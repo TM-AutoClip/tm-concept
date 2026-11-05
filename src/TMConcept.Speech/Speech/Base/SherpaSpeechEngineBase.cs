@@ -1,19 +1,17 @@
 using Microsoft.Extensions.Logging;
-using SherpaOnnx;
 using TMConcept.Core.Speech;
 using TMConcept.Core.Tools;
 
 namespace TMConcept.Speech.Speech;
 
 /// <summary>
-/// A local sherpa-onnx voice: the model is loaded once (on the processor, never the GPU), one sentence block at a time; the result is
-/// written as a WAV file. Speaking runs on a background thread.
+/// A local sherpa-onnx voice. Two downloads make it ready: the voice model (<see cref="SpeechModelInstaller"/>) and the sherpa-onnx
+/// libraries (a tool, <see cref="ToolKind.SpeechRuntime"/>). Speaking happens in the speech worker process (<see cref="SpeechWorkerClient"/>),
+/// on the processor, never the GPU; the window process never loads the libraries.
 /// </summary>
-public abstract class SherpaSpeechEngineBase(SpeechModelInstaller installer, ToolArchive model, ILogger logger) : ISpeechEngine, IDisposable
+public abstract class SherpaSpeechEngineBase(SpeechModelInstaller installer, IToolLocator tools, SpeechWorkerClient worker, ToolArchive model,
+    ILogger logger) : ISpeechEngine
 {
-    private readonly Lock _gate = new();
-    private OfflineTts? _tts;
-
     /// <inheritdoc />
     public abstract string Code { get; }
 
@@ -24,10 +22,10 @@ public abstract class SherpaSpeechEngineBase(SpeechModelInstaller installer, Too
     public bool IsLocal => true;
 
     /// <inheritdoc />
-    public bool Ready => installer.Ready(model);
+    public bool Ready => installer.Ready(model) && tools.Status(ToolKind.SpeechRuntime).Ready;
 
-    /// <summary>The model folder.</summary>
-    protected string Folder => installer.Folder(model);
+    /// <summary>The voice model's download.</summary>
+    public ToolArchive Model => model;
 
     /// <summary>Processor threads for speaking (leaves two cores free).</summary>
     protected static int Threads => Math.Clamp(Environment.ProcessorCount - 2, 1, 4);
@@ -43,59 +41,31 @@ public abstract class SherpaSpeechEngineBase(SpeechModelInstaller installer, Too
         installer.InstallAsync(model, agreed, progress, cancellationToken);
 
     /// <inheritdoc />
-    public Task<SpeechClip> SynthesizeAsync(SpeechRequest request, CancellationToken cancellationToken)
+    public async Task<SpeechClip> SynthesizeAsync(SpeechRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (!Ready)
+        if (!installer.Ready(model))
         {
             throw new SpeechException($"{Name} is not installed.") { Code = "missing" };
         }
 
-        return Task.Run(() =>
+        var runtime = tools.Status(ToolKind.SpeechRuntime);
+        if (!runtime.Ready)
         {
-            lock (_gate)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                try
-                {
-                    _tts ??= new OfflineTts(Config());
-                    var audio = _tts.GenerateWithConfig(request.Text, Generation(request), (_, _, _, _) => cancellationToken.IsCancellationRequested ? 0 : 1);
-                    cancellationToken.ThrowIfCancellationRequested();
+            throw new SpeechException("The speech libraries (sherpa-onnx) are not installed. Install them in Settings → Tools.") { Code = "missing" };
+        }
 
-                    // An engine that could not turn the text into sounds returns no samples: that is a failure, never a silent clip.
-                    if (audio.SampleRate <= 0 || audio.Samples.Length == 0)
-                    {
-                        throw new SpeechException($"{Name} produced no audio for the text.") { Code = "engine" };
-                    }
+        var reply = await worker.SpeakAsync(Path.GetDirectoryName(runtime.ExecutablePath)!, installer.Folder(model), Threads, Request(request),
+            cancellationToken).ConfigureAwait(false);
+        if (!reply.Ok)
+        {
+            logger.LogError("{Engine} failed ({Code}): {Error}", Name, reply.Code, reply.Error);
+            throw new SpeechException($"{Name} failed: {reply.Error}") { Code = "engine" };
+        }
 
-                    Directory.CreateDirectory(Path.GetDirectoryName(request.OutputWav)!);
-                    if (!audio.SaveToWaveFile(request.OutputWav))
-                    {
-                        throw new SpeechException("The WAV file could not be written.") { Code = "engine" };
-                    }
-
-                    var ms = audio.SampleRate > 0 ? (long)Math.Round(audio.Samples.Length * 1000.0 / audio.SampleRate) : 0;
-                    return new SpeechClip(request.OutputWav, ms, request.Text.Length, 0, Code);
-                }
-                catch (Exception ex) when (ex is not (SpeechException or OperationCanceledException))
-                {
-                    logger.LogError(ex, "{Engine} failed", Name);
-                    throw new SpeechException($"{Name} failed: {ex.Message}", ex) { Code = "engine" };
-                }
-            }
-        }, cancellationToken);
+        return new SpeechClip(request.OutputWav, reply.DurationMs, request.Text.Length, 0, Code);
     }
 
-    /// <inheritdoc />
-    public void Dispose()
-    {
-        _tts?.Dispose();
-        GC.SuppressFinalize(this);
-    }
-
-    /// <summary>The model configuration.</summary>
-    protected abstract OfflineTtsConfig Config();
-
-    /// <summary>The generation settings of a request.</summary>
-    protected abstract OfflineTtsGenerationConfig Generation(SpeechRequest request);
+    /// <summary>The worker request of a speech request (voice, speed, steps and language of this model).</summary>
+    protected abstract SpeechWorkerRequest Request(SpeechRequest request);
 }

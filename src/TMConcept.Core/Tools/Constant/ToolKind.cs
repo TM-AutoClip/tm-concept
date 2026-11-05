@@ -11,4 +11,7 @@ public enum ToolKind
 
     /// <summary>Supertonic 3 voice model (sherpa-onnx).</summary>
     SupertonicVoice = 2,
+
+    /// <summary>sherpa-onnx with ONNX Runtime: the native libraries the speech worker loads for the local voice (not in the app itself).</summary>
+    SpeechRuntime = 3,
 }

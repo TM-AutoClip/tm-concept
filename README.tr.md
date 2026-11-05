@@ -119,7 +119,8 @@ SHA-256 ile denetlenir (npm paketleri: kilit dosyasının bütünlük değerleri
    tutmazsa PATH'teki ffmpeg kullanılır (uyarıyla); o da yoksa program nasıl kurulacağını gösterir.
 3. **Bir motor:** HyperFrames (varsayılan) ve/veya Remotion (önce lisansını kabul etmeni ister) ve/veya Revideo (deneysel). Motor paketleri
    ve Chrome Headless Shell birkaç yüz MB tutar. **Örnek render** motoru modelsiz ve ağsız dener.
-4. **Ses:** Supertonic 3 (≈ 130 MB; önce OpenRAIL-M şartlarını gösterir; Türkçe ve İngilizce). Ses yoksa videolar sessiz üretilir ve
+4. **Ses:** Supertonic 3 (≈ 130 MB; önce OpenRAIL-M şartlarını gösterir; Türkçe ve İngilizce), kitaplıklarıyla birlikte: sherpa-onnx
+   (≈ 8–13 MB; yalnız ses konuşurken ayrı bir süreçte çalışır). Ses yoksa videolar sessiz üretilir ve
    günlüğe sarı uyarı düşer.
 
 Bir motor ve sesle toplam disk: yaklaşık 0,6–1 GB.

@@ -1,7 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- Local text-to-speech (sherpa-onnx), speech cache. Depends on Core only. -->
+  <!--
+    Local text-to-speech through sherpa-onnx in a separate worker process. No package: the native libraries are a downloaded tool (official
+    release files, pinned SHA-256) and the few C API calls are declared here (LibraryImport). Depends on Core only.
+  -->
+  <PropertyGroup>
+    <!-- LibraryImport generates the marshalling code (blittable structs passed by reference); nothing else is unsafe. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="org.k2fsa.sherpa.onnx" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\TMConcept.Core\TMConcept.Core.csproj" />

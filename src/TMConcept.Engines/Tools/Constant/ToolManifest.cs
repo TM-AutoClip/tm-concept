@@ -7,7 +7,10 @@ namespace TMConcept.Engines.Tools;
 /// FFmpeg-Builds release (GPL build, a separate program; never the floating "latest"); hashes from that release's checksums.sha256. BtbN
 /// keeps only the last 14 daily builds but the last build of each month for two years, so the pin is always a month-end build (here the
 /// last one of October 2026). When the pinned archive is gone or its hash does not match, ffmpeg from the system PATH is used if there is
-/// one (<see cref="FallbackToSystem"/>); an unverified download is never run. Updating a version = new rows here with new hashes.
+/// one (<see cref="FallbackToSystem"/>); an unverified download is never run. sherpa-onnx: the official "-lib" archives of the v2.0.1
+/// release (only the shared libraries with ONNX Runtime; Windows: the MT build, which needs no Visual C++ runtime), hashes from the
+/// release's asset digests; the speech worker loads them, the app itself carries no speech library. Updating a version = new rows here with
+/// new hashes.
 /// </summary>
 public static class ToolManifest
 {
@@ -19,6 +22,12 @@ public static class ToolManifest
 
     /// <summary>ffmpeg build name inside the release.</summary>
     public const string FfmpegBuild = "ffmpeg-n8.1.3-27-g8dca1586f4";
+
+    /// <summary>sherpa-onnx version (must match the C structures in TMConcept.Speech).</summary>
+    public const string SherpaVersion = "2.0.1";
+
+    /// <summary>Tools that are libraries, not programs: never looked for on the system PATH.</summary>
+    public static readonly IReadOnlyList<ToolKind> Libraries = [ToolKind.SpeechRuntime];
 
     /// <summary>Tools that may come from the system PATH when their pinned download is gone (404) or does not match its hash.</summary>
     public static readonly IReadOnlyList<ToolKind> FallbackToSystem = [ToolKind.Ffmpeg];
@@ -41,5 +50,17 @@ public static class ToolManifest
             "41e9c565594c390622cf968d82fa4135d9e9a11d06c1515644288cbc844e3380", $"{FfmpegBuild}-linux64-gpl-8.1", "bin/ffmpeg", 130_000_000),
         new(ToolKind.Ffmpeg, "8.1.3", "linux-arm64", new Uri($"https://github.com/BtbN/FFmpeg-Builds/releases/download/{FfmpegTag}/{FfmpegBuild}-linuxarm64-gpl-8.1.tar.xz"),
             "a08c0ee6e1c4e02139344b303002dcc7c37cf125d639f1fbd15dabee40fcb525", $"{FfmpegBuild}-linuxarm64-gpl-8.1", "bin/ffmpeg", 110_000_000),
+        new(ToolKind.SpeechRuntime, SherpaVersion, "win-x64",
+            new Uri($"https://github.com/k2-fsa/sherpa-onnx/releases/download/v{SherpaVersion}/sherpa-onnx-v{SherpaVersion}-win-x64-shared-MT-Release-lib.tar.bz2"),
+            "afa4de3ca4ab0afd53bb4aab40d28ee15608364b549ffc0fe0caf6489bfc39a5", $"sherpa-onnx-v{SherpaVersion}-win-x64-shared-MT-Release-lib",
+            "lib/sherpa-onnx-c-api.dll", 7_899_712),
+        new(ToolKind.SpeechRuntime, SherpaVersion, "linux-x64",
+            new Uri($"https://github.com/k2-fsa/sherpa-onnx/releases/download/v{SherpaVersion}/sherpa-onnx-v{SherpaVersion}-linux-x64-shared-lib.tar.bz2"),
+            "532c45bbd41036d83cd70606797529aa8086c2053395a58967736c727625b120", $"sherpa-onnx-v{SherpaVersion}-linux-x64-shared-lib",
+            "lib/libsherpa-onnx-c-api.so", 9_710_131),
+        new(ToolKind.SpeechRuntime, SherpaVersion, "linux-arm64",
+            new Uri($"https://github.com/k2-fsa/sherpa-onnx/releases/download/v{SherpaVersion}/sherpa-onnx-v{SherpaVersion}-linux-aarch64-shared-cpu-lib.tar.bz2"),
+            "15bd737eae467da32ec97e3740a329a535fd21e33caca4f327b0081451d11533", $"sherpa-onnx-v{SherpaVersion}-linux-aarch64-shared-cpu-lib",
+            "lib/libsherpa-onnx-c-api.so", 12_500_491),
     ];
 }

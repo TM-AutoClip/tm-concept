@@ -12,12 +12,18 @@ namespace TMConcept.Desktop;
 internal static class Program
 {
     /// <summary>
-    /// Arguments: <c>--data-dir &lt;folder&gt;</c> (portable mode: data, tools, videos and backups all under that folder; the environment variable
+    /// Arguments: <c>--speech-worker …</c> runs the speech worker (started by the app itself, see SpeechWorker). <c>--data-dir &lt;folder&gt;</c> (portable mode: data, tools, videos and backups all under that folder; the environment variable
     /// <c>TMCONCEPT_DATA_DIR</c> does the same). A second start with the same data folder asks the running one to show its window and exits.
     /// </summary>
     [STAThread]
     public static int Main(string[] args)
     {
+        if (args.Length > 0 && args[0] == Speech.Speech.SpeechWorker.Argument)
+        {
+            // The speech worker (started by the app itself): no window, no data folder lock, no services.
+            return Speech.Speech.SpeechWorker.Run(args, Console.OpenStandardInput(), Console.OpenStandardOutput(), Console.Error);
+        }
+
         var options = StartOptions.Parse(args);
         var paths = new AppPaths(options.DataDirectory, DesktopServices.CurrentOs);
         using var instance = SingleInstance.Acquire(paths.DataDirectory);

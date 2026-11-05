@@ -65,6 +65,7 @@ public static class DesktopServices
         services.AddSingleton<Core.Media.IMediaTools, Engines.Media.FfmpegMedia>();
         services.AddSingleton<Core.Videos.VideoPipeline>();
         services.AddSingleton<Speech.Speech.SpeechModelInstaller>();
+        services.AddSingleton<Speech.Speech.SpeechWorkerClient>();
         services.AddSingleton<Core.Speech.ISpeechEngine, Speech.Speech.SupertonicSpeechEngine>();
         services.AddSingleton<Core.Speech.ISpeechEngine, Providers.Speech.OpenAISpeechEngine>();
         services.AddSingleton<Core.Speech.SpeechService>();
@@ -74,6 +75,8 @@ public static class DesktopServices
         services.AddSingleton<Core.Images.ImageDescriber>();
         services.AddSingleton<ProfileSpeechViewModel>();
         services.AddSingleton<Engines.Tools.ToolInstaller>();
+        services.AddSingleton<Core.Tools.IToolLocator>(s => s.GetRequiredService<Engines.Tools.ToolInstaller>());
+        services.AddSingleton<Core.Processes.IChildProcessGuard>(s => s.GetRequiredService<Engines.Processes.ChildProcessGuardBase>());
         services.AddSingleton<Engines.Engines.ChromeLocator>();
         services.AddSingleton<Engines.Engines.SampleRender>();
         services.AddSingleton<Core.Engines.IVideoEngine, Engines.Engines.HyperFramesEngine>();

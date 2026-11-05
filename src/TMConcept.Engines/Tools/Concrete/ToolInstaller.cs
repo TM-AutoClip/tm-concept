@@ -6,13 +6,13 @@ using TMConcept.Core.Tools;
 namespace TMConcept.Engines.Tools;
 
 /// <summary>
-/// Installs Node and ffmpeg into <c>&lt;data&gt;/tools/&lt;tool&gt;/&lt;version&gt;/</c> after the user agreed: download → SHA-256 → unpack into a
+/// Installs Node, ffmpeg and the speech libraries (sherpa-onnx) into <c>&lt;data&gt;/tools/&lt;tool&gt;/&lt;version&gt;/</c> after the user agreed: download → SHA-256 → unpack into a
 /// temporary folder → move into place → write a marker. A tool counts as ready only with its marker and executable. On Linux a program on
 /// the system PATH may be used when the app has no copy. For <see cref="ToolManifest.FallbackToSystem"/> tools (ffmpeg) on every system:
 /// when the pinned download is gone or its hash does not match, the copy on the PATH is used (with ffprobe next to it; logged as a
 /// warning and remembered with a marker), otherwise the install fails with "unavailable" and the page shows how to install it.
 /// </summary>
-public sealed class ToolInstaller(IAppPaths paths, IToolPlatform platform, ToolDownloader downloader, ILogger<ToolInstaller> logger)
+public sealed class ToolInstaller(IAppPaths paths, IToolPlatform platform, ToolDownloader downloader, ILogger<ToolInstaller> logger) : IToolLocator
 {
     /// <summary>Source of a tool that came from the PATH because its pinned download was not usable.</summary>
     public const string FallbackSource = "fallback";
@@ -29,7 +29,7 @@ public sealed class ToolInstaller(IAppPaths paths, IToolPlatform platform, ToolD
     /// <summary>The pinned archive of a tool on this computer.</summary>
     public ToolArchive? Archive(ToolKind tool) => Archives.FirstOrDefault(a => a.Tool == tool && a.Rid == platform.Rid);
 
-    /// <summary>Whether a tool is ready and where.</summary>
+    /// <inheritdoc />
     public ToolStatus Status(ToolKind tool)
     {
         if (Archive(tool) is { } archive)
@@ -39,6 +39,12 @@ public sealed class ToolInstaller(IAppPaths paths, IToolPlatform platform, ToolD
             {
                 return new ToolStatus(tool, true, archive.Version, exe, "app");
             }
+        }
+
+        if (ToolManifest.Libraries.Contains(tool))
+        {
+            // A library is used only from the app's own pinned copy.
+            return new ToolStatus(tool, false, Archive(tool)?.Version ?? string.Empty, string.Empty, string.Empty);
         }
 
         if (platform.UseSystemPrograms && FindOnPath(platform.Executable(Name(tool))) is { } system)
@@ -171,6 +177,7 @@ public sealed class ToolInstaller(IAppPaths paths, IToolPlatform platform, ToolD
     {
         ToolKind.Node => "node",
         ToolKind.Ffmpeg => "ffmpeg",
+        ToolKind.SpeechRuntime => "sherpa-onnx",
         _ => tool.ToString().ToLowerInvariant(),
     };
 

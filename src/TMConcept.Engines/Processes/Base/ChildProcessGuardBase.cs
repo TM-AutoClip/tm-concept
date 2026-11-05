@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
+using TMConcept.Core.Processes;
 
 namespace TMConcept.Engines.Processes;
 
@@ -14,7 +15,7 @@ namespace TMConcept.Engines.Processes;
 /// parent is gone (or is not this app and not another tool). Arguments are never looked at: an editor or a file manager that merely has a
 /// tools path on its command line is not touched.
 /// </summary>
-public abstract class ChildProcessGuardBase(ILogger logger) : IDisposable
+public abstract class ChildProcessGuardBase(ILogger logger) : IChildProcessGuard, IDisposable
 {
     private readonly Lock _gate = new();
     private readonly HashSet<Process> _live = [];

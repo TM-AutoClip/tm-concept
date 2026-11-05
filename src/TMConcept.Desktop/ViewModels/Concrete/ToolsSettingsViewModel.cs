@@ -16,7 +16,7 @@ using TMConcept.Engines.Tools;
 namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
-/// Tools: Node.js, ffmpeg and the video engines (their npm packages and Chrome). Nothing is downloaded without a confirmation that names
+/// Tools: Node.js, ffmpeg, the speech libraries, the video engines and the local voice (their npm packages and Chrome). Nothing is downloaded without a confirmation that names
 /// the source and size; Remotion first asks for its license. A ready engine can render a sample (no model, no network). On Linux missing
 /// Chrome libraries are listed with the apt command to run (the app never uses root).
 /// </summary>
@@ -48,6 +48,7 @@ public sealed partial class ToolsSettingsViewModel(ToolInstaller installer, IToo
         Rows.Clear();
         Rows.Add(new ToolRowViewModel("node", "Node.js", text["tools.node.purpose"]));
         Rows.Add(new ToolRowViewModel("ffmpeg", "ffmpeg", text["tools.ffmpeg.purpose"]));
+        Rows.Add(new ToolRowViewModel(nameof(ToolKind.SpeechRuntime), "sherpa-onnx", text["tools.speechruntime.purpose"]));
         foreach (var engine in engines.OrderBy(e => e.Kind))
         {
             var note = engine.Experimental ? text["engines.experimental"] : engine.NeedsLicenseConsent ? text["engines.license_short"] : text["engines.default"];
@@ -94,8 +95,8 @@ public sealed partial class ToolsSettingsViewModel(ToolInstaller installer, IToo
             return;
         }
 
-        var size = (archive.ApproximateBytes / 1_000_000.0).ToString("0", CultureInfo.InvariantCulture);
-        var answer = await confirm.AskAsync(text["tools.confirm.title"], text.Format("tools.confirm.message", row.Name, archive.Version, archive.Url.Host, size),
+        var answer = await confirm.AskAsync(text["tools.confirm.title"],
+            text.Format("tools.confirm.message", row.Name, archive.Version, archive.Url.Host, Megabytes(archive.ApproximateBytes)),
             text["tools.install"], danger: false).ConfigureAwait(true);
         if (answer.Confirmed)
         {
@@ -197,17 +198,30 @@ public sealed partial class ToolsSettingsViewModel(ToolInstaller installer, IToo
             await session.SaveAsync(session.Settings, CancellationToken.None).ConfigureAwait(true);
         }
 
+        // The voice needs the sherpa-onnx libraries too (a tool of their own): one confirmation names both downloads.
         var model = Speech.Speech.SpeechModels.Supertonic;
-        var size = (model.ApproximateBytes / 1_000_000.0).ToString("0", CultureInfo.InvariantCulture);
-        var answer = await confirm.AskAsync(text["tools.confirm.title"], text.Format("tools.confirm.message", voice.Name, model.Version, model.Url.Host, size),
-            text["tools.install"], danger: false).ConfigureAwait(true);
+        var runtime = installer.Status(ToolKind.SpeechRuntime).Ready ? null : installer.Archive(ToolKind.SpeechRuntime);
+        var message = runtime is null
+            ? text.Format("tools.confirm.message", voice.Name, model.Version, model.Url.Host, Megabytes(model.ApproximateBytes))
+            : text.Format("tools.confirm.voice", voice.Name, model.Version, model.Url.Host, Megabytes(model.ApproximateBytes), runtime.Version,
+                Megabytes(runtime.ApproximateBytes));
+        var answer = await confirm.AskAsync(text["tools.confirm.title"], message, text["tools.install"], danger: false).ConfigureAwait(true);
         if (answer.Confirmed)
         {
             await RunAsync(row, async progress =>
             {
+                if (runtime is not null)
+                {
+                    await installer.InstallAsync(ToolKind.SpeechRuntime, agreed: true, progress, CancellationToken.None).ConfigureAwait(true);
+                }
+
                 await voice.InstallAsync(agreed: true, progress, CancellationToken.None).ConfigureAwait(true);
                 return text.Format("tools.installed", voice.Name, model.Version);
             }).ConfigureAwait(true);
+            foreach (var other in Rows.Where(r => r.Code == nameof(ToolKind.SpeechRuntime)))
+            {
+                Refresh(other);
+            }
         }
     }
 
@@ -245,7 +259,9 @@ public sealed partial class ToolsSettingsViewModel(ToolInstaller installer, IToo
         if (row.Voice is { } voice)
         {
             row.Ready = voice.Ready;
-            row.State = voice.Ready ? "✓ " + text["engines.ready"] : text["tools.state.missing"];
+            row.State = voice.Ready ? "✓ " + text["engines.ready"]
+                : voice is Speech.Speech.SherpaSpeechEngineBase local ? text.Format("tools.state.missing_size", Megabytes(local.Model.ApproximateBytes))
+                : text["tools.state.missing"];
             return;
         }
 
@@ -264,6 +280,16 @@ public sealed partial class ToolsSettingsViewModel(ToolInstaller installer, IToo
             ? "✓ " + (tools.Source == "system" ? text["tools.state.system"]
                 : tools.Source == ToolInstaller.FallbackSource ? text["tools.state.fallback"]
                 : text.Format("tools.state.ready", tools.Version))
-            : installer.Archive(tool) is null ? text["tools.state.unsupported"] : text["tools.state.missing"];
+            : installer.Archive(tool) is { } archive ? text.Format("tools.state.missing_size", Megabytes(archive.ApproximateBytes)) : text["tools.state.unsupported"];
+
+        if (tool == ToolKind.SpeechRuntime)
+        {
+            foreach (var voiceRow in Rows.Where(r => r.Voice is not null))
+            {
+                Refresh(voiceRow);
+            }
+        }
     }
+
+    private static string Megabytes(long bytes) => Math.Max(1, Math.Round(bytes / 1_000_000.0)).ToString("0", CultureInfo.InvariantCulture);
 }

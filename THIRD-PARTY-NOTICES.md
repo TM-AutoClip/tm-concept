@@ -27,11 +27,9 @@ The release files are self-contained: they carry the .NET runtime and these libr
 | Konscious.Security.Cryptography.Argon2 | MIT |
 | NAudio (NAudio.Core, NAudio.WinMM; Windows sound output of the player) | MIT |
 | System.Security.Cryptography.ProtectedData | MIT |
-| sherpa-onnx (org.k2fsa.sherpa.onnx 2.0.1) | Apache-2.0 |
-| ONNX Runtime (inside the sherpa-onnx package) | MIT |
 
-sherpa-onnx 2.0.1 is used on purpose: the native library of 1.13.8 still contained espeak-ng (GPL-3.0); the 2.0.1 library does not
-(checked in the package binaries before choosing it). Exact versions are in `Directory.Packages.props`.
+Exact versions are in `Directory.Packages.props`. Since 0.1.3 the speech libraries (sherpa-onnx, ONNX Runtime) are no longer bundled; they
+are downloaded like the other tools (below).
 
 ## Downloaded after your approval (not distributed with TM Concept)
 
@@ -46,6 +44,7 @@ each download against a pinned SHA-256 (npm packages: the integrity values of th
 | HyperFrames + GSAP | Apache-2.0 (HyperFrames), GSAP "no charge" standard license | npm |
 | Remotion | Remotion License (source available, conditional) | Free for individuals, companies of up to 3 people and non-profits; other companies need a Remotion Company License. The license is between you and Remotion. |
 | Revideo | MIT | npm (experimental engine) |
+| sherpa-onnx 2.0.1 shared libraries with ONNX Runtime | Apache-2.0 (sherpa-onnx), MIT (ONNX Runtime) | The official "-lib" archives of the sherpa-onnx v2.0.1 GitHub release (Windows: the MT build). Loaded only by the app's speech worker process. 2.0.1 is used on purpose: the 1.13.8 library still contained espeak-ng (GPL-3.0); 2.0.1 does not. |
 | Supertonic 3 voice model | Model weights: OpenRAIL-M; code: MIT | sherpa-onnx tts-models release. The OpenRAIL-M use restrictions apply to you (below). |
 
 ### Supertonic 3 (OpenRAIL-M) use restrictions, short form

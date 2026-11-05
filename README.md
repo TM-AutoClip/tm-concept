@@ -120,7 +120,8 @@ is checked against a pinned SHA-256 (npm packages: the lock file's integrity val
    SHA-256, the ffmpeg already on your PATH is used (with a warning); without one the app shows how to install it.
 3. **An engine:** HyperFrames (default) and/or Remotion (asks you to accept its license first) and/or Revideo (experimental). The engine
    packages and Chrome Headless Shell take a few hundred MB. **Sample render** checks the engine without any model or network.
-4. **Voice:** Supertonic 3 (≈ 130 MB; shows its OpenRAIL-M terms first; Turkish and English). Without a voice the videos are silent and a
+4. **Voice:** Supertonic 3 (≈ 130 MB; shows its OpenRAIL-M terms first; Turkish and English) with its libraries, sherpa-onnx (≈ 8–13 MB;
+   they run in a separate process only while the voice speaks). Without a voice the videos are silent and a
    yellow warning appears in the log.
 
 Total disk use with one engine and the voice: about 0.6–1 GB.

@@ -68,7 +68,8 @@ public sealed class SpeechProviderTests
     [Fact]
     public async Task LocalSpeechWhenTheModelIsInstalled()
     {
-        // Real Supertonic 3 speech on the processor. Runs only when TMCONCEPT_RENDER_DATA points to a data folder with the model installed.
+        // Real Supertonic 3 speech on the processor, in the speech worker process (the app's own program, next to the tests). Runs only when
+        // TMCONCEPT_RENDER_DATA points to a data folder with the voice model and the sherpa-onnx libraries installed.
         var data = Environment.GetEnvironmentVariable("TMCONCEPT_RENDER_DATA");
         if (string.IsNullOrEmpty(data))
         {
@@ -76,11 +77,21 @@ public sealed class SpeechProviderTests
         }
 
         using var paths = TempPaths.At(data);
+        var program = Path.Combine(AppContext.BaseDirectory, OperatingSystem.IsWindows() ? "TMConcept.exe" : "TMConcept");
+        var tools = new TMConcept.Engines.Tools.ToolInstaller(paths, OperatingSystem.IsWindows() ? new TMConcept.Engines.Tools.WindowsToolPlatform(null!)
+            : new TMConcept.Engines.Tools.LinuxToolPlatform(null!), null!, NullLogger<TMConcept.Engines.Tools.ToolInstaller>.Instance);
         var installer = new TMConcept.Speech.Speech.SpeechModelInstaller(paths, null!, null!, NullLogger<TMConcept.Speech.Speech.SpeechModelInstaller>.Instance);
-        using var engine = new TMConcept.Speech.Speech.SupertonicSpeechEngine(installer, NullLogger<TMConcept.Speech.Speech.SupertonicSpeechEngine>.Instance);
-        if (!engine.Ready)
+        using TMConcept.Engines.Processes.ChildProcessGuardBase guard = OperatingSystem.IsWindows()
+            ? new TMConcept.Engines.Processes.WindowsChildProcessGuard(NullLogger<TMConcept.Engines.Processes.WindowsChildProcessGuard>.Instance)
+            : new TMConcept.Engines.Processes.LinuxChildProcessGuard(NullLogger<TMConcept.Engines.Processes.LinuxChildProcessGuard>.Instance);
+        using var worker = new TMConcept.Speech.Speech.SpeechWorkerClient(guard, NullLogger<TMConcept.Speech.Speech.SpeechWorkerClient>.Instance)
         {
-            Assert.Skip("Supertonic is not installed in TMCONCEPT_RENDER_DATA.");
+            ProgramPath = program,
+        };
+        var engine = new TMConcept.Speech.Speech.SupertonicSpeechEngine(installer, tools, worker, NullLogger<TMConcept.Speech.Speech.SupertonicSpeechEngine>.Instance);
+        if (!engine.Ready || !File.Exists(program))
+        {
+            Assert.Skip("Supertonic or its libraries are not installed in TMCONCEPT_RENDER_DATA, or the app program is not next to the tests.");
         }
 
         foreach (var language in new[] { "tr", "en" })
@@ -91,5 +102,7 @@ public sealed class SpeechProviderTests
             clip.DurationMs.ShouldBeGreaterThan(1000);
             Math.Abs(WaveFile.DurationMs(output) - clip.DurationMs).ShouldBeLessThan(50);
         }
+
+        worker.Running.ShouldBeTrue();
     }
 }

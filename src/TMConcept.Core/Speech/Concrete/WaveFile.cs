@@ -2,9 +2,40 @@ using System.Buffers.Binary;
 
 namespace TMConcept.Core.Speech;
 
-/// <summary>Reads the length of a PCM / float WAV file from its header (no decoding).</summary>
+/// <summary>Reads the length of a PCM / float WAV file from its header (no decoding) and writes mono 16-bit PCM files.</summary>
 public static class WaveFile
 {
+    /// <summary>Writes mono samples in [-1, 1] as a 16-bit PCM WAV file (the folder is created; values outside the range are clipped).</summary>
+    public static void WritePcm16(string path, ReadOnlySpan<float> samples, int sampleRate)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(path);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(sampleRate);
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
+        var data = new byte[samples.Length * 2];
+        for (var i = 0; i < samples.Length; i++)
+        {
+            var value = (short)Math.Round(Math.Clamp(samples[i], -1f, 1f) * short.MaxValue);
+            BinaryPrimitives.WriteInt16LittleEndian(data.AsSpan(i * 2, 2), value);
+        }
+
+        Span<byte> header = stackalloc byte[44];
+        "RIFF"u8.CopyTo(header);
+        BinaryPrimitives.WriteInt32LittleEndian(header[4..], 36 + data.Length);
+        "WAVEfmt "u8.CopyTo(header[8..]);
+        BinaryPrimitives.WriteInt32LittleEndian(header[16..], 16);
+        BinaryPrimitives.WriteInt16LittleEndian(header[20..], 1);
+        BinaryPrimitives.WriteInt16LittleEndian(header[22..], 1);
+        BinaryPrimitives.WriteInt32LittleEndian(header[24..], sampleRate);
+        BinaryPrimitives.WriteInt32LittleEndian(header[28..], sampleRate * 2);
+        BinaryPrimitives.WriteInt16LittleEndian(header[32..], 2);
+        BinaryPrimitives.WriteInt16LittleEndian(header[34..], 16);
+        "data"u8.CopyTo(header[36..]);
+        BinaryPrimitives.WriteInt32LittleEndian(header[40..], data.Length);
+        using var stream = File.Create(path);
+        stream.Write(header);
+        stream.Write(data);
+    }
+
     /// <summary>Length in milliseconds.</summary>
     public static long DurationMs(string path)
     {
