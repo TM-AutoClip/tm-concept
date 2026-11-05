@@ -1,4 +1,5 @@
 using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
@@ -17,7 +18,7 @@ public sealed class BackupTests
     private static readonly CancellationToken None = CancellationToken.None;
 
     private static BackupService Service(StorageHarness h, TimeProvider? clock = null) =>
-        new(h.Paths, h.Key, h.Vault, h.Factory, new SettingsStore(h.Factory), KdfParameters.Fast, clock ?? TimeProvider.System, NullLogger<BackupService>.Instance);
+        new(h.Paths, h.Key, h.Vault, h.Factory, KdfParameters.Fast, clock ?? TimeProvider.System, NullLogger<BackupService>.Instance);
 
     private static async Task<(StorageHarness H, string File)> BackupAsync()
     {
@@ -107,6 +108,79 @@ public sealed class BackupTests
 
         SqliteConnection.ClearAllPools();
         service.List().Count.ShouldBe(BackupRules.Keep);
+    }
+
+    [Fact]
+    public async Task TheBackupFileHoldsNoBackupKeyAndARestoreDerivesItAgainFromThePassword()
+    {
+        var (source, file) = await BackupAsync();
+        using var _ = source;
+
+        // Opened like an attacker with the password would: the sealed copy has no stored key and no API key.
+        var sealedFile = await File.ReadAllBytesAsync(file, None);
+        var plain = SealedBox.Open(System.Text.Encoding.ASCII.GetBytes("TMCBAK02"), Password, sealedFile);
+        var copy = Path.Combine(source.Paths.DataDirectory, "inspect.db");
+        await File.WriteAllBytesAsync(copy, plain.AsMemory(33).ToArray(), None);
+        await using (var db = new TMConcept.Storage.Database.ConceptDbContext(TMConcept.Storage.Database.ConceptDbContextFactory.Options(
+            TMConcept.Storage.Database.ConceptDbContextFactory.ConnectionString(copy, Convert.ToHexString(plain.AsSpan(1, 32))))))
+        {
+            (await db.Settings.Select(r => r.Key).ToListAsync(None)).ShouldNotContain("backup-key");
+            (await db.Settings.Select(r => r.Key).ToListAsync(None)).ShouldNotContain("backup-last");
+            (await db.ApiKeys.CountAsync(None)).ShouldBe(0);
+        }
+
+        SqliteConnection.ClearAllPools();
+        using var target = new StorageHarness();
+        var service = Service(target);
+        await service.RestoreAsync(file, Password, target.Protector, None);
+
+        // Daily backups go on without asking, and the new file opens with the same password.
+        (await service.HasPasswordAsync(None)).ShouldBeTrue();
+        var next = await service.CreateInFolderAsync(None);
+        var nextFile = await File.ReadAllBytesAsync(next, None);
+        SealedBox.Open(System.Text.Encoding.ASCII.GetBytes("TMCBAK02"), Password, nextFile).Length.ShouldBeGreaterThan(33);
+    }
+
+    [Fact]
+    public async Task SavingOlderSettingsDoesNotUndoTheLastBackupTime()
+    {
+        using var h = await StorageHarness.CreatedAsync();
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 11, 1, 9, 0, 0, TimeSpan.Zero));
+        clock.SetLocalTimeZone(TimeZoneInfo.Utc);
+        var settings = new SettingsStore(h.Factory);
+        var stale = await settings.GetAsync(None);
+        var service = Service(h, clock);
+        await service.SetPasswordAsync(Password, None);
+
+        (await service.RunDailyAsync(None)).ShouldNotBeNull();
+        await settings.SaveAsync(stale, None);
+        clock.Advance(TimeSpan.FromHours(1));
+
+        (await service.LastBackupAsync(None)).ShouldBe(new DateTimeOffset(2026, 11, 1, 9, 0, 0, TimeSpan.Zero));
+        (await service.RunDailyAsync(None)).ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task BackupsBeforeAChangeAreKeptApartFromTheDailyOnes()
+    {
+        using var h = await StorageHarness.CreatedAsync();
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 11, 1, 9, 0, 0, TimeSpan.Zero));
+        clock.SetLocalTimeZone(TimeZoneInfo.Utc);
+        var service = Service(h, clock);
+        (await service.CreateBeforeChangeAsync("test", None)).ShouldBeNull();
+        await service.SetPasswordAsync(Password, None);
+        (await service.RunDailyAsync(None)).ShouldNotBeNull();
+
+        for (var i = 0; i < 12; i++)
+        {
+            clock.Advance(TimeSpan.FromMinutes(1));
+            Path.GetFileName(await service.CreateBeforeChangeAsync("test", None))!.ShouldStartWith(BackupRules.ChangePrefix);
+        }
+
+        SqliteConnection.ClearAllPools();
+        var files = service.List().Select(f => Path.GetFileName(f.Path)).ToList();
+        files.Count(f => f.StartsWith(BackupRules.ChangePrefix, StringComparison.Ordinal)).ShouldBe(BackupRules.Keep);
+        files.Count(f => !f.StartsWith(BackupRules.ChangePrefix, StringComparison.Ordinal)).ShouldBe(1, "the daily backup is not pushed out");
     }
 
     [Fact]

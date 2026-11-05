@@ -9,15 +9,18 @@ using TMConcept.Core.Text;
 using TMConcept.Desktop.Dialogs;
 using TMConcept.Desktop.Localization;
 using TMConcept.Desktop.Startup;
+using TMConcept.Storage.Backup;
 
 namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
 /// 🗑 Trash: deleted concepts are kept forever (they still count in the duplicate check). "Restore" puts them back to new. "Delete
 /// permanently" asks first and then removes the rows; a permanently deleted concept no longer counts anywhere (there is no "deleted" flag).
+/// Deleting <see cref="BackupRules.BulkChange"/> or more takes a backup first. Only checked cards that are visible (not hidden by the
+/// search) are acted on. A storage error is shown and logged, never a crash.
 /// </summary>
 public sealed partial class TrashViewModel(AppSession session, IConceptStore concepts, IConfirmDialog confirm, ConceptEvents events, IActivityLog activity,
-    Localizer text, ILogger<TrashViewModel> logger) : PageViewModelBase
+    BackupService backup, Localizer text, ILogger<TrashViewModel> logger) : PageViewModelBase
 {
     private readonly List<ConceptCardViewModel> _all = [];
     private bool _attached;
@@ -70,10 +73,18 @@ public sealed partial class TrashViewModel(AppSession session, IConceptStore con
             return;
         }
 
-        await concepts.SetStatusAsync(ids, ConceptStatus.New, CancellationToken.None).ConfigureAwait(true);
-        activity.Add(ActivityLevel.Info, text.Format("trash.restored", ids.Count));
-        events.Raise(this);
-        await ReloadAsync().ConfigureAwait(true);
+        try
+        {
+            await concepts.SetStatusAsync(ids, ConceptStatus.New, CancellationToken.None).ConfigureAwait(true);
+            activity.Add(ActivityLevel.Info, text.Format("trash.restored", ids.Count));
+            events.Raise(this);
+            await ReloadAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Concepts could not be restored from the trash");
+            Status = text.Format("error.generic", ex.Message);
+        }
     }
 
     /// <summary>Deletes the checked concepts permanently after a confirmation.</summary>
@@ -93,11 +104,34 @@ public sealed partial class TrashViewModel(AppSession session, IConceptStore con
             return;
         }
 
-        var removed = await concepts.DeletePermanentlyAsync(ids, CancellationToken.None).ConfigureAwait(true);
-        logger.LogInformation("{Count} concepts deleted permanently", removed);
-        activity.Add(ActivityLevel.Info, text.Format("trash.deleted", removed));
-        events.Raise(this);
-        await ReloadAsync().ConfigureAwait(true);
+        try
+        {
+            if (ids.Count >= BackupRules.BulkChange && await backup.CreateBeforeChangeAsync("permanent delete", CancellationToken.None).ConfigureAwait(true) is not null)
+            {
+                activity.Add(ActivityLevel.Info, text["backup.before_change"]);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Without the safety backup nothing is deleted: the user can try again (or free disk space).
+            logger.LogError(ex, "The backup before a permanent delete failed; nothing was deleted");
+            Status = text.Format("backup.before_change_failed", ex.Message);
+            return;
+        }
+
+        try
+        {
+            var removed = await concepts.DeletePermanentlyAsync(ids, CancellationToken.None).ConfigureAwait(true);
+            logger.LogInformation("{Count} concepts deleted permanently", removed);
+            activity.Add(ActivityLevel.Info, text.Format("trash.deleted", removed));
+            events.Raise(this);
+            await ReloadAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Concepts could not be deleted permanently");
+            Status = text.Format("error.generic", ex.Message);
+        }
     }
 
     partial void OnSearchChanged(string value) => Filter();
@@ -112,9 +146,10 @@ public sealed partial class TrashViewModel(AppSession session, IConceptStore con
         }
     }
 
+    /// <summary>The checked cards that are visible now (a card hidden by the search is never acted on), else the open one.</summary>
     private List<Guid> Chosen()
     {
-        var ids = _all.Where(c => c.IsChecked).Select(c => c.Id).ToList();
+        var ids = Items.Where(c => c.IsChecked).Select(c => c.Id).ToList();
         if (ids.Count == 0 && Selected is not null)
         {
             ids.Add(Selected.Id);
@@ -149,29 +184,32 @@ public sealed partial class TrashViewModel(AppSession session, IConceptStore con
 
     private async Task ReloadAsync()
     {
-        _all.Clear();
-        Selected = null;
-        if (session.Profile is { } profile)
+        var profile = session.Profile;
+        var list = profile is null ? [] : await concepts.ListAsync(profile.Id, [ConceptStatus.Trashed], false, CancellationToken.None).ConfigureAwait(true);
+        if (session.Profile?.Id != profile?.Id)
         {
-            foreach (var concept in await concepts.ListAsync(profile.Id, [ConceptStatus.Trashed], false, CancellationToken.None).ConfigureAwait(true))
-            {
-                _all.Add(new ConceptCardViewModel(concept, text));
-            }
+            return;
         }
+
+        var cards = _all.ToDictionary(c => c.Id);
+        var selected = Selected?.Id;
+        _all.Clear();
+        _all.AddRange(list.Select(c => cards.TryGetValue(c.Id, out var card) ? card : new ConceptCardViewModel(c, text)));
 
         Badge = _all.Count == 0 ? string.Empty : _all.Count.ToString(CultureInfo.InvariantCulture);
         Header = text.Format("trash.header", _all.Count);
         Filter();
+        var again = Items.FirstOrDefault(c => c.Id == selected);
+        if (!ReferenceEquals(again, Selected))
+        {
+            Selected = again;
+        }
     }
 
     private void Filter()
     {
         var search = TurkishFold.Fold(Search);
-        Items.Clear();
-        foreach (var card in _all.Where(c => search.Length == 0 || TurkishFold.Fold(c.Title).Contains(search, StringComparison.Ordinal)))
-        {
-            Items.Add(card);
-        }
+        CollectionSync.Apply(Items, _all.Where(c => search.Length == 0 || TurkishFold.Fold(c.Title).Contains(search, StringComparison.Ordinal)).ToList());
     }
 
     private async Task LoadContentAsync(ConceptCardViewModel card)

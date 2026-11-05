@@ -76,7 +76,18 @@ public sealed partial class KeysSettingsViewModel(IEnumerable<IProvider> provide
             Label = Label.Trim().Length > 0 ? Label.Trim() : text["keys.default_label"],
             Secret = Secret.Trim(),
         };
-        await keys.SaveAsync(key, CancellationToken.None).ConfigureAwait(true);
+        try
+        {
+            await keys.SaveAsync(key, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The message never holds the key: it comes from the storage layer, which does not see the value.
+            logger.LogError(ex, "An API key could not be saved ({Provider})", key.Provider);
+            Status = text.Format("error.generic", ex.Message);
+            return;
+        }
+
         Secret = string.Empty;
         Label = string.Empty;
         await ReloadAsync().ConfigureAwait(true);

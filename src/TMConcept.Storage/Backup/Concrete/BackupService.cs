@@ -6,7 +6,6 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TMConcept.Core.Paths;
-using TMConcept.Core.Settings;
 using TMConcept.Storage.Crypto;
 using TMConcept.Storage.Database;
 using TMConcept.Storage.Keys;
@@ -14,18 +13,29 @@ using TMConcept.Storage.Keys;
 namespace TMConcept.Storage.Backup;
 
 /// <summary>
-/// Backups as one file (<c>.tmcbak</c>): <see cref="SealedBox"/> with the magic word <c>TMCBAK01</c> around
+/// Backups as one file (<c>.tmcbak</c>): <see cref="SealedBox"/> with the magic word <c>TMCBAK02</c> around
 /// [key length (1) | database key (32) | encrypted database copy]. The copy is made with SQLite's online backup into a file encrypted with
-/// the same key, so no plain data is written to disk at any moment; API keys are deleted from the copy before it is sealed (decision: keys
-/// never go into a backup). Only the database is backed up: videos and sample images stay in the user's folder.
-/// The backup password is required at the first start; the derived key is kept in the database, so daily backups need no password.
-/// A forgotten backup password cannot be recovered. A restore is possible only while there is no database yet (first start).
+/// the same key, so no plain data is written to disk at any moment; API keys, the stored backup key and the backup bookkeeping are deleted
+/// from the copy before it is sealed (decision: keys never go into a backup). Only the database is backed up: videos and sample images
+/// stay in the user's folder.
+/// The backup password is required at the first start; the key derived from it is kept only in the encrypted database (never in a backup
+/// file), so daily backups need no password. Opening a backup always needs the password; after a restore the key is derived again from
+/// it. A forgotten backup password cannot be recovered. A restore is possible only while there is no database yet (first start).
+/// Format 02 (0.1.1): format 01 kept the derived key inside the sealed copy; 01 files are not read (0.1.0 had no users).
+/// The time of the last backup is kept in its own row written only here (it was a field of the settings document, which the app saved
+/// back from an older copy and so reset it: a "daily" backup ran on every start).
 /// </summary>
-public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault, IDbContextFactory<ConceptDbContext> factory, ISettingsStore settings,
-    KdfParameters kdf, TimeProvider clock, ILogger<BackupService> logger)
+public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault, IDbContextFactory<ConceptDbContext> factory, KdfParameters kdf,
+    TimeProvider clock, ILogger<BackupService> logger)
 {
     private const string KeySetting = "backup-key";
-    private static readonly byte[] Magic = Encoding.ASCII.GetBytes("TMCBAK01");
+    private const string LastSetting = "backup-last";
+
+    /// <summary>Removed from the copy before it is sealed: API keys, the stored backup key, the backup bookkeeping.</summary>
+    private const string ScrubCopy = "PRAGMA secure_delete = ON; DELETE FROM api_keys; DELETE FROM settings WHERE \"Key\" IN ('" + KeySetting + "', '" + LastSetting
+        + "'); VACUUM;";
+
+    private static readonly byte[] Magic = Encoding.ASCII.GetBytes("TMCBAK02");
 
     /// <summary>Whether a backup password was set.</summary>
     public async Task<bool> HasPasswordAsync(CancellationToken cancellationToken) => await LoadKeyAsync(cancellationToken).ConfigureAwait(false) is not null;
@@ -48,20 +58,18 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
             Key = Convert.ToBase64String(derived.Key),
         };
         CryptographicOperations.ZeroMemory(derived.Key);
-        var value = JsonSerializer.Serialize(record, StorageJsonContext.Default.BackupKeyRecord);
-        await using var db = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var row = await db.Settings.FirstOrDefaultAsync(s => s.Key == KeySetting, cancellationToken).ConfigureAwait(false);
-        if (row is null)
-        {
-            db.Settings.Add(new SettingRow { Key = KeySetting, Value = value });
-        }
-        else
-        {
-            row.Value = value;
-        }
-
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await WriteSettingAsync(KeySetting, JsonSerializer.Serialize(record, StorageJsonContext.Default.BackupKeyRecord), cancellationToken).ConfigureAwait(false);
         logger.LogInformation("Backup password set");
+    }
+
+    /// <summary>When the last backup (daily, manual or before a change) was written; <c>null</c> before the first.</summary>
+    public async Task<DateTimeOffset?> LastBackupAsync(CancellationToken cancellationToken)
+    {
+        await using var db = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var row = await db.Settings.AsNoTracking().FirstOrDefaultAsync(s => s.Key == LastSetting, cancellationToken).ConfigureAwait(false);
+        return row is not null && long.TryParse(row.Value, NumberStyles.None, CultureInfo.InvariantCulture, out var ticks)
+            ? new DateTimeOffset(ticks, TimeSpan.Zero)
+            : null;
     }
 
     /// <summary>Writes a backup of the open database to <paramref name="target"/>.</summary>
@@ -83,7 +91,7 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
                 destination.Open();
                 source.BackupDatabase(destination);
                 using var command = destination.CreateCommand();
-                command.CommandText = "PRAGMA secure_delete = ON; DELETE FROM api_keys; VACUUM;";
+                command.CommandText = ScrubCopy;
                 command.ExecuteNonQuery();
             }
 
@@ -109,17 +117,24 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
     }
 
     /// <summary>Writes a backup into the backup folder now and keeps the last <see cref="BackupRules.Keep"/>.</summary>
-    public async Task<string> CreateInFolderAsync(CancellationToken cancellationToken)
+    public Task<string> CreateInFolderAsync(CancellationToken cancellationToken) => CreateNamedAsync(BackupRules.Prefix, cancellationToken);
+
+    /// <summary>
+    /// The extra backup before a large change (a profile deleted, <see cref="BackupRules.BulkChange"/> or more concepts deleted for good):
+    /// taken before the change, so the data can come back. Kept apart from the daily ones (the last <see cref="BackupRules.Keep"/> of each),
+    /// so a busy day does not push the older days out. <c>null</c> when no backup password is set (logged).
+    /// </summary>
+    public async Task<string?> CreateBeforeChangeAsync(string reason, CancellationToken cancellationToken)
     {
-        var now = clock.GetUtcNow();
-        var target = Path.Combine(paths.BackupDirectory,
-            BackupRules.Prefix + now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + BackupRules.Extension);
-        await CreateAsync(target, cancellationToken).ConfigureAwait(false);
-        Prune();
-        var current = await settings.GetAsync(cancellationToken).ConfigureAwait(false);
-        current.LastBackupUtc = now;
-        await settings.SaveAsync(current, cancellationToken).ConfigureAwait(false);
-        return target;
+        if (!await HasPasswordAsync(cancellationToken).ConfigureAwait(false))
+        {
+            logger.LogWarning("No backup before the change ({Reason}): no backup password is set", reason);
+            return null;
+        }
+
+        var file = await CreateNamedAsync(BackupRules.ChangePrefix, cancellationToken).ConfigureAwait(false);
+        logger.LogInformation("Backup before a change written ({Reason})", reason);
+        return file;
     }
 
     /// <summary>
@@ -134,9 +149,8 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
             return null;
         }
 
-        var current = await settings.GetAsync(cancellationToken).ConfigureAwait(false);
         var today = clock.GetLocalNow().Date;
-        if (current.LastBackupUtc is { } last && TimeZoneInfo.ConvertTime(last, clock.LocalTimeZone).Date >= today)
+        if (await LastBackupAsync(cancellationToken).ConfigureAwait(false) is { } last && TimeZoneInfo.ConvertTime(last, clock.LocalTimeZone).Date >= today)
         {
             return null;
         }
@@ -194,6 +208,9 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
 
             await vault.InstallAsync(copy, dek, protector, cancellationToken).ConfigureAwait(false);
             CryptographicOperations.ZeroMemory(dek);
+
+            // The backup carries no backup key: it is derived again from the password just entered, so daily backups go on without asking.
+            await SetPasswordAsync(password, cancellationToken).ConfigureAwait(false);
             return await ReportAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -218,9 +235,39 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
             Convert.FromBase64String(record.Key));
     }
 
-    private void Prune()
+    private async Task<string> CreateNamedAsync(string prefix, CancellationToken cancellationToken)
     {
-        foreach (var old in List().Where(f => System.IO.Path.GetFileName(f.Path).StartsWith(BackupRules.Prefix, StringComparison.Ordinal)).Skip(BackupRules.Keep))
+        var now = clock.GetUtcNow();
+        var target = Path.Combine(paths.BackupDirectory, prefix + now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + BackupRules.Extension);
+        await CreateAsync(target, cancellationToken).ConfigureAwait(false);
+        Prune(prefix);
+        await WriteSettingAsync(LastSetting, now.UtcTicks.ToString(CultureInfo.InvariantCulture), cancellationToken).ConfigureAwait(false);
+        return target;
+    }
+
+    private async Task WriteSettingAsync(string name, string value, CancellationToken cancellationToken)
+    {
+        await using var db = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var row = await db.Settings.FirstOrDefaultAsync(s => s.Key == name, cancellationToken).ConfigureAwait(false);
+        if (row is null)
+        {
+            db.Settings.Add(new SettingRow { Key = name, Value = value });
+        }
+        else
+        {
+            row.Value = value;
+        }
+
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Keeps the newest <see cref="BackupRules.Keep"/> files of one kind (daily/manual, or before a change).</summary>
+    private void Prune(string prefix)
+    {
+        bool Kind(string name) => prefix == BackupRules.ChangePrefix
+            ? name.StartsWith(BackupRules.ChangePrefix, StringComparison.Ordinal)
+            : name.StartsWith(BackupRules.Prefix, StringComparison.Ordinal) && !name.StartsWith(BackupRules.ChangePrefix, StringComparison.Ordinal);
+        foreach (var old in List().Where(f => Kind(System.IO.Path.GetFileName(f.Path))).Skip(BackupRules.Keep))
         {
             try
             {

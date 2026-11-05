@@ -12,9 +12,6 @@ public sealed class AppSettings
     /// <summary>How long a notification stays (seconds; default one minute).</summary>
     public int NotificationSeconds { get; set; } = 60;
 
-    /// <summary>Last automatic or manual backup (UTC); <c>null</c> before the first.</summary>
-    public DateTimeOffset? LastBackupUtc { get; set; }
-
     /// <summary>The selected profile (channel) the pages are filtered by.</summary>
     public Guid? SelectedProfileId { get; set; }
 
@@ -23,7 +20,4 @@ public sealed class AppSettings
 
     /// <summary>Accepted the Supertonic OpenRAIL-M use restrictions.</summary>
     public bool SupertonicLicenseAccepted { get; set; }
-
-    /// <summary>Accepted the non-commercial notice of the optional Piper Turkish voice (CC BY-NC-SA 4.0).</summary>
-    public bool PiperNonCommercialAccepted { get; set; }
 }

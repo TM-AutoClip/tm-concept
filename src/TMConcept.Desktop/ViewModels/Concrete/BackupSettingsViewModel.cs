@@ -13,7 +13,7 @@ namespace TMConcept.Desktop.ViewModels;
 /// Backup settings: back up now, change the backup password, open the backup folder, last backup. Backups are daily and the last ten are kept;
 /// API keys, videos and sample images are not in them.
 /// </summary>
-public sealed partial class BackupSettingsViewModel(BackupService backup, AppSession session, IAppPaths paths, ShellLauncher shell, Localizer text,
+public sealed partial class BackupSettingsViewModel(BackupService backup, IAppPaths paths, ShellLauncher shell, Localizer text,
     ILogger<BackupSettingsViewModel> logger) : SettingsSectionBase
 {
     /// <inheritdoc />
@@ -43,11 +43,7 @@ public sealed partial class BackupSettingsViewModel(BackupService backup, AppSes
     public partial bool Busy { get; set; }
 
     /// <inheritdoc />
-    public override Task ActivateAsync()
-    {
-        Refresh();
-        return Task.CompletedTask;
-    }
+    public override Task ActivateAsync() => RefreshAsync();
 
     [RelayCommand]
     private async Task BackupNowAsync()
@@ -66,7 +62,7 @@ public sealed partial class BackupSettingsViewModel(BackupService backup, AppSes
         finally
         {
             Busy = false;
-            Refresh();
+            await RefreshAsync().ConfigureAwait(true);
         }
     }
 
@@ -116,9 +112,19 @@ public sealed partial class BackupSettingsViewModel(BackupService backup, AppSes
         }
     }
 
-    private void Refresh()
+    private async Task RefreshAsync()
     {
         Count = backup.List().Count;
-        LastBackup = session.Settings.LastBackupUtc is { } at ? at.ToLocalTime().ToString("g", text.Culture) : text["backup.never"];
+        try
+        {
+            LastBackup = await backup.LastBackupAsync(CancellationToken.None).ConfigureAwait(true) is { } at
+                ? at.ToLocalTime().ToString("g", text.Culture)
+                : text["backup.never"];
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "The time of the last backup could not be read");
+            LastBackup = text["backup.never"];
+        }
     }
 }

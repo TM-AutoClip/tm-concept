@@ -10,6 +10,7 @@ using TMConcept.Core.Templates;
 using TMConcept.Desktop.Dialogs;
 using TMConcept.Desktop.Localization;
 using TMConcept.Desktop.Startup;
+using TMConcept.Storage.Backup;
 
 namespace TMConcept.Desktop.ViewModels;
 
@@ -20,7 +21,7 @@ namespace TMConcept.Desktop.ViewModels;
 /// </summary>
 public sealed partial class ProfileViewModel(AppSession session, IProfileStore profiles, ITemplateSource templates, IAppPaths paths, FileDialogs dialogs,
     IConfirmDialog confirm, IActivityLog activity, Localizer text, ILogger<ProfileViewModel> logger, ProfileSpeechViewModel speech,
-    Core.Images.ImageDescriber describer) : PageViewModelBase
+    Core.Images.ImageDescriber describer, BackupService backup) : PageViewModelBase
 {
     /// <summary>The narration part.</summary>
     public ProfileSpeechViewModel Speech { get; } = speech;
@@ -61,6 +62,7 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
 
     /// <summary>Vertical short video.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Horizontal))]
     public partial bool Vertical { get; set; } = true;
 
     /// <summary>Horizontal video.</summary>
@@ -330,6 +332,13 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
             return;
         }
 
+        if (session.WorkRunning)
+        {
+            // A generation or a video queue belongs to the selected profile; its rows would vanish under it.
+            Status = text["profile.delete.busy"];
+            return;
+        }
+
         var answer = await confirm.AskAsync(text["profile.delete.title"], text.Format("profile.delete.message", _editing.Name),
             text["profile.delete.confirm"], danger: true).ConfigureAwait(true);
         if (!answer.Confirmed)
@@ -337,15 +346,38 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
             return;
         }
 
-        await profiles.DeleteAsync(_editing.Id, CancellationToken.None).ConfigureAwait(true);
-        activity.Add(ActivityLevel.Info, text.Format("profile.deleted", _editing.Name));
-        _editing = null;
-        HasProfile = false;
-        var rest = await profiles.ListAsync(CancellationToken.None).ConfigureAwait(true);
-        await session.SelectProfileAsync(rest.FirstOrDefault(), CancellationToken.None).ConfigureAwait(true);
-        if (_profilesChanged is not null)
+        try
         {
-            await _profilesChanged().ConfigureAwait(true);
+            // Deleting a profile removes its concepts, queue and video records: a backup is taken first so they can come back.
+            if (await backup.CreateBeforeChangeAsync("profile delete", CancellationToken.None).ConfigureAwait(true) is not null)
+            {
+                activity.Add(ActivityLevel.Info, text["backup.before_change"]);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "The backup before a profile delete failed; the profile was not deleted");
+            Status = text.Format("backup.before_change_failed", ex.Message);
+            return;
+        }
+
+        try
+        {
+            await profiles.DeleteAsync(_editing.Id, CancellationToken.None).ConfigureAwait(true);
+            activity.Add(ActivityLevel.Info, text.Format("profile.deleted", _editing.Name));
+            _editing = null;
+            HasProfile = false;
+            var rest = await profiles.ListAsync(CancellationToken.None).ConfigureAwait(true);
+            await session.SelectProfileAsync(rest.FirstOrDefault(), CancellationToken.None).ConfigureAwait(true);
+            if (_profilesChanged is not null)
+            {
+                await _profilesChanged().ConfigureAwait(true);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "The profile could not be deleted");
+            Status = text.Format("error.generic", ex.Message);
         }
     }
 
