@@ -23,6 +23,9 @@ public sealed class ToolInstaller(IAppPaths paths, IToolPlatform platform, ToolD
     /// <summary>Pinned archives (tests give their own).</summary>
     public IReadOnlyList<ToolArchive> Archives { get; init; } = ToolManifest.Archives;
 
+    /// <summary>The folders searched for a system copy (the PATH; tests give their own).</summary>
+    public string SearchPath { get; init; } = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+
     /// <summary>The pinned archive of a tool on this computer.</summary>
     public ToolArchive? Archive(ToolKind tool) => Archives.FirstOrDefault(a => a.Tool == tool && a.Rid == platform.Rid);
 
@@ -175,9 +178,9 @@ public sealed class ToolInstaller(IAppPaths paths, IToolPlatform platform, ToolD
 
     private string Executable(ToolArchive archive) => Path.Combine(Folder(archive), archive.Root, archive.ExecutablePath);
 
-    private static string? FindOnPath(string program)
+    private string? FindOnPath(string program)
     {
-        foreach (var folder in (Environment.GetEnvironmentVariable("PATH") ?? string.Empty).Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        foreach (var folder in SearchPath.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
         {
             var candidate = Path.Combine(folder, program);
             if (File.Exists(candidate))

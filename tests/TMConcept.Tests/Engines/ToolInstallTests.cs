@@ -22,6 +22,18 @@ public sealed class ToolInstallTests
         return (installer, fake, paths);
     }
 
+    private static ToolInstaller Installer(TempPaths paths, FakeDownloads fake, ToolKind tool, byte[] body, string searchPath) =>
+        new(paths, new FakePlatform(), new ToolDownloader(new DownloadTransport(() => fake), NullLogger<ToolDownloader>.Instance),
+            NullLogger<ToolInstaller>.Instance)
+        {
+            Archives = [ToolManifest.Archives.First(a => a.Tool == tool && a.Rid == "win-x64") with
+            {
+                Sha256 = Convert.ToHexStringLower(SHA256.HashData(body)),
+                Root = tool == ToolKind.Ffmpeg ? "ffmpeg-root" : "node-v26.13.0-win-x64",
+            }],
+            SearchPath = searchPath,
+        };
+
     private static ToolArchive Sample(byte[] body) =>
         ToolManifest.Archives.First(a => a.Tool == ToolKind.Node && a.Rid == "win-x64") with { Sha256 = Convert.ToHexStringLower(SHA256.HashData(body)) };
 
@@ -86,6 +98,68 @@ public sealed class ToolInstallTests
     }
 
     [Fact]
+    public async Task AGoneFfmpegDownloadFallsBackToTheCopyOnThePath()
+    {
+        var body = Zip("ffmpeg-root", "bin/ffmpeg.exe");
+        using var paths = new TempPaths();
+        var system = Path.Combine(paths.DataDirectory, "system-bin");
+        Directory.CreateDirectory(system);
+        await File.WriteAllTextAsync(Path.Combine(system, "ffmpeg.exe"), "x", CancellationToken.None);
+        await File.WriteAllTextAsync(Path.Combine(system, "ffprobe.exe"), "x", CancellationToken.None);
+        var fake = new FakeDownloads(body) { Status = HttpStatusCode.NotFound };
+        var installer = Installer(paths, fake, ToolKind.Ffmpeg, body, system);
+
+        var status = await installer.InstallAsync(ToolKind.Ffmpeg, agreed: true, null, CancellationToken.None);
+
+        status.Ready.ShouldBeTrue();
+        status.Source.ShouldBe(ToolInstaller.FallbackSource);
+        installer.Status(ToolKind.Ffmpeg).ExecutablePath.ShouldBe(Path.Combine(system, "ffmpeg.exe"));
+        Directory.Exists(Path.Combine(paths.ToolsDirectory, "ffmpeg", "8.1.3")).ShouldBeFalse("nothing was unpacked");
+    }
+
+    [Fact]
+    public async Task AWrongFfmpegDownloadWithoutASystemCopyFailsClearlyAndRunsNothing()
+    {
+        var body = Zip("ffmpeg-root", "bin/ffmpeg.exe");
+        using var paths = new TempPaths();
+        var fake = new FakeDownloads(body);
+        var installer = Installer(paths, fake, ToolKind.Ffmpeg, body, Path.Combine(paths.DataDirectory, "empty"));
+        var wrong = new ToolInstaller(paths, new FakePlatform(), new ToolDownloader(new DownloadTransport(() => fake), NullLogger<ToolDownloader>.Instance),
+            NullLogger<ToolInstaller>.Instance)
+        {
+            Archives = [installer.Archives[0] with { Sha256 = new string('0', 64) }],
+            SearchPath = Path.Combine(paths.DataDirectory, "empty"),
+        };
+
+        var error = await Should.ThrowAsync<ToolInstallException>(() => wrong.InstallAsync(ToolKind.Ffmpeg, agreed: true, null, CancellationToken.None));
+
+        error.Code.ShouldBe("unavailable");
+        wrong.Status(ToolKind.Ffmpeg).Ready.ShouldBeFalse();
+        Directory.Exists(Path.Combine(paths.ToolsDirectory, "ffmpeg", "8.1.3")).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task AGoneNodeDownloadHasNoFallback()
+    {
+        var body = Zip("node-v26.13.0-win-x64", "node.exe");
+        using var paths = new TempPaths();
+        var system = Path.Combine(paths.DataDirectory, "system-bin");
+        Directory.CreateDirectory(system);
+        await File.WriteAllTextAsync(Path.Combine(system, "node.exe"), "x", CancellationToken.None);
+        var fake = new FakeDownloads(body) { Status = HttpStatusCode.NotFound };
+        var installer = Installer(paths, fake, ToolKind.Node, body, system);
+
+        var error = await Should.ThrowAsync<ToolInstallException>(() => installer.InstallAsync(ToolKind.Node, agreed: true, null, CancellationToken.None));
+
+        error.Code.ShouldBe("gone");
+        installer.Status(ToolKind.Node).Ready.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void TheFfmpegPinIsAMonthEndBuild() =>
+        ToolManifest.FfmpegTag.ShouldStartWith("autobuild-2026-10-31-", Case.Sensitive, "BtbN keeps a month's last build for two years, a daily build for 14 days");
+
+    [Fact]
     public void EveryPinnedArchiveIsHttpsWithAHashForEveryPlatform()
     {
         foreach (var tool in new[] { ToolKind.Node, ToolKind.Ffmpeg })
@@ -141,6 +215,8 @@ public sealed class ToolInstallTests
 
         public Uri? RedirectTo { get; set; }
 
+        public HttpStatusCode Status { get; set; } = HttpStatusCode.OK;
+
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Requests.Add(request.RequestUri!);
@@ -151,7 +227,7 @@ public sealed class ToolInstallTests
                 return Task.FromResult(redirect);
             }
 
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(body) });
+            return Task.FromResult(new HttpResponseMessage(Status) { Content = new ByteArrayContent(Status == HttpStatusCode.OK ? body : []) });
         }
     }
 }
