@@ -32,8 +32,10 @@
   <!--
     The app's own projects must stay trimmable and ready for native compilation: the trim, single-file and AOT analyzers run on every build,
     so reflection that trimming would break is a build error (warnings are errors), not a runtime surprise. The release is trimmed.
+    Only the projects under this repository's own src/ (the path is checked from the repository root, so a clone under a folder named
+    "src", such as C:\src or ~/src, does not turn it on for the netstandard2.0 analyzer or the tests).
   -->
-  <PropertyGroup Condition="$(MSBuildProjectDirectory.Contains('$([System.IO.Path]::DirectorySeparatorChar)src$([System.IO.Path]::DirectorySeparatorChar)'))">
+  <PropertyGroup Condition="$(MSBuildProjectDirectory.StartsWith('$(MSBuildThisFileDirectory)src$([System.IO.Path]::DirectorySeparatorChar)'))">
     <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
 
