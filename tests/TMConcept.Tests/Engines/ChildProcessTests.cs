@@ -57,7 +57,7 @@ public sealed class ChildProcessTests
     }
 
     [Fact]
-    public void TheSweepEndsOnlyProcessesInsideTheToolsFolder()
+    public void TheSweepEndsARealOrphanFromTheToolsFolderButNotAProgramThatOnlyNamesItInItsArguments()
     {
         var tools = Path.Combine(Path.GetTempPath(), "tmconcept-tests", "sweep-" + Guid.NewGuid().ToString("N"), "tools");
         var copy = Path.Combine(tools, "bin", Path.GetFileName(SystemProgram()));
@@ -68,31 +68,78 @@ public sealed class ChildProcessTests
             File.SetUnixFileMode(copy, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
 
-        var (_, arguments) = LongRunning(SystemProgram());
-        using var orphan = Start(copy, arguments);
-        using var other = Start(SystemProgram(), arguments);
         try
         {
+            // Both are started through a shell that exits at once, so their parent is gone (an orphan, as after a hard kill). The second
+            // is a system program whose arguments name the tools folder: it must live.
+            Orphan(OperatingSystem.IsWindows() ? $"\"{copy}\" -n 30 127.0.0.1" : $"'{copy}' 30");
+            Orphan(OperatingSystem.IsWindows()
+                ? $"cmd /c \"ping -n 30 127.0.0.1 >nul & rem {tools}\""
+                : $"sh -c 'sleep 30; : {tools}'");
+            for (var i = 0; i < 50 && Running(copy).Count == 0; i++)
+            {
+                Thread.Sleep(100);
+            }
+
+            Running(copy).Count.ShouldBe(1);
             using var guard = Guard();
             guard.SweepOrphans(tools).ShouldBe(1);
-            orphan.WaitForExit(10_000).ShouldBeTrue();
-            other.HasExited.ShouldBeFalse();
+            for (var i = 0; i < 50 && Running(copy).Count > 0; i++)
+            {
+                Thread.Sleep(100);
+            }
+
+            Running(copy).ShouldBeEmpty();
         }
         finally
         {
-            Kill(orphan);
-            Kill(other);
+            foreach (var process in Running(copy))
+            {
+                Kill(process);
+                process.Dispose();
+            }
+
             try
             {
                 Directory.Delete(Path.GetDirectoryName(tools)!, recursive: true);
             }
-            catch (IOException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 // Windows may still hold the program file for a moment; the temp folder is cleaned later.
             }
         }
     }
 
+    [Fact]
+    public void TheSweepRuleEndsOnlyToolProcessesWhoseParentIsGoneOrForeign()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "tmconcept-rule");
+        var tools = Path.Combine(root, "data", "tools");
+        string Tool(string name) => Path.Combine(tools, "node", name);
+        var app = Path.Combine(root, "elsewhere", Path.GetFileName(Environment.ProcessPath)!);
+        var system = Path.Combine(root, "system", "init");
+        var own = Environment.ProcessId;
+        var guard = new FakeTable(new Dictionary<int, (string?, int?)>
+        {
+            [101] = (system, 0),
+            [10] = (Tool("node"), 101),           // parent is the system (subreaper / init): orphan
+            [11] = (Tool("chrome"), 10),          // child of a tool: ended with its parent's tree
+            [12] = (Tool("ffmpeg"), 9_999),       // parent gone: orphan
+            [13] = (Path.Combine(root, "usr", "vim"), 101), // not from the tools folder (whatever its arguments say)
+            [15] = (app, 101),
+            [14] = (Tool("node"), 15),            // child of a running TM Concept
+            [16] = (Tool("ffmpeg"), own),         // child of this process
+        });
+
+        guard.SweepOrphans(tools).ShouldBe(2);
+        guard.Ended.Order().ToArray().ShouldBe(new[] { 10, 12 });
+    }
+
+    [Theory]
+    [InlineData("4242 (node) S 1 4242 4242 0 -1", 1)]
+    [InlineData("77 (a (b) c) R 4242 77 77 0 -1", 4242)]
+    [InlineData("garbage", null)]
+    public void TheParentIsReadFromProcStat(string stat, int? parent) => LinuxChildProcessGuard.ParseParent(stat).ShouldBe(parent);
     private static string SystemProgram() => OperatingSystem.IsWindows()
         ? Path.Combine(Environment.SystemDirectory, "PING.EXE")
         : File.Exists("/usr/bin/sleep") ? "/usr/bin/sleep" : "/bin/sleep";
@@ -112,6 +159,43 @@ public sealed class ChildProcessTests
         return Process.Start(info) ?? throw new InvalidOperationException("The test program did not start.");
     }
 
+    /// <summary>Starts a command through a shell that returns at once (the command keeps running without a parent).</summary>
+    private static void Orphan(string command)
+    {
+        var info = OperatingSystem.IsWindows()
+            ? new ProcessStartInfo("cmd.exe", $"/d /c start \"\" /b {command}")
+            : new ProcessStartInfo("/bin/sh", ["-c", command + " >/dev/null 2>&1 &"]);
+        info.UseShellExecute = false;
+        info.CreateNoWindow = true;
+        using var shell = Process.Start(info) ?? throw new InvalidOperationException("The shell did not start.");
+        shell.WaitForExit(10_000).ShouldBeTrue();
+    }
+
+    /// <summary>The running processes started from <paramref name="program"/>.</summary>
+    private static List<Process> Running(string program)
+    {
+        var found = new List<Process>();
+        foreach (var process in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(program)))
+        {
+            try
+            {
+                if (string.Equals(process.MainModule?.FileName, program, StringComparison.OrdinalIgnoreCase))
+                {
+                    found.Add(process);
+                    continue;
+                }
+            }
+            catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+            {
+                // Another user's or an ended process.
+            }
+
+            process.Dispose();
+        }
+
+        return found;
+    }
+
     private static void Kill(Process process)
     {
         try
@@ -124,6 +208,30 @@ public sealed class ChildProcessTests
         catch (InvalidOperationException)
         {
             // Already gone.
+        }
+    }
+
+    /// <summary>A guard over a made-up process table; ending only records the id.</summary>
+    private sealed class FakeTable(Dictionary<int, (string? Image, int? Parent)> table) : ChildProcessGuardBase(NullLogger.Instance)
+    {
+        public List<int> Ended { get; } = [];
+
+        protected override StringComparison PathComparison => StringComparison.Ordinal;
+
+        protected override void Tie(Process process)
+        {
+        }
+
+        protected override string? ImagePath(int pid) => table.TryGetValue(pid, out var entry) ? entry.Image : null;
+
+        protected override int? ParentId(int pid) => table.TryGetValue(pid, out var entry) ? entry.Parent : null;
+
+        protected override IEnumerable<int> ProcessIds() => table.Keys;
+
+        protected override bool EndOrphan(int pid)
+        {
+            Ended.Add(pid);
+            return true;
         }
     }
 }

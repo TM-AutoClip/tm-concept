@@ -1,12 +1,13 @@
 using System.Diagnostics;
+using System.Globalization;
 using Microsoft.Extensions.Logging;
 
 namespace TMConcept.Engines.Processes;
 
 /// <summary>
 /// Linux: children are tracked and their trees killed on exit (see <see cref="ChildProcessGuardBase"/>); nothing ties them to the app at
-/// start. The command line of an orphan is read from /proc/&lt;pid&gt;/cmdline and /proc/&lt;pid&gt;/exe (another user's processes are
-/// not readable and are skipped).
+/// start. For the start-up sweep the executable is read from /proc/&lt;pid&gt;/exe (never the arguments) and the parent from
+/// /proc/&lt;pid&gt;/stat; another user's processes cannot be read and are skipped.
 /// </summary>
 public sealed class LinuxChildProcessGuard(ILogger<LinuxChildProcessGuard> logger) : ChildProcessGuardBase(logger)
 {
@@ -20,32 +21,46 @@ public sealed class LinuxChildProcessGuard(ILogger<LinuxChildProcessGuard> logge
     }
 
     /// <inheritdoc />
-    protected override IReadOnlyList<string> CommandLine(Process process)
+    protected override string? ImagePath(int pid)
     {
-        ArgumentNullException.ThrowIfNull(process);
-        var folder = "/proc/" + process.Id.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        var parts = new List<string>();
         try
         {
-            if (new FileInfo(folder + "/exe").LinkTarget is { } exe)
-            {
-                parts.Add(exe);
-            }
+            return new FileInfo(Folder(pid) + "/exe").LinkTarget;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // Another user's process, or it just ended.
+            // Another user's process (no permission), or it just ended: not ours to end.
+            return null;
         }
-
-        try
-        {
-            parts.AddRange(File.ReadAllText(folder + "/cmdline").Split('\0', StringSplitOptions.RemoveEmptyEntries));
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            // Another user's process, or it just ended.
-        }
-
-        return parts;
     }
+
+    /// <inheritdoc />
+    protected override int? ParentId(int pid)
+    {
+        try
+        {
+            return ParseParent(File.ReadAllText(Folder(pid) + "/stat"));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // It just ended.
+            return null;
+        }
+    }
+
+    /// <summary>The parent id from a /proc/&lt;pid&gt;/stat line ("pid (name) state ppid …"; the name may hold spaces and brackets).</summary>
+    internal static int? ParseParent(string stat)
+    {
+        ArgumentNullException.ThrowIfNull(stat);
+        var end = stat.LastIndexOf(')');
+        if (end < 0)
+        {
+            return null;
+        }
+
+        var fields = stat[(end + 1)..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return fields.Length > 1 && int.TryParse(fields[1], NumberStyles.None, CultureInfo.InvariantCulture, out var parent) ? parent : null;
+    }
+
+    private static string Folder(int pid) => "/proc/" + pid.ToString(CultureInfo.InvariantCulture);
 }

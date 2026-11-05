@@ -9,8 +9,8 @@ namespace TMConcept.Engines.Processes;
 /// Windows: one job object with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE for the app's lifetime. Every child is assigned to it right after it
 /// starts and the processes it starts (Node → Chrome) join it by themselves. Only the app holds the job's handle, so when the app ends in
 /// any way (closed, killed, crashed) Windows closes the handle and ends every process in the job. Nested jobs (Windows 8+) let this work
-/// when the app itself runs inside a job (a terminal, an IDE). The command line of an orphan is its program path
-/// (QueryFullProcessImageName).
+/// when the app itself runs inside a job (a terminal, an IDE). For the start-up sweep a process is known by its executable path
+/// (QueryFullProcessImageName, never its arguments) and its parent id (NtQueryInformationProcess).
 /// </summary>
 public sealed partial class WindowsChildProcessGuard : ChildProcessGuardBase
 {
@@ -67,21 +67,20 @@ public sealed partial class WindowsChildProcessGuard : ChildProcessGuardBase
     }
 
     /// <inheritdoc />
-    protected override IReadOnlyList<string> CommandLine(Process process)
+    protected override string? ImagePath(int pid)
     {
-        ArgumentNullException.ThrowIfNull(process);
-        var handle = OpenProcess(QueryLimitedInformation, false, (uint)process.Id);
+        var handle = OpenProcess(QueryLimitedInformation, false, (uint)pid);
         if (handle == IntPtr.Zero)
         {
-            // Another user's or a protected process: not ours.
-            return [];
+            // Another user's or a protected process, or it ended: not ours.
+            return null;
         }
 
         try
         {
             var buffer = new char[32_768];
             var length = (uint)buffer.Length;
-            return QueryFullProcessImageName(handle, 0, buffer, ref length) ? [new string(buffer, 0, (int)length)] : [];
+            return QueryFullProcessImageName(handle, 0, buffer, ref length) ? new string(buffer, 0, (int)length) : null;
         }
         finally
         {
@@ -89,6 +88,27 @@ public sealed partial class WindowsChildProcessGuard : ChildProcessGuardBase
         }
     }
 
+    /// <inheritdoc />
+    protected override int? ParentId(int pid)
+    {
+        var handle = OpenProcess(QueryLimitedInformation, false, (uint)pid);
+        if (handle == IntPtr.Zero)
+        {
+            return null;
+        }
+
+        try
+        {
+            var info = default(BasicInformation);
+            return NtQueryInformationProcess(handle, 0, ref info, (uint)Marshal.SizeOf<BasicInformation>(), out _) == 0
+                ? (int)info.InheritedFromUniqueProcessId
+                : null;
+        }
+        finally
+        {
+            CloseHandle(handle);
+        }
+    }
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
@@ -133,6 +153,23 @@ public sealed partial class WindowsChildProcessGuard : ChildProcessGuardBase
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool CloseHandle(IntPtr handle);
+
+    [LibraryImport("ntdll.dll")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial int NtQueryInformationProcess(IntPtr process, int informationClass, ref BasicInformation information, uint length,
+        out uint returned);
+
+    /// <summary>PROCESS_BASIC_INFORMATION (only the parent id is read).</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    private struct BasicInformation
+    {
+        public IntPtr ExitStatus;
+        public IntPtr PebBaseAddress;
+        public IntPtr AffinityMask;
+        public IntPtr BasePriority;
+        public nuint UniqueProcessId;
+        public nuint InheritedFromUniqueProcessId;
+    }
 
     /// <summary>JOBOBJECT_BASIC_LIMIT_INFORMATION.</summary>
     [StructLayout(LayoutKind.Sequential)]

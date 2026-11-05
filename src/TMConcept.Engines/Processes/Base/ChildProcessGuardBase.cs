@@ -10,7 +10,9 @@ namespace TMConcept.Engines.Processes;
 /// when the app is killed or crashes. Linux has no such tie for children of a .NET <see cref="Process"/> (PR_SET_PDEATHSIG must be set
 /// in the child before exec), so the tree of every tracked child is killed on exit (<see cref="KillAll"/>: normal close, an unhandled
 /// exception, the process-exit event). For what a hard kill on Linux leaves behind, <see cref="SweepOrphans"/> runs at the next start: it
-/// ends processes whose program or arguments lie inside this app's tools folder (Node, ffmpeg, Chrome from there), nothing else.
+/// ends only orphans, processes whose executable file lies inside this app's tools folder (Node, ffmpeg, Chrome from there) and whose
+/// parent is gone (or is not this app and not another tool). Arguments are never looked at: an editor or a file manager that merely has a
+/// tools path on its command line is not touched.
 /// </summary>
 public abstract class ChildProcessGuardBase(ILogger logger) : IDisposable
 {
@@ -65,35 +67,40 @@ public abstract class ChildProcessGuardBase(ILogger logger) : IDisposable
     }
 
     /// <summary>
-    /// Start of the app: ends processes left by an earlier run of this app whose program or arguments lie inside
-    /// <paramref name="toolsDirectory"/>. No other process is touched. Returns how many were ended.
+    /// Start of the app (after the data folder's instance lock is held): ends the orphans an earlier run left behind. A process is ended
+    /// when its executable lies inside <paramref name="toolsDirectory"/> and its parent is gone, or is neither this app nor another program
+    /// from the tools folder (Chrome under Node is ended with Node's tree). Returns how many were ended.
     /// </summary>
     public int SweepOrphans(string toolsDirectory)
     {
         ArgumentException.ThrowIfNullOrEmpty(toolsDirectory);
         var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(toolsDirectory)) + Path.DirectorySeparatorChar;
         var own = Environment.ProcessId;
+        var app = Path.GetFileName(Environment.ProcessPath ?? string.Empty);
+        bool InTools(string? image) => image is not null && image.StartsWith(root, PathComparison);
         var ended = 0;
-        foreach (var process in Process.GetProcesses())
+        foreach (var pid in ProcessIds())
         {
-            using (process)
+            if (pid == own || !InTools(ImagePath(pid)))
             {
-                if (process.Id == own || !CommandLine(process).Any(part => part.StartsWith(root, PathComparison)))
-                {
-                    continue;
-                }
+                continue;
+            }
 
-                logger.LogWarning("A process left by an earlier run ({Program}, pid {Pid}) is ended", Program(process), process.Id);
-                if (TryKillTree(process, "sweep"))
-                {
-                    ended++;
-                }
+            if (ParentId(pid) is { } parent && parent != 0 && (parent == own || (ImagePath(parent) is { } parentImage
+                && (InTools(parentImage) || string.Equals(Path.GetFileName(parentImage), app, PathComparison)))))
+            {
+                // A tool's child (ended with its parent's tree) or a child of a running TM Concept: not an orphan.
+                continue;
+            }
+
+            if (EndOrphan(pid))
+            {
+                ended++;
             }
         }
 
         return ended;
     }
-
     /// <inheritdoc />
     public void Dispose()
     {
@@ -107,8 +114,36 @@ public abstract class ChildProcessGuardBase(ILogger logger) : IDisposable
     /// <summary>Ties a just-started process to the app where the system can (Windows job object).</summary>
     protected abstract void Tie(Process process);
 
-    /// <summary>The program path and arguments of a process (only what can be read; empty when nothing can).</summary>
-    protected abstract IReadOnlyList<string> CommandLine(Process process);
+    /// <summary>The full path of a process's executable file; null when it cannot be read (another user's process, gone).</summary>
+    protected abstract string? ImagePath(int pid);
+
+    /// <summary>The parent process id; null when it cannot be read.</summary>
+    protected abstract int? ParentId(int pid);
+
+    /// <summary>Ends an orphan's process tree (logged); false when it was already gone or could not be ended.</summary>
+    protected virtual bool EndOrphan(int pid)
+    {
+        using var process = Open(pid);
+        if (process is null)
+        {
+            return false;
+        }
+
+        logger.LogWarning("A process left by an earlier run ({Program}, pid {Pid}) is ended", Program(process), pid);
+        return TryKillTree(process, "sweep");
+    }
+
+    /// <summary>Every running process id.</summary>
+    protected virtual IEnumerable<int> ProcessIds()
+    {
+        foreach (var process in Process.GetProcesses())
+        {
+            using (process)
+            {
+                yield return process.Id;
+            }
+        }
+    }
 
     /// <summary>Ends what still runs.</summary>
     protected virtual void Dispose(bool disposing)
@@ -135,6 +170,19 @@ public abstract class ChildProcessGuardBase(ILogger logger) : IDisposable
         catch (InvalidOperationException)
         {
             return "?";
+        }
+    }
+
+    private static Process? Open(int pid)
+    {
+        try
+        {
+            return Process.GetProcessById(pid);
+        }
+        catch (ArgumentException)
+        {
+            // It ended meanwhile.
+            return null;
         }
     }
 

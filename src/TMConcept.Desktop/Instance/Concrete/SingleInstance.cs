@@ -5,21 +5,26 @@ using System.Text;
 namespace TMConcept.Desktop.Instance;
 
 /// <summary>
-/// One running app per data folder: a named mutex decides, a named pipe (a Unix socket on Linux) carries "show your window" from a second
-/// start to the first.
+/// One running app per data folder. The first start holds <c>instance.lock</c> in the data folder open without sharing for its whole life
+/// (Windows: no second open; Linux: .NET takes an exclusive flock). A file lock is used, not a named mutex: on Linux .NET scopes a named
+/// mutex to the login session, so a start from a terminal and one from the menu both counted as first, and the second one's start-up
+/// clean-up then ended the first one's render processes and emptied its work folder. A named pipe (a Unix socket on Linux) carries "show
+/// your window" from a second start to the first.
 /// </summary>
 public sealed class SingleInstance : IDisposable
 {
-    private readonly Mutex _mutex;
+    /// <summary>The lock file's name in the data folder.</summary>
+    public const string LockFileName = "instance.lock";
+
+    private readonly FileStream? _lock;
     private readonly string _name;
     private readonly CancellationTokenSource _stop = new();
 
-    private SingleInstance(Mutex mutex, string name, bool first)
+    private SingleInstance(FileStream? lockFile, string name)
     {
-        _mutex = mutex;
+        _lock = lockFile;
         _name = name;
-        IsFirst = first;
-        if (first)
+        if (IsFirst)
         {
             _ = ListenAsync();
         }
@@ -28,16 +33,28 @@ public sealed class SingleInstance : IDisposable
     /// <summary>Raised (on a pool thread) when a second start asks for the window.</summary>
     public event EventHandler? ShowRequested;
 
-    /// <summary>Whether this is the first instance.</summary>
-    public bool IsFirst { get; }
+    /// <summary>Whether this is the first instance (it holds the lock file).</summary>
+    public bool IsFirst => _lock is not null;
 
-    /// <summary>Takes the instance lock of the data folder.</summary>
+    /// <summary>Takes the instance lock of the data folder (the folder must exist).</summary>
     public static SingleInstance Acquire(string dataDirectory)
     {
-        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(dataDirectory).ToUpperInvariant())))[..16];
+        var full = Path.GetFullPath(dataDirectory);
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(full.ToUpperInvariant())))[..16];
         var name = "TMConcept-" + hash;
-        var mutex = new Mutex(true, name, out var created);
-        return new SingleInstance(mutex, name, created);
+        FileStream? lockFile;
+        try
+        {
+            lockFile = new FileStream(Path.Combine(full, LockFileName), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        }
+        catch (IOException ex) when (ex is not DirectoryNotFoundException and not PathTooLongException and not FileNotFoundException)
+        {
+            // Held by the running instance (sharing violation on Windows, flock on Linux): this is a second start.
+            Console.Error.WriteLine("TM Concept is already running for this data folder (" + ex.GetType().Name + ").");
+            lockFile = null;
+        }
+
+        return new SingleInstance(lockFile, name);
     }
 
     /// <summary>Asks the first instance to show its window.</summary>
@@ -60,12 +77,7 @@ public sealed class SingleInstance : IDisposable
     public void Dispose()
     {
         _stop.Cancel();
-        if (IsFirst)
-        {
-            _mutex.ReleaseMutex();
-        }
-
-        _mutex.Dispose();
+        _lock?.Dispose();
         _stop.Dispose();
     }
 
