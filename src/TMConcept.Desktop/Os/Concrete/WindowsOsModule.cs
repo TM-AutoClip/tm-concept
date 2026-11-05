@@ -19,6 +19,7 @@ public sealed class WindowsOsModule : IOsModule
     public void Register(IServiceCollection services)
     {
         services.AddSingleton<IKeyProtector, DpapiKeyProtector>();
+        services.AddSingleton<IRecycleBin, WindowsRecycleBin>();
         services.AddSingleton<Core.Tools.IToolPlatform, Engines.Tools.WindowsToolPlatform>();
     }
 }

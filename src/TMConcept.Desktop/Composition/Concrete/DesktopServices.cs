@@ -138,6 +138,7 @@ public static class DesktopServices
         services.AddSingleton<Dialogs.IConfirmDialog, Dialogs.ConfirmDialog>();
         AddPage<ConceptsViewModel, ConceptsView>(services);
         AddPage<VideoViewModel, VideoView>(services);
+        AddPage<ProducedViewModel, ProducedView>(services);
         AddPage<TrashViewModel, TrashView>(services);
         AddPage<ProfileViewModel, ProfileView>(services);
         AddPage<SettingsViewModel, SettingsView>(services);

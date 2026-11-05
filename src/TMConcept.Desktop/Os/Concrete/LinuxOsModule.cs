@@ -28,6 +28,7 @@ public sealed class LinuxOsModule : IOsModule
     {
         services.AddSingleton<ICommandRunner, ProcessCommandRunner>();
         services.AddSingleton<IKeyProtector, SecretServiceKeyProtector>();
+        services.AddSingleton<IRecycleBin, LinuxRecycleBin>();
         services.AddSingleton<Core.Tools.IToolPlatform, Engines.Tools.LinuxToolPlatform>();
     }
 

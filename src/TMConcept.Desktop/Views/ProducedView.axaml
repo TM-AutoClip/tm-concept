@@ -1,0 +1,44 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:TMConcept.Desktop.ViewModels"
+             xmlns:c="using:TMConcept.Desktop.Converters"
+             x:Class="TMConcept.Desktop.Views.ProducedView"
+             x:DataType="vm:ProducedViewModel">
+  <Grid ColumnDefinitions="*,16,380" Margin="16">
+    <DockPanel>
+      <StackPanel DockPanel.Dock="Top" Spacing="8">
+        <TextBlock Text="{DynamicResource nav.produced}" Classes="h1" />
+        <TextBox Text="{Binding Search}" PlaceholderText="{DynamicResource common.search}" MaxWidth="400" HorizontalAlignment="Left" MinWidth="260" />
+        <TextBlock Text="{Binding Status}" Classes="error" />
+      </StackPanel>
+      <ListBox ItemsSource="{Binding Items}" SelectedItem="{Binding Selected}" Background="Transparent" Margin="0,8,0,0">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:VideoRowViewModel">
+            <Grid ColumnDefinitions="72,*" ColumnSpacing="10" Margin="0,2">
+              <Border Width="72" Height="72" Background="#22000000" CornerRadius="6" ClipToBounds="True">
+                <Image Source="{Binding Thumbnail, Converter={x:Static c:FileBitmapConverter.Instance}}" Stretch="UniformToFill" />
+              </Border>
+              <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{Binding Line}" Classes="small" />
+                <TextBlock Text="{Binding Badges}" Classes="small warning" />
+              </StackPanel>
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </DockPanel>
+    <Border Grid.Column="2" Classes="card" IsVisible="{Binding HasSelection}" VerticalAlignment="Top">
+      <StackPanel Spacing="10">
+        <TextBlock Text="{Binding Selected.Title}" Classes="h2" TextWrapping="Wrap" />
+        <Image Source="{Binding Selected.Thumbnail, Converter={x:Static c:FileBitmapConverter.Instance}}" MaxHeight="300" Stretch="Uniform" />
+        <WrapPanel>
+          <Button Classes="accent" Content="{DynamicResource produced.play}" Command="{Binding PlayCommand}" Margin="0,0,8,8" />
+          <Button Content="{DynamicResource produced.folder}" Command="{Binding OpenFolderCommand}" Margin="0,0,8,8" />
+          <Button Classes="danger" Content="{DynamicResource common.delete}" Command="{Binding DeleteCommand}" Margin="0,0,8,8" />
+        </WrapPanel>
+        <SelectableTextBlock Text="{Binding Details}" TextWrapping="Wrap" />
+      </StackPanel>
+    </Border>
+  </Grid>
+</UserControl>
