@@ -9,9 +9,6 @@ public static class SpeechEngines
     /// <summary>Local Supertonic 3 (default).</summary>
     public const string Supertonic = "supertonic";
 
-    /// <summary>Local Piper Turkish voice (dfki; non-commercial only).</summary>
-    public const string PiperTurkish = "piper-tr";
-
     /// <summary>The online model chosen for the speech step.</summary>
     public const string Online = "online";
 }

@@ -61,6 +61,13 @@ public abstract class SherpaSpeechEngineBase(SpeechModelInstaller installer, Too
                     _tts ??= new OfflineTts(Config());
                     var audio = _tts.GenerateWithConfig(request.Text, Generation(request), (_, _, _, _) => cancellationToken.IsCancellationRequested ? 0 : 1);
                     cancellationToken.ThrowIfCancellationRequested();
+
+                    // An engine that could not turn the text into sounds returns no samples: that is a failure, never a silent clip.
+                    if (audio.SampleRate <= 0 || audio.Samples.Length == 0)
+                    {
+                        throw new SpeechException($"{Name} produced no audio for the text.") { Code = "engine" };
+                    }
+
                     Directory.CreateDirectory(Path.GetDirectoryName(request.OutputWav)!);
                     if (!audio.SaveToWaveFile(request.OutputWav))
                     {

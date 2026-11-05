@@ -11,7 +11,4 @@ public enum ToolKind
 
     /// <summary>Supertonic 3 voice model (sherpa-onnx).</summary>
     SupertonicVoice = 2,
-
-    /// <summary>Piper Turkish voice (dfki, non-commercial).</summary>
-    PiperTurkishVoice = 3,
 }

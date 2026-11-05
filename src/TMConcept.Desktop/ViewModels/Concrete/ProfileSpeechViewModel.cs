@@ -11,7 +11,7 @@ using TMConcept.Desktop.Os;
 namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
-/// The narration part of a profile: off (silent video), local Supertonic 3 (default, free), local Piper Turkish (non-commercial only), or
+/// The narration part of a profile: off (silent video), local Supertonic 3 (default, free), or
 /// the online model of the speech step. Voice and speed; "Listen" speaks a sample sentence.
 /// </summary>
 public sealed partial class ProfileSpeechViewModel(SpeechService speech, IAppPaths paths, ShellLauncher shell, Localizer text,
@@ -135,8 +135,7 @@ public sealed partial class ProfileSpeechViewModel(SpeechService speech, IAppPat
                 Voices.Add(new ChoiceOption(voice.Id, voice.Label));
             }
 
-            Note = (local.Ready ? string.Empty : text["speech.not_installed"] + " ")
-                + (local.Code == SpeechEngines.PiperTurkish ? text["speech.piper.note"] : text["speech.supertonic.note"]);
+            Note = (local.Ready ? string.Empty : text["speech.not_installed"] + " ") + text["speech.supertonic.note"];
         }
 
         Voice = Voices.FirstOrDefault();

@@ -8,7 +8,7 @@ namespace TMConcept.Core.Speech;
 /// </summary>
 public interface ISpeechEngine
 {
-    /// <summary>Code ("supertonic", "piper-tr", or a provider code such as "openai").</summary>
+    /// <summary>Code ("supertonic", or a provider code such as "openai").</summary>
     string Code { get; }
 
     /// <summary>Display name.</summary>
