@@ -182,7 +182,7 @@
   "concepts.model": "Model",
   "concepts.check": "Duplicate check",
   "concepts.check.local": "local (free)",
-  "concepts.check.semantic": "semantic (needs an embedding model)",
+  "concepts.check.semantic": "semantic (paid, needs an embedding model)",
   "concepts.estimate.title": "Estimated cost",
   "concepts.estimate": "{0} · {1} concepts\n≈ {2} – {3}  (input ~{4}, output up to ~{5} tokens)",
   "concepts.estimate.none": "Choose a model to see the estimate.",
@@ -353,5 +353,6 @@
   "produced.note.images_failed": "Images could not be made; the video was made without them.",
   "produced.note.ai_voice": "AI voice — say that the voice is AI-generated when you publish (Supertonic OpenRAIL-M).",
   "produced.note.non_commercial_voice": "Non-commercial only: the Piper Turkish voice (dfki) is CC BY-NC-SA 4.0; this video may not be used commercially.",
-  "produced.note.repaired": "The video code needed its one repair."
+  "produced.note.repaired": "The video code needed its one repair.",
+  "concepts.semantic.skipped": "Semantic check skipped: choose an embedding model and add its key."
 }

@@ -16,8 +16,10 @@ namespace TMConcept.Core.Concepts;
 /// for thrown-away duplicates: the result tells how many are missing.
 /// </summary>
 public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profiles, IRunStore runs, IChatClientFactory chats, ICostCalculator costs,
-    TimeProvider clock, ILogger<ConceptGenerator> logger)
+    IEmbeddingStore embeddings, IEmbeddingService embedder, TimeProvider clock, ILogger<ConceptGenerator> logger)
 {
+    private readonly List<ConceptEmbedding> _pendingEmbeddings = [];
+
     /// <summary>Thinking share on top of the output (low and high end of the range).</summary>
     public static readonly (double Low, double High) ThinkingShare = (1.1, 1.5);
 
@@ -115,6 +117,7 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
                 var verdicts = request.LocalCheck
                     ? DuplicateCheck.Sift(batchCandidates.Select(c => c.Subject), subjects)
                     : batchCandidates.Select(c => new DuplicateVerdict(c.Subject, DuplicateResult.None)).ToList();
+                verdicts = await SemanticAsync(request, run, verdicts, subjects, cancellationToken).ConfigureAwait(false);
                 var batch = new List<Concept>();
                 foreach (var (candidate, verdict) in batchCandidates.Zip(verdicts))
                 {
@@ -142,6 +145,13 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
                 }
 
                 await concepts.AddAsync(batch, CancellationToken.None).ConfigureAwait(false);
+                var saved = _pendingEmbeddings.Where(e => batch.Any(b => b.Id == e.ConceptId)).ToList();
+                _pendingEmbeddings.Clear();
+                if (saved.Count > 0)
+                {
+                    await embeddings.SaveAsync(saved, CancellationToken.None).ConfigureAwait(false);
+                }
+
                 accepted.AddRange(batch);
                 run.Accepted = accepted.Count;
                 run.RejectedDuplicates = rejected;
@@ -186,11 +196,74 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
         }
     }
 
+    /// <summary>
+    /// Layer 3 (optional): embeds the candidates that passed the local check, compares them with the stored vectors of the profile and
+    /// with each other, drops duplicates, marks similar ones and stores the new vectors. A failure only skips this layer (logged).
+    /// </summary>
+    private async Task<IReadOnlyList<DuplicateVerdict>> SemanticAsync(ConceptRequest request, Run run, IReadOnlyList<DuplicateVerdict> verdicts,
+        IReadOnlyList<DuplicateSubject> history, CancellationToken cancellationToken)
+    {
+        if (request.Embedding is not { } model || verdicts.All(v => !v.Result.Accepted))
+        {
+            return verdicts;
+        }
+
+        try
+        {
+            var stored = await embeddings.ListAsync(request.Profile.Id, model.Model.Id, cancellationToken).ConfigureAwait(false);
+            var byId = history.ToDictionary(h => h.Id);
+            var pool = stored.Where(e => byId.ContainsKey(e.ConceptId)).Select(e => (Subject: byId[e.ConceptId], Vector: SemanticCheck.FromBytes(e.Vector))).ToList();
+            var candidates = verdicts.Where(v => v.Result.Accepted).ToList();
+            var result = await embedder.EmbedAsync(model, candidates.Select(v => SemanticCheck.Text(v.Subject.Title, v.Subject.Summary)).ToList(), cancellationToken)
+                .ConfigureAwait(false);
+            run.ActualUsd += result.Tokens * model.Model.InputUsd / 1_000_000m;
+            var output = new List<DuplicateVerdict>();
+            var keep = new List<ConceptEmbedding>();
+            var index = 0;
+            foreach (var verdict in verdicts)
+            {
+                if (!verdict.Result.Accepted)
+                {
+                    output.Add(verdict);
+                    continue;
+                }
+
+                var vector = result.Vectors[index++];
+                var semantic = SemanticCheck.Check(vector, pool);
+                var chosen = semantic.Kind == DuplicateKind.Duplicate || (semantic.Kind == DuplicateKind.Similar && verdict.Result.Kind == DuplicateKind.New)
+                    ? semantic
+                    : verdict.Result;
+                output.Add(verdict with { Result = chosen });
+                if (chosen.Accepted)
+                {
+                    pool.Add((verdict.Subject, vector));
+                    keep.Add(new ConceptEmbedding
+                    {
+                        ConceptId = verdict.Subject.Id,
+                        ProfileId = request.Profile.Id,
+                        Model = model.Model.Id,
+                        Dimensions = vector.Length,
+                        Vector = SemanticCheck.ToBytes(vector),
+                    });
+                }
+            }
+
+            _pendingEmbeddings.AddRange(keep);
+            return output;
+        }
+        catch (Exception ex) when (ex is ProviderException or InvalidOperationException or ArgumentException)
+        {
+            logger.LogWarning(ex, "Semantic duplicate check skipped for this batch");
+            return verdicts;
+        }
+    }
+
     private static int MaxOutput(int count) => Math.Min(64_000, 4_000 + (count * 1_600));
 
-    private static List<string> Titles(IReadOnlyList<DuplicateSubject> subjects) => subjects.OrderBy(s => s.Number).Select(s => s.Title).ToList();
+    private static IReadOnlyList<string> Titles(IReadOnlyList<DuplicateSubject> subjects) =>
+        HistoryCompressor.Lines(subjects.OrderBy(s => s.Number).Select(s => s.Title).ToList());
 
-    private async Task<List<string>> HistoryTitlesAsync(Guid profileId, CancellationToken cancellationToken) =>
+    private async Task<IReadOnlyList<string>> HistoryTitlesAsync(Guid profileId, CancellationToken cancellationToken) =>
         Titles(await concepts.HistoryAsync(profileId, cancellationToken).ConfigureAwait(false));
 
     private void Charge(Run run, ConceptRequest request, ChatUsage usage, decimal? reported)

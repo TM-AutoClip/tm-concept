@@ -182,7 +182,7 @@
   "concepts.model": "Model",
   "concepts.check": "Tekrar denetimi",
   "concepts.check.local": "yerel (ücretsiz)",
-  "concepts.check.semantic": "anlamsal (gömme modeli gerekir)",
+  "concepts.check.semantic": "anlamsal (ücretli, gömme modeli gerekir)",
   "concepts.estimate.title": "Tahmini ücret",
   "concepts.estimate": "{0} · {1} konsept\n≈ {2} – {3}  (girdi ~{4}, çıktı en çok ~{5} jeton)",
   "concepts.estimate.none": "Tahmini görmek için bir model seç.",
@@ -353,5 +353,6 @@
   "produced.note.images_failed": "Görseller üretilemedi; video görselsiz üretildi.",
   "produced.note.ai_voice": "YZ sesi — yayınlarken sesin yapay zekâ ile üretildiğini belirt (Supertonic OpenRAIL-M).",
   "produced.note.non_commercial_voice": "Yalnız ticari olmayan kullanım: Piper Türkçe sesi (dfki) CC BY-NC-SA 4.0 lisanslı; bu video ticari amaçla kullanılamaz.",
-  "produced.note.repaired": "Video kodu tek onarımını kullandı."
+  "produced.note.repaired": "Video kodu tek onarımını kullandı.",
+  "concepts.semantic.skipped": "Anlamsal denetim atlandı: bir gömme modeli seç ve anahtarını ekle."
 }

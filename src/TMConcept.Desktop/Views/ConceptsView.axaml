@@ -25,7 +25,7 @@
         </Border>
         <TextBlock Text="{DynamicResource concepts.check}" FontWeight="SemiBold" />
         <CheckBox IsChecked="{Binding LocalCheck}" Content="{DynamicResource concepts.check.local}" />
-        <CheckBox IsEnabled="False" Content="{DynamicResource concepts.check.semantic}" />
+        <CheckBox IsChecked="{Binding SemanticCheck}" IsEnabled="{Binding SemanticAvailable}" Content="{DynamicResource concepts.check.semantic}" />
         <TextBlock Text="{Binding Status}" Classes="error" TextWrapping="Wrap" />
       </StackPanel>
     </ScrollViewer>

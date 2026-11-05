@@ -60,6 +60,14 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
     [ObservableProperty]
     public partial bool LocalCheck { get; set; } = true;
 
+    /// <summary>Semantic duplicate check (needs an embedding model in Settings → Models).</summary>
+    [ObservableProperty]
+    public partial bool SemanticCheck { get; set; }
+
+    /// <summary>Whether an embedding model is chosen.</summary>
+    [ObservableProperty]
+    public partial bool SemanticAvailable { get; set; }
+
     /// <summary>Estimate.</summary>
     [ObservableProperty]
     public partial string Estimate { get; set; } = string.Empty;
@@ -253,6 +261,20 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
             return;
         }
 
+        ResolvedModel? embedding = null;
+        if (SemanticCheck)
+        {
+            try
+            {
+                embedding = await resolver.ResolveAsync(PipelineSteps.Embedding, null, CancellationToken.None).ConfigureAwait(true);
+            }
+            catch (ModelNotReadyException ex)
+            {
+                logger.LogWarning("Semantic check skipped: {Missing}", ex.Missing);
+                activity.Add(ActivityLevel.Warning, text["concepts.semantic.skipped"]);
+            }
+        }
+
         Status = string.Empty;
         Missing = 0;
         Busy = true;
@@ -262,7 +284,7 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         try
         {
             var progress = new Progress<ConceptBatch>(OnBatch);
-            var result = await generator.GenerateAsync(new ConceptRequest(profile, count, ExtraPrompt.Trim(), resolved, LocalCheck), progress, cancel.Token)
+            var result = await generator.GenerateAsync(new ConceptRequest(profile, count, ExtraPrompt.Trim(), resolved, LocalCheck, embedding), progress, cancel.Token)
                 .ConfigureAwait(true);
             Report(result);
         }
@@ -339,6 +361,8 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
             var step = PipelineSteps.All.First(s => s.Code == PipelineSteps.Concepts);
             Recommended = text.Format("models.recommended",
                 string.Join(" · ", step.Recommended.Select(r => catalog.All.FirstOrDefault(m => m.Provider + "/" + m.Id == r)?.Name ?? r)));
+            SemanticAvailable = await steps.GetAsync(PipelineSteps.Embedding, CancellationToken.None).ConfigureAwait(true) is not null;
+            SemanticCheck &= SemanticAvailable;
             PricedOn = text.Format("concepts.priced_on", catalog.All.Select(m => m.PricedOn).Where(d => d.Length > 0).DefaultIfEmpty("-").Max()!);
         }
         finally

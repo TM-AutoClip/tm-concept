@@ -31,6 +31,8 @@ public static class ProviderServices
         AddChat<MistralProvider>(services);
         AddChat<DeepSeekProvider>(services);
         AddProvider<FalProvider>(services);
+        services.AddSingleton<Providers.Embeddings.IEmbeddingTransport, Providers.Embeddings.OpenAIEmbeddings>();
+        services.AddSingleton<Core.Duplicates.IEmbeddingService, Providers.Embeddings.EmbeddingService>();
     }
 
     /// <summary>A provider without chat.</summary>
