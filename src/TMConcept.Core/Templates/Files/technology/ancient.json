@@ -1,0 +1,16 @@
+{
+  "id": "technology.ancient",
+  "category": { "tr": "Teknoloji", "en": "Technology" },
+  "name": { "tr": "Antik teknoloji", "en": "Ancient technology" },
+  "channelName": { "tr": "Kayıp Mühendislik", "en": "Lost Engineering" },
+  "concept": {
+    "tr": "Hayal: Eski uygarlıkların mühendislik zekâsını, nasıl çalıştığını göstererek anlatan bir kanal.\nHedef: Antikythera mekanizması, Roma betonu, Rum ateşi, su saatleri gibi buluşların ne işe yaradığını ve nasıl yapıldığını şemalarla, anlaşılır biçimde göstermek.\nNasıl videolar: 60–90 saniyelik dikey videolar. \"Bu nasıl mümkündü?\" sorusuyla açılır, adım adım çalışan bir şema animasyonuyla devam eder ve bugünkü karşılığıyla biter. Bilinmeyen kısım açıkça \"bilinmiyor\" diye söylenir.\nTon: hayranlık uyandıran ama bilimsel; abartı yok.\nKaçınılacaklar: \"uzaylılar yaptı\" türü iddialar, sahte arkeoloji, kanıtsız \"kayıp teknoloji\" söylemi.",
+    "en": "Vision: A channel that shows the engineering genius of ancient civilizations by showing how things actually worked.\nGoal: Explain inventions such as the Antikythera mechanism, Roman concrete, Greek fire and water clocks: what they did and how they were made, with clear diagrams.\nWhat the videos are like: 60–90 second vertical videos that open with \"How was this possible?\", continue with a step-by-step diagram animation and end with the modern equivalent. Unknowns are clearly stated as unknown.\nTone: awe-inspiring yet scientific; no exaggeration.\nAvoid: \"aliens built it\" claims, pseudo-archaeology, unsupported \"lost technology\" narratives."
+  },
+  "format": "vertical",
+  "targetSeconds": 75,
+  "extraPromptExamples": {
+    "tr": ["yalnız Antik Yunan", "su ve sulama", "savaş makineleri"],
+    "en": ["Only ancient Greece", "Water and irrigation", "Siege engines"]
+  }
+}

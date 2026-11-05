@@ -1,0 +1,16 @@
+{
+  "id": "technology.modern",
+  "category": { "tr": "Teknoloji", "en": "Technology" },
+  "name": { "tr": "Günümüz teknolojileri", "en": "Modern technology" },
+  "channelName": { "tr": "İçinde Ne Var?", "en": "What's Inside?" },
+  "concept": {
+    "tr": "Hayal: Her gün kullandığımız teknolojinin içini, kimseyi küçümsemeden, sade bir dille açan bir kanal.\nHedef: Telefon, pil, GPS, Wi-Fi, çip, internet kabloları gibi teknolojilerin nasıl çalıştığını bir dakikada anlaşılır kılmak.\nNasıl videolar: 45–75 saniyelik dikey videolar. Gündelik bir anla açılır (\"Haritayı açtığında telefonun uzaydan ne duyuyor?\"), sade bir şema animasyonuyla açıklar, bir şaşırtıcı sayıyla biter. Yalnız kalıcı bilgi anlatılır; çabuk eskiyen fiyat ve ürün haberi yok.\nTon: samimi, açık, doğru.\nKaçınılacaklar: marka övgüsü ya da reklam, sağlık ve finans tavsiyesi, doğrulanmamış performans rakamları.",
+    "en": "Vision: A channel that opens up everyday technology in plain language, without talking down to anyone.\nGoal: Explain how phones, batteries, GPS, Wi-Fi, chips and undersea internet cables work, in about a minute.\nWhat the videos are like: 45–75 second vertical videos that open with an everyday moment (\"When you open a map, what is your phone hearing from space?\"), explain with a simple diagram animation and end with one surprising number. Only lasting knowledge; no fast-ageing price or product news.\nTone: friendly, clear, accurate.\nAvoid: brand praise or advertising, health and finance advice, unverified performance figures."
+  },
+  "format": "vertical",
+  "targetSeconds": 60,
+  "extraPromptExamples": {
+    "tr": ["yalnız iletişim teknolojileri", "enerji ve piller", "yapay zekâ donanımı"],
+    "en": ["Only communication technologies", "Energy and batteries", "AI hardware"]
+  }
+}

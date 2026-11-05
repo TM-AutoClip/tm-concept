@@ -4,6 +4,10 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
   <ItemGroup>
+    <!-- Ready channel templates (read-only, one file each). -->
+    <EmbeddedResource Include="Templates/Files/**/*.json" LogicalName="TMConcept.Templates.%(Filename)%(Extension)" />
+  </ItemGroup>
+  <ItemGroup>
     <InternalsVisibleTo Include="TMConcept.Tests" />
   </ItemGroup>
 </Project>

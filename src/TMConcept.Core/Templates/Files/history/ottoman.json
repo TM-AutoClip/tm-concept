@@ -1,0 +1,16 @@
+{
+  "id": "history.ottoman",
+  "category": { "tr": "Tarih", "en": "History" },
+  "name": { "tr": "Osmanlı tarihi", "en": "Ottoman history" },
+  "channelName": { "tr": "Osmanlı Defteri", "en": "The Ottoman Ledger" },
+  "concept": {
+    "tr": "Hayal: Altı yüzyıllık Osmanlı'yı savaş listesinden çıkarıp gündelik hayatı, kurumları ve insanlarıyla anlatan bir kanal.\nHedef: Devletin nasıl işlediğini, şehirlerin nasıl yaşadığını, bilim ve sanatın nasıl geliştiğini kısa ve kaynaklı videolarla anlaşılır kılmak.\nNasıl videolar: 60–90 saniyelik dikey videolar. Bir belge, bir yapı ya da bir sayıyla açılır. Harita, minyatür esinli çizimler, zaman çizelgesi ve arşiv belgesi görünümünde yazılar kullanılır. Her video tek bir soruyu cevaplar. Dönem: 1299–1922.\nTon: tarafsız ve meraklı; ne övgü ne karalama. Rivayet, \"rivayete göre\" diye söylenir.\nKaçınılacaklar: günümüz siyasi tartışmaları, milliyetçi ya da aşağılayıcı dil, doğrulanmamış sayılar.",
+    "en": "Vision: A channel that takes six centuries of Ottoman history beyond lists of battles and tells it through daily life, institutions and people.\nGoal: Make it easy to understand how the state worked, how cities lived and how science and art developed, in short, well-sourced videos.\nWhat the videos are like: 60–90 second vertical videos that open with a document, a building or a number. Maps, miniature-inspired drawings, timelines and archive-style captions. Each video answers one question. Period: 1299–1922.\nTone: neutral and curious; neither glorifying nor disparaging. Legends are told as legends.\nAvoid: present-day political debates, nationalist or demeaning language, unverified figures."
+  },
+  "format": "vertical",
+  "targetSeconds": 75,
+  "extraPromptExamples": {
+    "tr": ["Lale Devri", "esnaf ve loncalar", "yalnız 16. yüzyıl"],
+    "en": ["The Tulip Era", "Guilds and craftsmen", "Only the 16th century"]
+  }
+}

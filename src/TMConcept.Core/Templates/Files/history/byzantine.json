@@ -1,0 +1,16 @@
+{
+  "id": "history.byzantine",
+  "category": { "tr": "Tarih", "en": "History" },
+  "name": { "tr": "Bizans tarihi", "en": "Byzantine history" },
+  "channelName": { "tr": "Bizans Kronikleri", "en": "Byzantine Chronicles" },
+  "concept": {
+    "tr": "Hayal: Bin yıllık Bizans'ı ders kitabının ötesinde, yaşayan bir dünya olarak anlatan bir kanal.\nHedef: Tarihi merak eden izleyiciye her videoda az bilinen bir olayı, kişiyi ya da yapıyı kaynağa dayanarak anlatmak; izleyici videonun sonunda \"bunu bilmiyordum\" desin.\nNasıl videolar: 60–90 saniyelik dikey videolar. İlk 3 saniyede şaşırtıcı bir soru ya da sayı. Harita, zaman çizelgesi, mimari çizim ve kısa yazılarla desteklenen sakin, belgesel bir anlatım. Her video tek bir olaya odaklanır ve sonunda bir sonraki merak noktasını bırakır. Dönem: 330–1453.\nTon: tarafsız, saygılı, abartısız; efsane ile belgelenmiş bilgiyi ayırır.\nKaçınılacaklar: kan ve şiddet ayrıntısı, olayları günümüz siyasetine bağlamak, kanıtsız iddia.",
+    "en": "Vision: A channel that brings the thousand-year Byzantine Empire to life as a living world, beyond the textbook.\nGoal: In every video, tell history-curious viewers about a little-known event, person or building, grounded in sources, so they finish thinking \"I never knew that\".\nWhat the videos are like: 60–90 second vertical videos. A surprising question or number in the first 3 seconds. Calm, documentary narration supported by maps, timelines, architectural drawings and short captions. Each video focuses on one event and ends with a hook for the next question. Period: 330–1453.\nTone: neutral, respectful, never sensational; separates legend from documented fact.\nAvoid: graphic violence, tying events to present-day politics, unsupported claims."
+  },
+  "format": "vertical",
+  "targetSeconds": 75,
+  "extraPromptExamples": {
+    "tr": ["1000–1500 yılları arası olsun", "yalnız imparatoriçeler", "Konstantinopolis'in yapıları"],
+    "en": ["Focus on 1000–1500 AD", "Only empresses", "Buildings of Constantinople"]
+  }
+}
