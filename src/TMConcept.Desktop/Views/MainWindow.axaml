@@ -25,6 +25,7 @@
                 </DataTemplate>
               </ComboBox.ItemTemplate>
             </ComboBox>
+            <Button Classes="link" Content="{DynamicResource profile.add}" Command="{Binding NewProfileCommand}" />
           </StackPanel>
           <ItemsControl ItemsSource="{Binding Items}" Margin="8,4">
             <ItemsControl.ItemTemplate>

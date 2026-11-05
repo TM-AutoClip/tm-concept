@@ -1,0 +1,19 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="using:TMConcept.Desktop.Dialogs"
+        x:Class="TMConcept.Desktop.Views.ConfirmWindow"
+        x:DataType="d:ConfirmViewModel"
+        Title="{Binding Title}"
+        Width="520" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+  <StackPanel Margin="24" Spacing="14">
+    <TextBlock Text="{Binding Title}" Classes="h2" TextWrapping="Wrap" />
+    <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />
+    <CheckBox IsChecked="{Binding Checked}" Content="{Binding CheckboxText}" IsVisible="{Binding HasCheckbox}" />
+    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+      <Button Name="CancelButton" Content="{Binding CancelText}" IsCancel="True" />
+      <Button Name="ConfirmButton" Classes="accent" Content="{Binding ConfirmText}" IsVisible="{Binding Normal}" />
+      <Button Name="DangerButton" Classes="danger" Content="{Binding ConfirmText}" IsVisible="{Binding Danger}" />
+    </StackPanel>
+  </StackPanel>
+</Window>

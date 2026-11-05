@@ -1,0 +1,86 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:TMConcept.Desktop.ViewModels"
+             xmlns:c="using:TMConcept.Desktop.Converters"
+             x:Class="TMConcept.Desktop.Views.ProfileView"
+             x:DataType="vm:ProfileViewModel">
+  <ScrollViewer>
+    <StackPanel Margin="24" Spacing="12" MaxWidth="900" HorizontalAlignment="Left">
+      <TextBlock Text="{DynamicResource profile.title.new}" Classes="h1" IsVisible="{Binding IsNew}" />
+      <TextBlock Text="{DynamicResource profile.title.edit}" Classes="h1" IsVisible="{Binding !IsNew}" />
+
+      <Border Classes="card">
+        <StackPanel Spacing="8">
+          <TextBlock Text="{DynamicResource profile.template}" FontWeight="SemiBold" />
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <ComboBox ItemsSource="{Binding Templates}" SelectedItem="{Binding SelectedTemplate}" MinWidth="320">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:TemplateOption">
+                  <TextBlock Text="{Binding Label}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <Button Content="{DynamicResource profile.template.apply}" Command="{Binding ApplyTemplateCommand}" />
+          </StackPanel>
+          <TextBlock Text="{DynamicResource profile.template.hint}" Classes="small" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+
+      <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="10" ColumnSpacing="12">
+        <TextBlock Text="{DynamicResource profile.name}" VerticalAlignment="Center" />
+        <TextBox Grid.Column="1" Text="{Binding Name}" MaxLength="80" />
+        <TextBlock Grid.Row="1" Text="{DynamicResource profile.language}" VerticalAlignment="Center" />
+        <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Languages}" SelectedItem="{Binding Language}" MinWidth="200">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ChoiceOption">
+              <TextBlock Text="{Binding Label}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <TextBlock Grid.Row="2" Text="{DynamicResource profile.format}" VerticalAlignment="Center" />
+        <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Spacing="16">
+          <RadioButton GroupName="format" IsChecked="{Binding Vertical}" Content="{DynamicResource profile.format.vertical}" />
+          <RadioButton GroupName="format" IsChecked="{Binding Horizontal}" Content="{DynamicResource profile.format.horizontal}" />
+        </StackPanel>
+        <TextBlock Grid.Row="3" Text="{DynamicResource profile.seconds}" VerticalAlignment="Center" />
+        <NumericUpDown Grid.Row="3" Grid.Column="1" Value="{Binding TargetSeconds}" Minimum="15" Maximum="180" Increment="5" Width="160"
+                       HorizontalAlignment="Left" FormatString="0" />
+      </Grid>
+
+      <TextBlock Text="{DynamicResource profile.concept}" FontWeight="SemiBold" />
+      <TextBlock Text="{DynamicResource profile.concept.hint}" Classes="small" TextWrapping="Wrap" />
+      <TextBox Text="{Binding ConceptText}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="180" MaxLength="6000" />
+
+      <Border Classes="card">
+        <StackPanel Spacing="8">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <TextBlock Text="{DynamicResource profile.images}" FontWeight="SemiBold" VerticalAlignment="Center" />
+            <Button Content="{DynamicResource profile.images.add}" Command="{Binding AddImagesCommand}" IsEnabled="{Binding !IsNew}" />
+          </StackPanel>
+          <TextBlock Text="{DynamicResource profile.images.warning}" Classes="warning" TextWrapping="Wrap" />
+          <ItemsControl ItemsSource="{Binding Images}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:ProfileImageViewModel">
+                <Grid ColumnDefinitions="96,*,Auto" ColumnSpacing="10" Margin="0,4">
+                  <Image Source="{Binding FullPath, Converter={x:Static c:FileBitmapConverter.Instance}}" Width="96" Height="64" Stretch="UniformToFill" />
+                  <StackPanel Grid.Column="1" Spacing="4">
+                    <TextBlock Text="{Binding FileName}" Classes="small" />
+                    <TextBox Text="{Binding Caption}" PlaceholderText="{DynamicResource profile.images.caption}" MaxLength="200" />
+                  </StackPanel>
+                  <Button Grid.Column="2" Content="✕" VerticalAlignment="Top"
+                          Command="{Binding $parent[ItemsControl].((vm:ProfileViewModel)DataContext).RemoveImageCommand}" CommandParameter="{Binding}" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button Classes="accent" Content="{DynamicResource common.save}" Command="{Binding SaveCommand}" />
+        <Button Classes="danger" Content="{DynamicResource profile.delete}" Command="{Binding DeleteCommand}" IsVisible="{Binding !IsNew}" />
+      </StackPanel>
+      <TextBlock Text="{Binding Status}" Classes="muted" TextWrapping="Wrap" />
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

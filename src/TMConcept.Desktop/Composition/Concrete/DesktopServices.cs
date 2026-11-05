@@ -109,6 +109,8 @@ public static class DesktopServices
         services.AddTransient<FirstRunViewModel>();
         services.AddTransient<UnlockViewModel>();
 
+        services.AddSingleton<Dialogs.IConfirmDialog, Dialogs.ConfirmDialog>();
+        AddPage<ProfileViewModel, ProfileView>(services);
         AddPage<SettingsViewModel, SettingsView>(services);
         AddSection<GeneralSettingsViewModel, GeneralSettingsView>(services);
         AddSection<BackupSettingsViewModel, BackupSettingsView>(services);

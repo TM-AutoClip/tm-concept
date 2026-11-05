@@ -69,11 +69,35 @@ public sealed partial class ShellViewModel : ObservableObject
     public async Task StartAsync()
     {
         _log.Entries.CollectionChanged += (_, _) => OnPropertyChanged(nameof(LastLine));
+        foreach (var page in Items.Select(i => i.Page).OfType<ProfileViewModel>())
+        {
+            page.OnProfilesChanged(RefreshProfilesAsync);
+        }
+
         await RefreshProfilesAsync().ConfigureAwait(true);
-        if (Items.Count > 0)
+        if (Profiles.Count == 0)
+        {
+            // First start: the first profile is the last step of the setup.
+            await NewProfileAsync().ConfigureAwait(true);
+        }
+        else if (Items.Count > 0)
         {
             await NavigateAsync(Items[0].Page).ConfigureAwait(true);
         }
+    }
+
+    /// <summary>Opens the profile page with a new, empty profile.</summary>
+    [RelayCommand]
+    public async Task NewProfileAsync()
+    {
+        if (Items.FirstOrDefault(i => i.Page is ProfileViewModel) is not { } item)
+        {
+            return;
+        }
+
+        var page = (ProfileViewModel)item.Page;
+        page.StartNew();
+        await NavigateAsync(page).ConfigureAwait(true);
     }
 
     /// <summary>Reloads the profile list (after a profile was added, edited or deleted) and keeps the session's selection.</summary>
