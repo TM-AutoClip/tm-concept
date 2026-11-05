@@ -16,5 +16,9 @@ public sealed class WindowsOsModule : IOsModule
     public string DocumentsDirectory() => Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
 
     /// <inheritdoc />
-    public void Register(IServiceCollection services) => services.AddSingleton<IKeyProtector, DpapiKeyProtector>();
+    public void Register(IServiceCollection services)
+    {
+        services.AddSingleton<IKeyProtector, DpapiKeyProtector>();
+        services.AddSingleton<Core.Tools.IToolPlatform, Engines.Tools.WindowsToolPlatform>();
+    }
 }

@@ -57,6 +57,10 @@ public static class DesktopServices
 
         AddStorage(services);
         ProviderServices.Add(services);
+        services.AddSingleton<Core.Processes.IProcessRunner, Engines.Processes.ProcessRunner>();
+        services.AddSingleton(Engines.Tools.DownloadTransport.Network);
+        services.AddSingleton<Engines.Tools.ToolDownloader>();
+        services.AddSingleton<Engines.Tools.ToolInstaller>();
         AddDesktop(services);
         overrides?.Invoke(services);
         services.AddSingleton(s =>
@@ -120,6 +124,7 @@ public static class DesktopServices
         AddSection<GeneralSettingsViewModel, GeneralSettingsView>(services);
         AddSection<KeysSettingsViewModel, KeysSettingsView>(services);
         AddSection<ModelsSettingsViewModel, ModelsSettingsView>(services);
+        AddSection<ToolsSettingsViewModel, ToolsSettingsView>(services);
         AddSection<BackupSettingsViewModel, BackupSettingsView>(services);
         AddSection<AboutSettingsViewModel, AboutSettingsView>(services);
     }

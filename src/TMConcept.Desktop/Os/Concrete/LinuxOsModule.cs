@@ -28,6 +28,7 @@ public sealed class LinuxOsModule : IOsModule
     {
         services.AddSingleton<ICommandRunner, ProcessCommandRunner>();
         services.AddSingleton<IKeyProtector, SecretServiceKeyProtector>();
+        services.AddSingleton<Core.Tools.IToolPlatform, Engines.Tools.LinuxToolPlatform>();
     }
 
     /// <summary>The documents folder from user-dirs.dirs (<c>XDG_DOCUMENTS_DIR="$HOME/Belgeler"</c>), otherwise ~/Documents.</summary>
