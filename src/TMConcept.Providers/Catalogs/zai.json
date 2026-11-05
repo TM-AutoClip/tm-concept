@@ -1,0 +1,8 @@
+{
+  "provider": "zai",
+  "pricedOn": "2026-11-05",
+  "models": [
+    { "id": "glm-5.3", "name": "GLM-5.3", "capabilities": "Chat", "inputUsd": 1.40, "outputUsd": 4.40, "cacheReadUsd": 0.26, "contextTokens": 200000, "maxOutputTokens": 128000 },
+    { "id": "glm-5.3-flash", "name": "GLM-5.3 Flash", "capabilities": "Chat", "inputUsd": 0.15, "outputUsd": 0.50, "cacheReadUsd": 0.03, "contextTokens": 200000, "maxOutputTokens": 64000 }
+  ]
+}

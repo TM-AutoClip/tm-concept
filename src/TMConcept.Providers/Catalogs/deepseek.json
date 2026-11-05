@@ -1,0 +1,8 @@
+{
+  "provider": "deepseek",
+  "pricedOn": "2026-11-05",
+  "models": [
+    { "id": "deepseek-v4-pro", "name": "DeepSeek V4 Pro", "capabilities": "Chat", "inputUsd": 1.32, "outputUsd": 3.96 },
+    { "id": "deepseek-flash", "name": "DeepSeek Flash", "capabilities": "Chat", "inputUsd": 0.30, "outputUsd": 1.20 }
+  ]
+}

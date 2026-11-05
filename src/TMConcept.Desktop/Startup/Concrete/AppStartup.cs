@@ -6,6 +6,7 @@ using Avalonia.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TMConcept.Core.Activity;
+using TMConcept.Core.Models;
 using TMConcept.Desktop.Composition;
 using TMConcept.Desktop.Localization;
 using TMConcept.Desktop.Paths;
@@ -133,6 +134,8 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
     {
         await session.LoadAsync(CancellationToken.None).ConfigureAwait(true);
         text.Use(session.Settings.Language);
+        services.GetRequiredService<IModelCatalog>().UseOverrides(
+            await services.GetRequiredService<IPriceOverrideStore>().ListAsync(CancellationToken.None).ConfigureAwait(true));
         var shell = services.GetRequiredService<ShellViewModel>();
         var window = new MainWindow { DataContext = shell, Icon = AppIcon() };
         window.Closed += (_, _) => Quit();

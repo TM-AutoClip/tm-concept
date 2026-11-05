@@ -1,0 +1,9 @@
+{
+  "provider": "fal",
+  "pricedOn": "2026-11-05",
+  "models": [
+    { "id": "fal-ai/flux-2/flash", "name": "FLUX 2 Flash (fal)", "capabilities": "Image", "imageUsd": 0.01 },
+    { "id": "fal-ai/z-image/turbo", "name": "Z Image Turbo (fal)", "capabilities": "Image", "imageUsd": 0.01 },
+    { "id": "fal-ai/nano-banana-2", "name": "Nano Banana 2 (fal)", "capabilities": "Image", "imageUsd": 0.08 }
+  ]
+}

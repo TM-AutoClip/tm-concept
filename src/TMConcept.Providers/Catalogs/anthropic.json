@@ -1,0 +1,10 @@
+{
+  "provider": "anthropic",
+  "pricedOn": "2026-11-05",
+  "models": [
+    { "id": "claude-sonnet-5-5", "name": "Claude Sonnet 5.5", "capabilities": "Chat, Schema, Vision", "inputUsd": 2.00, "outputUsd": 10.00, "cacheReadUsd": 0.20, "cacheWriteUsd": 2.50, "contextTokens": 1000000, "maxOutputTokens": 128000, "efforts": ["low", "medium", "high", "xhigh", "max"] },
+    { "id": "claude-opus-5-5", "name": "Claude Opus 5.5", "capabilities": "Chat, Schema, Vision", "inputUsd": 4.00, "outputUsd": 20.00, "cacheReadUsd": 0.20, "cacheWriteUsd": 5.00, "contextTokens": 1000000, "maxOutputTokens": 128000, "efforts": ["low", "medium", "high", "xhigh", "max"] },
+    { "id": "claude-haiku-5-5", "name": "Claude Haiku 5.5", "capabilities": "Chat, Schema, Vision", "inputUsd": 0.10, "outputUsd": 0.50, "cacheReadUsd": 0.01, "cacheWriteUsd": 0.125, "longContextTokens": 100000, "longInputUsd": 0.50, "longOutputUsd": 2.50, "contextTokens": 1000000, "maxOutputTokens": 128000, "efforts": ["low", "medium", "high", "xhigh", "max"] },
+    { "id": "claude-fable-5-1", "name": "Claude Fable 5.1", "capabilities": "Chat, Schema, Vision", "inputUsd": 10.00, "outputUsd": 50.00, "cacheReadUsd": 0.25, "cacheWriteUsd": 12.50, "contextTokens": 1000000, "maxOutputTokens": 128000, "efforts": ["low", "medium", "high", "xhigh", "max"] }
+  ]
+}

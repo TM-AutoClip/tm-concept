@@ -7,4 +7,6 @@ namespace TMConcept.Core.Render;
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(RenderInput))]
 [JsonSerializable(typeof(ChannelTemplate))]
+[JsonSerializable(typeof(Models.StepOptions))]
+[JsonSerializable(typeof(Models.ModelCatalogFile))]
 internal sealed partial class CoreJsonContext : JsonSerializerContext;

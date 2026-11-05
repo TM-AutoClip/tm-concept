@@ -1,0 +1,7 @@
+{
+  "provider": "mistral",
+  "pricedOn": "2026-11-05",
+  "models": [
+    { "id": "mistral-large-latest", "name": "Mistral Large", "capabilities": "Chat, Schema", "inputUsd": 0.50, "outputUsd": 1.50, "contextTokens": 128000 }
+  ]
+}

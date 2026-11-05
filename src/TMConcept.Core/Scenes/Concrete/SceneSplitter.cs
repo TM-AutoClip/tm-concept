@@ -20,6 +20,13 @@ public static partial class SceneSplitter
     /// <summary>Longest visual description.</summary>
     public const int MaxVisual = 600;
 
+    /// <summary>Whether a line is only a scene description ("[on screen: …]" / "[ekranda: …]").</summary>
+    public static bool IsSceneLine(string? line)
+    {
+        var text = (line ?? string.Empty).Trim();
+        return text.Length > 0 && Bracket().IsMatch(text) && Bracket().Replace(text, string.Empty).Trim().Length == 0;
+    }
+
     /// <summary>Splits.</summary>
     public static SceneSplit Split(string? content)
     {

@@ -1,0 +1,11 @@
+{
+  "provider": "openrouter",
+  "pricedOn": "2026-11-05",
+  "models": [
+    { "id": "anthropic/claude-sonnet-5.5", "name": "Claude Sonnet 5.5 (OpenRouter)", "capabilities": "Chat, Schema, Vision", "inputUsd": 2.00, "outputUsd": 10.00, "cacheReadUsd": 0.20, "cacheWriteUsd": 2.50, "contextTokens": 1000000, "maxOutputTokens": 128000 },
+    { "id": "anthropic/claude-haiku-5.5", "name": "Claude Haiku 5.5 (OpenRouter)", "capabilities": "Chat, Schema, Vision", "inputUsd": 0.10, "outputUsd": 0.50, "contextTokens": 1000000, "maxOutputTokens": 128000 },
+    { "id": "z-ai/glm-5.3", "name": "GLM-5.3 (OpenRouter)", "capabilities": "Chat", "inputUsd": 1.40, "outputUsd": 4.40, "cacheReadUsd": 0.26 },
+    { "id": "deepseek/deepseek-v4-pro", "name": "DeepSeek V4 Pro (OpenRouter)", "capabilities": "Chat", "inputUsd": 1.32, "outputUsd": 3.96 },
+    { "id": "openai/text-embedding-3-small", "name": "text-embedding-3-small (OpenRouter)", "capabilities": "Embedding", "inputUsd": 0.02, "outputUsd": 0 }
+  ]
+}

@@ -56,6 +56,7 @@ public static class DesktopServices
         services.AddSingleton<ITemplateSource, EmbeddedTemplateSource>();
 
         AddStorage(services);
+        ProviderServices.Add(services);
         AddDesktop(services);
         overrides?.Invoke(services);
         services.AddSingleton(s =>
@@ -113,6 +114,8 @@ public static class DesktopServices
         AddPage<ProfileViewModel, ProfileView>(services);
         AddPage<SettingsViewModel, SettingsView>(services);
         AddSection<GeneralSettingsViewModel, GeneralSettingsView>(services);
+        AddSection<KeysSettingsViewModel, KeysSettingsView>(services);
+        AddSection<ModelsSettingsViewModel, ModelsSettingsView>(services);
         AddSection<BackupSettingsViewModel, BackupSettingsView>(services);
         AddSection<AboutSettingsViewModel, AboutSettingsView>(services);
     }
