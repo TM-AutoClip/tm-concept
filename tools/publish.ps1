@@ -24,8 +24,9 @@ foreach ($rid in $Rids) {
         -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=$compress -p:DebugType=none -p:DebugSymbols=false `
         -p:SourceRevisionId=$commit -m:1 -nodeReuse:false -o $out
     if ($LASTEXITCODE -ne 0) { throw "publish failed for $rid" }
-    if ($rid.StartsWith('win')) {
-        # The exe's version resource holds the informational version: it must name the commit.
+    if ($rid.StartsWith('win') -and [Environment]::OSVersion.Platform -eq 'Win32NT') {
+        # The exe's version resource holds the informational version: it must name the commit. Only Windows reads a PE version
+        # resource (FileVersionInfo on Linux sees none), so a Windows build made on Linux is not checked here.
         $product = (Get-Item (Join-Path $out 'TMConcept.exe')).VersionInfo.ProductVersion
         if ($product -ne "$version+$commit") { throw "The exe says '$product', expected '$version+$commit'." }
     }
