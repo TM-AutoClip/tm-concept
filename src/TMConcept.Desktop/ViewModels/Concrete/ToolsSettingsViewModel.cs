@@ -198,13 +198,22 @@ public sealed partial class ToolsSettingsViewModel(ToolInstaller installer, IToo
             await session.SaveAsync(session.Settings, CancellationToken.None).ConfigureAwait(true);
         }
 
-        // The voice needs the sherpa-onnx libraries too (a tool of their own): one confirmation names both downloads.
+        // The voice needs the sherpa-onnx libraries too (a tool of their own): one confirmation names what is missing. A model that is
+        // already there (an update from 0.1.2, where the libraries were inside the app) is not downloaded again.
         var model = Speech.Speech.SpeechModels.Supertonic;
+        var needModel = voice is not Speech.Speech.SherpaSpeechEngineBase { ModelInstalled: true };
         var runtime = installer.Status(ToolKind.SpeechRuntime).Ready ? null : installer.Archive(ToolKind.SpeechRuntime);
+        if (!needModel && runtime is null)
+        {
+            return;
+        }
+
         var message = runtime is null
             ? text.Format("tools.confirm.message", voice.Name, model.Version, model.Url.Host, Megabytes(model.ApproximateBytes))
-            : text.Format("tools.confirm.voice", voice.Name, model.Version, model.Url.Host, Megabytes(model.ApproximateBytes), runtime.Version,
-                Megabytes(runtime.ApproximateBytes));
+            : !needModel
+                ? text.Format("tools.confirm.message", "sherpa-onnx", runtime.Version, runtime.Url.Host, Megabytes(runtime.ApproximateBytes))
+                : text.Format("tools.confirm.voice", voice.Name, model.Version, model.Url.Host, Megabytes(model.ApproximateBytes), runtime.Version,
+                    Megabytes(runtime.ApproximateBytes));
         var answer = await confirm.AskAsync(text["tools.confirm.title"], message, text["tools.install"], danger: false).ConfigureAwait(true);
         if (answer.Confirmed)
         {
@@ -215,7 +224,11 @@ public sealed partial class ToolsSettingsViewModel(ToolInstaller installer, IToo
                     await installer.InstallAsync(ToolKind.SpeechRuntime, agreed: true, progress, CancellationToken.None).ConfigureAwait(true);
                 }
 
-                await voice.InstallAsync(agreed: true, progress, CancellationToken.None).ConfigureAwait(true);
+                if (needModel)
+                {
+                    await voice.InstallAsync(agreed: true, progress, CancellationToken.None).ConfigureAwait(true);
+                }
+
                 return text.Format("tools.installed", voice.Name, model.Version);
             }).ConfigureAwait(true);
             foreach (var other in Rows.Where(r => r.Code == nameof(ToolKind.SpeechRuntime)))
@@ -260,8 +273,10 @@ public sealed partial class ToolsSettingsViewModel(ToolInstaller installer, IToo
         {
             row.Ready = voice.Ready;
             row.State = voice.Ready ? "✓ " + text["engines.ready"]
-                : voice is Speech.Speech.SherpaSpeechEngineBase local ? text.Format("tools.state.missing_size", Megabytes(local.Model.ApproximateBytes))
-                : text["tools.state.missing"];
+                : voice is Speech.Speech.SherpaSpeechEngineBase local
+                    ? text.Format("tools.state.missing_size", Megabytes((local.ModelInstalled ? 0 : local.Model.ApproximateBytes)
+                        + (installer.Status(ToolKind.SpeechRuntime).Ready ? 0 : installer.Archive(ToolKind.SpeechRuntime)?.ApproximateBytes ?? 0)))
+                    : text["tools.state.missing"];
             return;
         }
 

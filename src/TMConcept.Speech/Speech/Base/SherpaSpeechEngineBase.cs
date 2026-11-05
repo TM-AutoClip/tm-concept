@@ -22,7 +22,10 @@ public abstract class SherpaSpeechEngineBase(SpeechModelInstaller installer, ITo
     public bool IsLocal => true;
 
     /// <inheritdoc />
-    public bool Ready => installer.Ready(model) && tools.Status(ToolKind.SpeechRuntime).Ready;
+    public bool Ready => ModelInstalled && tools.Status(ToolKind.SpeechRuntime).Ready;
+
+    /// <summary>Whether the voice model itself is installed (the libraries may still be missing, as after an update from 0.1.2).</summary>
+    public bool ModelInstalled => installer.Ready(model);
 
     /// <summary>The voice model's download.</summary>
     public ToolArchive Model => model;

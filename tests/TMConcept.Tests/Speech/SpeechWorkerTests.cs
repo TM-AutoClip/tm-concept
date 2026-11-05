@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json.Nodes;
 using Shouldly;
+using Microsoft.Extensions.Logging.Abstractions;
 using TMConcept.Core.Speech;
 using TMConcept.Core.Tools;
 using TMConcept.Engines.Tools;
@@ -73,5 +74,35 @@ public sealed class SpeechWorkerTests
         }
 
         ToolManifest.Libraries.ShouldContain(ToolKind.SpeechRuntime);
+    }
+
+    [Fact]
+    public async Task AVoiceModelFromAnEarlierVersionIsInstalledButNotReadyWithoutTheLibraries()
+    {
+        using var paths = new TempPaths();
+        var installer = new SpeechModelInstaller(paths, null!, null!, NullLogger<SpeechModelInstaller>.Instance);
+        var folder = installer.Folder(SpeechModels.Supertonic);
+        Directory.CreateDirectory(folder);
+        await File.WriteAllTextAsync(Path.Combine(folder, SpeechModels.Supertonic.ExecutablePath), "{}", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(Path.Combine(Path.GetDirectoryName(folder)!, ".installed"), "x", TestContext.Current.CancellationToken);
+        var tools = new FixedTools(false);
+        using var worker = new SpeechWorkerClient(null!, NullLogger<SpeechWorkerClient>.Instance);
+        var engine = new SupertonicSpeechEngine(installer, tools, worker, NullLogger<SupertonicSpeechEngine>.Instance);
+
+        engine.ModelInstalled.ShouldBeTrue();
+        engine.Ready.ShouldBeFalse();
+        var error = await Should.ThrowAsync<SpeechException>(() => engine.SynthesizeAsync(new SpeechRequest("a", "tr", "0", 1, "a.wav"), CancellationToken.None));
+        error.Code.ShouldBe("missing");
+        error.Message.ShouldContain("sherpa-onnx");
+
+        tools.Ready = true;
+        engine.Ready.ShouldBeTrue();
+    }
+
+    private sealed class FixedTools(bool ready) : IToolLocator
+    {
+        public bool Ready { get; set; } = ready;
+
+        public ToolStatus Status(ToolKind tool) => new(tool, Ready, "2.0.1", Ready ? "lib/libsherpa-onnx-c-api.so" : string.Empty, "app");
     }
 }
