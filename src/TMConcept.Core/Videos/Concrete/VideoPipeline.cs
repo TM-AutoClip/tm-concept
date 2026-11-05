@@ -38,6 +38,9 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
     /// <summary>Work folders of runs older than this are removed by <see cref="CleanWork"/>.</summary>
     public static readonly TimeSpan WorkKeep = TimeSpan.FromDays(7);
 
+    /// <summary>The thumbnail's file name in a video folder (the Produced videos page makes it again when it is missing).</summary>
+    public const string ThumbnailFile = "thumbnail.jpg";
+
     private const string Rejected = "rejected-";
 
     private static readonly (string Step, double Weight)[] Weights =
@@ -261,7 +264,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
             Finish("mux");
 
             // I. thumbnail and records
-            var thumbnail = await media.ThumbnailAsync(output, Path.Combine(folder, "thumbnail.jpg"), cancellationToken).ConfigureAwait(false);
+            var thumbnail = await media.ThumbnailAsync(output, Path.Combine(folder, ThumbnailFile), cancellationToken).ConfigureAwait(false);
             var record = new VideoRecord
             {
                 Id = id,
@@ -270,7 +273,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                 Title = job.Concept.Title,
                 Folder = LibraryPaths.Relative(paths.LibraryDirectory, folder),
                 FileName = "video.mp4",
-                ThumbnailName = thumbnail ? "thumbnail.jpg" : string.Empty,
+                ThumbnailName = thumbnail ? ThumbnailFile : string.Empty,
                 DurationMs = (long)Math.Round(input.DurationSeconds * 1000),
                 Width = width,
                 Height = height,
@@ -326,24 +329,34 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
     public static int Workers() => Math.Clamp(Environment.ProcessorCount - 2, 1, 8);
 
     /// <summary>
-    /// Removes the work folders of old runs (a run that was cut off by closing the app) and old kept scene images. Called once at start,
-    /// before any video runs.
+    /// Called once at start, before any video runs (no run can own a work folder then). A run's work folder left by an app that was closed
+    /// or killed mid-run is an orphan: it is emptied at once, except a rejected code kept for reading (the folder goes with it after
+    /// <see cref="WorkKeep"/>). Scene images that were paid for stay for a retry until <see cref="WorkKeep"/>.
     /// </summary>
     public void CleanWork()
     {
-        foreach (var root in new[] { Path.Combine(paths.WorkDirectory, "videos"), Path.Combine(paths.WorkDirectory, "scene-images") })
+        var runs = Path.Combine(paths.WorkDirectory, "videos");
+        if (Directory.Exists(runs))
         {
-            if (!Directory.Exists(root))
-            {
-                continue;
-            }
-
-            foreach (var folder in Directory.EnumerateDirectories(root))
+            foreach (var folder in Directory.EnumerateDirectories(runs))
             {
                 if (clock.GetUtcNow() - Directory.GetLastWriteTimeUtc(folder) > WorkKeep)
                 {
                     TryDelete(folder);
                 }
+                else
+                {
+                    CleanFailed(folder, null, folderCreated: false);
+                }
+            }
+        }
+
+        var images = Path.Combine(paths.WorkDirectory, "scene-images");
+        if (Directory.Exists(images))
+        {
+            foreach (var folder in Directory.EnumerateDirectories(images).Where(f => clock.GetUtcNow() - Directory.GetLastWriteTimeUtc(f) > WorkKeep))
+            {
+                TryDelete(folder);
             }
         }
     }
@@ -457,7 +470,8 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                         Usd = costs.Exact(promptModel.Model, answer.Usage, answer.ReportedCostUsd),
                         Exact = true,
                     });
-                    prompts = ImagePromptBuilder.Parse(answer.Text, visuals);
+                    prompts = ImagePromptBuilder.Parse(answer.Text, visuals,
+                        problem => logger.LogWarning("The image prompts could not all be read ({Problem}); scene descriptions are used for the rest", problem));
                     await File.WriteAllLinesAsync(promptFile, prompts.Select(p => p.ReplaceLineEndings(" ")), cancellationToken).ConfigureAwait(false);
                 }
 
@@ -541,7 +555,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
             }
             else
             {
-                foreach (var name in new[] { "subtitles.srt", "narration.txt", "video.mp4", "thumbnail.jpg" })
+                foreach (var name in new[] { "subtitles.srt", "narration.txt", "video.mp4", ThumbnailFile })
                 {
                     TryDeleteFile(Path.Combine(folder, name));
                 }

@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- Video engines (HyperFrames, Remotion, Revideo), tool installer (Node, ffmpeg, Chrome, npm), ffmpeg muxing, thumbnails. Depends on Core only. -->
+  <PropertyGroup>
+    <!-- The Windows job object calls (LibraryImport passes a pinned struct); nothing else is unsafe. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\TMConcept.Core\TMConcept.Core.csproj" />
   </ItemGroup>

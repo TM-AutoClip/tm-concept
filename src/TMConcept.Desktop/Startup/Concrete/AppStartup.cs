@@ -42,6 +42,7 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
             activity.Add(ActivityLevel.Error, text.Format("error.generic", e.Exception.Message));
             e.Handled = true;
         };
+        Converters.FileBitmapConverter.Logger = services.GetRequiredService<ILogger<Converters.FileBitmapConverter>>();
         Application.Current!.DataTemplates.Add(services.GetRequiredService<ViewLocator>());
         var language = preferences.Read().Language;
         text.Use(language.Length > 0 ? language : Localizer.SystemLanguage());
@@ -222,6 +223,9 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
             {
                 logger.LogWarning("The work did not stop within 20 s; closing anyway");
             }
+
+            // Whatever still runs (a render that ignored the cancel) ends now, not with the process.
+            services.GetRequiredService<Engines.Processes.ChildProcessGuardBase>().KillAll();
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

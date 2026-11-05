@@ -42,8 +42,11 @@ public static class ImagePromptBuilder
         ["additionalProperties"] = false,
     };
 
-    /// <summary>Reads the prompts (a missing one falls back to the scene description itself).</summary>
-    public static IReadOnlyList<string> Parse(string? answer, IReadOnlyList<string> visuals)
+    /// <summary>
+    /// Reads the prompts (a missing one falls back to the scene description itself); an unreadable answer is reported to
+    /// <paramref name="onProblem"/> (for the log).
+    /// </summary>
+    public static IReadOnlyList<string> Parse(string? answer, IReadOnlyList<string> visuals, Action<string>? onProblem = null)
     {
         ArgumentNullException.ThrowIfNull(visuals);
         var prompts = new List<string>();
@@ -56,9 +59,16 @@ public static class ImagePromptBuilder
                 prompts.AddRange(array.Select(p => p?.ToString().Trim() ?? string.Empty));
             }
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
-            // Falls back to the descriptions below.
+            // Not JSON: every scene uses its own description.
+            onProblem?.Invoke(ex.Message);
+            return visuals.Select(Cut).ToList();
+        }
+
+        if (prompts.Count < visuals.Count)
+        {
+            onProblem?.Invoke(string.Create(CultureInfo.InvariantCulture, $"{prompts.Count} of {visuals.Count} prompts in the answer"));
         }
 
         return visuals.Select((v, i) => i < prompts.Count && prompts[i].Length > 0 ? Cut(prompts[i]) : Cut(v)).ToList();

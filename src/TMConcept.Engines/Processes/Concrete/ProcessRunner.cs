@@ -6,9 +6,10 @@ namespace TMConcept.Engines.Processes;
 
 /// <summary>
 /// Runs a program with a cleaned environment (names containing KEY, TOKEN, SECRET, PASSWORD, PASS, AUTH or CREDENTIAL are removed) and
-/// below-normal priority; keeps the last 40 output lines for error messages. Cancel kills the whole process tree.
+/// below-normal priority; keeps the last 40 output lines for error messages. Cancel kills the whole process tree. Every child is handed to
+/// the <see cref="ChildProcessGuardBase"/>, so it cannot outlive the app.
 /// </summary>
-public sealed class ProcessRunner(ILogger<ProcessRunner> logger) : IProcessRunner
+public sealed class ProcessRunner(ChildProcessGuardBase children, ILogger<ProcessRunner> logger) : IProcessRunner
 {
     private static readonly string[] SecretWords = ["KEY", "TOKEN", "SECRET", "PASSWORD", "PASS", "AUTH", "CREDENTIAL"];
 
@@ -65,6 +66,8 @@ public sealed class ProcessRunner(ILogger<ProcessRunner> logger) : IProcessRunne
         {
             throw new InvalidOperationException("The program could not be started: " + Path.GetFileName(start.Program));
         }
+
+        using var adoption = children.Adopt(process);
 
         try
         {

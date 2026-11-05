@@ -1,3 +1,4 @@
+using System.Reflection;
 using Avalonia;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -28,11 +29,22 @@ internal static class Program
 
         using var services = DesktopServices.Build(paths);
         var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(Program));
+        var children = services.GetRequiredService<Engines.Processes.ChildProcessGuardBase>();
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
             logger.LogCritical(e.ExceptionObject as Exception, "Unhandled exception (terminating: {Terminating})", e.IsTerminating);
+            if (e.IsTerminating)
+            {
+                // Linux has no job object: the children (ffmpeg, Node, Chrome) are ended here or they would outlive the app.
+                children.KillAll();
+            }
+        };
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => children.KillAll();
         TaskScheduler.UnobservedTaskException += (_, e) => logger.LogError(e.Exception, "Unobserved task exception");
-        logger.LogInformation("TM Concept {Version} starting on {Os} ({Architecture})", typeof(Program).Assembly.GetName().Version,
+        logger.LogInformation("TM Concept {Version} starting on {Os} ({Architecture})",
+            typeof(Program).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion,
             Environment.OSVersion.Platform, System.Runtime.InteropServices.RuntimeInformation.OSArchitecture);
+        SweepOrphans(children, paths, logger);
 
         instance.ShowRequested += (_, _) => services.GetRequiredService<Startup.AppStartup>().ShowMainWindow();
         App.Services = services;
@@ -44,6 +56,23 @@ internal static class Program
         {
             logger.LogCritical(ex, "The app stopped with an unhandled exception");
             throw;
+        }
+    }
+
+    /// <summary>Ends processes an earlier run left in this app's tools folder (it was killed); a failure is logged, the start goes on.</summary>
+    private static void SweepOrphans(Engines.Processes.ChildProcessGuardBase children, AppPaths paths, ILogger logger)
+    {
+        try
+        {
+            var ended = children.SweepOrphans(paths.ToolsDirectory);
+            if (ended > 0)
+            {
+                logger.LogWarning("{Count} process(es) left by an earlier run were ended", ended);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or IOException or UnauthorizedAccessException)
+        {
+            logger.LogError(ex, "Processes left by an earlier run could not be checked");
         }
     }
 

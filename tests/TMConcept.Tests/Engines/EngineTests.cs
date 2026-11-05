@@ -13,7 +13,7 @@ public sealed class EngineTests
 {
     private static IVideoEngine[] All(TempPaths paths)
     {
-        IProcessRunner runner = new ProcessRunner(NullLogger<ProcessRunner>.Instance);
+        IProcessRunner runner = new ProcessRunner(ChildProcessTests.Guard(), NullLogger<ProcessRunner>.Instance);
         var platform = new WindowsToolPlatform(runner);
         var tools = new ToolInstaller(paths, platform, new ToolDownloader(DownloadTransport.Network, NullLogger<ToolDownloader>.Instance),
             NullLogger<ToolInstaller>.Instance);

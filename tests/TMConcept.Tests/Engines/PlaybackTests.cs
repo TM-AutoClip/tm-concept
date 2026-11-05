@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using TMConcept.Core.Playback;
 using TMConcept.Engines.Playback;
+using TMConcept.Engines.Processes;
 
 namespace TMConcept.Tests.Engines;
 
@@ -47,7 +48,7 @@ public sealed class PlaybackTests
     {
         var (ffmpeg, clip) = await ClipAsync();
         var device = new RealTimeDevice();
-        using var playback = new FfmpegPlayback(new Devices(device), TimeProvider.System, NullLogger<FfmpegPlayback>.Instance);
+        using var playback = new FfmpegPlayback(new Devices(device), ChildProcessTests.Guard(), TimeProvider.System, NullLogger<FfmpegPlayback>.Instance);
         var frames = new List<(long Frame, double Clock)>();
         playback.FrameReady += () =>
         {
@@ -94,7 +95,7 @@ public sealed class PlaybackTests
     {
         var (ffmpeg, clip) = await ClipAsync();
         var device = new RealTimeDevice();
-        using var playback = new FfmpegPlayback(new Devices(device), TimeProvider.System, NullLogger<FfmpegPlayback>.Instance);
+        using var playback = new FfmpegPlayback(new Devices(device), ChildProcessTests.Guard(), TimeProvider.System, NullLogger<FfmpegPlayback>.Instance);
         var frames = 0;
         playback.FrameReady += () => Interlocked.Increment(ref frames);
         playback.Open(new PlaybackSource(ffmpeg, clip, 64, 36, 30, ClipMs));
@@ -125,7 +126,7 @@ public sealed class PlaybackTests
     {
         var (ffmpeg, clip) = await ClipAsync();
         var device = new RealTimeDevice();
-        using var playback = new FfmpegPlayback(new Devices(device), TimeProvider.System, NullLogger<FfmpegPlayback>.Instance);
+        using var playback = new FfmpegPlayback(new Devices(device), ChildProcessTests.Guard(), TimeProvider.System, NullLogger<FfmpegPlayback>.Instance);
         var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         playback.FrameReady += () => ready.TrySetResult();
         playback.Open(new PlaybackSource(ffmpeg, clip, 64, 36, 30, ClipMs));
@@ -160,7 +161,7 @@ public sealed class PlaybackTests
     public async Task WithoutASoundDeviceTheVideoStillPlaysOnTheWallClock()
     {
         var (ffmpeg, clip) = await ClipAsync();
-        using var playback = new FfmpegPlayback(new NoDevice(), TimeProvider.System, NullLogger<FfmpegPlayback>.Instance);
+        using var playback = new FfmpegPlayback(new NoDevice(), ChildProcessTests.Guard(), TimeProvider.System, NullLogger<FfmpegPlayback>.Instance);
         var stopped = new TaskCompletionSource<PlaybackStop>(TaskCreationOptions.RunContinuationsAsynchronously);
         playback.Stopped += s => stopped.TrySetResult(s);
         playback.Open(new PlaybackSource(ffmpeg, clip, 64, 36, 30, ClipMs));

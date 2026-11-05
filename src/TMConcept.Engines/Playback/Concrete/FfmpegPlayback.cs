@@ -13,9 +13,10 @@ namespace TMConcept.Engines.Playback;
 /// remembers the position; play and seek start both again at the position, so the two streams always begin together (no drift can build
 /// up across a pause). A paused seek decodes a single picture. Without a sound device the video plays silently on the wall clock (logged).
 /// The newest frame is kept in one buffer; <see cref="FrameReady"/> says it changed and the interface copies it (no frame allocations).
-/// Events come from background threads.
+/// Events come from background threads. The ffmpeg processes are handed to the <see cref="ChildProcessGuardBase"/> (they end with the app).
 /// </summary>
-public sealed class FfmpegPlayback(IAudioOutputFactory audio, TimeProvider time, ILogger<FfmpegPlayback> logger) : IDisposable
+public sealed class FfmpegPlayback(IAudioOutputFactory audio, ChildProcessGuardBase children, TimeProvider time, ILogger<FfmpegPlayback> logger)
+    : IDisposable
 {
     private readonly Lock _gate = new();
     private readonly Lock _frameLock = new();
@@ -199,6 +200,15 @@ public sealed class FfmpegPlayback(IAudioOutputFactory audio, TimeProvider time,
         }
     }
 
+    /// <summary>Drops the newest-frame buffer (the player was closed); the next play or paused seek makes it again.</summary>
+    public void ReleaseFrame()
+    {
+        lock (_frameLock)
+        {
+            _latest = null;
+        }
+    }
+
     /// <inheritdoc />
     public void Dispose() => Stop();
 
@@ -256,8 +266,9 @@ public sealed class FfmpegPlayback(IAudioOutputFactory audio, TimeProvider time,
             throw new InvalidOperationException("ffmpeg could not be started.");
         }
 
-        process.BeginErrorReadLine();
         session.Processes.Add(process);
+        session.Adoptions.Add(children.Adopt(process));
+        process.BeginErrorReadLine();
         return process;
     }
 
@@ -296,7 +307,11 @@ public sealed class FfmpegPlayback(IAudioOutputFactory audio, TimeProvider time,
         }
         catch (Exception ex) when (ex is OperationCanceledException or IOException or ObjectDisposedException or InvalidOperationException)
         {
-            // Stopped (pause, seek, end): the process was killed under the read.
+            // Stopped (pause, seek, end) kills the process under the read: expected. Without a stop it is a real failure.
+            if (!session.Cancel.IsCancellationRequested)
+            {
+                logger.LogError(ex, "Reading the sound failed; the picture goes on");
+            }
         }
         finally
         {
@@ -460,6 +475,8 @@ public sealed class FfmpegPlayback(IAudioOutputFactory audio, TimeProvider time,
 
         public List<Process> Processes { get; } = [];
 
+        public List<IDisposable> Adoptions { get; } = [];
+
         public Process? Video { get; set; }
 
         public Process? Audio { get; set; }
@@ -510,7 +527,13 @@ public sealed class FfmpegPlayback(IAudioOutputFactory audio, TimeProvider time,
                 process.Dispose();
             }
 
+            foreach (var adoption in Adoptions)
+            {
+                adoption.Dispose();
+            }
+
             Processes.Clear();
+            Adoptions.Clear();
         }
     }
 }
