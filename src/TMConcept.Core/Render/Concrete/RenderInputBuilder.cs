@@ -1,5 +1,6 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 
 namespace TMConcept.Core.Render;
 
@@ -68,14 +69,14 @@ public static class RenderInputBuilder
     }
 
     /// <summary>Indented JSON for <c>input.json</c>.</summary>
-    public static string ToJson(RenderInput input) => JsonSerializer.Serialize(input, FileJson);
+    public static string ToJson(RenderInput input) => JsonSerializer.Serialize(input, Info(FileJson));
 
     /// <summary>Reads <c>input.json</c>; <c>null</c> when it is not valid.</summary>
     public static RenderInput? FromJson(string json)
     {
         try
         {
-            return JsonSerializer.Deserialize<RenderInput>(json, FileJson);
+            return JsonSerializer.Deserialize(json, Info(FileJson));
         }
         catch (JsonException)
         {
@@ -87,7 +88,10 @@ public static class RenderInputBuilder
     /// JSON for a <c>&lt;script&gt;</c> block of an HTML page: <c>&lt;</c>, <c>&gt;</c>, <c>&amp;</c>, quotes and non-ASCII escaped, so a
     /// <c>&lt;/script&gt;</c> inside a text can never leave the script block (text stays data).
     /// </summary>
-    public static string ToHtmlSafeJson(RenderInput input) => JsonSerializer.Serialize(input, HtmlJson);
+    public static string ToHtmlSafeJson(RenderInput input) => JsonSerializer.Serialize(input, Info(HtmlJson));
+
+    /// <summary>The source-generated contract of <see cref="RenderInput"/> under <paramref name="options"/> (no reflection).</summary>
+    private static JsonTypeInfo<RenderInput> Info(JsonSerializerOptions options) => (JsonTypeInfo<RenderInput>)options.GetTypeInfo(typeof(RenderInput));
 
     /// <summary>Video size of a format, scaled (even numbers; H.264 rejects odd sizes).</summary>
     public static (int Width, int Height) Size(Profiles.VideoFormat format, double scale = 1)

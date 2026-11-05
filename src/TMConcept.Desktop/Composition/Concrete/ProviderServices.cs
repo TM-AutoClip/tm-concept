@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using TMConcept.Core.Chat;
 using TMConcept.Core.Costs;
@@ -37,14 +38,14 @@ public static class ProviderServices
     }
 
     /// <summary>A provider without chat.</summary>
-    public static void AddProvider<T>(IServiceCollection services)
+    public static void AddProvider<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] T>(IServiceCollection services)
         where T : class, IProvider
     {
         services.AddSingleton<T>();
         services.AddSingleton<IProvider>(s => s.GetRequiredService<T>());
     }
 
-    private static void AddChat<T>(IServiceCollection services)
+    private static void AddChat<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] T>(IServiceCollection services)
         where T : class, IProvider, IChatTransport
     {
         AddProvider<T>(services);

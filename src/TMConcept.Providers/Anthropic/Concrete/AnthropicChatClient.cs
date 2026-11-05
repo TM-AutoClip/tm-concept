@@ -33,20 +33,20 @@ public sealed class AnthropicChatClient(AnthropicProvider provider, ProviderHttp
         var content = new JsonArray();
         foreach (var image in (request.Images ?? []).Where(i => ImageTypes.Contains(i.MimeType)))
         {
-            content.Add(new JsonObject
+            content.Add((JsonNode)new JsonObject
             {
                 ["type"] = "image",
                 ["source"] = new JsonObject { ["type"] = "base64", ["media_type"] = image.MimeType, ["data"] = Convert.ToBase64String(image.Data) },
             });
         }
 
-        content.Add(new JsonObject { ["type"] = "text", ["text"] = request.User });
+        content.Add((JsonNode)new JsonObject { ["type"] = "text", ["text"] = request.User });
         var body = new JsonObject
         {
             ["model"] = Model.Id,
             ["max_tokens"] = Math.Min(request.MaxOutputTokens, Model.MaxOutputTokens > 0 ? Model.MaxOutputTokens : request.MaxOutputTokens),
-            ["system"] = new JsonArray { system },
-            ["messages"] = new JsonArray { new JsonObject { ["role"] = "user", ["content"] = content } },
+            ["system"] = new JsonArray(system),
+            ["messages"] = new JsonArray(new JsonObject { ["role"] = "user", ["content"] = content }),
             ["stream"] = true,
         };
         var output = new JsonObject();

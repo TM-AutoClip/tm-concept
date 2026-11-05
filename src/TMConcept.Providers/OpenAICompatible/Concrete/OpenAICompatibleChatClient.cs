@@ -34,11 +34,9 @@ public sealed class OpenAICompatibleChatClient(OpenAICompatibleProviderBase prov
         var body = new JsonObject
         {
             ["model"] = Model.Id,
-            ["messages"] = new JsonArray
-            {
+            ["messages"] = new JsonArray(
                 new JsonObject { ["role"] = "system", ["content"] = request.System },
-                new JsonObject { ["role"] = "user", ["content"] = content },
-            },
+                new JsonObject { ["role"] = "user", ["content"] = content }),
             ["stream"] = false,
         };
         if (request.Schema is not null)

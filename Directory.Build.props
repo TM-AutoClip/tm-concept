@@ -30,6 +30,14 @@
   </PropertyGroup>
 
   <!--
+    The app's own projects must stay trimmable and ready for native compilation: the trim, single-file and AOT analyzers run on every build,
+    so reflection that trimming would break is a build error (warnings are errors), not a runtime surprise. The release is trimmed.
+  -->
+  <PropertyGroup Condition="$(MSBuildProjectDirectory.Contains('$([System.IO.Path]::DirectorySeparatorChar)src$([System.IO.Path]::DirectorySeparatorChar)'))">
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <!--
     Repository rules analyzer: one top-level type per file (TMC0001) and file name = type name (TMC0002), error level.
     Attached to every C# project except the analyzer itself.
   -->

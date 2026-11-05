@@ -1,4 +1,4 @@
-using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 using TMConcept.Core.Paths;
 using TMConcept.Core.Tools;
@@ -105,12 +105,12 @@ public sealed class ToolInstaller(IAppPaths paths, IToolPlatform platform, ToolD
             Delete(folder);
             Directory.CreateDirectory(Path.GetDirectoryName(folder)!);
             Directory.Move(unpack, folder);
-            await File.WriteAllTextAsync(Path.Combine(folder, Marker), JsonSerializer.Serialize(new Dictionary<string, string>
+            await File.WriteAllTextAsync(Path.Combine(folder, Marker), new JsonObject
             {
                 ["version"] = archive.Version,
                 ["sha256"] = archive.Sha256,
                 ["at"] = DateTimeOffset.UtcNow.ToString("O"),
-            }), cancellationToken).ConfigureAwait(false);
+            }.ToJsonString(), cancellationToken).ConfigureAwait(false);
             logger.LogInformation("{Tool} {Version} installed", tool, archive.Version);
             return Status(tool);
         }

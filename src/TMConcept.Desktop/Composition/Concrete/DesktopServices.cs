@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TMConcept.Core.Activity;
@@ -156,7 +157,7 @@ public static class DesktopServices
     }
 
     /// <summary>Registers a page of the sidebar and its view.</summary>
-    internal static void AddPage<TPage, TView>(IServiceCollection services)
+    internal static void AddPage<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TPage, TView>(IServiceCollection services)
         where TPage : PageViewModelBase
         where TView : Avalonia.Controls.Control, new()
     {
@@ -166,7 +167,8 @@ public static class DesktopServices
     }
 
     /// <summary>Registers a settings section (a tab of the settings page) and its view.</summary>
-    internal static void AddSection<TSection, TView>(IServiceCollection services)
+    internal static void AddSection<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TSection, TView>(
+        IServiceCollection services)
         where TSection : SettingsSectionBase
         where TView : Avalonia.Controls.Control, new()
     {
