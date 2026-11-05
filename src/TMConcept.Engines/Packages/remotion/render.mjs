@@ -1,8 +1,10 @@
 // TM Concept: renders the Remotion project a model wrote (C#: TMConcept.Engines RemotionEngine).
 //
-//   node render.mjs --work "<work folder>" --out "<silent.mp4>" [--crf 20] [--jpeg 90] [--concurrency 2] [--gl swangle]
+//   node render.mjs --work "<work folder>" --out "<silent.mp4>" --browser "<chrome-headless-shell>" [--crf 20] [--jpeg 90] [--concurrency 2]
+//                   [--gl swangle]
 //   node render.mjs --ensure-browser
 //
+// --browser is required: given no browser, Remotion would download one during the render (it is installed with --ensure-browser).
 // Work folder (written by C#): src/index.ts, src/Root.tsx, src/input.ts (the app's files), src/Scene.tsx (the model's file, already
 // checked in C#), input.json (props), public/ (images). Packages (remotion, react) resolve from THIS folder's node_modules; nothing is
 // copied into the work folder and no model code is written here. Every resolved module must be inside the work folder or this
@@ -49,7 +51,9 @@ const main = async () => {
 
   const work = args.work ? path.resolve(args.work) : "";
   const out = args.out ? path.resolve(args.out) : "";
+  const browserExecutable = args.browser && args.browser !== "true" ? path.resolve(args.browser) : "";
   if (!work || !out) throw new Error("--work and --out are required.");
+  if (!browserExecutable || !existsSync(browserExecutable)) throw new Error("--browser must name the installed Chrome Headless Shell.");
   const entry = path.join(work, "src", "index.ts");
   if (!existsSync(entry)) throw new Error("src/index.ts is missing.");
   const inputProps = JSON.parse(readFileSync(path.join(work, "input.json"), "utf8").replace(/^﻿/, ""));
@@ -75,7 +79,7 @@ const main = async () => {
     },
   });
 
-  const composition = await selectComposition({ serveUrl, id: "Concept", inputProps, logLevel: "error" });
+  const composition = await selectComposition({ serveUrl, id: "Concept", inputProps, logLevel: "error", browserExecutable });
   const partial = out.replace(/\.mp4$/i, "") + ".partial.mp4";
   rmSync(partial, { force: true });
   let last = -1;
@@ -92,6 +96,7 @@ const main = async () => {
     jpegQuality: number("jpeg", 90),
     overwrite: true,
     logLevel: "error",
+    browserExecutable,
     chromiumOptions: { gl: args.gl ?? "swangle" },
     onProgress: (p) => {
       const percent = Math.floor(p.progress * 100);

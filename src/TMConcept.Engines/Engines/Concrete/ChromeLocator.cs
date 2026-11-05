@@ -15,11 +15,22 @@ public sealed partial class ChromeLocator(IAppPaths paths, IToolPlatform platfor
     /// <summary>The app's browser folder.</summary>
     public string Root => Path.Combine(paths.ToolsDirectory, "chrome");
 
+    /// <summary>Remotion's own browser folder (its <c>ensureBrowser</c> downloads there).</summary>
+    public string RemotionRoot => Path.Combine(paths.ToolsDirectory, "engines", "remotion", "node_modules", ".remotion");
+
     /// <summary>The browser, or null.</summary>
-    public string? Find()
+    public string? Find() => Search(Root, RemotionRoot) ?? SystemBrowser();
+
+    /// <summary>
+    /// Remotion's own Chrome Headless Shell, or null. Remotion renders only with this one (passed to it explicitly): given no browser it would
+    /// download one during the render.
+    /// </summary>
+    public string? FindRemotion() => Search(RemotionRoot);
+
+    private string? Search(params string[] roots)
     {
         var shell = platform.Executable("chrome-headless-shell");
-        foreach (var root in new[] { Root, Path.Combine(paths.ToolsDirectory, "engines", "remotion", "node_modules", ".remotion") })
+        foreach (var root in roots)
         {
             try
             {
@@ -34,6 +45,11 @@ public sealed partial class ChromeLocator(IAppPaths paths, IToolPlatform platfor
             }
         }
 
+        return null;
+    }
+
+    private string? SystemBrowser()
+    {
         if (platform.UseSystemPrograms)
         {
             foreach (var name in new[] { "chromium", "chromium-browser", "google-chrome" })

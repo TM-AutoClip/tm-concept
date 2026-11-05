@@ -69,7 +69,7 @@ public abstract class VideoEngineBase(EnginePackage package, ChromeLocator chrom
             missing.Add("packages");
         }
 
-        if (Chrome.Find() is null)
+        if (Browser() is null)
         {
             missing.Add("browser");
         }
@@ -115,6 +115,9 @@ public abstract class VideoEngineBase(EnginePackage package, ChromeLocator chrom
 
     /// <summary>The app's files of the project (relative path → content). The model cannot touch them.</summary>
     protected abstract IReadOnlyDictionary<string, string> Skeleton(EngineRenderRequest request);
+
+    /// <summary>The browser this engine renders with (the shared one by default), or null when it is not installed.</summary>
+    protected virtual string? Browser() => Chrome.Find();
 
     /// <summary>Installs the browser (shared Chrome Headless Shell by default).</summary>
     protected virtual Task InstallBrowserAsync(IProgress<ToolProgress>? progress, CancellationToken cancellationToken) =>

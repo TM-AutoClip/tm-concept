@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using TMConcept.Core.Chat;
@@ -20,15 +22,24 @@ using TMConcept.Core.Subtitles;
 namespace TMConcept.Core.Videos;
 
 /// <summary>
-/// Concept → video (plan §6.1): A prepare (scenes, no model) · B narration per scene (cached; off or failed = silent video with a warning)
-/// · C timing in C# · D images (samples or an image model) · E video code from the model, safety check, one repair · F render (processor
-/// only), one repair with the error text · H mux, subtitles (.srt always, burned ASS when chosen), narration text file · I thumbnail,
-/// files into the library folder, video and cost rows, concept marked produced.
+/// Concept → video (plan §6.1): 0 the engine and ffmpeg must be installed (checked before anything is paid for) · A prepare (scenes, no
+/// model) · B narration per scene (cached; off or failed = silent video with a warning) · C timing in C# · D images (samples or an image
+/// model; generated images and their prompts are kept per concept until the video is made, so a retry does not pay for them again) · E
+/// video code from the model, safety check, one repair · F render (processor only), one repair with the error text · H mux into the work
+/// folder, then the finished file is moved into the library folder; subtitles (.srt always, burned ASS when chosen), narration text file ·
+/// I thumbnail, video and cost rows, concept marked produced. Every paid call is counted in the cost, also when it fails (a cut-off code
+/// answer is billed). A failed or canceled run leaves nothing half-written in the library and removes its work files (a rejected code is
+/// kept there as text for reading).
 /// </summary>
 public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechService speech, IEnumerable<IImageEngine> images, StepModelResolver resolver,
     IChatClientFactory chats, ICostCalculator costs, IMediaTools media, IVideoStore videos, IConceptStore concepts, IProfileStore profiles, IAppPaths paths,
     TimeProvider clock, ILogger<VideoPipeline> logger)
 {
+    /// <summary>Work folders of runs older than this are removed by <see cref="CleanWork"/>.</summary>
+    public static readonly TimeSpan WorkKeep = TimeSpan.FromDays(7);
+
+    private const string Rejected = "rejected-";
+
     private static readonly (string Step, double Weight)[] Weights =
         [("prepare", 2), ("speech", 20), ("timing", 1), ("images", 15), ("code", 15), ("render", 40), ("mux", 5), ("save", 2)];
 
@@ -40,10 +51,22 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         var profile = job.Profile;
         var options = job.Options;
         var engine = engines.FirstOrDefault(e => e.Kind == options.Engine) ?? throw new VideoException($"Engine {options.Engine} is not available.") { Code = "render" };
+
+        // 0. Nothing is paid for before the engine can render: a missing Node / ffmpeg / package / browser used to show up only after the
+        // narration, images and code were bought.
+        var status = engine.Status();
+        if (!status.Ready)
+        {
+            logger.LogWarning("Video not started: {Engine} is not installed (missing: {Missing})", engine.Name, string.Join(", ", status.Missing));
+            throw new VideoException($"{engine.Name} is not installed (missing: {string.Join(", ", status.Missing)}).") { Code = "missing" };
+        }
+
         var id = Guid.NewGuid();
         var work = Path.Combine(paths.WorkDirectory, "videos", id.ToString("N"));
         var warnings = new List<string>();
         var spent = new List<VideoCost>();
+        string? folder = null;
+        var folderCreated = false;
         var speechOn = options.Speech && profile.SpeechEngine != SpeechEngines.Off;
         var active = Weights.Where(w => (w.Step != "speech" || speechOn) && (w.Step != "images" || options.Images != ImageSources.None)).ToList();
         var total = active.Sum(w => w.Weight);
@@ -82,30 +105,35 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
             }
             else
             {
+                decimal speechCost = 0;
                 try
                 {
                     for (var i = 0; i < split.Scenes.Count; i++)
                     {
                         var narration = split.Scenes[i].Narration;
-                        clips.Add(narration.Length == 0 ? null : await speech.SynthesizeAsync(profile.SpeechEngine, profile.SpeechVoice, profile.SpeechSpeed,
+                        var clip = narration.Length == 0 ? null : await speech.SynthesizeAsync(profile.SpeechEngine, profile.SpeechVoice, profile.SpeechSpeed,
                             profile.ContentLanguage, narration, Path.Combine(work, "audio", (i + 1).ToString(CultureInfo.InvariantCulture) + ".wav"), cancellationToken)
-                            .ConfigureAwait(false));
+                            .ConfigureAwait(false);
+                        speechCost += clip?.CostUsd ?? 0;
+                        clips.Add(clip);
                         Report("speech", (i + 1.0) / split.Scenes.Count);
                     }
 
-                    var speechCost = clips.Sum(c => c?.CostUsd ?? 0);
-                    if (speechCost > 0)
-                    {
-                        spent.Add(new VideoCost { VideoId = id, Step = PipelineSteps.Speech, Usd = speechCost, Exact = false });
-                    }
-
-                    warnings.Add(profile.SpeechEngine == SpeechEngines.PiperTurkish ? VideoWarnings.NonCommercialVoice : VideoWarnings.AiVoice);
+                    warnings.Add(VideoWarnings.AiVoice);
                 }
                 catch (Exception ex) when (ex is SpeechException or Providers.ProviderException or IOException or InvalidDataException)
                 {
                     logger.LogError(ex, "Narration failed; the video will be silent");
                     warnings.Add(VideoWarnings.SpeechFailed);
                     clips.Clear();
+                }
+                finally
+                {
+                    // Online clips made before a failure (or a cancel) were paid for: they are counted either way.
+                    if (speechCost > 0)
+                    {
+                        spent.Add(new VideoCost { VideoId = id, Step = PipelineSteps.Speech, Usd = speechCost, Exact = false });
+                    }
                 }
 
                 Finish("speech");
@@ -126,9 +154,10 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
 
             // E. code (+ one repair after a rejected check)
             var chat = chats.Create(job.CodeModel.Model, job.CodeModel.Key.Secret);
+            var system = VideoCodePrompt.System(engine, options.Subtitles);
             var repaired = false;
             Report("code", 0.1);
-            var code = await CodeAsync(chat, job, engine, VideoCodePrompt.User(input), spent, id, cancellationToken).ConfigureAwait(false);
+            var code = await CodeAsync(chat, job, system, VideoCodePrompt.User(input), spent, id, cancellationToken).ConfigureAwait(false);
             var silent = Path.Combine(work, "silent.mp4");
             var request = new EngineRenderRequest(Path.Combine(work, "project"), code, input, silent, Workers());
             try
@@ -137,9 +166,9 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
             }
             catch (EngineException ex) when (ex.Code == "check")
             {
-                File.WriteAllText(Path.Combine(work, "rejected-1.txt"), code);
+                await File.WriteAllTextAsync(Path.Combine(work, Rejected + "1.txt"), code, cancellationToken).ConfigureAwait(false);
                 logger.LogWarning("The video code was rejected; asking for one repair: {Findings}", string.Join(" · ", ex.Findings.Take(4)));
-                code = await CodeAsync(chat, job, engine, VideoCodePrompt.Repair(code, string.Join("\n", ex.Findings)), spent, id, cancellationToken)
+                code = await CodeAsync(chat, job, system, VideoCodePrompt.Repair(code, string.Join("\n", ex.Findings)), spent, id, cancellationToken)
                     .ConfigureAwait(false);
                 request = request with { Code = code };
                 repaired = true;
@@ -149,7 +178,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                 }
                 catch (EngineException again) when (again.Code == "check")
                 {
-                    File.WriteAllText(Path.Combine(work, "rejected-2.txt"), code);
+                    await File.WriteAllTextAsync(Path.Combine(work, Rejected + "2.txt"), code, cancellationToken).ConfigureAwait(false);
                     throw new VideoException("The video code did not pass the safety check twice and was not run: " + string.Join(" · ", again.Findings.Take(4)))
                     {
                         Code = "code",
@@ -168,7 +197,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
             catch (EngineException ex) when (ex.Code == "render" && !repaired)
             {
                 logger.LogWarning("Render failed; asking for one repair: {Error}", ex.Message);
-                code = await CodeAsync(chat, job, engine, VideoCodePrompt.Repair(code, ex.Message), spent, id, cancellationToken).ConfigureAwait(false);
+                code = await CodeAsync(chat, job, system, VideoCodePrompt.Repair(code, ex.Message), spent, id, cancellationToken).ConfigureAwait(false);
                 request = request with { Code = code };
                 repaired = true;
                 try
@@ -193,13 +222,10 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
 
             Finish("render");
 
-            // H. mux, subtitles, narration file
-            var folder = LibraryFolder(profile, job.Concept);
-            Directory.CreateDirectory(folder);
+            // H. mux into the work folder; the library folder gets only finished files.
             var cueSources = input.Scenes.Select(s => new SubtitleSource((long)Math.Round(s.StartSeconds * 1000),
                 clips.ElementAtOrDefault(s.Number - 1)?.DurationMs ?? (long)Math.Round(s.DurationSeconds * 1000), s.Caption)).ToList();
             var cues = SubtitleBuilder.Build(cueSources);
-            await File.WriteAllTextAsync(Path.Combine(folder, "subtitles.srt"), SubtitleBuilder.Srt(cues), cancellationToken).ConfigureAwait(false);
             string? ass = null;
             if (options.Subtitles && cues.Count > 0)
             {
@@ -207,25 +233,31 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                 await File.WriteAllTextAsync(Path.Combine(work, ass), SubtitleBuilder.Ass(cues, width, height, input.Theme), cancellationToken).ConfigureAwait(false);
             }
 
-            if (options.NarrationFile)
-            {
-                await File.WriteAllTextAsync(Path.Combine(folder, "narration.txt"), NarrationScript.Text(job.Concept.Title, profile.ContentLanguage, cueSources),
-                    cancellationToken).ConfigureAwait(false);
-            }
-
             var audio = clips.Select((c, i) => (Clip: c, Start: (long)Math.Round(input.Scenes[i].StartSeconds * 1000))).Where(x => x.Clip is not null)
                 .Select(x => (x.Clip!.File, x.Start)).ToList();
-            var output = Path.Combine(folder, "video.mp4");
+            var muxed = Path.Combine(work, "video.partial.mp4");
             Report("mux", 0.1);
             try
             {
-                await media.MuxAsync(work, silent, audio, ass, output, cancellationToken).ConfigureAwait(false);
+                await media.MuxAsync(work, silent, audio, ass, muxed, cancellationToken).ConfigureAwait(false);
             }
             catch (InvalidOperationException ex)
             {
                 throw new VideoException("Joining video and narration failed: " + ex.Message, ex) { Code = "mux" };
             }
 
+            folder = LibraryFolder(profile, job.Concept);
+            folderCreated = !Directory.Exists(folder);
+            Directory.CreateDirectory(folder);
+            await File.WriteAllTextAsync(Path.Combine(folder, "subtitles.srt"), SubtitleBuilder.Srt(cues), cancellationToken).ConfigureAwait(false);
+            if (options.NarrationFile)
+            {
+                await File.WriteAllTextAsync(Path.Combine(folder, "narration.txt"), NarrationScript.Text(job.Concept.Title, profile.ContentLanguage, cueSources),
+                    cancellationToken).ConfigureAwait(false);
+            }
+
+            var output = Path.Combine(folder, "video.mp4");
+            File.Move(muxed, output, overwrite: true);
             Finish("mux");
 
             // I. thumbnail and records
@@ -249,7 +281,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                 SpeechModel = speechOn && !warnings.Contains(VideoWarnings.SpeechFailed) ? profile.SpeechEngine + ":" + profile.SpeechVoice : string.Empty,
                 ImageModel = options.Images,
                 SettingsJson = JsonSerializer.Serialize(options, Render.CoreJsonContext.Default.VideoOptions),
-                PromptVersion = "1",
+                PromptVersion = VideoCodePrompt.Version,
                 TotalUsd = spent.Sum(c => c.Usd),
                 CostExact = spent.All(c => c.Exact),
                 ElapsedMs = watch.ElapsedMilliseconds,
@@ -261,28 +293,77 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
             Finish("save");
             logger.LogInformation("Video {Id} made in {Seconds:0} s ({Engine}, {Usd} USD)", id, watch.Elapsed.TotalSeconds, engine.Name, record.TotalUsd);
             TryDelete(work);
+            TryDelete(SceneImageRoot(job.Concept.Id));
             return record;
         }
         catch (VideoException ex)
         {
             logger.LogError("Video failed ({Code}): {Message}", ex.Code, ex.Message);
+            CleanFailed(work, folder, folderCreated);
             throw new VideoException(ex.Message, ex) { Code = ex.Code, SpentUsd = spent.Sum(c => c.Usd) };
         }
         catch (Providers.ProviderException ex)
         {
-            logger.LogError("Video failed: provider error ({Code})", ex.Code);
+            logger.LogError("Video failed: provider error ({Code}, request {RequestId})", ex.Code, ex.RequestId.Length > 0 ? ex.RequestId : "-");
+            CleanFailed(work, folder, folderCreated);
             throw new VideoException(ex.Message, ex) { Code = "provider:" + ex.Code, SpentUsd = spent.Sum(c => c.Usd) };
+        }
+        catch (OperationCanceledException)
+        {
+            logger.LogWarning("Video canceled after {Usd} USD were spent", spent.Sum(c => c.Usd));
+            CleanFailed(work, folder, folderCreated);
+            throw;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            logger.LogError(ex, "Video failed: a file could not be written");
+            CleanFailed(work, folder, folderCreated);
+            throw new VideoException("A file could not be written: " + ex.Message, ex) { Code = "files", SpentUsd = spent.Sum(c => c.Usd) };
         }
     }
 
     /// <summary>Render workers: cores − 2 (at least 1).</summary>
     public static int Workers() => Math.Clamp(Environment.ProcessorCount - 2, 1, 8);
 
-    private async Task<string> CodeAsync(IChatClient chat, VideoJob job, IVideoEngine engine, string user, List<VideoCost> spent, Guid id,
+    /// <summary>
+    /// Removes the work folders of old runs (a run that was cut off by closing the app) and old kept scene images. Called once at start,
+    /// before any video runs.
+    /// </summary>
+    public void CleanWork()
+    {
+        foreach (var root in new[] { Path.Combine(paths.WorkDirectory, "videos"), Path.Combine(paths.WorkDirectory, "scene-images") })
+        {
+            if (!Directory.Exists(root))
+            {
+                continue;
+            }
+
+            foreach (var folder in Directory.EnumerateDirectories(root))
+            {
+                if (clock.GetUtcNow() - Directory.GetLastWriteTimeUtc(folder) > WorkKeep)
+                {
+                    TryDelete(folder);
+                }
+            }
+        }
+    }
+
+    private async Task<string> CodeAsync(IChatClient chat, VideoJob job, string system, string user, List<VideoCost> spent, Guid id,
         CancellationToken cancellationToken)
     {
-        var answer = await chat.SendAsync(new ChatRequest(VideoCodePrompt.System(engine), user, CacheSystem: true, MaxOutputTokens: 32_000,
-            Effort: job.CodeModel.Effort), cancellationToken).ConfigureAwait(false);
+        ChatResponse answer;
+        try
+        {
+            answer = await chat.SendAsync(new ChatRequest(system, user, CacheSystem: true, MaxOutputTokens: 32_000, Effort: job.CodeModel.Effort), cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Providers.ProviderException ex) when (ex.ChargedUsage is { } charged)
+        {
+            // A cut-off or refused code answer is billed: counted before the failure goes up.
+            spent.Add(new VideoCost { VideoId = id, Step = PipelineSteps.VideoCode, Usd = costs.Exact(job.CodeModel.Model, charged), Exact = true });
+            throw;
+        }
+
         spent.Add(new VideoCost
         {
             VideoId = id,
@@ -310,21 +391,30 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
             if (job.Options.Images == ImageSources.Samples)
             {
                 var samples = await profiles.ImagesAsync(job.Profile.Id, cancellationToken).ConfigureAwait(false);
-                var folder = Path.Combine(paths.LibraryDirectory, LibraryPaths.SafeName(job.Profile.Name), "images");
+                var missing = 0;
                 for (var i = 0; i < scenes.Count && samples.Count > 0; i++)
                 {
                     var sample = samples[i % samples.Count];
                     var name = "sample-" + (i % samples.Count + 1).ToString(CultureInfo.InvariantCulture) + Path.GetExtension(sample.FileName);
-                    var source = Path.Combine(folder, sample.FileName);
-                    if (File.Exists(source))
+
+                    // The stored name is relative to the library folder ("<profile>/images/<file>"), like every library path.
+                    var source = SampleFile(sample.FileName);
+                    if (source is not null && File.Exists(source))
                     {
                         Place(source, name);
                         names.Add(name);
                     }
                     else
                     {
+                        missing++;
                         names.Add(string.Empty);
                     }
+                }
+
+                if (missing > 0)
+                {
+                    logger.LogWarning("{Missing} scene(s) have no image: their sample image file is missing", missing);
+                    warnings.Add(VideoWarnings.ImagesFailed);
                 }
             }
             else if (job.Options.Images == ImageSources.Model)
@@ -334,22 +424,52 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                 var engine = images.FirstOrDefault(e => e.Code == imageModel.Model.Provider)
                     ?? throw new VideoException($"{imageModel.Model.Provider} has no image engine.") { Code = "images" };
                 var visuals = scenes.Select(s => s.Visual.Length > 0 ? s.Visual : s.Narration).ToList();
-                var chat = chats.Create(promptModel.Model, promptModel.Key.Secret);
-                var answer = await chat.SendAsync(new ChatRequest(ImagePromptBuilder.System, ImagePromptBuilder.User(job.Profile.Name, visuals),
-                    Schema: ImagePromptBuilder.Schema(), MaxOutputTokens: 4000, Effort: promptModel.Effort), cancellationToken).ConfigureAwait(false);
-                spent.Add(new VideoCost
+
+                // Prompts and images of this concept are kept until its video is made: a retry after a later failure reuses them.
+                var cache = Path.Combine(SceneImageRoot(job.Concept.Id), CacheKey(job.Profile.Name, imageModel.Model, width, height, visuals));
+                Directory.CreateDirectory(cache);
+                var promptFile = Path.Combine(cache, "prompts.txt");
+                IReadOnlyList<string> prompts;
+                if (File.Exists(promptFile) && (await File.ReadAllLinesAsync(promptFile, cancellationToken).ConfigureAwait(false)) is { } kept && kept.Length == visuals.Count)
                 {
-                    VideoId = id,
-                    Step = PipelineSteps.ImagePrompt,
-                    Usd = costs.Exact(promptModel.Model, answer.Usage, answer.ReportedCostUsd),
-                    Exact = true,
-                });
-                var prompts = ImagePromptBuilder.Parse(answer.Text, visuals);
+                    prompts = kept;
+                    logger.LogInformation("Scene image prompts reused from an earlier attempt");
+                }
+                else
+                {
+                    var chat = chats.Create(promptModel.Model, promptModel.Key.Secret);
+                    ChatResponse answer;
+                    try
+                    {
+                        answer = await chat.SendAsync(new ChatRequest(ImagePromptBuilder.System, ImagePromptBuilder.User(job.Profile.Name, visuals),
+                            Schema: ImagePromptBuilder.Schema(), MaxOutputTokens: 4000, Effort: promptModel.Effort), cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (Providers.ProviderException ex) when (ex.ChargedUsage is { } charged)
+                    {
+                        spent.Add(new VideoCost { VideoId = id, Step = PipelineSteps.ImagePrompt, Usd = costs.Exact(promptModel.Model, charged), Exact = true });
+                        throw;
+                    }
+
+                    spent.Add(new VideoCost
+                    {
+                        VideoId = id,
+                        Step = PipelineSteps.ImagePrompt,
+                        Usd = costs.Exact(promptModel.Model, answer.Usage, answer.ReportedCostUsd),
+                        Exact = true,
+                    });
+                    prompts = ImagePromptBuilder.Parse(answer.Text, visuals);
+                    await File.WriteAllLinesAsync(promptFile, prompts.Select(p => p.ReplaceLineEndings(" ")), cancellationToken).ConfigureAwait(false);
+                }
+
                 for (var i = 0; i < prompts.Count; i++)
                 {
-                    var file = Path.Combine(work, "images", "scene-" + (i + 1).ToString(CultureInfo.InvariantCulture) + ".png");
-                    var result = await engine.GenerateAsync(new ImageRequest(prompts[i], width, height, file, imageModel), cancellationToken).ConfigureAwait(false);
-                    spent.Add(new VideoCost { VideoId = id, Step = PipelineSteps.Image, Usd = result.CostUsd, Exact = false });
+                    var file = Path.Combine(cache, "scene-" + (i + 1).ToString(CultureInfo.InvariantCulture) + ".png");
+                    if (!File.Exists(file))
+                    {
+                        var result = await engine.GenerateAsync(new ImageRequest(prompts[i], width, height, file, imageModel), cancellationToken).ConfigureAwait(false);
+                        spent.Add(new VideoCost { VideoId = id, Step = PipelineSteps.Image, Usd = result.CostUsd, Exact = false });
+                    }
+
                     Place(file, Path.GetFileName(file));
                     names.Add(Path.GetFileName(file));
                     report((i + 1.0) / prompts.Count);
@@ -364,6 +484,28 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         }
 
         return names;
+    }
+
+    private string? SampleFile(string stored)
+    {
+        try
+        {
+            return LibraryPaths.Resolve(paths.LibraryDirectory, stored);
+        }
+        catch (InvalidOperationException ex)
+        {
+            logger.LogWarning(ex, "A sample image path is outside the library folder and is ignored");
+            return null;
+        }
+    }
+
+    private string SceneImageRoot(Guid conceptId) => Path.Combine(paths.WorkDirectory, "scene-images", conceptId.ToString("N"));
+
+    private static string CacheKey(string channel, CatalogModel model, int width, int height, IReadOnlyList<string> visuals)
+    {
+        var text = string.Join('\n', new[] { channel, model.Provider, model.Id, width.ToString(CultureInfo.InvariantCulture), height.ToString(CultureInfo.InvariantCulture) }
+            .Concat(visuals));
+        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)))[..16];
     }
 
     private static long EstimateMs(string narration, Profile profile)
@@ -385,15 +527,76 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         return folder;
     }
 
-    private void TryDelete(string work)
+    /// <summary>
+    /// After a failure or a cancel: the library keeps nothing of this run (a folder it created is removed; in an existing folder only the
+    /// files it wrote), and the work folder is emptied except a rejected code, which stays for reading until <see cref="CleanWork"/>.
+    /// </summary>
+    private void CleanFailed(string work, string? folder, bool folderCreated)
+    {
+        if (folder is not null)
+        {
+            if (folderCreated)
+            {
+                TryDelete(folder);
+            }
+            else
+            {
+                foreach (var name in new[] { "subtitles.srt", "narration.txt", "video.mp4", "thumbnail.jpg" })
+                {
+                    TryDeleteFile(Path.Combine(folder, name));
+                }
+            }
+        }
+
+        if (!Directory.Exists(work))
+        {
+            return;
+        }
+
+        if (!Directory.EnumerateFiles(work, Rejected + "*.txt").Any())
+        {
+            TryDelete(work);
+            return;
+        }
+
+        foreach (var entry in Directory.EnumerateFileSystemEntries(work).Where(e => !Path.GetFileName(e).StartsWith(Rejected, StringComparison.Ordinal)))
+        {
+            if (Directory.Exists(entry))
+            {
+                TryDelete(entry);
+            }
+            else
+            {
+                TryDeleteFile(entry);
+            }
+        }
+    }
+
+    private void TryDelete(string folder)
     {
         try
         {
-            Directory.Delete(work, recursive: true);
+            if (Directory.Exists(folder))
+            {
+                Directory.Delete(folder, recursive: true);
+            }
         }
-        catch (IOException ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            logger.LogDebug(ex, "The work folder could not be removed yet");
+            // A process that was just killed can hold a file for a moment; the start-up clean-up removes it later.
+            logger.LogWarning(ex, "A work folder could not be removed yet");
+        }
+    }
+
+    private void TryDeleteFile(string file)
+    {
+        try
+        {
+            File.Delete(file);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarning(ex, "A file of a failed video could not be removed");
         }
     }
 }

@@ -9,9 +9,10 @@ namespace TMConcept.Core.Engines;
 /// <list type="bullet">
 /// <item>Imports are allow-listed: the engine's packages and the skeleton's <c>./input</c> file. HyperFrames code has no imports at all.</item>
 /// <item>Forbidden patterns: fetch / XMLHttpRequest / WebSocket / EventSource / sendBeacon, dynamic import, eval / Function, require /
-/// process / node:, storage and cookies, window.open / location, workers and messaging, script / iframe / link tags, http(s) / ws addresses,
-/// escape sequences used to hide text (\x, \u, fromCharCode, atob), global access by brackets, constructor / __proto__ chains, HTML
-/// injection.</item>
+/// process / quoted node: modules, storage and cookies, window.open / the page's location and frames, workers and messaging, script / iframe /
+/// link tags, http(s) / ws addresses, escapes of ASCII characters and other ways to hide text (fromCharCode, atob), global access by
+/// brackets, constructor / __proto__ chains, HTML injection. Ordinary names (a parameter "node: Rect", a variable "location" or "parent")
+/// and escapes of non-ASCII characters pass: a false rejection costs a paid repair.</item>
 /// </list>
 /// This is not the only defense: the HyperFrames page has a content security policy without network, the Remotion bundler resolves only
 /// inside the work folder and the engine packages, Revideo's browser gets a dead proxy, and engine processes start without secrets in their
@@ -34,14 +35,17 @@ public static partial class EngineCodeCheck
         (new(@"XMLHttpRequest|WebSocket|EventSource|sendBeacon|RTCPeerConnection", RegexOptions.IgnoreCase), "network connection"),
         (new(@"\bimport\s*\(|\bimport\s*\.\s*meta\b"), "dynamic import (import() / import.meta)"),
         (new(@"\beval\s*\(|\bnew\s+Function\b|\bFunction\s*\(|setTimeout\s*\(\s*['""`]|setInterval\s*\(\s*['""`]"), "dynamic code"),
-        (new(@"\brequire\s*\(|\bprocess\s*\.|child_process|\bnode:|__dirname|__filename"), "Node.js access"),
+        // "node:" only as a quoted module name: a TypeScript annotation such as (node: Rect) is ordinary drawing code.
+        (new(@"\brequire\s*\(|\bprocess\s*\.|child_process|['""`]node:|__dirname|__filename"), "Node.js access"),
         (new(@"document\s*\.\s*cookie|localStorage|sessionStorage|indexedDB|caches\s*\.|navigator\s*\.", RegexOptions.IgnoreCase), "browser storage or device access"),
-        (new(@"window\s*\.\s*open|\blocation\s*\.|\blocation\s*=|document\s*\.\s*domain|\bopener\b|\btop\s*\.|\bparent\s*\."), "another page or window"),
+        // The page's own location and frames; a variable called location / top / parent (a map pin, a layout box) is not one of them.
+        (new(@"window\s*\.\s*open|\b(window|document|self|globalThis|top|parent|frames)\s*\.\s*location\b|\blocation\s*\.\s*(href|assign|replace|reload)\b|(?<!\b(?:const|let|var)\s+)(?<![\.\w$])location\s*=(?!=)|document\s*\.\s*domain|\bopener\b|\b(window|self|globalThis)\s*\.\s*(top|parent|frames)\b|\b(top|parent)\s*\.\s*(document|postMessage|frames|window)\b"), "another page or window"),
         (new(@"\bWorker\s*\(|SharedWorker|importScripts|postMessage|BroadcastChannel|serviceWorker"), "workers or messaging"),
         (new(@"<\s*(script|iframe|object|embed|link|base|meta|form)\b", RegexOptions.IgnoreCase), "embedded tag (script / iframe / link …)"),
         (new(@"@import|url\s*\(\s*['""]?\s*(https?:|//|data:text)", RegexOptions.IgnoreCase), "external resource (CSS)"),
         (new(@"\b(https?|wss?|ftp|file):", RegexOptions.IgnoreCase), "address (http / ws / file)"),
-        (new(@"\\x[0-9a-fA-F]{2}|\\u\{?[0-9a-fA-F]{4}|fromCharCode|fromCodePoint|\batob\s*\(|\bbtoa\s*\(|unescape\s*\(|decodeURI"), "hidden text (escape sequences)"),
+        // Escapes are checked separately (AsciiEscape): only an escape for an ASCII character can hide a name such as "fetch".
+        (new(@"fromCharCode|fromCodePoint|\batob\s*\(|\bbtoa\s*\(|unescape\s*\(|decodeURI"), "hidden text (escape sequences)"),
         (new(@"\b(window|globalThis|self|document)\s*\["), "global access by brackets"),
         (new(@"constructor\s*[\.\[]|\[\s*['""`]constructor|__proto__|prototype\s*\[|Reflect\s*\.|\bProxy\s*\(|defineProperty"), "object chain escape"),
         (new(@"innerHTML|outerHTML|insertAdjacentHTML|document\s*\.\s*write|createContextualFragment|DOMParser|srcdoc", RegexOptions.IgnoreCase), "HTML injection (use textContent)"),
@@ -94,6 +98,11 @@ public static partial class EngineCodeCheck
                     findings.Add($"line {i + 1}: {reason} — {Head(lines[i])}");
                 }
             }
+
+            if (HidesAscii(line))
+            {
+                findings.Add($"line {i + 1}: hidden text (an escape sequence for an ASCII character) — {Head(lines[i])}");
+            }
         }
 
         var allowed = AllowedImports(engine);
@@ -135,6 +144,24 @@ public static partial class EngineCodeCheck
         return (match.Success ? match.Groups[1].Value : answer).Replace("\r\n", "\n", StringComparison.Ordinal).Trim() + "\n";
     }
 
+    /// <summary>
+    /// Whether a line has a \x, \u or \u{…} escape of an ASCII character (below 0x80): that is how a forbidden name can be spelled without its
+    /// letters. Escapes of other characters ("\u2014" for —, "\u00b7" for ·) are ordinary text and pass.
+    /// </summary>
+    private static bool HidesAscii(string line)
+    {
+        foreach (Match match in AsciiEscape().Matches(line))
+        {
+            var hex = match.Groups[1].Success ? match.Groups[1].Value : match.Groups[2].Success ? match.Groups[2].Value : match.Groups[3].Value;
+            if (hex.Length > 6 || int.Parse(hex, System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture) < 0x80)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static string Head(string line)
     {
         var text = line.Trim();
@@ -147,6 +174,9 @@ public static partial class EngineCodeCheck
     /// </summary>
     [GeneratedRegex(@"\b(?:from|import)\b(?:\s|/\*[\s\S]*?\*/|//[^\n]*(?:\n|$))*(['""`])(.*?)\1")]
     private static partial Regex Import();
+
+    [GeneratedRegex(@"\\x([0-9a-fA-F]{2})|\\u\{([0-9a-fA-F]+)\}|\\u([0-9a-fA-F]{4})")]
+    private static partial Regex AsciiEscape();
 
     [GeneratedRegex(@"\bexport\s+(?:const|function)\s+Scene\b")]
     private static partial Regex RemotionScene();

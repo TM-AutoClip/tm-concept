@@ -24,8 +24,32 @@ public sealed class EngineCodeCheckTests
     [InlineData("const u = 'https://example.com';")]
     [InlineData("const t = '\\x41';")]
     [InlineData("new Function('return 1')();")]
+    [InlineData("const t = '\\u0066etch';")]
+    [InlineData("const t = '\\u{66}';")]
+    [InlineData("window.location.href = 'x';")]
+    [InlineData("location.assign(u);")]
+    [InlineData("location = target;")]
+    [InlineData("top.location = u;")]
+    [InlineData("parent.postMessage(1);")]
+    [InlineData("const m = await import('node:fs');")]
     public void ForbiddenPatternsAreFound(string line) =>
         EngineCodeCheck.Check(EngineKind.HyperFrames, HyperFramesOk + line).ShouldNotBeEmpty();
+
+    [Theory]
+    [InlineData("function pulse(node: HTMLElement) { return node; }")]
+    [InlineData("const location = scene.visual;")]
+    [InlineData("const x = pin.location.x + box.top.y + parent.width;")]
+    [InlineData("let top = 0; top = top + 4;")]
+    [InlineData("const sep = ' \\u2014 ' + '\\u00b7' + '\\xb7';")]
+    public void OrdinaryDrawingCodePasses(string line) =>
+        EngineCodeCheck.Check(EngineKind.HyperFrames, HyperFramesOk + line + "\n").ShouldBeEmpty();
+
+    [Fact]
+    public void ATypeScriptAnnotationNamedNodePassesInRevideo()
+    {
+        const string code = "import {makeScene2D, Rect} from '@revideo/2d';\nexport default makeScene2D('scene', function* (view) {\n  const grow = (node: Rect) => node.width(100, 1);\n});\n";
+        EngineCodeCheck.Check(EngineKind.Revideo, code).ShouldBeEmpty();
+    }
 
     [Fact]
     public void ImportsOutsideTheAllowListAreFound()

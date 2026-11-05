@@ -147,7 +147,7 @@ public sealed class RemotionEngine(IAppPaths paths, ToolInstaller tools, ChromeL
         string[] arguments =
         [
             Path.Combine(Package.Root, "render.mjs"), "--work", request.Folder, "--out", request.Output, "--crf", "20", "--jpeg", "90",
-            "--concurrency", request.Workers.ToString(CultureInfo.InvariantCulture), "--gl", "swangle",
+            "--concurrency", request.Workers.ToString(CultureInfo.InvariantCulture), "--gl", "swangle", "--browser", Browser()!,
         ];
         Logger.LogInformation("Remotion render: {Width}×{Height}, {Frames} frames", request.Input.Width, request.Input.Height, request.Input.TotalFrames);
         await RunNodeAsync(arguments, Package.Root, request.Folder, null, progress, requireDone: true, cancellationToken).ConfigureAwait(false);
@@ -166,10 +166,16 @@ public sealed class RemotionEngine(IAppPaths paths, ToolInstaller tools, ChromeL
         ["public/.keep"] = string.Empty,
     };
 
-    /// <summary>Remotion downloads its own Chrome Headless Shell (x64 and arm64).</summary>
+    /// <summary>Remotion renders with its own Chrome Headless Shell (the version it was tested with), passed to it by path.</summary>
+    protected override string? Browser() => Chrome.FindRemotion();
+
+    /// <summary>
+    /// Remotion downloads its own Chrome Headless Shell (x64 and arm64) at install time, also when another engine's browser is already there:
+    /// the render must never download one.
+    /// </summary>
     protected override async Task InstallBrowserAsync(IProgress<ToolProgress>? progress, CancellationToken cancellationToken)
     {
-        if (Chrome.Find() is not null)
+        if (Chrome.FindRemotion() is not null)
         {
             return;
         }
@@ -177,7 +183,7 @@ public sealed class RemotionEngine(IAppPaths paths, ToolInstaller tools, ChromeL
         progress?.Report(new ToolProgress(0.6, "chrome-headless-shell"));
         var result = await Package.RunNodeAsync([Path.Combine(Package.Root, "render.mjs"), "--ensure-browser"],
             line => Logger.LogDebug("remotion: {Line}", EnginePackage.Short(line)), cancellationToken).ConfigureAwait(false);
-        if (result.ExitCode != 0 || Chrome.Find() is null)
+        if (result.ExitCode != 0 || Chrome.FindRemotion() is null)
         {
             throw new ToolInstallException($"Chrome Headless Shell could not be installed ({result.ExitCode}): {EnginePackage.Short(result.LastLines)}")
             {
