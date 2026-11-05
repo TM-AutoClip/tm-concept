@@ -7,7 +7,7 @@ using TMConcept.Desktop.Startup;
 
 namespace TMConcept.Desktop.ViewModels;
 
-/// <summary>General settings: interface language (changes at once) and the bottom-right notifications.</summary>
+/// <summary>General settings: interface language (changes at once), drawing (after a restart) and the bottom-right notifications.</summary>
 public sealed partial class GeneralSettingsViewModel(AppSession session, Localizer text, UiPreferencesFile preferences, INotifier notifier)
     : SettingsSectionBase
 {
@@ -25,12 +25,32 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
     [ObservableProperty]
     public partial decimal? NotificationSeconds { get; set; }
 
+    /// <summary>Draw with the graphics card (stored at once, used from the next start).</summary>
+    [ObservableProperty]
+    public partial bool UseGraphicsCard { get; set; }
+
     /// <inheritdoc />
     public override Task ActivateAsync()
     {
+        _loading = true;
+        UseGraphicsCard = preferences.Read().UseGraphicsCard;
+        _loading = false;
         NotificationsEnabled = session.Settings.NotificationsEnabled;
         NotificationSeconds = session.Settings.NotificationSeconds;
         return Task.CompletedTask;
+    }
+
+    private bool _loading;
+
+    partial void OnUseGraphicsCardChanged(bool value)
+    {
+        if (_loading)
+        {
+            return;
+        }
+
+        preferences.Change(p => p.UseGraphicsCard = value);
+        Status = text["settings.drawing.restart"];
     }
 
     [RelayCommand]
@@ -56,7 +76,7 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
     private async Task UseLanguageAsync(string code)
     {
         text.Use(code);
-        preferences.Write(new UiPreferences { Language = code });
+        preferences.Change(p => p.Language = code);
         var settings = session.Settings;
         settings.Language = code;
         await session.SaveAsync(settings, CancellationToken.None).ConfigureAwait(true);

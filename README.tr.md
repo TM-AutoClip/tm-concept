@@ -125,6 +125,9 @@ SHA-256 ile denetlenir (npm paketleri: kilit dosyasının bütünlük değerleri
 
 Bir motor ve sesle toplam disk: yaklaşık 0,6–1 GB.
 
+Pencereyi varsayılan olarak işlemci çizer (görünüm aynı, yaklaşık 50–70 MB daha az bellek). Kaydırma ya da oynatıcı yavaş gelirse
+Ayarlar → **Genel** → **Pencereyi ekran kartıyla çiz** seçeneğini aç ve programı yeniden başlat.
+
 ## API anahtarları
 
 Ayarlar → **Anahtarlar**: sağlayıcıyı seç, anahtarı yapıştır, **Kaydet ve bağlantıyı dene**'ye bas (ücretsiz bir istek; fal'da ücretsiz

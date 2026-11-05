@@ -54,9 +54,11 @@ internal static class Program
 
         instance.ShowRequested += (_, _) => services.GetRequiredService<Startup.AppStartup>().ShowMainWindow();
         App.Services = services;
+        var graphicsCard = services.GetRequiredService<UiPreferencesFile>().Read().UseGraphicsCard;
+        logger.LogInformation("Drawing with the {Renderer}", graphicsCard ? "graphics card" : "processor");
         try
         {
-            return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+            return BuildAvaloniaApp(graphicsCard).StartWithClassicDesktopLifetime(args);
         }
         catch (Exception ex)
         {
@@ -83,5 +85,18 @@ internal static class Program
     }
 
     /// <summary>Avalonia app builder (also used by the designer).</summary>
-    public static AppBuilder BuildAvaloniaApp() => AppBuilder.Configure<App>().UsePlatformDetect().LogToTrace();
+    public static AppBuilder BuildAvaloniaApp() => BuildAvaloniaApp(graphicsCard: true);
+
+    /// <summary>
+    /// Avalonia app builder. Without the graphics card the window is drawn by Skia on the processor: the same picture, but no Direct3D /
+    /// OpenGL driver in the process (on Windows its memory and some 40 driver threads; on a Raspberry Pi Mesa and LLVM).
+    /// </summary>
+    public static AppBuilder BuildAvaloniaApp(bool graphicsCard)
+    {
+        var builder = AppBuilder.Configure<App>().UsePlatformDetect().LogToTrace();
+        return graphicsCard
+            ? builder
+            : builder.With(new Win32PlatformOptions { RenderingMode = [Win32RenderingMode.Software] })
+                .With(new X11PlatformOptions { RenderingMode = [X11RenderingMode.Software] });
+    }
 }

@@ -126,6 +126,9 @@ is checked against a pinned SHA-256 (npm packages: the lock file's integrity val
 
 Total disk use with one engine and the voice: about 0.6–1 GB.
 
+The window is drawn by the processor by default (same look, about 50–70 MB less memory). If scrolling or the player feels slow, turn on
+Settings → **General** → **Draw the window with the graphics card** and restart.
+
 ## API keys
 
 Settings → **Keys**: choose the provider, paste the key, press **Save and test the connection** (a free request; fal has no free test).

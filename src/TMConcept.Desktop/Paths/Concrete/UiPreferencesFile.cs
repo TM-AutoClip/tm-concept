@@ -25,6 +25,15 @@ public sealed class UiPreferencesFile(AppPaths paths, ILogger<UiPreferencesFile>
         }
     }
 
+    /// <summary>Changes the stored preferences (read, change, write), so one preference never resets another.</summary>
+    public void Change(Action<UiPreferences> change)
+    {
+        ArgumentNullException.ThrowIfNull(change);
+        var preferences = Read();
+        change(preferences);
+        Write(preferences);
+    }
+
     /// <summary>Writes the preferences.</summary>
     public void Write(UiPreferences preferences) =>
         File.WriteAllText(paths.PreferencesFile, JsonSerializer.Serialize(preferences, DesktopJsonContext.Default.UiPreferences));

@@ -10,6 +10,9 @@
         <Button Content="Türkçe" Command="{Binding TurkishCommand}" />
         <Button Content="English" Command="{Binding EnglishCommand}" />
       </StackPanel>
+      <TextBlock Text="{DynamicResource settings.drawing}" Classes="h2" Margin="0,10,0,0" />
+      <CheckBox IsChecked="{Binding UseGraphicsCard}" Content="{DynamicResource settings.drawing.gpu}" />
+      <TextBlock Text="{DynamicResource settings.drawing.note}" Classes="muted" TextWrapping="Wrap" />
       <TextBlock Text="{DynamicResource settings.notifications}" Classes="h2" Margin="0,10,0,0" />
       <CheckBox IsChecked="{Binding NotificationsEnabled}" Content="{DynamicResource settings.notifications.enabled}" />
       <StackPanel Orientation="Horizontal" Spacing="10">

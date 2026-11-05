@@ -166,7 +166,7 @@ public sealed partial class FirstRunViewModel(Vault vault, BackupService backup,
 
     private void ChooseLanguage(string code)
     {
-        preferences.Write(new UiPreferences { Language = code });
+        preferences.Change(p => p.Language = code);
         text.Use(code);
         Step = FirstRunStep.Choice;
     }

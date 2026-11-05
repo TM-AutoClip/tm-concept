@@ -20,6 +20,8 @@
       project of the app runs the trim analyzers (Directory.Build.props), so a trim warning is a build error.
     -->
     <PublishTrimmed>true</PublishTrimmed>
+    <!-- Native AOT is ready to try (dotnet publish -r win-x64 -p:NativeAotTrial=true); not the release yet, see docs/release-notes/v0.1.3.md. -->
+    <PublishAot Condition="'$(NativeAotTrial)' == 'true'">true</PublishAot>
   </PropertyGroup>
   <ItemGroup>
     <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="5" />
