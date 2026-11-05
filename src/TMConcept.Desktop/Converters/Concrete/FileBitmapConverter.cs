@@ -4,7 +4,10 @@ using Avalonia.Media.Imaging;
 
 namespace TMConcept.Desktop.Converters;
 
-/// <summary>Loads a small preview bitmap from a file path (decoded to 240 px wide); <c>null</c> when the file is missing or not an image.</summary>
+/// <summary>
+/// Loads a preview bitmap from a file path, decoded to 240 px wide (or the width given as the converter parameter, the player's poster);
+/// <c>null</c> when the file is missing or not an image.
+/// </summary>
 public sealed class FileBitmapConverter : IValueConverter
 {
     /// <summary>The shared instance.</summary>
@@ -21,7 +24,8 @@ public sealed class FileBitmapConverter : IValueConverter
         try
         {
             using var stream = File.OpenRead(path);
-            return Bitmap.DecodeToWidth(stream, 240);
+            var width = parameter is string text && int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var wanted) ? wanted : 240;
+            return Bitmap.DecodeToWidth(stream, width);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
         {

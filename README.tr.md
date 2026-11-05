@@ -35,7 +35,8 @@ veritabanını şifreli tutar.
   örnek görsellerin ya da bir görsel modeli), seslendirmeyi, altyazıyı ve konuşma metni dosyasını seç, **Sıradakileri sırayla üret**'e bas.
   Model tek bir kod dosyası yazar; hiçbir şey çalıştırılmadan önce güvenlik denetimi yapılır; denetim ya da render hatasında tek onarım
   istenir. Videolar en çok 3 dakikadır.
-- **Üretilen videolar.** Küçük resim, ayrıntılar (motor, modeller, adım adım ücret, ses notları), oynat, klasörü aç, kaydı sil ve
+- **Üretilen videolar.** Küçük resim, program içi oynatıcı (oynat/duraklat, sarma çubuğu, süre, ses düzeyi, tam ekran; kendiliğinden
+  başlamaz), ayrıntılar (motor, modeller, adım adım ücret, ses notları, konsept metni), sistem oynatıcısında aç, yeniden üret, klasörü aç, kaydı sil ve
   istersen dosyaları geri dönüşüm kutusuna taşı.
 - **Bildirimler** sağ altta (konseptler hazır, video hazır, hata). Varsayılan 1 dakika; Ayarlar'dan süresi değişir ya da kapatılır.
   Alttaki işlem günlüğü her şeyi tutar (sarı uyarı, kırmızı hata).
@@ -113,12 +114,13 @@ Ayarlar → **Araçlar**. Her kalem, kaynağını ve boyutunu gösteren onay pen
 SHA-256 ile denetlenir (npm paketleri: kilit dosyasının bütünlük değerleri). Hepsi programın kendi veri klasörüne gider.
 
 1. **Node.js** (≈ 35 MB) — motorları çalıştırır.
-2. **ffmpeg** (≈ 130–200 MB, GPL derlemesi, ayrı bir program) — sesi ve videoyu birleştirir, altyazıyı yakar, küçük resim çıkarır.
-   Linux'ta dağıtımın ffmpeg'i varsa o kullanılır.
+2. **ffmpeg** (≈ 130–200 MB, GPL derlemesi, ayrı bir program) — sesi ve videoyu birleştirir, altyazıyı yakar, küçük resim çıkarır,
+   videoları program içinde oynatır. Linux'ta dağıtımın ffmpeg'i varsa o kullanılır. Sabitlenen indirme bir gün kaldırılırsa ya da SHA-256'sı
+   tutmazsa PATH'teki ffmpeg kullanılır (uyarıyla); o da yoksa program nasıl kurulacağını gösterir.
 3. **Bir motor:** HyperFrames (varsayılan) ve/veya Remotion (önce lisansını kabul etmeni ister) ve/veya Revideo (deneysel). Motor paketleri
    ve Chrome Headless Shell birkaç yüz MB tutar. **Örnek render** motoru modelsiz ve ağsız dener.
-4. **Ses:** Supertonic 3 (≈ 130 MB; önce OpenRAIL-M şartlarını gösterir). İsteğe bağlı: Piper Türkçe sesi (≈ 21 MB; **yalnız ticari
-   olmayan kullanım**, indirmeden önce gösterilir). Ses yoksa videolar sessiz üretilir ve günlüğe sarı uyarı düşer.
+4. **Ses:** Supertonic 3 (≈ 130 MB; önce OpenRAIL-M şartlarını gösterir; Türkçe ve İngilizce). Ses yoksa videolar sessiz üretilir ve
+   günlüğe sarı uyarı düşer.
 
 Bir motor ve sesle toplam disk: yaklaşık 0,6–1 GB.
 
@@ -135,7 +137,7 @@ Sonra Ayarlar → **Modeller**: her adım için bir model seç. Senin yerine se�
 1. **Konsept Üret:** modeli, adedi ve isteğe bağlı ek istemi seç; tahmini gör; **Üret**'e bas.
 2. Kartları aç, iyileri onayla (A), kalanı sil (D).
 3. **Konseptten Video:** onaylı konseptlere tıklayıp sıraya al, ayarlara bak, **Sıradakileri sırayla üret**'e bas.
-4. **Üretilen Videolar:** izle, klasörü aç. Video klasöründe `video.mp4`, `subtitles.srt`, `narration.txt` ve `thumbnail.jpg` bulunur.
+4. **Üretilen Videolar:** program içinde izle (Linux'ta ses PulseAudio ya da PipeWire ile), klasörü aç. Video klasöründe `video.mp4`, `subtitles.srt`, `narration.txt` ve `thumbnail.jpg` bulunur.
 
 ## Güncelleme
 
@@ -164,7 +166,6 @@ Taşınabilir kip: programı `--data-dir <klasör>` ile başlat; videolar dahil 
 
 - **Supertonic 3** (varsayılan ses): OpenRAIL-M. Yayınlarken sesin yapay zekâ ile üretildiğini belirt; kimseyi taklit etme. Video
   ayrıntısı bunu hatırlatır.
-- **Piper Türkçe (dfki)**: CC BY-NC-SA 4.0, **yalnız ticari olmayan kullanım**; etiket bu sesle üretilen her videoda kalır.
 - **Remotion**: açık kaynak değil; bireyler ve en çok 3 kişilik şirketler ücretsiz, daha büyük şirketler Remotion lisansı almalı.
 - **Örnek görseller**: kullanım hakkı sende olmalı.
 - **ffmpeg**: GPL, ayrı bir program olarak indirilir.

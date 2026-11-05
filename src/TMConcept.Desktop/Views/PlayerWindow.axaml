@@ -1,0 +1,11 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:TMConcept.Desktop.ViewModels"
+        xmlns:v="using:TMConcept.Desktop.Views"
+        x:Class="TMConcept.Desktop.Views.PlayerWindow"
+        x:DataType="vm:PlayerViewModel"
+        Title="TM Concept"
+        Background="Black"
+        WindowState="FullScreen">
+  <v:VideoPlayerView InFullscreen="True" Margin="12" />
+</Window>

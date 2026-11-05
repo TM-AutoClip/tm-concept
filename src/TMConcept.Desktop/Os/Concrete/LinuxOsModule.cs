@@ -5,7 +5,7 @@ namespace TMConcept.Desktop.Os;
 
 /// <summary>
 /// Linux: Secret Service key protection (secret-tool; without a keyring the app asks for a master password), $XDG_DATA_HOME data folder and
-/// the XDG documents folder (<c>XDG_DOCUMENTS_DIR</c> in user-dirs.dirs, otherwise ~/Documents).
+/// the XDG documents folder (<c>XDG_DOCUMENTS_DIR</c> in user-dirs.dirs, otherwise ~/Documents), PulseAudio / PipeWire sound for the player.
 /// </summary>
 public sealed class LinuxOsModule : IOsModule
 {
@@ -30,6 +30,7 @@ public sealed class LinuxOsModule : IOsModule
         services.AddSingleton<IKeyProtector, SecretServiceKeyProtector>();
         services.AddSingleton<IRecycleBin, LinuxRecycleBin>();
         services.AddSingleton<Core.Tools.IToolPlatform, Engines.Tools.LinuxToolPlatform>();
+        services.AddSingleton<Core.Playback.IAudioOutputFactory, Playback.AudioOutputFactory<Playback.PulseAudioOutput>>();
     }
 
     /// <summary>The documents folder from user-dirs.dirs (<c>XDG_DOCUMENTS_DIR="$HOME/Belgeler"</c>), otherwise ~/Documents.</summary>

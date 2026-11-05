@@ -66,7 +66,6 @@ public static class DesktopServices
         services.AddSingleton<Core.Videos.VideoPipeline>();
         services.AddSingleton<Speech.Speech.SpeechModelInstaller>();
         services.AddSingleton<Core.Speech.ISpeechEngine, Speech.Speech.SupertonicSpeechEngine>();
-        services.AddSingleton<Core.Speech.ISpeechEngine, Speech.Speech.PiperTurkishSpeechEngine>();
         services.AddSingleton<Core.Speech.ISpeechEngine, Providers.Speech.OpenAISpeechEngine>();
         services.AddSingleton<Core.Speech.SpeechService>();
         services.AddSingleton<Core.Images.IImageEngine, Providers.Images.FalImageEngine>();
@@ -136,6 +135,8 @@ public static class DesktopServices
         services.AddTransient<UnlockViewModel>();
 
         services.AddSingleton<Dialogs.IConfirmDialog, Dialogs.ConfirmDialog>();
+        services.AddSingleton<Engines.Playback.FfmpegPlayback>();
+        services.AddSingleton<PlayerViewModel>();
         AddPage<ConceptsViewModel, ConceptsView>(services);
         AddPage<VideoViewModel, VideoView>(services);
         AddPage<ProducedViewModel, ProducedView>(services);

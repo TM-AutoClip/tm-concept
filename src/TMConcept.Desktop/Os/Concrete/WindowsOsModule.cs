@@ -3,7 +3,7 @@ using TMConcept.Storage.Keys;
 
 namespace TMConcept.Desktop.Os;
 
-/// <summary>Windows: DPAPI key protection, %LOCALAPPDATA% data folder, the shell's Documents folder.</summary>
+/// <summary>Windows: DPAPI key protection, %LOCALAPPDATA% data folder, the shell's Documents folder, WaveOut sound for the player.</summary>
 public sealed class WindowsOsModule : IOsModule
 {
     /// <inheritdoc />
@@ -21,5 +21,6 @@ public sealed class WindowsOsModule : IOsModule
         services.AddSingleton<IKeyProtector, DpapiKeyProtector>();
         services.AddSingleton<IRecycleBin, WindowsRecycleBin>();
         services.AddSingleton<Core.Tools.IToolPlatform, Engines.Tools.WindowsToolPlatform>();
+        services.AddSingleton<Core.Playback.IAudioOutputFactory, Playback.AudioOutputFactory<Playback.WaveOutAudioOutput>>();
     }
 }

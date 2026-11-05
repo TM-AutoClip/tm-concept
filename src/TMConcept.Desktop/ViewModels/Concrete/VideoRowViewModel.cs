@@ -26,8 +26,9 @@ public sealed class VideoRowViewModel(VideoRecord video, string folder, Localize
     public string Line => Video.CreatedAtUtc.ToLocalTime().ToString("g", text.Culture) + " · "
         + TimeSpan.FromMilliseconds(Video.DurationMs).ToString(@"m\:ss", CultureInfo.InvariantCulture) + " · " + text.Usd(Video.TotalUsd);
 
-    /// <summary>Warning badges.</summary>
-    public string Badges => string.Join(" ", Video.Warnings.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(w => text["produced.badge." + w]));
+    /// <summary>Warning badges ("file missing" first when the video file was deleted from outside).</summary>
+    public string Badges => string.Join(" ", (Missing ? [text["produced.badge.missing"]] : Array.Empty<string>())
+        .Concat(Video.Warnings.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(w => text["produced.badge." + w])));
 
     /// <summary>Whether the files are still there.</summary>
     public bool Missing => !System.IO.File.Exists(File);

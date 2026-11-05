@@ -1,0 +1,31 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:TMConcept.Desktop.ViewModels"
+             xmlns:c="using:TMConcept.Desktop.Converters"
+             x:Class="TMConcept.Desktop.Views.VideoPlayerView"
+             x:DataType="vm:PlayerViewModel">
+  <DockPanel>
+    <StackPanel DockPanel.Dock="Bottom" Spacing="4" Margin="0,6,0,0">
+      <Slider Name="SeekBar" Minimum="0" Maximum="{Binding DurationMs}" Value="{Binding PositionMs}" IsEnabled="{Binding HasVideo}"
+              ToolTip.Tip="{DynamicResource player.seek}" />
+      <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="8">
+        <Button Content="{Binding PlayGlyph}" Command="{Binding PlayPauseCommand}" IsEnabled="{Binding HasVideo}" MinWidth="44"
+                ToolTip.Tip="{DynamicResource player.play_pause}" />
+        <TextBlock Grid.Column="1" Text="{Binding TimeText}" VerticalAlignment="Center" Classes="small" />
+        <TextBlock Grid.Column="2" Text="🔊" VerticalAlignment="Center" />
+        <Slider Grid.Column="3" Minimum="0" Maximum="100" Value="{Binding Volume}" Width="90" ToolTip.Tip="{DynamicResource player.volume}" />
+        <Button Grid.Column="4" Content="⛶" Command="{Binding FullscreenCommand}" IsEnabled="{Binding HasVideo}" ToolTip.Tip="{DynamicResource player.fullscreen}" />
+      </Grid>
+      <TextBlock Text="{Binding Message}" Classes="small warning" TextWrapping="Wrap" />
+    </StackPanel>
+    <Border Background="Black" CornerRadius="6" ClipToBounds="True" MinHeight="200">
+      <Panel>
+        <Image Source="{Binding Poster, Converter={x:Static c:FileBitmapConverter.Instance}, ConverterParameter=720}" Stretch="Uniform"
+               IsVisible="{Binding ShowPoster}" />
+        <Image Source="{Binding Frame}" Stretch="Uniform" />
+        <Button Content="▶" Command="{Binding PlayPauseCommand}" IsVisible="{Binding ShowPoster}" IsEnabled="{Binding HasVideo}"
+                HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="28" Padding="18,10" Opacity="0.85" />
+      </Panel>
+    </Border>
+  </DockPanel>
+</UserControl>

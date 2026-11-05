@@ -35,8 +35,9 @@ needed) and narrates it with a **free local voice**. It runs on Windows and Linu
   (none, your sample images or an image model), narration, subtitles and a narration text file, then press **Produce the queue in order**.
   The model writes one code file; a safety check runs before anything is executed; a failed check or render gets one repair request.
   Videos are at most 3 minutes.
-- **Produced videos.** Thumbnail, details (engine, models, cost per step, voice notes), play, open the folder, delete the record and, if
-  you want, move the files to the recycle bin.
+- **Produced videos.** Thumbnail, a built-in player (play/pause, seek bar, time, volume, full screen; nothing starts by itself), details
+  (engine, models, cost per step, voice notes, the concept text), open in the system player, open the folder, produce again, delete the
+  record and, if you want, move the files to the recycle bin.
 - **Notifications** in the bottom-right corner (concepts ready, video ready, error). One minute by default; change or turn them off in
   Settings. A log panel at the bottom keeps everything (yellow warnings, red errors).
 - **Encrypted.** The database (with your API keys) is encrypted with SQLite3 Multiple Ciphers. Its key is protected by Windows (DPAPI), the
@@ -114,12 +115,13 @@ Settings → **Tools**. Each item is downloaded from its official source only af
 is checked against a pinned SHA-256 (npm packages: the lock file's integrity values). Everything goes into the app's own data folder.
 
 1. **Node.js** (≈ 35 MB) — runs the engines.
-2. **ffmpeg** (≈ 130–200 MB, GPL build, a separate program) — joins voice and video, burns subtitles, makes thumbnails. On Linux the
-   distribution's ffmpeg is used when present.
+2. **ffmpeg** (≈ 130–200 MB, GPL build, a separate program) — joins voice and video, burns subtitles, makes thumbnails, plays videos in
+   the app. On Linux the distribution's ffmpeg is used when present. If the pinned download is ever removed or does not match its
+   SHA-256, the ffmpeg already on your PATH is used (with a warning); without one the app shows how to install it.
 3. **An engine:** HyperFrames (default) and/or Remotion (asks you to accept its license first) and/or Revideo (experimental). The engine
    packages and Chrome Headless Shell take a few hundred MB. **Sample render** checks the engine without any model or network.
-4. **Voice:** Supertonic 3 (≈ 130 MB; shows its OpenRAIL-M terms first). Optional: the Piper Turkish voice (≈ 21 MB; **non-commercial
-   only**, shown before download). Without a voice the videos are silent and a yellow warning appears in the log.
+4. **Voice:** Supertonic 3 (≈ 130 MB; shows its OpenRAIL-M terms first; Turkish and English). Without a voice the videos are silent and a
+   yellow warning appears in the log.
 
 Total disk use with one engine and the voice: about 0.6–1 GB.
 
@@ -136,7 +138,7 @@ Then Settings → **Models**: choose a model for each step. Nothing is chosen fo
 1. **Generate concepts:** choose the model, the count and an optional extra request; check the estimate; press **Generate**.
 2. Open cards, approve the good ones (A), delete the rest (D).
 3. **Concept to video:** click approved concepts to queue them, check the settings, press **Produce the queue in order**.
-4. **Produced videos:** watch, open the folder. The video folder has `video.mp4`, `subtitles.srt`, `narration.txt` and `thumbnail.jpg`.
+4. **Produced videos:** watch in the app (sound on Linux through PulseAudio or PipeWire), open the folder. The video folder has `video.mp4`, `subtitles.srt`, `narration.txt` and `thumbnail.jpg`.
 
 ## Update
 
@@ -165,7 +167,6 @@ Portable mode: start the program with `--data-dir <folder>`; then everything, vi
 
 - **Supertonic 3** (default voice): OpenRAIL-M. Say that the voice is AI-generated when you publish; no impersonation. The video details
   remind you.
-- **Piper Turkish (dfki)**: CC BY-NC-SA 4.0, **non-commercial only**; the label stays on every video made with it.
 - **Remotion**: not open source; free for individuals and companies of up to 3 people, larger companies need a Remotion license.
 - **Sample images**: you must have the right to use them.
 - **ffmpeg**: GPL, downloaded as a separate program.

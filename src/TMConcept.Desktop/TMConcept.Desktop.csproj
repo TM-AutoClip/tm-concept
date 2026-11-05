@@ -6,6 +6,8 @@
     <RootNamespace>TMConcept.Desktop</RootNamespace>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <!-- The player's PulseAudio calls pass a pinned sample buffer (LibraryImport); nothing else is unsafe. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" />
@@ -14,6 +16,8 @@
     <PackageReference Include="CommunityToolkit.Mvvm" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.Extensions.Logging" />
+    <!-- Windows sound output of the in-app player (WaveOut); not used on Linux. -->
+    <PackageReference Include="NAudio.WinMM" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\TMConcept.Core\TMConcept.Core.csproj" />

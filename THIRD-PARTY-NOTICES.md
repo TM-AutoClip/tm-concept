@@ -25,6 +25,7 @@ The release files are self-contained: they carry the .NET runtime and these libr
 | SQLite3 Multiple Ciphers (SQLite3MC.PCLRaw.bundle) and SQLitePCLRaw | MIT |
 | SQLite | Public domain |
 | Konscious.Security.Cryptography.Argon2 | MIT |
+| NAudio (NAudio.Core, NAudio.WinMM; Windows sound output of the player) | MIT |
 | System.Security.Cryptography.ProtectedData | MIT |
 | sherpa-onnx (org.k2fsa.sherpa.onnx 2.0.1) | Apache-2.0 |
 | ONNX Runtime (inside the sherpa-onnx package) | MIT |
@@ -46,7 +47,6 @@ each download against a pinned SHA-256 (npm packages: the integrity values of th
 | Remotion | Remotion License (source available, conditional) | Free for individuals, companies of up to 3 people and non-profits; other companies need a Remotion Company License. The license is between you and Remotion. |
 | Revideo | MIT | npm (experimental engine) |
 | Supertonic 3 voice model | Model weights: OpenRAIL-M; code: MIT | sherpa-onnx tts-models release. The OpenRAIL-M use restrictions apply to you (below). |
-| Piper Turkish voice (dfki) | Voice data: CC BY-NC-SA 4.0 | Optional. Non-commercial use only; the license carries over to every video made with it. |
 
 ### Supertonic 3 (OpenRAIL-M) use restrictions, short form
 
@@ -59,4 +59,6 @@ when publishing" note.
 
 ### Not used
 
-No voice cloning, no reference voice, no reading of other channels (no yt-dlp), no Piper GPL program.
+No voice cloning, no reference voice, no reading of other channels (no yt-dlp), no Piper GPL program. The optional Piper Turkish voice of
+0.1.0 was removed in 0.1.1 (sherpa-onnx 2.x has no espeak-ng to turn text into its phonemes). On Linux the player uses the system's
+libpulse-simple (PulseAudio / PipeWire, LGPL-2.1, a system library that is not distributed with TM Concept).

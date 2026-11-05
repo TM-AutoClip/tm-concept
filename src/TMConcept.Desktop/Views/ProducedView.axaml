@@ -2,9 +2,10 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:TMConcept.Desktop.ViewModels"
              xmlns:c="using:TMConcept.Desktop.Converters"
+             xmlns:v="using:TMConcept.Desktop.Views"
              x:Class="TMConcept.Desktop.Views.ProducedView"
              x:DataType="vm:ProducedViewModel">
-  <Grid ColumnDefinitions="*,16,380" Margin="16">
+  <Grid ColumnDefinitions="*,16,420" Margin="16">
     <DockPanel>
       <StackPanel DockPanel.Dock="Top" Spacing="8">
         <TextBlock Text="{DynamicResource nav.produced}" Classes="h1" />
@@ -29,16 +30,22 @@
       </ListBox>
     </DockPanel>
     <Border Grid.Column="2" Classes="card" IsVisible="{Binding HasSelection}" VerticalAlignment="Top">
-      <StackPanel Spacing="10">
-        <TextBlock Text="{Binding Selected.Title}" Classes="h2" TextWrapping="Wrap" />
-        <Image Source="{Binding Selected.Thumbnail, Converter={x:Static c:FileBitmapConverter.Instance}}" MaxHeight="300" Stretch="Uniform" />
-        <WrapPanel>
-          <Button Classes="accent" Content="{DynamicResource produced.play}" Command="{Binding PlayCommand}" Margin="0,0,8,8" />
-          <Button Content="{DynamicResource produced.folder}" Command="{Binding OpenFolderCommand}" Margin="0,0,8,8" />
-          <Button Classes="danger" Content="{DynamicResource common.delete}" Command="{Binding DeleteCommand}" Margin="0,0,8,8" />
-        </WrapPanel>
-        <SelectableTextBlock Text="{Binding Details}" TextWrapping="Wrap" />
-      </StackPanel>
+      <ScrollViewer>
+        <StackPanel Spacing="10">
+          <TextBlock Text="{Binding Selected.Title}" Classes="h2" TextWrapping="Wrap" />
+          <v:VideoPlayerView DataContext="{Binding Player}" Height="420" />
+          <WrapPanel>
+            <Button Content="{DynamicResource produced.play}" Command="{Binding PlayCommand}" Margin="0,0,8,8" />
+            <Button Content="{DynamicResource produced.folder}" Command="{Binding OpenFolderCommand}" Margin="0,0,8,8" />
+            <Button Content="{DynamicResource produced.again}" Command="{Binding ProduceAgainCommand}" Margin="0,0,8,8" />
+            <Button Classes="danger" Content="{DynamicResource common.delete}" Command="{Binding DeleteCommand}" Margin="0,0,8,8" />
+          </WrapPanel>
+          <SelectableTextBlock Text="{Binding Details}" TextWrapping="Wrap" />
+          <Expander Header="{DynamicResource produced.prompt.title}" HorizontalAlignment="Stretch">
+            <SelectableTextBlock Text="{Binding ConceptText}" TextWrapping="Wrap" />
+          </Expander>
+        </StackPanel>
+      </ScrollViewer>
     </Border>
   </Grid>
 </UserControl>

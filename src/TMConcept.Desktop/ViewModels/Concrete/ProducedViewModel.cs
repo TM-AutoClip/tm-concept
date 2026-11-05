@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using TMConcept.Core.Activity;
+using TMConcept.Core.Concepts;
 using TMConcept.Core.Paths;
 using TMConcept.Core.Text;
 using TMConcept.Core.Videos;
@@ -16,12 +17,15 @@ using TMConcept.Desktop.Startup;
 namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
-/// 🎞 Produced videos: thumbnail (the first frame that is not black), title, date, length, cost and warning badges; details (settings, cost
-/// per step, the AI voice / non-commercial notes, files); play with the system player, open the folder; delete the record (the files can be
-/// moved to the recycle bin in the same step).
+/// 🎞 Produced videos: thumbnail (the first frame that is not black), title, date, length, cost and warning badges (a file deleted from
+/// outside shows "file missing"); the in-app player (a chosen video does not start by itself) with "open in the system player" beside it;
+/// details (the concept the video was made from, settings, cost per step, the AI voice note, files); open the folder; produce again (the
+/// concept goes back to the approved list of the video page; the new video is a new row); delete the record (the files can be moved to the
+/// recycle bin in the same step).
 /// </summary>
-public sealed partial class ProducedViewModel(AppSession session, IVideoStore videos, IAppPaths paths, ShellLauncher shell, IRecycleBin recycleBin,
-    IConfirmDialog confirm, ConceptEvents events, IActivityLog activity, Localizer text, ILogger<ProducedViewModel> logger) : PageViewModelBase
+public sealed partial class ProducedViewModel(AppSession session, IVideoStore videos, IConceptStore concepts, IAppPaths paths, ShellLauncher shell,
+    IRecycleBin recycleBin, IConfirmDialog confirm, ConceptEvents events, IActivityLog activity, PlayerViewModel player, Localizer text,
+    ILogger<ProducedViewModel> logger) : PageViewModelBase
 {
     private readonly List<VideoRowViewModel> _all = [];
     private bool _attached;
@@ -54,6 +58,16 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
     [ObservableProperty]
     public partial string Details { get; set; } = string.Empty;
 
+    /// <summary>The concept the selected video was made from (title, summary, script) and the code prompt version.</summary>
+    [ObservableProperty]
+    public partial string ConceptText { get; set; } = string.Empty;
+
+    /// <summary>The player.</summary>
+    public PlayerViewModel Player { get; } = player;
+
+    /// <inheritdoc />
+    public override void Deactivate() => Player.Pause();
+
     /// <inheritdoc />
     public override Task ActivateAsync()
     {
@@ -79,13 +93,57 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
     /// <inheritdoc />
     public override Task ProfileChangedAsync() => ReloadAsync();
 
-    /// <summary>Plays the selected video with the system player.</summary>
+    /// <summary>Opens the selected video in the system's player.</summary>
     [RelayCommand]
     public void Play()
     {
-        if (Selected is { Missing: false } row)
+        if (Selected is not { } row)
         {
-            Open(row.File);
+            return;
+        }
+
+        if (row.Missing)
+        {
+            Status = text["produced.file_missing"];
+            return;
+        }
+
+        Open(row.File);
+    }
+
+    /// <summary>Puts the concept of the selected video back on the video page (approved), so it can be made again.</summary>
+    [RelayCommand]
+    public async Task ProduceAgainAsync()
+    {
+        if (Selected is not { } row)
+        {
+            return;
+        }
+
+        try
+        {
+            var concept = row.Video.ConceptId is { } id ? await concepts.GetAsync(id, CancellationToken.None).ConfigureAwait(true) : null;
+            if (concept is null)
+            {
+                Status = text["produced.again.gone"];
+                return;
+            }
+
+            if (concept.Status is ConceptStatus.Queued or ConceptStatus.Approved)
+            {
+                Status = text["produced.again.already"];
+                return;
+            }
+
+            await concepts.SetStatusAsync([concept.Id], ConceptStatus.Approved, CancellationToken.None).ConfigureAwait(true);
+            activity.Add(ActivityLevel.Info, text.Format("produced.again.done", row.Title));
+            Status = text.Format("produced.again.done", row.Title);
+            events.Raise(this);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "The concept could not be put back for production");
+            Status = text.Format("error.generic", ex.Message);
         }
     }
 
@@ -129,6 +187,12 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
             }
         }
 
+        if (ReferenceEquals(Selected, row))
+        {
+            // The player holds the file open on Windows: it is released before the folder moves.
+            Player.Unload();
+        }
+
         await videos.DeleteAsync(row.Video.Id, CancellationToken.None).ConfigureAwait(true);
         activity.Add(ActivityLevel.Info, text.Format(answer.Checked ? "produced.deleted_files" : "produced.deleted", row.Title));
         await ReloadAsync().ConfigureAwait(true);
@@ -139,10 +203,16 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
     partial void OnSelectedChanged(VideoRowViewModel? value)
     {
         Details = string.Empty;
-        if (value is not null)
+        ConceptText = string.Empty;
+        Status = string.Empty;
+        if (value is null)
         {
-            _ = DetailsAsync(value);
+            Player.Unload();
+            return;
         }
+
+        Player.Load(value.File, value.Thumbnail, value.Video.Width, value.Video.Height, value.Video.Fps, value.Video.DurationMs);
+        _ = DetailsAsync(value);
     }
 
     private async Task DetailsAsync(VideoRowViewModel row)
@@ -170,9 +240,14 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
             }
 
             details.Append(text.Format("produced.detail.folder", row.Folder));
+            var concept = v.ConceptId is { } conceptId ? await concepts.GetAsync(conceptId, CancellationToken.None).ConfigureAwait(true) : null;
+            var prompt = concept is null
+                ? text["produced.prompt.gone"]
+                : text.Format("produced.prompt", concept.Title, concept.Summary, v.PromptVersion.Length > 0 ? v.PromptVersion : "1", concept.Content);
             if (ReferenceEquals(Selected, row))
             {
                 Details = details.ToString();
+                ConceptText = prompt;
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -195,40 +270,53 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
         }
     }
 
+    /// <summary>Reloads the list; the selected video stays selected (a video finishing in the background reloads this page).</summary>
     private async Task ReloadAsync()
     {
-        _all.Clear();
-        Selected = null;
-        if (session.Profile is { } profile)
+        var selected = Selected?.Video.Id;
+        var profile = session.Profile;
+        var list = profile is null ? [] : await videos.ListAsync(profile.Id, CancellationToken.None).ConfigureAwait(true);
+        if (session.Profile?.Id != profile?.Id)
         {
-            foreach (var video in await videos.ListAsync(profile.Id, CancellationToken.None).ConfigureAwait(true))
-            {
-                string folder;
-                try
-                {
-                    folder = LibraryPaths.Resolve(paths.LibraryDirectory, video.Folder);
-                }
-                catch (InvalidOperationException ex)
-                {
-                    logger.LogWarning(ex, "A video folder is outside the library and is ignored");
-                    continue;
-                }
+            return;
+        }
 
-                _all.Add(new VideoRowViewModel(video, folder, text));
+        var rows = _all.ToDictionary(r => r.Video.Id);
+        _all.Clear();
+        foreach (var video in list)
+        {
+            if (rows.TryGetValue(video.Id, out var kept))
+            {
+                _all.Add(kept);
+                continue;
             }
+
+            string folder;
+            try
+            {
+                folder = LibraryPaths.Resolve(paths.LibraryDirectory, video.Folder);
+            }
+            catch (InvalidOperationException ex)
+            {
+                logger.LogWarning(ex, "A video folder is outside the library and is ignored");
+                continue;
+            }
+
+            _all.Add(new VideoRowViewModel(video, folder, text));
         }
 
         Badge = _all.Count == 0 ? string.Empty : _all.Count.ToString(CultureInfo.InvariantCulture);
         Filter();
+        var again = Items.FirstOrDefault(r => r.Video.Id == selected);
+        if (!ReferenceEquals(again, Selected))
+        {
+            Selected = again;
+        }
     }
 
     private void Filter()
     {
         var search = TurkishFold.Fold(Search);
-        Items.Clear();
-        foreach (var row in _all.Where(r => search.Length == 0 || TurkishFold.Fold(r.Title).Contains(search, StringComparison.Ordinal)))
-        {
-            Items.Add(row);
-        }
+        CollectionSync.Apply(Items, _all.Where(r => search.Length == 0 || TurkishFold.Fold(r.Title).Contains(search, StringComparison.Ordinal)).ToList());
     }
 }
