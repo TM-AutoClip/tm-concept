@@ -16,6 +16,7 @@ public sealed class LayerTests
         { "TMConcept.Engines", ["TMConcept.Core"] },
         { "TMConcept.Speech", ["TMConcept.Core"] },
         { "TMConcept.Storage", ["TMConcept.Core"] },
+        { "TMConcept.Desktop", ["TMConcept.Core", "TMConcept.Providers", "TMConcept.Engines", "TMConcept.Speech", "TMConcept.Storage"] },
     };
 
     [Theory]

@@ -1,0 +1,20 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:TMConcept.Desktop.ViewModels"
+             x:Class="TMConcept.Desktop.Views.AboutSettingsView"
+             x:DataType="vm:AboutSettingsViewModel">
+  <ScrollViewer>
+    <StackPanel Spacing="10" Margin="0,12" MaxWidth="760" HorizontalAlignment="Left">
+      <StackPanel Orientation="Horizontal" Spacing="12">
+        <Image Source="avares://TMConcept/Assets/app-256.png" Width="48" Height="48" />
+        <StackPanel VerticalAlignment="Center">
+          <TextBlock Text="TM Concept" Classes="h2" />
+          <TextBlock Text="{Binding Version}" Classes="muted" />
+        </StackPanel>
+      </StackPanel>
+      <TextBlock Text="{DynamicResource about.license}" TextWrapping="Wrap" />
+      <TextBlock Text="{DynamicResource about.thirdparty}" TextWrapping="Wrap" Classes="muted" />
+      <TextBlock Text="{DynamicResource about.network}" TextWrapping="Wrap" Classes="muted" />
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

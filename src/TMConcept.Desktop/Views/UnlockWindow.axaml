@@ -1,0 +1,20 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:TMConcept.Desktop.ViewModels"
+        x:Class="TMConcept.Desktop.Views.UnlockWindow"
+        x:DataType="vm:UnlockViewModel"
+        Title="TM Concept"
+        Width="480" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterScreen">
+  <StackPanel Margin="28" Spacing="14">
+    <StackPanel Orientation="Horizontal" Spacing="12">
+      <Image Source="avares://TMConcept/Assets/app-256.png" Width="36" Height="36" />
+      <TextBlock Text="{DynamicResource unlock.title}" Classes="h1" VerticalAlignment="Center" />
+    </StackPanel>
+    <TextBox Classes="secret" Text="{Binding Password}" PlaceholderText="{DynamicResource password.master}" IsVisible="{Binding NeedsPassword}" />
+    <TextBlock Text="{Binding Error}" Classes="error" />
+    <Button Classes="accent" Content="{DynamicResource unlock.open}" Command="{Binding UnlockCommand}" IsEnabled="{Binding !Busy}" IsDefault="True" />
+    <TextBlock Text="{DynamicResource unlock.forgotten}" Classes="small" TextWrapping="Wrap" />
+    <ProgressBar IsIndeterminate="True" IsVisible="{Binding Busy}" />
+  </StackPanel>
+</Window>

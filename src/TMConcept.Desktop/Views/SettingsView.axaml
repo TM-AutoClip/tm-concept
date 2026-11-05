@@ -1,0 +1,16 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:TMConcept.Desktop.ViewModels"
+             x:Class="TMConcept.Desktop.Views.SettingsView"
+             x:DataType="vm:SettingsViewModel">
+  <DockPanel Margin="24">
+    <TextBlock DockPanel.Dock="Top" Text="{DynamicResource nav.settings}" Classes="h1" Margin="0,0,0,12" />
+    <TabControl ItemsSource="{Binding Sections}" SelectedItem="{Binding SelectedSection}">
+      <TabControl.ItemTemplate>
+        <DataTemplate x:DataType="vm:SettingsSectionBase">
+          <TextBlock Text="{Binding Title}" />
+        </DataTemplate>
+      </TabControl.ItemTemplate>
+    </TabControl>
+  </DockPanel>
+</UserControl>

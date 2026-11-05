@@ -1,0 +1,85 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:TMConcept.Desktop.ViewModels"
+        x:Class="TMConcept.Desktop.Views.FirstRunWindow"
+        x:DataType="vm:FirstRunViewModel"
+        Title="TM Concept"
+        Width="660" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterScreen">
+  <StackPanel Margin="32" Spacing="16">
+    <StackPanel Orientation="Horizontal" Spacing="12">
+      <Image Source="avares://TMConcept/Assets/app-256.png" Width="40" Height="40" />
+      <TextBlock Text="TM Concept" Classes="h1" VerticalAlignment="Center" />
+    </StackPanel>
+
+    <!-- Language: two big buttons; the system language comes first. -->
+    <StackPanel Spacing="14" IsVisible="{Binding IsLanguageStep}">
+      <TextBlock Text="Dilinizi seçin · Choose your language" Classes="h2" />
+      <StackPanel Orientation="Horizontal" Spacing="16" IsVisible="{Binding TurkishFirst}">
+        <Button Classes="accent big" Content="Türkçe" Command="{Binding ChooseTurkishCommand}" />
+        <Button Classes="big" Content="English" Command="{Binding ChooseEnglishCommand}" />
+      </StackPanel>
+      <StackPanel Orientation="Horizontal" Spacing="16" IsVisible="{Binding EnglishFirst}">
+        <Button Classes="accent big" Content="English" Command="{Binding ChooseEnglishCommand}" />
+        <Button Classes="big" Content="Türkçe" Command="{Binding ChooseTurkishCommand}" />
+      </StackPanel>
+    </StackPanel>
+
+    <!-- Choice -->
+    <StackPanel Spacing="12" IsVisible="{Binding IsChoiceStep}">
+      <TextBlock Text="{DynamicResource firstrun.intro}" TextWrapping="Wrap" Classes="muted" />
+      <Button Classes="accent" HorizontalAlignment="Stretch" Command="{Binding ChooseNewCommand}">
+        <StackPanel>
+          <TextBlock Text="{DynamicResource firstrun.new}" FontWeight="SemiBold" />
+          <TextBlock Text="{DynamicResource firstrun.new.hint}" TextWrapping="Wrap" FontSize="12" />
+        </StackPanel>
+      </Button>
+      <Button HorizontalAlignment="Stretch" Command="{Binding ChooseRestoreCommand}">
+        <StackPanel>
+          <TextBlock Text="{DynamicResource firstrun.restore}" FontWeight="SemiBold" />
+          <TextBlock Text="{DynamicResource firstrun.restore.hint}" TextWrapping="Wrap" FontSize="12" />
+        </StackPanel>
+      </Button>
+    </StackPanel>
+
+    <StackPanel Spacing="10" IsVisible="{Binding IsRestoreStep}">
+      <TextBlock Text="{DynamicResource firstrun.restore}" Classes="h2" />
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+        <TextBox Text="{Binding BackupFile}" PlaceholderText="{DynamicResource restore.file}" />
+        <Button Grid.Column="1" Content="{DynamicResource common.browse}" Command="{Binding BrowseBackupCommand}" />
+      </Grid>
+      <TextBox Classes="secret" Text="{Binding BackupPassword}" PlaceholderText="{DynamicResource restore.password}" />
+      <TextBlock Text="{DynamicResource restore.keys_note}" Classes="small" TextWrapping="Wrap" />
+    </StackPanel>
+
+    <StackPanel Spacing="10" IsVisible="{Binding IsNewStep}">
+      <TextBlock Text="{DynamicResource firstrun.new}" Classes="h2" />
+      <TextBlock Text="{DynamicResource firstrun.protection.keyring}" TextWrapping="Wrap" Classes="muted" IsVisible="{Binding KeyringAvailable}" />
+      <TextBlock Text="{DynamicResource firstrun.protection.nokeyring}" Classes="warning" IsVisible="{Binding !KeyringAvailable}" />
+    </StackPanel>
+
+    <StackPanel Spacing="10" IsVisible="{Binding IsFormStep}">
+      <CheckBox IsChecked="{Binding UseMasterPassword}" IsVisible="{Binding KeyringAvailable}" Content="{DynamicResource firstrun.use_master_password}" />
+      <StackPanel Spacing="8" IsVisible="{Binding NeedsMasterPassword}">
+        <TextBlock Text="{DynamicResource password.forgotten_warning}" Classes="warning" />
+        <TextBox Classes="secret" Text="{Binding MasterPassword}" PlaceholderText="{DynamicResource password.master}" />
+        <TextBox Classes="secret" Text="{Binding MasterPasswordRepeat}" PlaceholderText="{DynamicResource password.repeat}" />
+      </StackPanel>
+      <StackPanel Spacing="8" IsVisible="{Binding IsNewStep}">
+        <TextBlock Text="{DynamicResource backup.password.title}" FontWeight="SemiBold" />
+        <TextBlock Text="{DynamicResource backup.password.explain}" Classes="small" TextWrapping="Wrap" />
+        <TextBox Classes="secret" Text="{Binding BackupPassword}" PlaceholderText="{DynamicResource backup.password.field}" />
+        <TextBox Classes="secret" Text="{Binding BackupPasswordRepeat}" PlaceholderText="{DynamicResource password.repeat}" />
+        <ProgressBar Minimum="0" Maximum="4" Value="{Binding BackupPasswordStrength}" Height="4" />
+      </StackPanel>
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button Content="{DynamicResource common.back}" Command="{Binding BackCommand}" />
+        <Button Classes="accent" Content="{DynamicResource firstrun.create}" Command="{Binding CreateCommand}" IsVisible="{Binding IsNewStep}" IsEnabled="{Binding !Busy}" />
+        <Button Classes="accent" Content="{DynamicResource firstrun.do_restore}" Command="{Binding RestoreCommand}" IsVisible="{Binding IsRestoreStep}" IsEnabled="{Binding !Busy}" />
+      </StackPanel>
+    </StackPanel>
+
+    <ProgressBar IsIndeterminate="True" IsVisible="{Binding Busy}" />
+    <TextBlock Text="{Binding Message}" Classes="error" />
+  </StackPanel>
+</Window>

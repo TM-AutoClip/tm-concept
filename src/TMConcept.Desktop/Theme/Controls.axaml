@@ -1,0 +1,100 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- Shared control styles built on the tokens (Theme/Tokens.axaml). -->
+  <Style Selector="Window">
+    <Setter Property="Background" Value="{DynamicResource tm-bg}" />
+    <Setter Property="Foreground" Value="{DynamicResource tm-text}" />
+    <Setter Property="FontFamily" Value="{DynamicResource tm-font-body}" />
+    <Setter Property="FontSize" Value="14" />
+  </Style>
+  <Style Selector="TextBlock.h1">
+    <Setter Property="FontFamily" Value="{DynamicResource tm-font-heading}" />
+    <Setter Property="FontWeight" Value="Bold" />
+    <Setter Property="FontSize" Value="24" />
+  </Style>
+  <Style Selector="TextBlock.h2">
+    <Setter Property="FontFamily" Value="{DynamicResource tm-font-heading}" />
+    <Setter Property="FontWeight" Value="Bold" />
+    <Setter Property="FontSize" Value="17" />
+  </Style>
+  <Style Selector="TextBlock.muted">
+    <Setter Property="Foreground" Value="{DynamicResource tm-text-2}" />
+  </Style>
+  <Style Selector="TextBlock.small">
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Foreground" Value="{DynamicResource tm-text-3}" />
+  </Style>
+  <Style Selector="TextBlock.scene">
+    <Setter Property="FontStyle" Value="Italic" />
+    <Setter Property="Foreground" Value="{DynamicResource tm-text-3}" />
+  </Style>
+  <Style Selector="TextBlock.error">
+    <Setter Property="Foreground" Value="{DynamicResource tm-danger}" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+  </Style>
+  <Style Selector="TextBlock.ok">
+    <Setter Property="Foreground" Value="{DynamicResource tm-success}" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+  </Style>
+  <Style Selector="TextBlock.warning">
+    <Setter Property="Foreground" Value="{DynamicResource tm-warning}" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+  </Style>
+  <Style Selector="Border.card">
+    <Setter Property="Background" Value="{DynamicResource tm-surface}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource tm-border}" />
+    <Setter Property="BorderThickness" Value="{DynamicResource tm-border-width}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource tm-radius}" />
+    <Setter Property="Padding" Value="16" />
+  </Style>
+  <Style Selector="Border.badge">
+    <Setter Property="CornerRadius" Value="{DynamicResource tm-radius-sm}" />
+    <Setter Property="Padding" Value="8,2" />
+    <Setter Property="Background" Value="{DynamicResource tm-accent-soft}" />
+  </Style>
+  <Style Selector="Button">
+    <Setter Property="CornerRadius" Value="{DynamicResource tm-radius-sm}" />
+    <Setter Property="Padding" Value="14,7" />
+  </Style>
+  <Style Selector="Button.accent">
+    <Setter Property="Background" Value="{DynamicResource tm-accent}" />
+    <Setter Property="Foreground" Value="{DynamicResource tm-on-accent}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+  <Style Selector="Button.accent:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource tm-warning}" />
+    <Setter Property="Foreground" Value="{DynamicResource tm-on-accent}" />
+  </Style>
+  <Style Selector="Button.big">
+    <Setter Property="Padding" Value="28,18" />
+    <Setter Property="FontSize" Value="18" />
+    <Setter Property="MinWidth" Value="200" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+  </Style>
+  <Style Selector="Button.danger">
+    <Setter Property="Foreground" Value="{DynamicResource tm-danger}" />
+  </Style>
+  <Style Selector="Button.link">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource tm-accent-2}" />
+    <Setter Property="Padding" Value="0" />
+  </Style>
+  <Style Selector="Button.nav">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource tm-sidebar-text}" />
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="Padding" Value="14,9" />
+  </Style>
+  <Style Selector="Button.nav.selected">
+    <Setter Property="Background" Value="{DynamicResource tm-selected-bg}" />
+    <Setter Property="Foreground" Value="{DynamicResource tm-text}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+  <Style Selector="TextBox">
+    <Setter Property="CornerRadius" Value="{DynamicResource tm-radius-sm}" />
+  </Style>
+  <Style Selector="TextBox.secret">
+    <Setter Property="PasswordChar" Value="●" />
+  </Style>
+</Styles>

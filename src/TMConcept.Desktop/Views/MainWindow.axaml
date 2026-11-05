@@ -1,0 +1,73 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:TMConcept.Desktop.ViewModels"
+        xmlns:p="using:TMConcept.Core.Profiles"
+        xmlns:a="using:TMConcept.Core.Activity"
+        x:Class="TMConcept.Desktop.Views.MainWindow"
+        x:DataType="vm:ShellViewModel"
+        Title="TM Concept"
+        Width="1280" Height="820" MinWidth="960" MinHeight="600"
+        WindowStartupLocation="CenterScreen">
+  <Grid RowDefinitions="*,Auto">
+    <Grid ColumnDefinitions="240,*">
+      <Border Background="{DynamicResource tm-sidebar-bg}">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Top" Margin="14,16,14,10" Spacing="10">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+              <Image Source="avares://TMConcept/Assets/app-256.png" Width="30" Height="30" />
+              <TextBlock Text="TM Concept" Classes="h2" VerticalAlignment="Center" />
+            </StackPanel>
+            <ComboBox Name="ProfilePicker" ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile}" HorizontalAlignment="Stretch"
+                      PlaceholderText="{DynamicResource profile.none}">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="p:Profile">
+                  <TextBlock Text="{Binding Name}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+          </StackPanel>
+          <ItemsControl ItemsSource="{Binding Items}" Margin="8,4">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:NavItemViewModel">
+                <Button Classes="nav" Classes.selected="{Binding IsSelected}" Command="{Binding OpenCommand}" Margin="0,2">
+                  <Grid ColumnDefinitions="24,*,Auto">
+                    <TextBlock Text="{Binding Glyph}" TextAlignment="Center" />
+                    <TextBlock Grid.Column="1" Text="{Binding Title}" Margin="8,0,0,0" />
+                    <TextBlock Grid.Column="2" Text="{Binding Page.Badge}" Classes="small" />
+                  </Grid>
+                </Button>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </DockPanel>
+      </Border>
+      <ContentControl Grid.Column="1" Content="{Binding Current}" />
+    </Grid>
+
+    <Border Grid.Row="1" Background="{DynamicResource tm-strip-bg}" BorderBrush="{DynamicResource tm-border}" BorderThickness="0,1,0,0">
+      <DockPanel>
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto,Auto" Margin="8,4">
+          <Button Classes="link" Command="{Binding ToggleLogCommand}" Content="{DynamicResource log.title}" />
+          <TextBlock Grid.Column="1" Text="{Binding LastLine}" Classes="small" Margin="12,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                     IsVisible="{Binding !LogOpen}" />
+          <Button Grid.Column="2" Content="{DynamicResource log.copy}" Command="{Binding CopyLogCommand}" Margin="4,0" />
+          <Button Grid.Column="3" Content="{DynamicResource log.clear}" Command="{Binding ClearLogCommand}" />
+        </Grid>
+        <ScrollViewer Name="LogScroll" Height="130" IsVisible="{Binding LogOpen}" Margin="8,0,8,6">
+          <ItemsControl ItemsSource="{Binding Log}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="a:ActivityEntry">
+                <Grid ColumnDefinitions="72,20,*">
+                  <TextBlock Text="{Binding At, StringFormat={}{0:HH:mm:ss}}" Classes="small" />
+                  <TextBlock Grid.Column="1" Text="{Binding Glyph}" Classes="small" />
+                  <TextBlock Grid.Column="2" Text="{Binding Text}" TextWrapping="Wrap" FontSize="12"
+                             Classes.warning="{Binding IsWarning}" Classes.error="{Binding IsError}" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+      </DockPanel>
+    </Border>
+  </Grid>
+</Window>

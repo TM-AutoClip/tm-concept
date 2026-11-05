@@ -1,0 +1,39 @@
+<!--
+  TM design tokens, single theme: the "Navy" desktop theme of TM AutoClip (dark navy surfaces, gold accent), the same tokens as TM Publisher.
+  One theme on purpose; colors are referenced by key (tm-*), never hard-coded in views.
+-->
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Thickness x:Key="tm-border-width">1</Thickness>
+  <Thickness x:Key="tm-focus-width">2</Thickness>
+  <x:Double x:Key="tm-dim">0.6</x:Double>
+  <CornerRadius x:Key="tm-radius-sm">6</CornerRadius>
+  <CornerRadius x:Key="tm-radius">10</CornerRadius>
+  <CornerRadius x:Key="tm-radius-lg">14</CornerRadius>
+  <SolidColorBrush x:Key="tm-bg" Color="#FF121C30" />
+  <SolidColorBrush x:Key="tm-surface" Color="#FF18243B" />
+  <SolidColorBrush x:Key="tm-surface-2" Color="#FF1F2D47" />
+  <SolidColorBrush x:Key="tm-surface-3" Color="#FF273754" />
+  <SolidColorBrush x:Key="tm-border" Color="#FF2A3A57" />
+  <SolidColorBrush x:Key="tm-border-strong" Color="#FF45597E" />
+  <SolidColorBrush x:Key="tm-text" Color="#FFE8EEF7" />
+  <SolidColorBrush x:Key="tm-text-2" Color="#FFB6C4D9" />
+  <SolidColorBrush x:Key="tm-text-3" Color="#FF8D9FBA" />
+  <SolidColorBrush x:Key="tm-accent" Color="#FFE3B341" />
+  <SolidColorBrush x:Key="tm-accent-2" Color="#FF7FB2F0" />
+  <SolidColorBrush x:Key="tm-on-accent" Color="#FF1A1405" />
+  <SolidColorBrush x:Key="tm-accent-soft" Color="#FF3A3527" />
+  <SolidColorBrush x:Key="tm-success" Color="#FF4FC3A1" />
+  <SolidColorBrush x:Key="tm-warning" Color="#FFF4D35E" />
+  <SolidColorBrush x:Key="tm-danger" Color="#FFFF7F57" />
+  <SolidColorBrush x:Key="tm-info" Color="#FF7FB2F0" />
+  <SolidColorBrush x:Key="tm-focus" Color="#FFE3B341" />
+  <BoxShadows x:Key="tm-shadow">0 1 2 0 #4D000000, 0 10 28 0 #52000000</BoxShadows>
+  <SolidColorBrush x:Key="tm-sidebar-bg" Color="#FF0E1727" />
+  <SolidColorBrush x:Key="tm-sidebar-text" Color="#FFC7D3E6" />
+  <SolidColorBrush x:Key="tm-selected-bg" Color="#FF233A5E" />
+  <SolidColorBrush x:Key="tm-strip-bg" Color="#FF0F1828" />
+  <FontFamily x:Key="tm-font-body">avares://TMConcept/Assets/Fonts#Manrope, Segoe UI, Noto Sans, DejaVu Sans</FontFamily>
+  <FontFamily x:Key="tm-font-heading">avares://TMConcept/Assets/Fonts#Space Grotesk, Segoe UI, Noto Sans, DejaVu Sans</FontFamily>
+  <FontWeight x:Key="tm-font-heading-weight">Bold</FontWeight>
+</ResourceDictionary>

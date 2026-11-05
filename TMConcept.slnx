@@ -8,6 +8,7 @@
     <Project Path="src/TMConcept.Engines/TMConcept.Engines.csproj" />
     <Project Path="src/TMConcept.Speech/TMConcept.Speech.csproj" />
     <Project Path="src/TMConcept.Storage/TMConcept.Storage.csproj" />
+    <Project Path="src/TMConcept.Desktop/TMConcept.Desktop.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/TMConcept.Tests/TMConcept.Tests.csproj" />

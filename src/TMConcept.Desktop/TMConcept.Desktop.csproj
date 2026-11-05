@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Avalonia desktop app: shell, pages, player, language, theme, notifications, first-run wizard, composition root. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>TMConcept</AssemblyName>
+    <RootNamespace>TMConcept.Desktop</RootNamespace>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\TMConcept.Core\TMConcept.Core.csproj" />
+    <ProjectReference Include="..\TMConcept.Providers\TMConcept.Providers.csproj" />
+    <ProjectReference Include="..\TMConcept.Engines\TMConcept.Engines.csproj" />
+    <ProjectReference Include="..\TMConcept.Speech\TMConcept.Speech.csproj" />
+    <ProjectReference Include="..\TMConcept.Storage\TMConcept.Storage.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Language files are embedded (WithCulture=false: the .en/.tr suffix is not a satellite culture). -->
+    <EmbeddedResource Include="Lang\*.json" LogicalName="TMConcept.Lang.%(Filename)%(Extension)" WithCulture="false" />
+    <AvaloniaResource Include="Assets\Fonts\*.ttf" />
+    <AvaloniaResource Include="Assets\app.ico;Assets\app-256.png" />
+    <None Include="Assets\Licenses\*.txt" CopyToOutputDirectory="PreserveNewest" LinkBase="licenses" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="TMConcept.Tests" />
+  </ItemGroup>
+</Project>
