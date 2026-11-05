@@ -241,7 +241,8 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
             var made = await Task.Run(() => media.ThumbnailAsync(row.File, jpeg, CancellationToken.None)).ConfigureAwait(true);
             if (!made)
             {
-                logger.LogWarning("The thumbnail could not be made again: no frame that is not black was found");
+                // The reason (ffmpeg's error, or no frame that is not black) is logged by the media tools just before.
+                logger.LogWarning("The thumbnail could not be made again");
                 return;
             }
 
