@@ -1,50 +1,57 @@
-using Microsoft.EntityFrameworkCore;
+using Microsoft.Data.Sqlite;
 using TMConcept.Core.Videos;
 using TMConcept.Storage.Database;
 
 namespace TMConcept.Storage.Stores;
 
 /// <summary><see cref="IQueueStore"/>.</summary>
-public sealed class QueueStore(IDbContextFactory<ConceptDbContext> factory) : IQueueStore
+public sealed class QueueStore(ConceptDatabase database) : IQueueStore
 {
     /// <inheritdoc />
     public async Task<IReadOnlyList<QueueItem>> ListAsync(Guid profileId, CancellationToken cancellationToken)
     {
-        await using var db = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        return await db.QueueItems.AsNoTracking().Where(q => q.ProfileId == profileId).OrderBy(q => q.Position)
-            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
+        return await QueueItemTable.Instance.ListAsync(db, "\"ProfileId\" = $profile", cancellationToken, null, "\"Position\"", ("$profile", Sql.Id(profileId)))
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task AddAsync(QueueItem item, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(item);
-        await using var db = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var last = await db.QueueItems.Where(q => q.ProfileId == item.ProfileId).Select(q => (int?)q.Position).MaxAsync(cancellationToken).ConfigureAwait(false);
-        item.Position = (last ?? -1) + 1;
-        db.QueueItems.Add(item);
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await db.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var last = await Sql.ScalarAsync(db, "SELECT MAX(\"Position\") FROM \"queue_items\" WHERE \"ProfileId\" = $profile", cancellationToken, transaction,
+            ("$profile", Sql.Id(item.ProfileId))).ConfigureAwait(false);
+        item.Position = (int)(last ?? -1) + 1;
+        await QueueItemTable.Instance.InsertAsync(db, item, cancellationToken, transaction).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task RemoveAsync(Guid id, CancellationToken cancellationToken)
     {
-        await using var db = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        await db.QueueItems.Where(q => q.Id == id).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await QueueItemTable.Instance.DeleteAsync(db, "\"Id\" = $id", cancellationToken, null, ("$id", Sql.Id(id))).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task ReorderAsync(Guid profileId, IReadOnlyList<Guid> ids, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(ids);
-        await using var db = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var items = await db.QueueItems.Where(q => q.ProfileId == profileId).ToListAsync(cancellationToken).ConfigureAwait(false);
+        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await db.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var items = await QueueItemTable.Instance.ListAsync(db, "\"ProfileId\" = $profile", cancellationToken, transaction, string.Empty,
+            ("$profile", Sql.Id(profileId))).ConfigureAwait(false);
+        var order = ids.ToList();
         foreach (var item in items)
         {
-            var index = ids.ToList().IndexOf(item.Id);
-            item.Position = index >= 0 ? index : ids.Count + item.Position;
+            var index = order.IndexOf(item.Id);
+            var position = index >= 0 ? index : ids.Count + item.Position;
+            await Sql.ExecuteAsync(db, "UPDATE \"queue_items\" SET \"Position\" = $position WHERE \"Id\" = $id", cancellationToken, transaction,
+                ("$position", position), ("$id", Sql.Id(item.Id))).ConfigureAwait(false);
         }
 
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 }

@@ -1,20 +1,19 @@
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
 using TMConcept.Core.Settings;
 using TMConcept.Storage.Database;
 
 namespace TMConcept.Storage.Stores;
 
 /// <summary><see cref="ISettingsStore"/>: one JSON document.</summary>
-public sealed class SettingsStore(IDbContextFactory<ConceptDbContext> factory) : ISettingsStore
+public sealed class SettingsStore(ConceptDatabase database) : ISettingsStore
 {
     private const string Key = "app";
 
     /// <inheritdoc />
     public async Task<AppSettings> GetAsync(CancellationToken cancellationToken)
     {
-        await using var db = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var row = await db.Settings.AsNoTracking().FirstOrDefaultAsync(s => s.Key == Key, cancellationToken).ConfigureAwait(false);
+        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
+        var row = await SettingTable.Instance.FirstAsync(db, "\"Key\" = $key", cancellationToken, null, ("$key", Key)).ConfigureAwait(false);
         return row is null ? new AppSettings() : JsonSerializer.Deserialize(row.Value, StorageJsonContext.Default.AppSettings) ?? new AppSettings();
     }
 
@@ -23,17 +22,7 @@ public sealed class SettingsStore(IDbContextFactory<ConceptDbContext> factory) :
     {
         ArgumentNullException.ThrowIfNull(settings);
         var value = JsonSerializer.Serialize(settings, StorageJsonContext.Default.AppSettings);
-        await using var db = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var row = await db.Settings.FirstOrDefaultAsync(s => s.Key == Key, cancellationToken).ConfigureAwait(false);
-        if (row is null)
-        {
-            db.Settings.Add(new SettingRow { Key = Key, Value = value });
-        }
-        else
-        {
-            row.Value = value;
-        }
-
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await SettingTable.Instance.UpsertAsync(db, new SettingRow { Key = Key, Value = value }, cancellationToken).ConfigureAwait(false);
     }
 }

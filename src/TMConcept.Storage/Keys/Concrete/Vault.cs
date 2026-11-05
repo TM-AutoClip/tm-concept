@@ -1,5 +1,4 @@
 using System.Security.Cryptography;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TMConcept.Core.Paths;
 using TMConcept.Storage.Database;
@@ -47,9 +46,9 @@ public sealed class Vault(IAppPaths paths, DatabaseKey key, IEnumerable<IKeyProt
                 File.Move(paths.DatabaseFile, paths.DatabaseFile + ".orphan-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss", System.Globalization.CultureInfo.InvariantCulture));
             }
 
-            await using (var db = new ConceptDbContextFactory(paths, key).CreateDbContext())
+            await using (var db = await new ConceptDatabase(paths, key).OpenAsync(cancellationToken).ConfigureAwait(false))
             {
-                await db.Database.EnsureCreatedAsync(cancellationToken).ConfigureAwait(false);
+                await ConceptDatabase.EnsureSchemaAsync(db, cancellationToken).ConfigureAwait(false);
             }
 
             KeyFile.Write(paths.KeyFile, envelope);
@@ -84,9 +83,9 @@ public sealed class Vault(IAppPaths paths, DatabaseKey key, IEnumerable<IKeyProt
 
         try
         {
-            await using var db = new ConceptDbContextFactory(paths, key).CreateDbContext();
-            await db.Database.EnsureCreatedAsync(cancellationToken).ConfigureAwait(false);
-            await db.Settings.CountAsync(cancellationToken).ConfigureAwait(false);
+            await using var db = await new ConceptDatabase(paths, key).OpenAsync(cancellationToken).ConfigureAwait(false);
+            await ConceptDatabase.EnsureSchemaAsync(db, cancellationToken).ConfigureAwait(false);
+            await SettingTable.Instance.CountAsync(db, string.Empty, cancellationToken).ConfigureAwait(false);
         }
         catch
         {

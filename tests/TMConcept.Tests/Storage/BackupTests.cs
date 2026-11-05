@@ -1,5 +1,4 @@
 using Microsoft.Data.Sqlite;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
@@ -18,13 +17,13 @@ public sealed class BackupTests
     private static readonly CancellationToken None = CancellationToken.None;
 
     private static BackupService Service(StorageHarness h, TimeProvider? clock = null) =>
-        new(h.Paths, h.Key, h.Vault, h.Factory, KdfParameters.Fast, clock ?? TimeProvider.System, NullLogger<BackupService>.Instance);
+        new(h.Paths, h.Key, h.Vault, h.Database, KdfParameters.Fast, clock ?? TimeProvider.System, NullLogger<BackupService>.Instance);
 
     private static async Task<(StorageHarness H, string File)> BackupAsync()
     {
         var h = await StorageHarness.CreatedAsync();
-        await new ProfileStore(h.Factory).SaveAsync(new Profile { Name = "Kept channel" }, None);
-        await new ApiKeyStore(h.Factory).SaveAsync(new ApiKey { Provider = "openai", Label = "x", Secret = "never-in-backup-1" }, None);
+        await new ProfileStore(h.Database).SaveAsync(new Profile { Name = "Kept channel" }, None);
+        await new ApiKeyStore(h.Database).SaveAsync(new ApiKey { Provider = "openai", Label = "x", Secret = "never-in-backup-1" }, None);
         var service = Service(h);
         await service.SetPasswordAsync(Password, None);
         var file = Path.Combine(h.Paths.DataDirectory, "manual" + BackupRules.Extension);
@@ -40,9 +39,9 @@ public sealed class BackupTests
         using var target = new StorageHarness();
         var report = await Service(target).RestoreAsync(file, Password, target.Protector, None);
         report.Profiles.ShouldBe(1);
-        (await new ProfileStore(target.Factory).ListAsync(None)).Single().Name.ShouldBe("Kept channel");
-        (await new ApiKeyStore(target.Factory).ListAsync(null, None)).ShouldBeEmpty();
-        (await new ApiKeyStore(source.Factory).ListAsync(null, None)).ShouldNotBeEmpty();
+        (await new ProfileStore(target.Database).ListAsync(None)).Single().Name.ShouldBe("Kept channel");
+        (await new ApiKeyStore(target.Database).ListAsync(null, None)).ShouldBeEmpty();
+        (await new ApiKeyStore(source.Database).ListAsync(null, None)).ShouldNotBeEmpty();
     }
 
     [Fact]
@@ -121,13 +120,9 @@ public sealed class BackupTests
         var plain = SealedBox.Open(System.Text.Encoding.ASCII.GetBytes("TMCBAK02"), Password, sealedFile);
         var copy = Path.Combine(source.Paths.DataDirectory, "inspect.db");
         await File.WriteAllBytesAsync(copy, plain.AsMemory(33).ToArray(), None);
-        await using (var db = new TMConcept.Storage.Database.ConceptDbContext(TMConcept.Storage.Database.ConceptDbContextFactory.Options(
-            TMConcept.Storage.Database.ConceptDbContextFactory.ConnectionString(copy, Convert.ToHexString(plain.AsSpan(1, 32))))))
-        {
-            (await db.Settings.Select(r => r.Key).ToListAsync(None)).ShouldNotContain("backup-key");
-            (await db.Settings.Select(r => r.Key).ToListAsync(None)).ShouldNotContain("backup-last");
-            (await db.ApiKeys.CountAsync(None)).ShouldBe(0);
-        }
+        var inspect = TMConcept.Storage.Database.ConceptDatabase.ConnectionString(copy, Convert.ToHexString(plain.AsSpan(1, 32)));
+        (await StorageHarness.CountAsync(inspect, "settings", "\"Key\" IN ('backup-key', 'backup-last')")).ShouldBe(0);
+        (await StorageHarness.CountAsync(inspect, "api_keys")).ShouldBe(0);
 
         SqliteConnection.ClearAllPools();
         using var target = new StorageHarness();
@@ -147,7 +142,7 @@ public sealed class BackupTests
         using var h = await StorageHarness.CreatedAsync();
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 11, 1, 9, 0, 0, TimeSpan.Zero));
         clock.SetLocalTimeZone(TimeZoneInfo.Utc);
-        var settings = new SettingsStore(h.Factory);
+        var settings = new SettingsStore(h.Database);
         var stale = await settings.GetAsync(None);
         var service = Service(h, clock);
         await service.SetPasswordAsync(Password, None);

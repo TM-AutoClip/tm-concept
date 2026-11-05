@@ -1,17 +1,16 @@
-using Microsoft.EntityFrameworkCore;
 using TMConcept.Core.Models;
 using TMConcept.Storage.Database;
 
 namespace TMConcept.Storage.Stores;
 
 /// <summary><see cref="IPriceOverrideStore"/>.</summary>
-public sealed class PriceOverrideStore(IDbContextFactory<ConceptDbContext> factory) : IPriceOverrideStore
+public sealed class PriceOverrideStore(ConceptDatabase database) : IPriceOverrideStore
 {
     /// <inheritdoc />
     public async Task<IReadOnlyList<ModelPriceOverride>> ListAsync(CancellationToken cancellationToken)
     {
-        await using var db = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        return await db.PriceOverrides.AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false);
+        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
+        return await PriceOverrideTable.Instance.ListAsync(db, string.Empty, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -19,23 +18,15 @@ public sealed class PriceOverrideStore(IDbContextFactory<ConceptDbContext> facto
     {
         ArgumentNullException.ThrowIfNull(price);
         price.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        await using var db = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        if (await db.PriceOverrides.AnyAsync(p => p.Provider == price.Provider && p.ModelId == price.ModelId, cancellationToken).ConfigureAwait(false))
-        {
-            db.PriceOverrides.Update(price);
-        }
-        else
-        {
-            db.PriceOverrides.Add(price);
-        }
-
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await PriceOverrideTable.Instance.UpsertAsync(db, price, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task DeleteAsync(string provider, string modelId, CancellationToken cancellationToken)
     {
-        await using var db = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        await db.PriceOverrides.Where(p => p.Provider == provider && p.ModelId == modelId).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await PriceOverrideTable.Instance.DeleteAsync(db, "\"Provider\" = $provider AND \"ModelId\" = $model", cancellationToken, null,
+            ("$provider", provider), ("$model", modelId)).ConfigureAwait(false);
     }
 }

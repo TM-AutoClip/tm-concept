@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TMConcept.Core.Activity;
@@ -107,7 +106,7 @@ public static class DesktopServices
         CurrentOs.Register(services);
         services.AddSingleton<Vault>();
         services.AddSingleton<BackupService>();
-        services.AddSingleton<IDbContextFactory<ConceptDbContext>, ConceptDbContextFactory>();
+        services.AddSingleton<ConceptDatabase>();
         services.AddSingleton<ISettingsStore, SettingsStore>();
         services.AddSingleton<IProfileStore, ProfileStore>();
         services.AddSingleton<IConceptStore, ConceptStore>();

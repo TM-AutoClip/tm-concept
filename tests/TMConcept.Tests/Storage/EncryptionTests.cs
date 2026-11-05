@@ -1,6 +1,5 @@
 using System.Text;
 using Microsoft.Data.Sqlite;
-using Microsoft.EntityFrameworkCore;
 using Shouldly;
 using TMConcept.Core.Profiles;
 using TMConcept.Storage.Crypto;
@@ -16,7 +15,7 @@ public sealed class EncryptionTests
     public async Task DatabaseFileIsEncryptedAndDoesNotOpenWithAnotherKey()
     {
         using var h = await StorageHarness.CreatedAsync();
-        await new ProfileStore(h.Factory).SaveAsync(new Profile { Name = "secret-name-123" }, CancellationToken.None);
+        await new ProfileStore(h.Database).SaveAsync(new Profile { Name = "secret-name-123" }, CancellationToken.None);
         SqliteConnection.ClearAllPools();
 
         var bytes = await File.ReadAllBytesAsync(h.Paths.DatabaseFile, TestContext.Current.CancellationToken);
@@ -24,9 +23,8 @@ public sealed class EncryptionTests
         Encoding.UTF8.GetString(bytes).ShouldNotContain("secret-name-123");
         Encoding.UTF8.GetString(bytes).ShouldNotContain("profiles");
 
-        await using var other = new ConceptDbContext(ConceptDbContextFactory.Options(
-            ConceptDbContextFactory.ConnectionString(h.Paths.DatabaseFile, Convert.ToHexString(new byte[32]))));
-        await Should.ThrowAsync<SqliteException>(() => other.Profiles.CountAsync(TestContext.Current.CancellationToken));
+        await Should.ThrowAsync<SqliteException>(() => StorageHarness.CountAsync(
+            ConceptDatabase.ConnectionString(h.Paths.DatabaseFile, Convert.ToHexString(new byte[32])), "profiles"));
     }
 
     [Fact]

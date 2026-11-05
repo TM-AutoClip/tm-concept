@@ -3,7 +3,6 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TMConcept.Core.Paths;
 using TMConcept.Storage.Crypto;
@@ -25,7 +24,7 @@ namespace TMConcept.Storage.Backup;
 /// The time of the last backup is kept in its own row written only here (it was a field of the settings document, which the app saved
 /// back from an older copy and so reset it: a "daily" backup ran on every start).
 /// </summary>
-public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault, IDbContextFactory<ConceptDbContext> factory, KdfParameters kdf,
+public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault, ConceptDatabase database, KdfParameters kdf,
     TimeProvider clock, ILogger<BackupService> logger)
 {
     private const string KeySetting = "backup-key";
@@ -65,8 +64,7 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
     /// <summary>When the last backup (daily, manual or before a change) was written; <c>null</c> before the first.</summary>
     public async Task<DateTimeOffset?> LastBackupAsync(CancellationToken cancellationToken)
     {
-        await using var db = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var row = await db.Settings.AsNoTracking().FirstOrDefaultAsync(s => s.Key == LastSetting, cancellationToken).ConfigureAwait(false);
+        var row = await SettingAsync(LastSetting, cancellationToken).ConfigureAwait(false);
         return row is not null && long.TryParse(row.Value, NumberStyles.None, CultureInfo.InvariantCulture, out var ticks)
             ? new DateTimeOffset(ticks, TimeSpan.Zero)
             : null;
@@ -84,8 +82,8 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
         try
         {
             var passphrase = key.Passphrase();
-            using (var source = new SqliteConnection(ConceptDbContextFactory.ConnectionString(paths.DatabaseFile, passphrase)))
-            using (var destination = new SqliteConnection(ConceptDbContextFactory.ConnectionString(copy, passphrase)))
+            using (var source = new SqliteConnection(ConceptDatabase.ConnectionString(paths.DatabaseFile, passphrase)))
+            using (var destination = new SqliteConnection(ConceptDatabase.ConnectionString(copy, passphrase)))
             {
                 source.Open();
                 destination.Open();
@@ -222,8 +220,7 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
 
     private async Task<DerivedKey?> LoadKeyAsync(CancellationToken cancellationToken)
     {
-        await using var db = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var row = await db.Settings.AsNoTracking().FirstOrDefaultAsync(s => s.Key == KeySetting, cancellationToken).ConfigureAwait(false);
+        var row = await SettingAsync(KeySetting, cancellationToken).ConfigureAwait(false);
         if (row is null)
         {
             return null;
@@ -247,18 +244,14 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
 
     private async Task WriteSettingAsync(string name, string value, CancellationToken cancellationToken)
     {
-        await using var db = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var row = await db.Settings.FirstOrDefaultAsync(s => s.Key == name, cancellationToken).ConfigureAwait(false);
-        if (row is null)
-        {
-            db.Settings.Add(new SettingRow { Key = name, Value = value });
-        }
-        else
-        {
-            row.Value = value;
-        }
+        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await SettingTable.Instance.UpsertAsync(db, new SettingRow { Key = name, Value = value }, cancellationToken).ConfigureAwait(false);
+    }
 
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    private async Task<SettingRow?> SettingAsync(string name, CancellationToken cancellationToken)
+    {
+        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
+        return await SettingTable.Instance.FirstAsync(db, "\"Key\" = $key", cancellationToken, null, ("$key", name)).ConfigureAwait(false);
     }
 
     /// <summary>Keeps the newest <see cref="BackupRules.Keep"/> files of one kind (daily/manual, or before a change).</summary>
@@ -284,8 +277,9 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
     {
         try
         {
-            await using var db = new ConceptDbContext(ConceptDbContextFactory.Options(ConceptDbContextFactory.ConnectionString(file, Convert.ToHexString(dek))));
-            await db.Settings.CountAsync(cancellationToken).ConfigureAwait(false);
+            await using var db = await ConceptDatabase.OpenAsync(ConceptDatabase.ConnectionString(file, Convert.ToHexString(dek)), cancellationToken)
+                .ConfigureAwait(false);
+            await SettingTable.Instance.CountAsync(db, string.Empty, cancellationToken).ConfigureAwait(false);
         }
         catch (SqliteException ex)
         {
@@ -299,11 +293,11 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
 
     private async Task<RestoreReport> ReportAsync(CancellationToken cancellationToken)
     {
-        await using var db = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
         var report = new RestoreReport(
-            await db.Profiles.CountAsync(cancellationToken).ConfigureAwait(false),
-            await db.Concepts.CountAsync(cancellationToken).ConfigureAwait(false),
-            await db.Videos.CountAsync(cancellationToken).ConfigureAwait(false));
+            await ProfileTable.Instance.CountAsync(db, string.Empty, cancellationToken).ConfigureAwait(false),
+            await ConceptTable.Instance.CountAsync(db, string.Empty, cancellationToken).ConfigureAwait(false),
+            await VideoTable.Instance.CountAsync(db, string.Empty, cancellationToken).ConfigureAwait(false));
         logger.LogInformation("Restore finished: {Profiles} profiles, {Concepts} concepts, {Videos} videos", report.Profiles, report.Concepts, report.Videos);
         return report;
     }
