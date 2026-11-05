@@ -1,7 +1,7 @@
 # Publishes self-contained single-file builds and packs them (artifacts/release). Usage: tools/publish.ps1 [-Rids win-x64,linux-x64,linux-arm64]
 #
 # A release is built only from a clean working tree (commit the version bump first): the binaries carry the commit they were built from
-# (informational version "0.1.2+<commit>"), so that commit must hold exactly the code that was built. Tag that commit.
+# (informational version "0.1.3+<commit>"), so that commit must hold exactly the code that was built. Tag that commit.
 param([string[]]$Rids = @('win-x64', 'linux-x64', 'linux-arm64'))
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
@@ -16,10 +16,9 @@ $version = ($props.Project.PropertyGroup | Where-Object { $_.Version } | Select-
 Write-Output "Building $version from commit $commit"
 foreach ($rid in $Rids) {
     $out = Join-Path $root "artifacts/publish/$rid"
-    # Linux: no compression inside the single file. A compressed bundle is unpacked into private memory at start (about 35 MB more
-    # on Windows measurements; the Pi showed ~230 MB with the window open), while an uncompressed one is mapped from the file. The tar.gz
-    # compresses it for the download anyway. Windows keeps it compressed: the exe is downloaded as is (59 MB instead of 129 MB).
-    $compress = if ($rid.StartsWith('win')) { 'true' } else { 'false' }
+    # Compressed inside the single file on every system (0.1.3, measured: since the trimmed build the compressed and the uncompressed
+    # file use the same memory within 2-5 MB, and the compressed one is half the size on disk).
+    $compress = 'true'
     & dotnet publish (Join-Path $root 'src/TMConcept.Desktop/TMConcept.Desktop.csproj') -c Release -r $rid --self-contained true `
         -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=$compress -p:DebugType=none -p:DebugSymbols=false `
         -p:SourceRevisionId=$commit -m:1 -nodeReuse:false -o $out

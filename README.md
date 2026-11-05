@@ -66,7 +66,7 @@ Windows 10 or 11, 64-bit.
 1. Open the [latest release](../../releases/latest) and download `TMConcept-<version>-win-x64.exe`.
 2. Optional but recommended: check the file against the SHA-256 value on the release page. In PowerShell:
    ```powershell
-   Get-FileHash .\TMConcept-0.1.2-win-x64.exe -Algorithm SHA256
+   Get-FileHash .\TMConcept-0.1.3-win-x64.exe -Algorithm SHA256
    ```
 3. Put the file where it can stay, for example `%LOCALAPPDATA%\Programs\TM Concept\TMConcept.exe`.
 4. Double-click it. The file is not code-signed, so Windows shows **"Windows protected your PC"** (SmartScreen): click **More info**, then
@@ -84,11 +84,11 @@ Use `linux-x64` on ordinary PCs and `linux-arm64` on 64-bit ARM computers (for e
 desktop session is required.
 
 1. Download `tm-concept-<version>-linux-x64.tar.gz` (or `-linux-arm64`) from the [latest release](../../releases/latest).
-2. Optional: check the SHA-256 value: `sha256sum tm-concept-0.1.2-linux-x64.tar.gz`
+2. Optional: check the SHA-256 value: `sha256sum tm-concept-0.1.3-linux-x64.tar.gz`
 3. Unpack it where it can stay:
    ```sh
    mkdir -p ~/.local/opt
-   tar -xzf tm-concept-0.1.2-linux-x64.tar.gz -C ~/.local/opt
+   tar -xzf tm-concept-0.1.3-linux-x64.tar.gz -C ~/.local/opt
    ~/.local/opt/tm-concept/install-desktop-entry.sh   # optional: adds TM Concept to the application menu
    ```
 4. **Keyring (recommended).** To open the database automatically, the key is stored in your desktop keyring with `secret-tool`:
