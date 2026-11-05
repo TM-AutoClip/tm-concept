@@ -35,4 +35,10 @@ public sealed class ProviderException : Exception
 
     /// <summary>Usage already billed before the failure (a cut-off answer still costs).</summary>
     public Chat.ChatUsage? ChargedUsage { get; init; }
+
+    /// <summary>
+    /// The text that arrived before a cut (<c>truncated</c> / <c>incomplete</c>; empty otherwise). It was paid for, so a caller that can use
+    /// a partial answer (the concept parser keeps every complete item before the cut) reads it from here.
+    /// </summary>
+    public string PartialText { get; init; } = string.Empty;
 }

@@ -65,4 +65,22 @@ public sealed class SemanticTests
         result.Tokens.ShouldBe(12);
         fake.Requests.Single().Uri.ShouldBe(new Uri("https://api.openai.com/v1/embeddings"));
     }
+
+    [Fact]
+    public async Task OpenRouterServesTheEmbeddingModelItsCatalogOffers()
+    {
+        var fake = new FakeHttp().Answer(HttpStatusCode.OK, """{"data":[{"index":0,"embedding":[1,0]}],"usage":{"prompt_tokens":3}}""");
+        var http = new ProviderHttp(fake.Transport, NullLogger<ProviderHttp>.Instance);
+        var service = new EmbeddingService(
+        [
+            new OpenAIEmbeddings(new OpenAIProvider(http, NullLogger<OpenAIProvider>.Instance), http),
+            new OpenRouterEmbeddings(new OpenRouterProvider(http, NullLogger<OpenRouterProvider>.Instance), http),
+        ]);
+        var model = new EmbeddedModelCatalog().All.First(m => m.Provider == "openrouter" && m.Capabilities.HasFlag(ModelCapability.Embedding));
+
+        var result = await service.EmbedAsync(new ResolvedModel(model, new ApiKey { Secret = "fake-test-key-embed-0123" }, string.Empty), ["a"], CancellationToken.None);
+
+        result.Vectors.Single().ShouldBe([1f, 0f]);
+        fake.Requests.Single().Uri.ShouldBe(new Uri("https://openrouter.ai/api/v1/embeddings"));
+    }
 }

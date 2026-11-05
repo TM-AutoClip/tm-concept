@@ -11,7 +11,8 @@ namespace TMConcept.Providers.OpenAICompatible;
 /// <summary>
 /// <c>POST chat/completions</c>. Images as <c>image_url</c> data addresses; a schema as <c>response_format</c> (json_schema, or json_object
 /// on providers without it) — when the provider rejects the field with 400 the request is sent once more without it (the parser tolerates a
-/// loose answer). No sampling parameters. <c>finish_reason: length</c> and a refusal are errors with the billed usage.
+/// loose answer). No sampling parameters. <c>finish_reason: length</c> (with the partial text), a refusal, an <c>error</c> object or
+/// <c>finish_reason: error</c> inside a 200 answer and an answer without choices are errors with the billed usage.
 /// </summary>
 public sealed class OpenAICompatibleChatClient(OpenAICompatibleProviderBase provider, ProviderHttp http, CatalogModel model, string apiKey, ILogger logger)
     : IChatClient
@@ -76,17 +77,62 @@ public sealed class OpenAICompatibleChatClient(OpenAICompatibleProviderBase prov
         var cached = JsonRead.Long(node?["usage"]?["prompt_tokens_details"]?["cached_tokens"]);
         var usage = new ChatUsage(Math.Max(0, promptTokens - cached), cached, 0, JsonRead.Long(node?["usage"]?["completion_tokens"]));
         var reported = JsonRead.Decimal(node?["usage"]?["cost"]);
-        var choice = node?["choices"]?[0];
-        var text = JsonRead.Text(choice?["message"]?["content"]);
-        if (text.Length == 0 && JsonRead.Text(choice?["message"]?["refusal"]).Length > 0)
+
+        // OpenRouter (and some gateways) answer HTTP 200 with only an "error" object when the upstream fails after the headers were sent,
+        // or with finish_reason "error" and a partial message. Both are failures, never an empty success.
+        var choice = (node?["choices"] as JsonArray) is { Count: > 0 } choices ? choices[0] : null;
+        var finish = JsonRead.Text(choice?["finish_reason"]);
+        if (node?["error"] is not null || finish == "error")
+        {
+            var status = ErrorStatus(node?["error"] ?? choice?["error"]);
+            throw http.Failure(provider.Name, status, reply.Text, reply.RequestId, apiKey, usage);
+        }
+
+        if (choice is null)
+        {
+            logger.LogWarning("{Provider} {Model}: the answer has no choices (request {RequestId})", provider.Name, Model.Id,
+                reply.RequestId.Length > 0 ? reply.RequestId : "-");
+            throw new ProviderException($"{provider.Name}: the answer had no choices.")
+            {
+                Code = "incomplete",
+                ChargedUsage = usage.Prompt > 0 || usage.Output > 0 ? usage : null,
+                RequestId = reply.RequestId,
+            };
+        }
+
+        var text = JsonRead.Text(choice["message"]?["content"]);
+        if (text.Length == 0 && JsonRead.Text(choice["message"]?["refusal"]).Length > 0)
         {
             throw new ProviderException($"{provider.Name}: the model refused.") { Code = "refusal", ChargedUsage = usage, RequestId = reply.RequestId };
         }
 
-        var finish = JsonRead.Text(choice?["finish_reason"]);
         return finish == "length"
-            ? throw new ProviderException($"{provider.Name}: the answer was cut off.") { Code = "truncated", ChargedUsage = usage, RequestId = reply.RequestId }
+            ? throw new ProviderException($"{provider.Name}: the answer was cut off.")
+            {
+                Code = "truncated",
+                ChargedUsage = usage,
+                RequestId = reply.RequestId,
+                PartialText = text,
+            }
             : new ChatResponse(text, usage, reported, finish, reply.RequestId);
+    }
+
+    /// <summary>HTTP status of an error object inside a 200 body: a numeric <c>code</c> when it is one (OpenRouter), otherwise 502 (busy).</summary>
+    private static int ErrorStatus(JsonNode? error)
+    {
+        var code = error?["code"];
+        if (code is JsonValue value && value.TryGetValue<int>(out var number) && number is >= 400 and < 600)
+        {
+            return number;
+        }
+
+        if (code is JsonValue text && text.TryGetValue<string>(out var s) && int.TryParse(s, System.Globalization.NumberStyles.None,
+            System.Globalization.CultureInfo.InvariantCulture, out var parsed) && parsed is >= 400 and < 600)
+        {
+            return parsed;
+        }
+
+        return 502;
     }
 
     private Task<ProviderReply> PostAsync(JsonObject body, CancellationToken cancellationToken)

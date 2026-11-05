@@ -61,8 +61,11 @@ public sealed class ProviderHttp(ProviderTransport transport, ILogger<ProviderHt
         }
     }
 
-    /// <summary>A failed answer as an exception (also used for errors reported inside a stream).</summary>
-    public ProviderException Failure(string providerName, int status, string body, string requestId, string apiKey)
+    /// <summary>
+    /// A failed answer as an exception (also used for errors reported inside a stream or inside a 200 body); <paramref name="charged"/> is
+    /// the usage the provider already billed, when the failing answer reported one.
+    /// </summary>
+    public ProviderException Failure(string providerName, int status, string body, string requestId, string apiKey, Core.Chat.ChatUsage? charged = null)
     {
         var detail = Redactor.Redact(Detail(body), [apiKey]);
         if (detail.Length > 300)
@@ -84,7 +87,13 @@ public sealed class ProviderHttp(ProviderTransport transport, ILogger<ProviderHt
             _ => "http",
         };
         logger.LogWarning("{Provider}: HTTP {Status} ({Code}), request {RequestId}: {Detail}", providerName, status, code, requestId.Length > 0 ? requestId : "-", detail);
-        return new ProviderException($"{providerName}: HTTP {status}. {detail}".Trim()) { Code = code, Status = status, RequestId = requestId };
+        return new ProviderException($"{providerName}: HTTP {status}. {detail}".Trim())
+        {
+            Code = code,
+            Status = status,
+            RequestId = requestId,
+            ChargedUsage = charged is { Prompt: > 0 } or { Output: > 0 } ? charged : null,
+        };
     }
 
     /// <inheritdoc />

@@ -78,6 +78,45 @@ public sealed class ProviderTests
 
         error.Code.ShouldBe("truncated");
         error.ChargedUsage!.Output.ShouldBe(42);
+        error.PartialText.ShouldBe("{\"konseptler\":[]}");
+    }
+
+    [Fact]
+    public async Task OpenRouterErrorInsideA200IsAFailureWithItsStatus()
+    {
+        var fake = new FakeHttp().Answer(HttpStatusCode.OK, """{"error":{"code":429,"message":"upstream rate limited"},"usage":{"prompt_tokens":0}}""");
+        var provider = new OpenRouterProvider(Http(fake), NullLogger<OpenRouterProvider>.Instance);
+        var client = provider.CreateChat(Catalog.All.First(m => m.Provider == "openrouter" && m.Capabilities.HasFlag(ModelCapability.Chat)), Key);
+
+        var error = await Should.ThrowAsync<ProviderException>(() => client.SendAsync(new ChatRequest("s", "u"), CancellationToken.None));
+
+        error.Code.ShouldBe("rate");
+        error.Message.ShouldContain("upstream rate limited");
+    }
+
+    [Fact]
+    public async Task FinishReasonErrorAndMissingChoicesAreFailuresWithTheBilledUsage()
+    {
+        var fake = new FakeHttp()
+            .Answer(HttpStatusCode.OK, """
+                {"choices":[{"message":{"content":"half"},"finish_reason":"error","error":{"code":502,"message":"provider died"}}],
+                 "usage":{"prompt_tokens":100,"completion_tokens":20}}
+                """)
+            .Answer(HttpStatusCode.OK, """{"choices":[],"usage":{"prompt_tokens":100,"completion_tokens":0}}""")
+            .Answer(HttpStatusCode.OK, """{"choices":[{"message":{"content":"[{"},"finish_reason":"length"}],"usage":{"prompt_tokens":10,"completion_tokens":9}}""");
+        var provider = new OpenRouterProvider(Http(fake), NullLogger<OpenRouterProvider>.Instance);
+        var client = provider.CreateChat(Catalog.All.First(m => m.Provider == "openrouter" && m.Capabilities.HasFlag(ModelCapability.Chat)), Key);
+
+        var failed = await Should.ThrowAsync<ProviderException>(() => client.SendAsync(new ChatRequest("s", "u"), CancellationToken.None));
+        failed.Code.ShouldBe("busy");
+        failed.ChargedUsage!.Output.ShouldBe(20);
+
+        var empty = await Should.ThrowAsync<ProviderException>(() => client.SendAsync(new ChatRequest("s", "u"), CancellationToken.None));
+        empty.Code.ShouldBe("incomplete");
+
+        var cut = await Should.ThrowAsync<ProviderException>(() => client.SendAsync(new ChatRequest("s", "u"), CancellationToken.None));
+        cut.Code.ShouldBe("truncated");
+        cut.PartialText.ShouldBe("[{");
     }
 
     [Fact]

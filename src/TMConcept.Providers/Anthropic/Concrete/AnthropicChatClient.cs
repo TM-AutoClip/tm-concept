@@ -11,7 +11,7 @@ namespace TMConcept.Providers.Anthropic;
 /// Claude through <c>POST v1/messages</c>, streamed (a long answer must not hit a timeout). The stable system text carries a cache marker
 /// when asked; a schema goes in <c>output_config.format</c> and an effort level in <c>output_config.effort</c>. No sampling parameters and no
 /// thinking settings are sent (the model's defaults apply). The stop reason is checked before the text: <c>refusal</c>, <c>max_tokens</c>,
-/// a context overflow and a stream that never finished are errors (with the tokens already billed).
+/// a context overflow and a stream that never finished are errors (with the tokens already billed and, for a cut, the text that arrived).
 /// </summary>
 public sealed class AnthropicChatClient(AnthropicProvider provider, ProviderHttp http, CatalogModel model, string apiKey) : IChatClient
 {
@@ -98,7 +98,13 @@ public sealed class AnthropicChatClient(AnthropicProvider provider, ProviderHttp
     }
 
     private ProviderException Charged(string code, AnthropicAnswer answer, string requestId) =>
-        new($"{provider.Name}: the answer was not complete ({code}).") { Code = code, ChargedUsage = answer.Usage, RequestId = requestId };
+        new($"{provider.Name}: the answer was not complete ({code}).")
+        {
+            Code = code,
+            ChargedUsage = answer.Usage,
+            RequestId = requestId,
+            PartialText = code == "refusal" ? string.Empty : answer.Text,
+        };
 
     private static int StatusOf(string type) => type switch
     {

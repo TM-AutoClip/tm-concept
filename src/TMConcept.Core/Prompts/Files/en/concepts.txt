@@ -21,8 +21,8 @@ CHANNEL: «{channel}»
 CHANNEL CONCEPT: «{concept}»
 FORMAT: {format}; target length {seconds} s ≈ {words} words of narration
 SAMPLE IMAGES (may be used in scenes): {images}
+=====
 HISTORY — do NOT produce these ({history_count} concepts):
 {history}
-=====
 EXTRA REQUEST: «{extra}»
 REQUESTED: {count} new concepts. JSON: {"konseptler":[{"baslik":"…","ozet":"…","icerik":"…"}]}

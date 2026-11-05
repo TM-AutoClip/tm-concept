@@ -9,19 +9,25 @@ using TMConcept.Core.Runs;
 namespace TMConcept.Core.Concepts;
 
 /// <summary>
-/// Concept generation. Estimate (no network): prompt tokens from the text, output = count × the profile's measured average (first guess
-/// 700) × 1.1–1.5. Generate: batches of 20; before every batch the history is read again (so a batch also avoids the concepts of the
-/// previous batches), the answer is parsed, the local duplicate check throws away duplicates and marks similar ones, the batch is saved at
-/// once and the run row is updated with the exact cost. Cancel or an error keeps the finished batches. No automatic extra batch is made
-/// for thrown-away duplicates: the result tells how many are missing.
+/// Concept generation. Estimate (no network): prompt tokens from the text; output = count × the profile's measured average ± 15 % (the
+/// measured tokens already include thinking), or before the first run count × the size expected from the target length × 1.1–1.5 for
+/// thinking. Generate: batches of 20; before every batch the history is read again (so a batch also avoids the concepts of the previous
+/// batches; the history is in the user part, so the cached system part stays the same for the whole run), the answer is parsed, the local
+/// duplicate check throws away duplicates and marks similar ones, the batch is saved at once and the run row is updated with the exact
+/// cost. A batch cut off at max_tokens keeps every complete concept before the cut (they were paid for) and then ends the run with
+/// "truncated". Cancel or an error keeps the finished batches. No automatic extra batch is made for thrown-away duplicates: the result
+/// tells how many are missing.
 /// </summary>
 public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profiles, IRunStore runs, IChatClientFactory chats, ICostCalculator costs,
     IEmbeddingStore embeddings, IEmbeddingService embedder, TimeProvider clock, ILogger<ConceptGenerator> logger)
 {
     private readonly List<ConceptEmbedding> _pendingEmbeddings = [];
 
-    /// <summary>Thinking share on top of the output (low and high end of the range).</summary>
+    /// <summary>Thinking share on top of the first-guess output (low and high end of the range).</summary>
     public static readonly (double Low, double High) ThinkingShare = (1.1, 1.5);
+
+    /// <summary>Band around a measured per-concept output (it already contains the thinking tokens).</summary>
+    public static readonly (double Low, double High) MeasuredBand = (0.85, 1.15);
 
     /// <summary>The estimate of a press.</summary>
     public async Task<CostEstimate> EstimateAsync(Profile profile, int count, string extraPrompt, Models.CatalogModel model, CancellationToken cancellationToken)
@@ -32,7 +38,9 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
         var images = await profiles.ImagesAsync(profile.Id, cancellationToken).ConfigureAwait(false);
         var history = await HistoryTitlesAsync(profile.Id, cancellationToken).ConfigureAwait(false);
         var average = await runs.AverageConceptOutputTokensAsync(profile.Id, cancellationToken).ConfigureAwait(false);
-        var perConcept = average > 0 ? average : NarrationRate.FirstGuessOutputTokens;
+        var (perConcept, band) = average > 0
+            ? (average, MeasuredBand)
+            : (ConceptOutputBudget.TokensPerConcept(profile.ContentLanguage, profile.TargetSeconds), ThinkingShare);
         var total = CostEstimate.Zero;
         var first = true;
         foreach (var size in Batches(count))
@@ -41,7 +49,7 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
             var system = costs.Tokens(prompt.System, profile.ContentLanguage);
             var user = costs.Tokens(prompt.User, profile.ContentLanguage);
             var output = size * perConcept;
-            total = total.Plus(costs.EstimateChat(model, system + user, first ? 0 : system, (long)(output * ThinkingShare.Low), (long)(output * ThinkingShare.High)));
+            total = total.Plus(costs.EstimateChat(model, system + user, first ? 0 : system, (long)(output * band.Low), (long)(output * band.High)));
             first = false;
         }
 
@@ -80,6 +88,7 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
         var sizes = Batches(count).ToList();
         var errorCode = string.Empty;
         var errorDetail = string.Empty;
+        var semanticSkipped = 0;
         try
         {
             for (var index = 0; index < sizes.Count; index++)
@@ -87,20 +96,32 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
                 cancellationToken.ThrowIfCancellationRequested();
                 var subjects = await concepts.HistoryAsync(profile.Id, cancellationToken).ConfigureAwait(false);
                 var prompt = ConceptPromptBuilder.Build(new ConceptPromptInput(profile, images, Titles(subjects), request.ExtraPrompt, sizes[index]));
-                ChatResponse response;
+                string answer;
+                ProviderException? cut = null;
                 try
                 {
-                    response = await client.SendAsync(new ChatRequest(prompt.System, prompt.User, CacheSystem: true, Schema: prompt.Schema,
-                        MaxOutputTokens: MaxOutput(sizes[index]), Effort: request.Model.Effort), cancellationToken).ConfigureAwait(false);
+                    var response = await client.SendAsync(new ChatRequest(prompt.System, prompt.User, CacheSystem: true, Schema: prompt.Schema,
+                        MaxOutputTokens: ConceptOutputBudget.MaxOutputTokens(profile.ContentLanguage, profile.TargetSeconds, sizes[index]),
+                        Effort: request.Model.Effort), cancellationToken).ConfigureAwait(false);
+                    Charge(run, request, response.Usage, response.ReportedCostUsd);
+                    answer = response.Text;
                 }
                 catch (ProviderException ex) when (ex.ChargedUsage is { } charged)
                 {
                     Charge(run, request, charged, null);
-                    throw;
+                    if (ex.Code is not ("truncated" or "incomplete") || ex.PartialText.Length == 0)
+                    {
+                        throw;
+                    }
+
+                    // The cut-off answer was paid for: keep the complete concepts before the cut, then stop the run.
+                    logger.LogWarning("Concept run {Run}: batch {Batch} was cut off ({Code}); keeping the complete concepts before the cut", run.Id,
+                        index + 1, ex.Code);
+                    cut = ex;
+                    answer = ex.PartialText;
                 }
 
-                Charge(run, request, response.Usage, response.ReportedCostUsd);
-                var parsed = ConceptResponseParser.Parse(response.Text);
+                var parsed = ConceptResponseParser.Parse(answer);
                 problems += parsed.Problems.Count;
                 foreach (var problem in parsed.Problems)
                 {
@@ -109,7 +130,7 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
 
                 if (parsed.Concepts.Count == 0)
                 {
-                    throw new ProviderException("The answer had no readable concept.") { Code = "parse" };
+                    throw cut ?? new ProviderException("The answer had no readable concept.") { Code = "parse" };
                 }
 
                 var batchCandidates = parsed.Concepts.Take(sizes[index])
@@ -117,7 +138,9 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
                 var verdicts = request.LocalCheck
                     ? DuplicateCheck.Sift(batchCandidates.Select(c => c.Subject), subjects)
                     : batchCandidates.Select(c => new DuplicateVerdict(c.Subject, DuplicateResult.None)).ToList();
-                verdicts = await SemanticAsync(request, run, verdicts, subjects, cancellationToken).ConfigureAwait(false);
+                var semantic = await SemanticAsync(request, run, verdicts, subjects, cancellationToken).ConfigureAwait(false);
+                verdicts = semantic.Verdicts;
+                semanticSkipped += semantic.Skipped ? 1 : 0;
                 var batch = new List<Concept>();
                 foreach (var (candidate, verdict) in batchCandidates.Zip(verdicts))
                 {
@@ -157,6 +180,10 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
                 run.RejectedDuplicates = rejected;
                 await runs.UpdateAsync(run, CancellationToken.None).ConfigureAwait(false);
                 progress?.Report(new ConceptBatch(index + 1, sizes.Count, batch, rejected, run.ActualUsd));
+                if (cut is not null)
+                {
+                    throw cut;
+                }
             }
 
             run.Status = RunStatus.Succeeded;
@@ -184,7 +211,7 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
             await runs.UpdateAsync(run, CancellationToken.None).ConfigureAwait(false);
         }
 
-        return new ConceptRunResult(run, accepted, rejected, problems, errorCode, errorDetail);
+        return new ConceptRunResult(run, accepted, rejected, problems, errorCode, errorDetail, semanticSkipped);
     }
 
     /// <summary>Batch sizes of a count (20, 20, …, rest).</summary>
@@ -198,14 +225,15 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
 
     /// <summary>
     /// Layer 3 (optional): embeds the candidates that passed the local check, compares them with the stored vectors of the profile and
-    /// with each other, drops duplicates, marks similar ones and stores the new vectors. A failure only skips this layer (logged).
+    /// with each other, drops duplicates, marks similar ones and stores the new vectors. A failure only skips this layer for the batch: it is
+    /// logged with its cause and reported back (<c>Skipped</c>) so the page can tell the user.
     /// </summary>
-    private async Task<IReadOnlyList<DuplicateVerdict>> SemanticAsync(ConceptRequest request, Run run, IReadOnlyList<DuplicateVerdict> verdicts,
+    private async Task<(IReadOnlyList<DuplicateVerdict> Verdicts, bool Skipped)> SemanticAsync(ConceptRequest request, Run run, IReadOnlyList<DuplicateVerdict> verdicts,
         IReadOnlyList<DuplicateSubject> history, CancellationToken cancellationToken)
     {
         if (request.Embedding is not { } model || verdicts.All(v => !v.Result.Accepted))
         {
-            return verdicts;
+            return (verdicts, false);
         }
 
         try
@@ -249,16 +277,14 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
             }
 
             _pendingEmbeddings.AddRange(keep);
-            return output;
+            return (output, false);
         }
         catch (Exception ex) when (ex is ProviderException or InvalidOperationException or ArgumentException)
         {
-            logger.LogWarning(ex, "Semantic duplicate check skipped for this batch");
-            return verdicts;
+            logger.LogWarning(ex, "Semantic duplicate check skipped for this batch ({Provider}/{Model})", model.Model.Provider, model.Model.Id);
+            return (verdicts, true);
         }
     }
-
-    private static int MaxOutput(int count) => Math.Min(64_000, 4_000 + (count * 1_600));
 
     private static IReadOnlyList<string> Titles(IReadOnlyList<DuplicateSubject> subjects) =>
         HistoryCompressor.Lines(subjects.OrderBy(s => s.Number).Select(s => s.Title).ToList());

@@ -32,6 +32,7 @@ public static class ProviderServices
         AddChat<DeepSeekProvider>(services);
         AddProvider<FalProvider>(services);
         services.AddSingleton<Providers.Embeddings.IEmbeddingTransport, Providers.Embeddings.OpenAIEmbeddings>();
+        services.AddSingleton<Providers.Embeddings.IEmbeddingTransport, Providers.Embeddings.OpenRouterEmbeddings>();
         services.AddSingleton<Core.Duplicates.IEmbeddingService, Providers.Embeddings.EmbeddingService>();
     }
 

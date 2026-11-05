@@ -21,8 +21,8 @@ KANAL: «{channel}»
 KANALIN KONSEPTİ: «{concept}»
 BİÇİM: {format}; hedef süre {seconds} sn ≈ {words} kelime seslendirme
 ÖRNEK GÖRSELLER (sahnelerde kullanılabilir): {images}
+=====
 GEÇMİŞ — bunları ÜRETME ({history_count} konsept):
 {history}
-=====
 EK İSTEK: «{extra}»
 İSTENEN: {count} yeni konsept. JSON: {"konseptler":[{"baslik":"…","ozet":"…","icerik":"…"}]}

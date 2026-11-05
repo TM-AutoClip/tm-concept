@@ -8,8 +8,9 @@ namespace TMConcept.Core.Concepts;
 
 /// <summary>
 /// Builds the concept prompt from the embedded template of the content language (Prompts/&lt;lang&gt;/concepts.txt). The order follows the
-/// cache: the fixed part (rules + channel + concept + history) comes first and carries the cache mark; the changing part (extra request,
-/// count) comes last. User text is put inside « » (rule 10) with the guillemets themselves removed from it, so it cannot close the block.
+/// cache: the fixed part (rules + channel + concept + format + sample images) comes first and carries the cache mark; the changing part
+/// (history, extra request, count) comes last. The history grows after every batch, so inside the cached part it made every call write a
+/// new cache entry (1.25× input price) and never read one. User text is put inside « » (rule 10) with the guillemets themselves removed from it, so it cannot close the block.
 /// A line whose value is empty is left out (no images, no history, no extra request).
 /// </summary>
 public static class ConceptPromptBuilder
