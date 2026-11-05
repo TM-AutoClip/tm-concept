@@ -19,19 +19,29 @@ namespace TMConcept.Desktop.Startup;
 
 /// <summary>
 /// Startup flow: first run (language → new start or restore → protection and backup password) · unlock (automatic keyring, or master
-/// password) · main window. After the main window opens: the daily backup. Closing the main window ends the app.
+/// password) · main window. After the main window opens: old work files are cleaned and the daily backup runs. Closing the main window
+/// ends the app; while a page works (a generation, a video render) it asks first and stops the work (its Node / Chrome / ffmpeg processes
+/// are ended with it) before the app closes. An exception that reaches the interface thread is logged and shown instead of ending the app.
 /// </summary>
 public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer text, LanguageResources languageResources, UiPreferencesFile preferences,
     AppSession session, WindowHost windows, BackupService backup, IActivityLog activity, ILogger<AppStartup> logger)
 {
     private IClassicDesktopStyleApplicationLifetime? _desktop;
     private Window? _main;
+    private bool _closeConfirmed;
 
     /// <summary>Runs the flow.</summary>
     public void Run(IClassicDesktopStyleApplicationLifetime desktop)
     {
         ArgumentNullException.ThrowIfNull(desktop);
         _desktop = desktop;
+        Dispatcher.UIThread.UnhandledException += (_, e) =>
+        {
+            // A command that throws (a storage error, a full disk) must not take the whole app down: logged with its cause and shown.
+            logger.LogError(e.Exception, "Unhandled exception on the interface thread");
+            activity.Add(ActivityLevel.Error, text.Format("error.generic", e.Exception.Message));
+            e.Handled = true;
+        };
         Application.Current!.DataTemplates.Add(services.GetRequiredService<ViewLocator>());
         var language = preferences.Read().Language;
         text.Use(language.Length > 0 ? language : Localizer.SystemLanguage());
@@ -138,6 +148,7 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
             await services.GetRequiredService<IPriceOverrideStore>().ListAsync(CancellationToken.None).ConfigureAwait(true));
         var shell = services.GetRequiredService<ShellViewModel>();
         var window = new MainWindow { DataContext = shell, Icon = AppIcon() };
+        window.Closing += (_, e) => OnClosing(window, shell, e);
         window.Closed += (_, _) => Quit();
         _main = window;
         windows.Active = window;
@@ -148,6 +159,15 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
         {
             activity.Add(ActivityLevel.Info, message);
             session.PendingMessage = null;
+        }
+
+        try
+        {
+            services.GetRequiredService<Core.Videos.VideoPipeline>().CleanWork();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarning(ex, "Old work files could not be cleaned");
         }
 
         try
@@ -166,6 +186,50 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
             logger.LogError(ex, "Daily backup failed");
             activity.Add(ActivityLevel.Error, text.Format("backup.failed", ex.Message));
         }
+    }
+
+    /// <summary>While work runs: asks, stops the work (waits at most 20 s for it to end its processes), then closes.</summary>
+    private void OnClosing(Window window, ShellViewModel shell, WindowClosingEventArgs e)
+    {
+        if (_closeConfirmed || !shell.AnyWorking)
+        {
+            return;
+        }
+
+        e.Cancel = true;
+        _ = CloseAfterWorkAsync(window, shell);
+    }
+
+    private async Task CloseAfterWorkAsync(Window window, ShellViewModel shell)
+    {
+        try
+        {
+            var answer = await services.GetRequiredService<Dialogs.IConfirmDialog>().AskAsync(text["close.busy.title"], text["close.busy.message"],
+                text["close.busy.confirm"], danger: true).ConfigureAwait(true);
+            if (!answer.Confirmed)
+            {
+                return;
+            }
+
+            logger.LogInformation("Closing while work runs: stopping it first");
+            shell.CancelWork();
+            for (var i = 0; i < 200 && shell.AnyWorking; i++)
+            {
+                await Task.Delay(100).ConfigureAwait(true);
+            }
+
+            if (shell.AnyWorking)
+            {
+                logger.LogWarning("The work did not stop within 20 s; closing anyway");
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Closing with running work failed; closing anyway");
+        }
+
+        _closeConfirmed = true;
+        window.Close();
     }
 
     private static WindowIcon AppIcon()

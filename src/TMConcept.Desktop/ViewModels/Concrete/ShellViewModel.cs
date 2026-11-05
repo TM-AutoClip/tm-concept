@@ -37,6 +37,18 @@ public sealed partial class ShellViewModel : ObservableObject
         _host = host;
         _logger = logger;
         Items = new ObservableCollection<NavItemViewModel>(pages.OrderBy(p => p.Order).Select(p => new NavItemViewModel(this, p)));
+        foreach (var item in Items)
+        {
+            item.Page.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(PageViewModelBase.Working))
+                {
+                    _session.WorkRunning = AnyWorking;
+                    OnPropertyChanged(nameof(CanSwitchProfile));
+                }
+            };
+        }
+
         RefreshTitles();
         _text.LanguageChanged += (_, _) => RefreshTitles();
     }
@@ -61,6 +73,21 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>Whether the activity log panel is open.</summary>
     [ObservableProperty]
     public partial bool LogOpen { get; set; } = true;
+
+    /// <summary>Whether a page runs work (a generation, a video queue).</summary>
+    public bool AnyWorking => Items.Any(i => i.Page.Working);
+
+    /// <summary>The profile can be switched only while no page works for the selected one.</summary>
+    public bool CanSwitchProfile => !AnyWorking;
+
+    /// <summary>Asks every running work to stop (closing the window).</summary>
+    public void CancelWork()
+    {
+        foreach (var item in Items.Where(i => i.Page.Working))
+        {
+            item.Page.CancelWork();
+        }
+    }
 
     /// <summary>The newest log line (shown when the panel is closed).</summary>
     public string LastLine => _log.Entries.Count > 0 ? _log.Entries[^1].Text : string.Empty;
@@ -146,6 +173,11 @@ public sealed partial class ShellViewModel : ObservableObject
         foreach (var item in Items)
         {
             item.IsSelected = item.Page == page;
+        }
+
+        if (Current is { } previous && !ReferenceEquals(previous, page))
+        {
+            previous.Deactivate();
         }
 
         Current = page;

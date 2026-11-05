@@ -11,6 +11,7 @@ using TMConcept.Core.Images;
 using TMConcept.Core.Models;
 using TMConcept.Core.Notifications;
 using TMConcept.Core.Pipeline;
+using TMConcept.Core.Profiles;
 using TMConcept.Core.Speech;
 using TMConcept.Core.Videos;
 using TMConcept.Desktop.Localization;
@@ -21,14 +22,18 @@ namespace TMConcept.Desktop.ViewModels;
 /// <summary>
 /// 🎬 Concept → video: approved concepts (left), the queue (middle; click moves a concept between the two, ↑↓ orders the queue) and the
 /// latest videos (right). Settings: engine, code model, images, narration, subtitles, narration file; they are stored with each queue
-/// item. "Produce the queue in order" makes the videos one by one (one job at a time); a failed item stays in the queue with its error and
-/// can be retried; cancel stops after the running step.
+/// item (an item stored without a code model takes the page's choice, then the saved default). "Produce the queue in order" makes the
+/// videos one by one (one job at a time): before each item the queue is read again, so a removed item is not made, a new one is, and the
+/// order follows ↑↓; each item is made with its own profile. A failed item stays in the queue with its error and can be retried; cancel
+/// stops after the running step. Rows keep their progress across reloads (coming back to the page, adding to the queue).
 /// </summary>
-public sealed partial class VideoViewModel(AppSession session, IConceptStore concepts, IQueueStore queue, IVideoStore videos, VideoPipeline pipeline,
-    IEnumerable<IVideoEngine> engines, IModelCatalog catalog, IStepModelStore steps, StepModelResolver resolver, ConceptEvents events, INotifier notifier,
-    IActivityLog activity, Localizer text, ILogger<VideoViewModel> logger) : PageViewModelBase
+public sealed partial class VideoViewModel(AppSession session, IConceptStore concepts, IQueueStore queue, IVideoStore videos, IProfileStore profiles,
+    VideoPipeline pipeline, IEnumerable<IVideoEngine> engines, IModelCatalog catalog, IStepModelStore steps, StepModelResolver resolver, ConceptEvents events,
+    INotifier notifier, IActivityLog activity, Localizer text, ILogger<VideoViewModel> logger) : PageViewModelBase
 {
+    private readonly IReadOnlyList<IVideoEngine> _engines = engines.ToList();
     private CancellationTokenSource? _cancel;
+    private Guid? _running;
     private bool _attached;
 
     /// <inheritdoc />
@@ -48,6 +53,10 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
     /// <summary>Chosen engine.</summary>
     [ObservableProperty]
     public partial EngineOption? Engine { get; set; }
+
+    /// <summary>Red note when the chosen engine (or ffmpeg) is not installed yet; empty when it is ready.</summary>
+    [ObservableProperty]
+    public partial string EngineNote { get; set; } = string.Empty;
 
     /// <summary>Code models.</summary>
     public ObservableCollection<ModelOption> Models { get; } = [];
@@ -119,13 +128,21 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
 
         Engine ??= Engines.FirstOrDefault();
         Images ??= ImageChoices[0];
-        Speech = session.Profile?.SpeechEngine is { Length: > 0 };
+        if (!Busy)
+        {
+            Speech = session.Profile?.SpeechEngine is { Length: > 0 };
+        }
+
+        RefreshEngineNote();
         await LoadModelsAsync().ConfigureAwait(true);
         await ReloadAsync().ConfigureAwait(true);
     }
 
     /// <inheritdoc />
     public override Task ProfileChangedAsync() => Busy ? Task.CompletedTask : ReloadAsync();
+
+    /// <inheritdoc />
+    public override void CancelWork() => Cancel();
 
     /// <summary>Moves an approved concept into the queue with the current settings.</summary>
     [RelayCommand]
@@ -149,11 +166,11 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
         await ReloadAsync().ConfigureAwait(true);
     }
 
-    /// <summary>Moves a queued concept back to the approved list.</summary>
+    /// <summary>Moves a queued concept back to the approved list (never the item that is being made).</summary>
     [RelayCommand]
     public async Task DequeueAsync(QueueRowViewModel? row)
     {
-        if (row is null || row.Busy)
+        if (row is null || row.Busy || row.Item.Id == _running)
         {
             return;
         }
@@ -181,16 +198,32 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
             return;
         }
 
+        if (session.Profile is not { } profile)
+        {
+            return;
+        }
+
         Busy = true;
         using var cancel = new CancellationTokenSource();
         _cancel = cancel;
+        var tried = new HashSet<Guid>();
         try
         {
-            foreach (var row in Queue.ToList())
+            // The queue is read again before every item: ✕, ↑↓ and new items during the run count; a failed item is tried once per press.
+            while (!cancel.IsCancellationRequested)
             {
-                if (cancel.IsCancellationRequested)
+                var next = (await queue.ListAsync(profile.Id, CancellationToken.None).ConfigureAwait(true)).FirstOrDefault(i => !tried.Contains(i.Id));
+                if (next is null)
                 {
                     break;
+                }
+
+                tried.Add(next.Id);
+                var row = Queue.FirstOrDefault(r => r.Item.Id == next.Id);
+                if (row is null)
+                {
+                    await ReloadAsync().ConfigureAwait(true);
+                    row = Queue.FirstOrDefault(r => r.Item.Id == next.Id) ?? new QueueRowViewModel(next, "?");
                 }
 
                 await ProduceAsync(row, cancel.Token).ConfigureAwait(true);
@@ -232,29 +265,64 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
     [RelayCommand]
     public void Cancel() => _cancel?.Cancel();
 
+    partial void OnBusyChanged(bool value) => Working = value;
+
+    partial void OnEngineChanged(EngineOption? value) => RefreshEngineNote();
+
+    private void RefreshEngineNote()
+    {
+        if (Engine is null || _engines.FirstOrDefault(e => e.Kind == Engine.Kind) is not { } engine)
+        {
+            EngineNote = string.Empty;
+            return;
+        }
+
+        var status = engine.Status();
+        EngineNote = status.Ready ? string.Empty : text.Format("video.engine.missing", engine.Name, string.Join(", ", status.Missing));
+    }
+
     private async Task ProduceAsync(QueueRowViewModel row, CancellationToken cancellationToken)
     {
         row.Error = string.Empty;
         row.Busy = true;
         row.Percent = 0;
+        _running = row.Item.Id;
         try
         {
-            if (session.Profile is not { } profile || await concepts.GetAsync(row.Item.ConceptId, CancellationToken.None).ConfigureAwait(true) is not { } concept)
+            // The item may have been removed (✕) after the run started: then it is not made and costs nothing.
+            var stored = (await queue.ListAsync(row.Item.ProfileId, CancellationToken.None).ConfigureAwait(true)).FirstOrDefault(i => i.Id == row.Item.Id);
+            var concept = stored is null ? null : await concepts.GetAsync(row.Item.ConceptId, CancellationToken.None).ConfigureAwait(true);
+            if (stored is null || concept is not { Status: ConceptStatus.Queued })
+            {
+                logger.LogInformation("Queue item skipped: it was removed or its concept is no longer queued");
+                return;
+            }
+
+            // Each item is made with its own profile, whatever profile is selected now.
+            if (await profiles.GetAsync(row.Item.ProfileId, CancellationToken.None).ConfigureAwait(true) is not { } profile)
             {
                 row.Error = text["video.error.concept"];
                 return;
             }
 
-            var options = JsonSerializer.Deserialize(row.Item.SettingsJson, Core.Render.CoreJsonContext.Default.VideoOptions) ?? Options();
+            var options = JsonSerializer.Deserialize(stored.SettingsJson, Core.Render.CoreJsonContext.Default.VideoOptions) ?? Options();
+            if (options.CodeProvider.Length == 0 && CodeModel?.Model is { } chosen)
+            {
+                // Queued before a code model was chosen: the page's current choice is used.
+                options.CodeProvider = chosen.Provider;
+                options.CodeModel = chosen.Id;
+            }
+
             ResolvedModel model;
             try
             {
-                model = await resolver.ResolveAsync(PipelineSteps.VideoCode, new StepModelChoice
+                var saved = await steps.GetAsync(PipelineSteps.VideoCode, CancellationToken.None).ConfigureAwait(true);
+                model = await resolver.ResolveAsync(PipelineSteps.VideoCode, options.CodeProvider.Length == 0 ? null : new StepModelChoice
                 {
                     Step = PipelineSteps.VideoCode,
                     Provider = options.CodeProvider,
                     Model = options.CodeModel,
-                    OptionsJson = (await steps.GetAsync(PipelineSteps.VideoCode, CancellationToken.None).ConfigureAwait(true))?.OptionsJson ?? "{}",
+                    OptionsJson = saved?.OptionsJson ?? "{}",
                 }, CancellationToken.None).ConfigureAwait(true);
             }
             catch (ModelNotReadyException ex)
@@ -292,6 +360,7 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
         finally
         {
             row.Busy = false;
+            _running = null;
         }
     }
 
@@ -368,32 +437,40 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
             ?? Models[0];
     }
 
+    /// <summary>
+    /// Reads the lists, then rebuilds them in one go (no await between clearing and filling, so two reloads cannot mix). A queue row that
+    /// is still in the queue keeps its object: the running item keeps its progress and stays locked, a failed one keeps its error.
+    /// </summary>
     private async Task ReloadAsync()
     {
-        Approved.Clear();
-        Produced.Clear();
-        var errors = Queue.Where(r => r.Failed).ToDictionary(r => r.Item.Id, r => r.Error);
-        Queue.Clear();
         if (session.Profile is not { } profile)
+        {
+            Approved.Clear();
+            Produced.Clear();
+            Queue.Clear();
+            Badge = string.Empty;
+            return;
+        }
+
+        var approved = await concepts.ListAsync(profile.Id, [ConceptStatus.Approved], false, CancellationToken.None).ConfigureAwait(true);
+        var queued = (await concepts.ListAsync(profile.Id, [ConceptStatus.Queued], false, CancellationToken.None).ConfigureAwait(true)).ToDictionary(c => c.Id);
+        var items = await queue.ListAsync(profile.Id, CancellationToken.None).ConfigureAwait(true);
+        var produced = (await videos.ListAsync(profile.Id, CancellationToken.None).ConfigureAwait(true)).Take(30).Select(v => v.Title).ToList();
+        if (session.Profile?.Id != profile.Id)
         {
             return;
         }
 
-        foreach (var concept in await concepts.ListAsync(profile.Id, [ConceptStatus.Approved], false, CancellationToken.None).ConfigureAwait(true))
-        {
-            Approved.Add(new ConceptCardViewModel(concept, text));
-        }
+        var cards = Approved.ToDictionary(c => c.Id);
+        CollectionSync.Apply(Approved, approved.Select(c => cards.TryGetValue(c.Id, out var card) ? card : new ConceptCardViewModel(c, text)).ToList());
+        var rows = Queue.ToDictionary(r => r.Item.Id);
+        CollectionSync.Apply(Queue, items.Select(item => rows.TryGetValue(item.Id, out var row) ? row : new QueueRowViewModel(item,
+            queued.TryGetValue(item.ConceptId, out var concept) ? "#" + concept.Number.ToString(CultureInfo.InvariantCulture) + " " + concept.Title : "?")).ToList());
 
-        var queued = (await concepts.ListAsync(profile.Id, [ConceptStatus.Queued], false, CancellationToken.None).ConfigureAwait(true)).ToDictionary(c => c.Id);
-        foreach (var item in await queue.ListAsync(profile.Id, CancellationToken.None).ConfigureAwait(true))
+        Produced.Clear();
+        foreach (var title in produced)
         {
-            var title = queued.TryGetValue(item.ConceptId, out var concept) ? "#" + concept.Number.ToString(CultureInfo.InvariantCulture) + " " + concept.Title : "?";
-            Queue.Add(new QueueRowViewModel(item, title) { Error = errors.GetValueOrDefault(item.Id, string.Empty) });
-        }
-
-        foreach (var video in (await videos.ListAsync(profile.Id, CancellationToken.None).ConfigureAwait(true)).Take(30))
-        {
-            Produced.Add(video.Title);
+            Produced.Add(title);
         }
 
         Badge = Queue.Count == 0 ? string.Empty : Queue.Count.ToString(CultureInfo.InvariantCulture);

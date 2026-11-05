@@ -15,6 +15,7 @@
               </DataTemplate>
             </ComboBox.ItemTemplate>
           </ComboBox>
+          <TextBlock Text="{Binding EngineNote}" Classes="error" TextWrapping="Wrap" MaxWidth="320" />
         </StackPanel>
         <StackPanel Margin="0,0,24,8" Spacing="4">
           <TextBlock Text="{DynamicResource video.code_model}" FontWeight="SemiBold" />
@@ -75,7 +76,8 @@
                     <TextBlock Text="{Binding Title}" TextWrapping="Wrap" FontWeight="SemiBold" />
                     <Button Grid.Column="1" Content="↑" Command="{Binding $parent[ItemsControl].((vm:VideoViewModel)DataContext).UpCommand}" CommandParameter="{Binding}" />
                     <Button Grid.Column="2" Content="↓" Command="{Binding $parent[ItemsControl].((vm:VideoViewModel)DataContext).DownCommand}" CommandParameter="{Binding}" />
-                    <Button Grid.Column="3" Content="✕" Command="{Binding $parent[ItemsControl].((vm:VideoViewModel)DataContext).DequeueCommand}" CommandParameter="{Binding}" />
+                    <Button Grid.Column="3" Content="✕" Command="{Binding $parent[ItemsControl].((vm:VideoViewModel)DataContext).DequeueCommand}" CommandParameter="{Binding}"
+                            IsEnabled="{Binding !Busy}" />
                   </Grid>
                   <ProgressBar Value="{Binding Percent}" Maximum="100" IsVisible="{Binding Busy}" />
                   <TextBlock Text="{Binding Step}" Classes="small" IsVisible="{Binding Busy}" />

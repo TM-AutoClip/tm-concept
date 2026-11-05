@@ -64,7 +64,8 @@ public sealed class ConceptPageTests
         fake.Requests.Count.ShouldBe(2);
         fake.KeysUsed.ShouldAllBe(k => k == Secret);
         fake.Requests[0].CacheSystem.ShouldBeTrue();
-        fake.Requests[1].System.ShouldContain("- " + first[19]);
+        fake.Requests[1].User.ShouldContain("- " + first[19]);
+        fake.Requests[1].System.ShouldBe(fake.Requests[0].System, "the cached part must not change between batches");
         page.NewConcepts.Count.ShouldBe(24);
         page.Missing.ShouldBe(1);
         page.LastCost.ShouldNotBeEmpty();
@@ -96,6 +97,118 @@ public sealed class ConceptPageTests
         run.Status.ShouldBe(RunStatus.Failed);
         run.Error.ShouldBe("truncated");
         run.OutputTokens.ShouldBe(3000);
+    }
+
+    [AvaloniaFact]
+    public async Task ACutOffBatchKeepsItsCompleteConceptsAndStopsTheRun()
+    {
+        var full = FakeChat.Json(FakeChat.Distinct(5));
+        var starts = new List<int>();
+        for (var at = full.IndexOf("{\"baslik\"", StringComparison.Ordinal); at >= 0; at = full.IndexOf("{\"baslik\"", at + 1, StringComparison.Ordinal))
+        {
+            starts.Add(at);
+        }
+
+        var fake = new FakeChat()
+            .Answer(_ => throw new ProviderException("cut")
+            {
+                Code = "truncated",
+                ChargedUsage = new ChatUsage(1000, 0, 0, 36_000),
+                PartialText = full[..(starts[3] + 12)],
+            });
+        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
+        await PrepareAsync(h);
+        var page = await PageAsync(h);
+        page.Count = 20;
+
+        await page.GenerateAsync();
+
+        page.NewConcepts.Count.ShouldBe(3);
+        page.Missing.ShouldBe(17);
+        var run = (await h.Get<IRunStore>().ListAsync(DateTimeOffset.UtcNow.AddHours(-1), CancellationToken.None)).Single();
+        run.Status.ShouldBe(RunStatus.Failed);
+        run.Error.ShouldBe("truncated");
+        run.Accepted.ShouldBe(3);
+        run.OutputTokens.ShouldBe(36_000);
+    }
+
+    [AvaloniaFact]
+    public async Task TheBatchBudgetFollowsTheTargetLength()
+    {
+        var fake = new FakeChat().Concepts(FakeChat.Distinct(20));
+        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
+        var profile = await PrepareAsync(h);
+        profile.ContentLanguage = ContentLanguages.Turkish;
+        profile.TargetSeconds = ProfileLimits.SecondsMax;
+        await h.Get<IProfileStore>().SaveAsync(profile, CancellationToken.None);
+        await h.Get<AppSession>().SelectProfileAsync(profile, CancellationToken.None);
+        var page = await PageAsync(h);
+        page.Count = 20;
+
+        await page.GenerateAsync();
+
+        // 20 Turkish 180 s scripts: about 1.7k visible tokens each, plus room for thinking (the old fixed 36k cut such batches off).
+        fake.Requests.Single().MaxOutputTokens.ShouldBeGreaterThan(45_000);
+        fake.Requests.Single().MaxOutputTokens.ShouldBeLessThanOrEqualTo(ConceptOutputBudget.Ceiling);
+    }
+
+    [AvaloniaFact]
+    public async Task AMeasuredAverageIsNotMultipliedByTheThinkingShareAgain()
+    {
+        using var h = new DesktopHarness();
+        var profile = await PrepareAsync(h);
+        var generator = h.Get<ConceptGenerator>();
+        var model = h.Get<TMConcept.Core.Models.IModelCatalog>().Find("anthropic", "claude-sonnet-5-5")!;
+
+        var first = await generator.EstimateAsync(profile, 20, string.Empty, model, CancellationToken.None);
+        var guess = ConceptOutputBudget.TokensPerConcept(profile.ContentLanguage, profile.TargetSeconds) * 20;
+        first.OutputTokensMax.ShouldBeInRange((long)(guess * ConceptGenerator.ThinkingShare.High) - 1, (long)(guess * ConceptGenerator.ThinkingShare.High) + 1);
+
+        await h.Get<IRunStore>().AddAsync(new Run
+        {
+            ProfileId = profile.Id,
+            Kind = RunKind.Concepts,
+            Status = RunStatus.Succeeded,
+            Accepted = 20,
+            OutputTokens = 20 * 2_000,
+            StartedAtUtc = DateTimeOffset.UtcNow,
+        }, CancellationToken.None);
+        var measured = await generator.EstimateAsync(profile, 20, string.Empty, model, CancellationToken.None);
+        measured.OutputTokensMin.ShouldBeInRange((long)(20 * 2_000 * ConceptGenerator.MeasuredBand.Low) - 1, (long)(20 * 2_000 * ConceptGenerator.MeasuredBand.Low) + 1);
+        measured.OutputTokensMax.ShouldBeInRange((long)(20 * 2_000 * ConceptGenerator.MeasuredBand.High) - 1, (long)(20 * 2_000 * ConceptGenerator.MeasuredBand.High) + 1);
+    }
+
+    [AvaloniaFact]
+    public async Task PermanentDeleteSkipsHiddenCardsAndBacksUpFirstWhenItIsLarge()
+    {
+        var confirm = new FakeConfirm();
+        using var h = new DesktopHarness(s => s.AddSingleton<IConfirmDialog>(confirm));
+        var profile = await PrepareAsync(h);
+        var trashed = Enumerable.Range(1, 25).Select(i => new Concept
+        {
+            ProfileId = profile.Id,
+            Title = (i == 1 ? "Hidden topic " : "Visible topic ") + Guid.NewGuid().ToString("N"),
+            Summary = "s",
+            Content = "c",
+            Language = "en",
+            Status = ConceptStatus.Trashed,
+        }).ToList();
+        await h.Get<IConceptStore>().AddAsync(trashed, CancellationToken.None);
+        var trash = h.Get<TrashViewModel>();
+        await trash.ActivateAsync();
+        foreach (var card in trash.Items)
+        {
+            card.IsChecked = true;
+        }
+
+        trash.Search = "Visible";
+        trash.Items.Count.ShouldBe(24);
+
+        await trash.DeletePermanentlyAsync();
+
+        (await h.Get<IConceptStore>().GetAsync(trashed[0].Id, CancellationToken.None)).ShouldNotBeNull("a card hidden by the search is not deleted");
+        (await h.Get<IConceptStore>().GetAsync(trashed[1].Id, CancellationToken.None)).ShouldBeNull();
+        Directory.EnumerateFiles(h.Paths.BackupDirectory, TMConcept.Storage.Backup.BackupRules.ChangePrefix + "*").ShouldNotBeEmpty();
     }
 
     [AvaloniaFact]

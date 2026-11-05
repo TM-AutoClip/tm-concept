@@ -15,6 +15,9 @@ public sealed class AppSession(ISettingsStore store, IProfileStore profiles)
     /// <summary>The selected profile; <c>null</c> when there is none yet.</summary>
     public Profile? Profile { get; private set; }
 
+    /// <summary>Whether a page runs work for the selected profile (set by the main window); the profile cannot be switched or deleted then.</summary>
+    public bool WorkRunning { get; set; }
+
     /// <summary>A message to show on the next page that has a status line (for example after a restore).</summary>
     public string? PendingMessage { get; set; }
 

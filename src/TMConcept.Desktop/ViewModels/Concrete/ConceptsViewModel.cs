@@ -221,7 +221,14 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
 
     partial void OnApprovedSearchChanged(string value) => Filter();
 
-    partial void OnBusyChanged(bool value) => OnPropertyChanged(nameof(HasMissing));
+    partial void OnBusyChanged(bool value)
+    {
+        Working = value;
+        OnPropertyChanged(nameof(HasMissing));
+    }
+
+    /// <inheritdoc />
+    public override void CancelWork() => Cancel();
 
     private async Task RunAsync(int count)
     {
@@ -322,6 +329,11 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
             activity.Add(ActivityLevel.Info, text.Format("concepts.duplicates_dropped", result.RejectedDuplicates));
         }
 
+        if (result.SemanticSkipped > 0)
+        {
+            activity.Add(ActivityLevel.Warning, text.Format("concepts.semantic.failed", result.SemanticSkipped));
+        }
+
         switch (result.ErrorCode)
         {
             case "":
@@ -371,24 +383,37 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         }
     }
 
+    /// <summary>
+    /// Reads both lists first and rebuilds them without an await in between (a reload and a batch arriving at the same time cannot add a
+    /// card twice). Cards that are still listed keep their object, so the open card stays open with its text (a video finishing in the
+    /// background reloads this page).
+    /// </summary>
     private async Task ReloadAsync()
     {
-        NewConcepts.Clear();
-        _approved.Clear();
-        Selected = null;
-        if (session.Profile is { } profile)
+        IReadOnlyList<Concept> fresh = [];
+        IReadOnlyList<Concept> approved = [];
+        var profile = session.Profile;
+        if (profile is not null)
         {
-            foreach (var concept in await concepts.ListAsync(profile.Id, [ConceptStatus.New], false, CancellationToken.None).ConfigureAwait(true))
+            fresh = await concepts.ListAsync(profile.Id, [ConceptStatus.New], false, CancellationToken.None).ConfigureAwait(true);
+            approved = await concepts.ListAsync(profile.Id, [ConceptStatus.Approved], false, CancellationToken.None).ConfigureAwait(true);
+            if (session.Profile?.Id != profile.Id)
             {
-                NewConcepts.Add(new ConceptCardViewModel(concept, text));
-            }
-
-            foreach (var concept in await concepts.ListAsync(profile.Id, [ConceptStatus.Approved], false, CancellationToken.None).ConfigureAwait(true))
-            {
-                _approved.Add(new ConceptCardViewModel(concept, text));
+                return;
             }
         }
 
+        var cards = NewConcepts.Concat(_approved).GroupBy(c => c.Id).ToDictionary(g => g.Key, g => g.First());
+        ConceptCardViewModel Card(Concept concept) => cards.TryGetValue(concept.Id, out var card) ? card : new ConceptCardViewModel(concept, text);
+        var selected = Selected?.Id;
+        CollectionSync.Apply(NewConcepts, fresh.DistinctBy(c => c.Id).Select(Card).ToList());
+        _approved.Clear();
+        _approved.AddRange(approved.DistinctBy(c => c.Id).Select(Card));
+        var again = NewConcepts.FirstOrDefault(c => c.Id == selected);
+        if (!ReferenceEquals(again, Selected))
+        {
+            Selected = again;
+        }
         NewHeader = text.Format("concepts.new", NewConcepts.Count);
         Filter();
         await EstimateAsync().ConfigureAwait(true);
@@ -433,11 +458,7 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
     private void Filter()
     {
         var search = TurkishFold.Fold(ApprovedSearch);
-        Approved.Clear();
-        foreach (var card in _approved.Where(c => search.Length == 0 || TurkishFold.Fold(c.Title).Contains(search, StringComparison.Ordinal)))
-        {
-            Approved.Add(card);
-        }
+        CollectionSync.Apply(Approved, _approved.Where(c => search.Length == 0 || TurkishFold.Fold(c.Title).Contains(search, StringComparison.Ordinal)).ToList());
 
         ApprovedHeader = text.Format("concepts.approved", _approved.Count);
     }

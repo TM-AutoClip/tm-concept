@@ -101,6 +101,79 @@ public sealed class VideoPageTests
         (await h.Get<IVideoStore>().ListAsync(concept.ProfileId, CancellationToken.None)).ShouldBeEmpty();
     }
 
+    [AvaloniaFact]
+    public async Task AnEngineThatIsNotInstalledStopsTheItemBeforeAnythingIsPaid()
+    {
+        var engine = new FakeEngine { Missing = ["node", "ffmpeg"] };
+        var chat = new FakeChat();
+        using var h = Harness(chat, engine);
+        var (page, concept) = await PrepareAsync(h);
+        page.EngineNote.ShouldContain("node, ffmpeg");
+
+        await page.ProduceAllAsync();
+
+        chat.Requests.ShouldBeEmpty();
+        page.Queue.Single().Error.ShouldContain(h.Get<TMConcept.Desktop.Localization.Localizer>()["video.error.missing"]);
+        (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!.Status.ShouldBe(ConceptStatus.Queued);
+    }
+
+    [AvaloniaFact]
+    public async Task AnItemRemovedDuringTheRunIsNotMadeAndANewOneIs()
+    {
+        var engine = new FakeEngine();
+        var chat = new FakeChat();
+        using var h = Harness(chat, engine);
+        var (page, first) = await PrepareAsync(h);
+        var second = new Concept { ProfileId = first.ProfileId, Title = "Iconoclasm", Summary = "s", Content = Content, Language = "en", Status = ConceptStatus.Approved };
+        var third = new Concept { ProfileId = first.ProfileId, Title = "Nika riots", Summary = "s", Content = Content, Language = "en", Status = ConceptStatus.Approved };
+        await h.Get<IConceptStore>().AddAsync([second, third], CancellationToken.None);
+        await page.ActivateAsync();
+        await page.EnqueueAsync(page.Approved.Single(c => c.Id == second.Id));
+        var queue = h.Get<IQueueStore>();
+        chat.Answer(_ =>
+        {
+            // While the first video is being made the user removes the second item (✕) and queues the third.
+            var items = queue.ListAsync(first.ProfileId, CancellationToken.None).GetAwaiter().GetResult();
+            queue.RemoveAsync(items.Single(i => i.ConceptId == second.Id).Id, CancellationToken.None).GetAwaiter().GetResult();
+            h.Get<IConceptStore>().SetStatusAsync([second.Id], ConceptStatus.Approved, CancellationToken.None).GetAwaiter().GetResult();
+            queue.AddAsync(new QueueItem { ProfileId = first.ProfileId, ConceptId = third.Id, Position = 9, SettingsJson = items[0].SettingsJson },
+                CancellationToken.None).GetAwaiter().GetResult();
+            h.Get<IConceptStore>().SetStatusAsync([third.Id], ConceptStatus.Queued, CancellationToken.None).GetAwaiter().GetResult();
+            return Code(engine.SampleCode);
+        }).Answer(_ => Code(engine.SampleCode));
+
+        await page.ProduceAllAsync();
+
+        var made = await h.Get<IVideoStore>().ListAsync(first.ProfileId, CancellationToken.None);
+        made.Select(v => v.Title).ShouldBe(["Greek fire", "Nika riots"], ignoreOrder: true);
+        (await h.Get<IConceptStore>().GetAsync(second.Id, CancellationToken.None))!.Status.ShouldBe(ConceptStatus.Approved);
+        chat.Requests.Count.ShouldBe(2);
+    }
+
+    [AvaloniaFact]
+    public async Task AnItemQueuedBeforeACodeModelWasChosenUsesThePageChoice()
+    {
+        var engine = new FakeEngine();
+        using var h = Harness(new FakeChat().Answer(_ => Code(engine.SampleCode)), engine);
+        await FirstRunTests.CreateAsync(h);
+        var profile = new Profile { Name = "Byzantium", ContentLanguage = ContentLanguages.English, ConceptText = "x", SpeechEngine = string.Empty };
+        await h.Get<IProfileStore>().SaveAsync(profile, CancellationToken.None);
+        await h.Get<AppSession>().SelectProfileAsync(profile, CancellationToken.None);
+        await h.Get<IApiKeyStore>().SaveAsync(new ApiKey { Provider = "anthropic", Label = "k", Secret = "fake-test-key-video-0123" }, CancellationToken.None);
+        var concept = new Concept { ProfileId = profile.Id, Title = "Greek fire", Summary = "s", Content = Content, Language = "en", Status = ConceptStatus.Approved };
+        await h.Get<IConceptStore>().AddAsync([concept], CancellationToken.None);
+        var page = h.Get<VideoViewModel>();
+        await page.ActivateAsync();
+        page.CodeModel!.Model.ShouldBeNull();
+        await page.EnqueueAsync(page.Approved.Single());
+
+        page.CodeModel = page.Models.First(m => m.Model?.Id == "claude-sonnet-5-5");
+        await page.ProduceAllAsync();
+
+        page.Queue.ShouldBeEmpty();
+        (await h.Get<IVideoStore>().ListAsync(profile.Id, CancellationToken.None)).Single().CodeModel.ShouldBe("anthropic/claude-sonnet-5-5");
+    }
+
     internal sealed class FakeEngine : IVideoEngine
     {
         public int FailRenders { get; set; }
@@ -121,7 +194,9 @@ public sealed class VideoPageTests
 
         public string SampleCode => "window.__timelines = window.__timelines || {}; window.__timelines[\"concept\"] = gsap.timeline({ paused: true });";
 
-        public EngineStatus Status() => new(true, []);
+        public IReadOnlyList<string> Missing { get; set; } = [];
+
+        public EngineStatus Status() => new(Missing.Count == 0, Missing);
 
         public Task InstallAsync(bool agreed, IProgress<ToolProgress>? progress, CancellationToken cancellationToken) => Task.CompletedTask;
 
