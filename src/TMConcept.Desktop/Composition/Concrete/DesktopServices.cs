@@ -62,6 +62,8 @@ public static class DesktopServices
         services.AddSingleton<Engines.Tools.ToolDownloader>();
         services.AddSingleton<Core.Tools.IArchiveDownloader>(s => s.GetRequiredService<Engines.Tools.ToolDownloader>());
         services.AddSingleton<Engines.Media.FfmpegMuxer>();
+        services.AddSingleton<Core.Media.IMediaTools, Engines.Media.FfmpegMedia>();
+        services.AddSingleton<Core.Videos.VideoPipeline>();
         services.AddSingleton<Speech.Speech.SpeechModelInstaller>();
         services.AddSingleton<Core.Speech.ISpeechEngine, Speech.Speech.SupertonicSpeechEngine>();
         services.AddSingleton<Core.Speech.ISpeechEngine, Speech.Speech.PiperTurkishSpeechEngine>();
@@ -135,6 +137,7 @@ public static class DesktopServices
 
         services.AddSingleton<Dialogs.IConfirmDialog, Dialogs.ConfirmDialog>();
         AddPage<ConceptsViewModel, ConceptsView>(services);
+        AddPage<VideoViewModel, VideoView>(services);
         AddPage<TrashViewModel, TrashView>(services);
         AddPage<ProfileViewModel, ProfileView>(services);
         AddPage<SettingsViewModel, SettingsView>(services);
