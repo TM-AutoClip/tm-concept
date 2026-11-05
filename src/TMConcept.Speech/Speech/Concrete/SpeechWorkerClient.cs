@@ -12,18 +12,22 @@ namespace TMConcept.Speech.Speech;
 /// <summary>
 /// Talks to the speech worker (<see cref="SpeechWorker"/>): starts the app's own program with <see cref="SpeechWorker.Argument"/> on the first
 /// request, keeps it (and its loaded model) while scenes are spoken one after another, and ends it after <see cref="IdleTimeout"/> without a
-/// request, so its memory goes back to the system. One request at a time. A cancelled request ends the worker (the next one starts it
-/// again). The worker is tied to the app like every other child process.
+/// request, so its memory goes back to the system. One request at a time. A cancelled request kills the worker at once, even in the middle
+/// of a scene (the next request starts it again). The worker is tied to the app like every other child process. Its error output is logged
+/// as a warning line by line, and a failure's log line carries the worker's last messages (read to their end once the worker has exited).
 /// </summary>
 public sealed class SpeechWorkerClient(IChildProcessGuard children, ILogger<SpeechWorkerClient> logger) : IDisposable
 {
+    // Never disposed: without AvailableWaitHandle it holds no unmanaged resource, and a Release that comes late (an idle stop or a request
+    // still finishing while the app closes) must not throw ObjectDisposedException on a thread-pool thread.
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly Lock _sync = new();
     private readonly Queue<string> _errors = new();
     private Process? _process;
     private IDisposable? _adoption;
     private string _startedFor = string.Empty;
     private Timer? _idle;
-    private bool _disposed;
+    private volatile bool _disposed;
 
     /// <summary>How long a worker without requests stays (it holds the voice model in memory).</summary>
     public TimeSpan IdleTimeout { get; init; } = TimeSpan.FromSeconds(60);
@@ -32,7 +36,16 @@ public sealed class SpeechWorkerClient(IChildProcessGuard children, ILogger<Spee
     public string ProgramPath { get; init; } = Environment.ProcessPath ?? string.Empty;
 
     /// <summary>Whether a worker runs now.</summary>
-    public bool Running => _process is { HasExited: false };
+    public bool Running
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _process is { HasExited: false };
+            }
+        }
+    }
 
     /// <summary>Speaks one request with the libraries of <paramref name="libraryFolder"/> and the model of <paramref name="modelFolder"/>.</summary>
     public async Task<SpeechWorkerReply> SpeakAsync(string libraryFolder, string modelFolder, int threads, SpeechWorkerRequest request,
@@ -43,34 +56,22 @@ public sealed class SpeechWorkerClient(IChildProcessGuard children, ILogger<Spee
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             _idle?.Change(Timeout.Infinite, Timeout.Infinite);
             var process = Start(libraryFolder, modelFolder, threads);
-            string? answer;
-            try
-            {
-                await process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(request, SpeechWorkerJsonContext.Default.SpeechWorkerRequest).AsMemory(),
-                    cancellationToken).ConfigureAwait(false);
-                await process.StandardInput.FlushAsync(cancellationToken).ConfigureAwait(false);
-                answer = await process.StandardOutput.ReadLineAsync(cancellationToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                Stop("cancelled");
-                throw;
-            }
-            catch (IOException ex)
-            {
-                // The worker is gone (its input pipe broke): handled like an ended worker below.
-                logger.LogWarning(ex, "The speech worker's pipe broke");
-                answer = null;
-            }
-
+            var answer = await ExchangeAsync(process, request, cancellationToken).ConfigureAwait(false);
             if (answer is null)
             {
-                var exit = process.WaitForExit(5000) ? process.ExitCode.ToString(CultureInfo.InvariantCulture) : "?";
+                var exit = ExitCodeOnceEnded(process);
                 var errors = LastErrors();
-                logger.LogError("The speech worker ended unexpectedly (exit code {Exit}); its last messages: {Errors}", exit, errors);
                 Stop("ended");
+                if (_disposed)
+                {
+                    logger.LogWarning("The speech worker was ended while a scene was spoken because the app is closing; its last messages: {Errors}", errors);
+                    throw new SpeechException("The voice process was ended because the app is closing.") { Code = "engine" };
+                }
+
+                logger.LogError("The speech worker ended unexpectedly (exit code {Exit}); its last messages: {Errors}", exit, errors);
                 throw new SpeechException($"The voice process ended unexpectedly (exit code {exit}). {errors}".Trim()) { Code = "engine" };
             }
 
@@ -78,12 +79,14 @@ public sealed class SpeechWorkerClient(IChildProcessGuard children, ILogger<Spee
                 ?? throw new SpeechException("The voice process gave an empty answer.") { Code = "engine" };
             if (!reply.Ok)
             {
-                logger.LogError("The speech worker could not speak ({Code}): {Error}; its last messages: {Errors}", reply.Code, reply.Error, LastErrors());
                 if (reply.Code == "model")
                 {
-                    // The worker stops after a model or library failure.
+                    // The worker stops after a model or library failure; once it has ended its error output (sherpa-onnx's own reason) is
+                    // read to the end, so the log line below has it. The two answers come on separate pipes and may arrive in any order.
                     Stop("failed");
                 }
+
+                logger.LogError("The speech worker could not speak ({Code}): {Error}; its last messages: {Errors}", reply.Code, reply.Error, LastErrors());
             }
 
             return reply;
@@ -96,7 +99,7 @@ public sealed class SpeechWorkerClient(IChildProcessGuard children, ILogger<Spee
         }
         finally
         {
-            if (!_disposed && _process is not null)
+            if (!_disposed && Running)
             {
                 _idle ??= new Timer(_ => StopWhenIdle());
                 _idle.Change(IdleTimeout, Timeout.InfiniteTimeSpan);
@@ -116,16 +119,127 @@ public sealed class SpeechWorkerClient(IChildProcessGuard children, ILogger<Spee
 
         _disposed = true;
         _idle?.Dispose();
+
+        // Ending the worker first also ends a request that is still being spoken (it reads the end of the worker's output at once).
         Stop("closing");
-        _gate.Dispose();
+
+        // Then an idle stop or that request finishes before the app goes on closing (and before its logging is gone).
+        if (_gate.Wait(TimeSpan.FromSeconds(10)))
+        {
+            _gate.Release();
+        }
+        else
+        {
+            logger.LogWarning("A speech request or an idle stop had not finished 10 seconds after the speech worker was closed");
+        }
+    }
+
+    /// <summary>Sends one request and reads its answer line (null: the worker ended). A cancel kills the worker, so the read ends at once.</summary>
+    private async Task<string?> ExchangeAsync(Process process, SpeechWorkerRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            string? answer;
+
+            // The read below ignores the token once it waits (a process's output is a synchronous pipe underneath): killing the worker
+            // ends it with the end of the stream.
+            using (cancellationToken.Register(() => KillForCancel(process)))
+            {
+                await process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(request, SpeechWorkerJsonContext.Default.SpeechWorkerRequest).AsMemory(),
+                    cancellationToken).ConfigureAwait(false);
+                await process.StandardInput.FlushAsync(cancellationToken).ConfigureAwait(false);
+                answer = await process.StandardOutput.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            // A kill gives the end of the stream (null) or a broken pipe: that is the cancel.
+            cancellationToken.ThrowIfCancellationRequested();
+            return answer;
+        }
+        catch (OperationCanceledException)
+        {
+            Cancelled(request);
+            throw;
+        }
+        catch (IOException) when (cancellationToken.IsCancellationRequested)
+        {
+            Cancelled(request);
+            throw new OperationCanceledException(cancellationToken);
+        }
+        catch (IOException ex)
+        {
+            // The worker is gone (its input pipe broke): handled like an ended worker.
+            logger.LogWarning(ex, "The speech worker's pipe broke");
+            return null;
+        }
+        catch (Exception ex) when (_disposed && ex is ObjectDisposedException or InvalidOperationException)
+        {
+            // The app closed the worker (Dispose) while this request used it.
+            logger.LogWarning(ex, "The speech worker was closed by the app while a scene was spoken");
+            throw new SpeechException("The voice process was ended because the app is closing.", ex) { Code = "engine" };
+        }
+    }
+
+    /// <summary>The exit code of a worker whose output ended ("?" if it does not exit within 5 seconds); its error output is read to the end.</summary>
+    private string ExitCodeOnceEnded(Process process)
+    {
+        try
+        {
+            if (!process.WaitForExit(5000))
+            {
+                return "?";
+            }
+
+            // Only after the exit is confirmed: the call without a timeout also waits until the error output has been read to its end.
+            process.WaitForExit();
+            return process.ExitCode.ToString(CultureInfo.InvariantCulture);
+        }
+        catch (InvalidOperationException ex) when (_disposed)
+        {
+            logger.LogWarning(ex, "The exit code of the speech worker could not be read: the app had already closed it");
+            return "?";
+        }
+    }
+
+    private void KillForCancel(Process process)
+    {
+        try
+        {
+            process.Kill(entireProcessTree: true);
+            logger.LogInformation("The speech request was cancelled; the speech worker is killed");
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or Win32Exception or NotSupportedException)
+        {
+            // InvalidOperationException: it had already ended (or was closed); the read ends anyway.
+            logger.LogInformation(ex, "The speech worker could not be killed after a cancel (it may have ended already)");
+        }
+    }
+
+    /// <summary>Ends the worker after a cancel and removes the half-written sound file of the request.</summary>
+    private void Cancelled(SpeechWorkerRequest request)
+    {
+        Stop("cancelled");
+        try
+        {
+            if (File.Exists(request.OutputWav))
+            {
+                File.Delete(request.OutputWav);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarning(ex, "The sound file of a cancelled speech request could not be removed ({File})", Path.GetFileName(request.OutputWav));
+        }
     }
 
     private Process Start(string libraryFolder, string modelFolder, int threads)
     {
         var key = string.Join('|', libraryFolder, modelFolder, threads.ToString(CultureInfo.InvariantCulture));
-        if (_process is { HasExited: false } running && key == _startedFor)
+        lock (_sync)
         {
-            return running;
+            if (_process is { HasExited: false } running && key == _startedFor)
+            {
+                return running;
+            }
         }
 
         Stop("restart");
@@ -152,6 +266,11 @@ public sealed class SpeechWorkerClient(IChildProcessGuard children, ILogger<Spee
         info.ArgumentList.Add(threads.ToString(CultureInfo.InvariantCulture));
         var process = new Process { StartInfo = info };
         process.ErrorDataReceived += (_, e) => Error(e.Data);
+        lock (_errors)
+        {
+            _errors.Clear();
+        }
+
         try
         {
             if (!process.Start())
@@ -166,7 +285,7 @@ public sealed class SpeechWorkerClient(IChildProcessGuard children, ILogger<Spee
             throw new SpeechException("The voice process could not be started: " + ex.Message, ex) { Code = "engine" };
         }
 
-        _adoption = children.Adopt(process);
+        var adoption = children.Adopt(process);
         try
         {
             process.PriorityClass = ProcessPriorityClass.BelowNormal;
@@ -177,11 +296,11 @@ public sealed class SpeechWorkerClient(IChildProcessGuard children, ILogger<Spee
         }
 
         process.BeginErrorReadLine();
-        _process = process;
-        _startedFor = key;
-        lock (_errors)
+        lock (_sync)
         {
-            _errors.Clear();
+            _process = process;
+            _adoption = adoption;
+            _startedFor = key;
         }
 
         logger.LogInformation("Speech worker started (pid {Pid}, {Threads} threads)", process.Id, threads);
@@ -205,31 +324,62 @@ public sealed class SpeechWorkerClient(IChildProcessGuard children, ILogger<Spee
         }
     }
 
-    /// <summary>Ends the worker: its input is closed (it exits by itself); after 5 seconds it is killed.</summary>
+    /// <summary>
+    /// Ends the worker: its input is closed (it exits by itself); after 5 seconds it is killed. Once it has exited its error output is read to
+    /// the end. Safe from two threads (closing and an idle stop): only one of them takes the worker.
+    /// </summary>
     private void Stop(string reason)
     {
-        var process = _process;
+        Process? process;
+        IDisposable? adoption;
+        lock (_sync)
+        {
+            process = _process;
+            adoption = _adoption;
+            _process = null;
+            _adoption = null;
+            _startedFor = string.Empty;
+        }
+
         if (process is null)
         {
             return;
         }
 
-        _process = null;
-        _startedFor = string.Empty;
         try
         {
-            if (!process.HasExited)
+            var exited = process.HasExited;
+            if (!exited)
             {
-                process.StandardInput.Close();
-                if (!process.WaitForExit(5000))
+                try
+                {
+                    process.StandardInput.Close();
+                }
+                catch (IOException ex)
+                {
+                    // A worker that is just ending (killed after a cancel) has already closed its end of the pipe.
+                    logger.LogInformation(ex, "The speech worker's input could not be closed ({Reason}); it is ending already", reason);
+                }
+
+                exited = process.WaitForExit(5000);
+                if (!exited)
                 {
                     logger.LogWarning("The speech worker did not end within 5 seconds ({Reason}); it is killed", reason);
                     process.Kill(entireProcessTree: true);
-                    process.WaitForExit(5000);
+                    exited = process.WaitForExit(5000);
                 }
             }
 
-            logger.LogInformation("Speech worker ended ({Reason})", reason);
+            if (exited)
+            {
+                // Only after the exit is confirmed: waits until the error output has been read to its end.
+                process.WaitForExit();
+                logger.LogInformation("Speech worker ended ({Reason})", reason);
+            }
+            else
+            {
+                logger.LogWarning("The speech worker had not ended 5 seconds after it was killed ({Reason})", reason);
+            }
         }
         catch (Exception ex) when (ex is InvalidOperationException or Win32Exception or IOException)
         {
@@ -237,8 +387,7 @@ public sealed class SpeechWorkerClient(IChildProcessGuard children, ILogger<Spee
         }
         finally
         {
-            _adoption?.Dispose();
-            _adoption = null;
+            adoption?.Dispose();
             process.Dispose();
         }
     }
@@ -250,7 +399,9 @@ public sealed class SpeechWorkerClient(IChildProcessGuard children, ILogger<Spee
             return;
         }
 
-        logger.LogDebug("speech worker: {Line}", line);
+        // The worker writes only failures there (sherpa-onnx runs without its debug output), so every line reaches the log, also one that
+        // arrives after the request has already returned.
+        logger.LogWarning("speech worker: {Line}", line);
         lock (_errors)
         {
             _errors.Enqueue(line);
