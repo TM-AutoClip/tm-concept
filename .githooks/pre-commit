@@ -1,0 +1,63 @@
+#!/bin/sh
+# pre-commit: blocks the commit when the staged content contains a secret or personal data.
+#
+# Install once: git config core.hooksPath .githooks   (or run tools/install-hooks.sh / tools/install-hooks.ps1)
+#
+# 1. tools/scan-secrets.py (in this repository) always runs: token / key / home-path / personal e-mail patterns.
+# 2. An extra scanner of your own can run too: set the environment variable TMCONCEPT_EXTRA_SCANNER to its path, or
+#    keep it next to this repository as ../betikler/kisisel-bilgi-tara.py (the maintainer's private scanner with
+#    personal keywords). With `git config tmconcept.requireExtraScanner true` the commit stops when that scanner
+#    cannot be found.
+# The hook fails closed: no Python, a crash or a finding stops the commit. Matched values are never printed.
+
+root=$(git rev-parse --show-toplevel) || exit 1
+
+PY=""
+for candidate in "py -3" python3 python; do
+    if $candidate -c "import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)" >/dev/null 2>&1; then
+        PY="$candidate"
+        break
+    fi
+done
+if [ -z "$PY" ]; then
+    echo "pre-commit: Python 3 was not found (py / python3 / python); the secret scan cannot run, commit stopped." >&2
+    exit 1
+fi
+
+run_scanner() {
+    label="$1"
+    shift
+    output=$(PYTHONIOENCODING=utf-8 $PY -I "$@" 2>&1)
+    code=$?
+    if [ $code -eq 0 ]; then
+        return 0
+    fi
+    if [ $code -eq 1 ]; then
+        echo "pre-commit: commit STOPPED by $label; the staged content has secrets or personal data:" >&2
+    else
+        echo "pre-commit: $label could not run (exit $code); commit stopped:" >&2
+    fi
+    printf '%s\n' "$output" | while IFS= read -r line; do
+        [ -n "$line" ] && echo "  $line" >&2
+    done
+    exit 1
+}
+
+run_scanner "tools/scan-secrets.py" "$root/tools/scan-secrets.py" --staged --root "$root"
+
+extra="${TMCONCEPT_EXTRA_SCANNER:-}"
+if [ -z "$extra" ] && [ -f "$root/../betikler/kisisel-bilgi-tara.py" ]; then
+    extra="$root/../betikler/kisisel-bilgi-tara.py"
+fi
+if [ -n "$extra" ]; then
+    if [ ! -f "$extra" ]; then
+        echo "pre-commit: the extra scanner was not found; commit stopped." >&2
+        exit 1
+    fi
+    run_scanner "the extra scanner" "$extra" --staged --kok "$root"
+elif [ "$(git config --bool tmconcept.requireExtraScanner)" = "true" ]; then
+    echo "pre-commit: tmconcept.requireExtraScanner is set but no extra scanner was found; commit stopped." >&2
+    exit 1
+fi
+
+exit 0

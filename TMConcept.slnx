@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/dev/">
+    <Project Path="dev/TMConcept.Analyzers/TMConcept.Analyzers.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/TMConcept.Core/TMConcept.Core.csproj" />
+    <Project Path="src/TMConcept.Providers/TMConcept.Providers.csproj" />
+    <Project Path="src/TMConcept.Engines/TMConcept.Engines.csproj" />
+    <Project Path="src/TMConcept.Speech/TMConcept.Speech.csproj" />
+    <Project Path="src/TMConcept.Storage/TMConcept.Storage.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TMConcept.Tests/TMConcept.Tests.csproj" />
+  </Folder>
+</Solution>

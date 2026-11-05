@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Video engines (HyperFrames, Remotion, Revideo), tool installer (Node, ffmpeg, Chrome, npm), ffmpeg muxing, thumbnails. Depends on Core only. -->
+  <ItemGroup>
+    <ProjectReference Include="..\TMConcept.Core\TMConcept.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="TMConcept.Tests" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Online chat, image, speech and embedding clients; model catalogs (embedded JSON); key guides. Depends on Core only. -->
+  <ItemGroup>
+    <ProjectReference Include="..\TMConcept.Core\TMConcept.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="TMConcept.Tests" />
+  </ItemGroup>
+</Project>

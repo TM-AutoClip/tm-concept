@@ -1,0 +1,53 @@
+#!/bin/sh
+# pre-push: checks every commit that is about to be pushed.
+#
+# - When `git config tmconcept.pushIdentity "Name <address>"` is set, the author and the committer of every pushed commit
+#   must be exactly that identity (the project pushes with a neutral bot identity; a personal identity must never leak).
+# - Every pushed commit message is scanned with tools/scan-secrets.py.
+# Fails closed: a mismatch, a finding or a scanner error stops the push.
+
+root=$(git rev-parse --show-toplevel) || exit 1
+expected=$(git config tmconcept.pushIdentity)
+zero=0000000000000000000000000000000000000000
+
+PY=""
+for candidate in "py -3" python3 python; do
+    if $candidate -c "import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)" >/dev/null 2>&1; then
+        PY="$candidate"
+        break
+    fi
+done
+if [ -z "$PY" ]; then
+    echo "pre-push: Python 3 was not found; commit messages cannot be scanned, push stopped." >&2
+    exit 1
+fi
+
+status=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+    [ "$local_sha" = "$zero" ] && continue
+    if [ "$remote_sha" = "$zero" ]; then
+        range="$local_sha"
+    else
+        range="$remote_sha..$local_sha"
+    fi
+    for commit in $(git rev-list "$range"); do
+        if [ -n "$expected" ]; then
+            author=$(git log -1 --format='%an <%ae>' "$commit")
+            committer=$(git log -1 --format='%cn <%ce>' "$commit")
+            if [ "$author" != "$expected" ] || [ "$committer" != "$expected" ]; then
+                echo "pre-push: commit $commit is not signed with the project identity (tmconcept.pushIdentity)." >&2
+                status=1
+            fi
+        fi
+        output=$(git log -1 --format='%B' "$commit" | PYTHONIOENCODING=utf-8 $PY -I "$root/tools/scan-secrets.py" --stdin 2>&1)
+        code=$?
+        if [ $code -ne 0 ]; then
+            echo "pre-push: commit message of $commit failed the secret scan (exit $code):" >&2
+            printf '%s\n' "$output" >&2
+            status=1
+        fi
+    done
+done
+
+[ $status -ne 0 ] && echo "pre-push: push stopped." >&2
+exit $status

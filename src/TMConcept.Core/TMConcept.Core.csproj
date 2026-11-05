@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Domain model, rules, prompt builders, parsers, duplicate check, cost math and every abstraction. Depends on nothing of ours. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="TMConcept.Tests" />
+  </ItemGroup>
+</Project>

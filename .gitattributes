@@ -1,0 +1,15 @@
+# Line endings are stored as LF in the repository.
+* text=auto eol=lf
+
+# Windows scripts use CRLF.
+*.ps1   text eol=crlf
+*.cmd   text eol=crlf
+
+# Binary files.
+*.png   binary
+*.ico   binary
+*.ttf   binary
+*.gz    binary
+*.zip   binary
+*.exe   binary
+*.dll   binary
