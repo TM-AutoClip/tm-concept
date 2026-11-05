@@ -1,0 +1,153 @@
+using Microsoft.EntityFrameworkCore;
+using Shouldly;
+using TMConcept.Core.Concepts;
+using TMConcept.Core.Duplicates;
+using TMConcept.Core.Keys;
+using TMConcept.Core.Profiles;
+using TMConcept.Core.Videos;
+using TMConcept.Storage.Stores;
+
+namespace TMConcept.Tests.Storage;
+
+public sealed class StoreTests
+{
+    private static readonly CancellationToken None = CancellationToken.None;
+
+    private static async Task<(StorageHarness H, Profile P)> WithProfileAsync()
+    {
+        var h = await StorageHarness.CreatedAsync();
+        var profile = new Profile { Name = "Channel" };
+        await new ProfileStore(h.Factory).SaveAsync(profile, None);
+        return (h, profile);
+    }
+
+    private static Concept New(Profile p, string title) => new() { ProfileId = p.Id, Title = title, Summary = "s", Content = "[x]\nc", Language = "en" };
+
+    [Fact]
+    public async Task NumbersIncreaseAndAreNeverReused()
+    {
+        var (h, p) = await WithProfileAsync();
+        using var _ = h;
+        var concepts = new ConceptStore(h.Factory);
+        var a = New(p, "A");
+        var b = New(p, "B");
+        await concepts.AddAsync([a, b], None);
+        a.Number.ShouldBe(1);
+        b.Number.ShouldBe(2);
+
+        await concepts.SetStatusAsync([b.Id], ConceptStatus.Trashed, None);
+        (await concepts.DeletePermanentlyAsync([b.Id], None)).ShouldBe(1);
+        var c = New(p, "C");
+        await concepts.AddAsync([c], None);
+        c.Number.ShouldBe(3);
+    }
+
+    [Fact]
+    public async Task PermanentDeleteRemovesOnlyTrashedRowsAndTheirEmbeddings()
+    {
+        var (h, p) = await WithProfileAsync();
+        using var _ = h;
+        var concepts = new ConceptStore(h.Factory);
+        var kept = New(p, "Kept");
+        var trashed = New(p, "Trashed");
+        await concepts.AddAsync([kept, trashed], None);
+        await concepts.SetStatusAsync([trashed.Id], ConceptStatus.Trashed, None);
+        await new EmbeddingStore(h.Factory).SaveAsync([new ConceptEmbedding { ConceptId = trashed.Id, ProfileId = p.Id, Model = "m", Dimensions = 1, Vector = [0, 0, 128, 63] }], None);
+
+        (await concepts.DeletePermanentlyAsync([kept.Id, trashed.Id], None)).ShouldBe(1);
+
+        (await concepts.GetAsync(trashed.Id, None)).ShouldBeNull();
+        (await concepts.GetAsync(kept.Id, None)).ShouldNotBeNull();
+        (await concepts.HistoryAsync(p.Id, None)).Select(s => s.Title).ShouldBe(["Kept"]);
+        (await new EmbeddingStore(h.Factory).ListAsync(p.Id, "m", None)).ShouldBeEmpty();
+        await using var db = h.Factory.CreateDbContext();
+        (await db.Concepts.CountAsync(TestContext.Current.CancellationToken)).ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task ListWithoutContentLeavesTheContentEmpty()
+    {
+        var (h, p) = await WithProfileAsync();
+        using var _ = h;
+        var concepts = new ConceptStore(h.Factory);
+        await concepts.AddAsync([New(p, "A")], None);
+        var light = await concepts.ListAsync(p.Id, [ConceptStatus.New], withContent: false, None);
+        light.Single().Content.ShouldBeEmpty();
+        light.Single().Summary.ShouldBe("s");
+        (await concepts.ListAsync(p.Id, [ConceptStatus.New], withContent: true, None)).Single().Content.ShouldNotBeEmpty();
+    }
+
+    [Fact]
+    public async Task DeletingAConceptKeepsItsVideoRecord()
+    {
+        var (h, p) = await WithProfileAsync();
+        using var _ = h;
+        var concepts = new ConceptStore(h.Factory);
+        var c = New(p, "Made");
+        await concepts.AddAsync([c], None);
+        var videos = new VideoStore(h.Factory);
+        var video = new VideoRecord { ConceptId = c.Id, ProfileId = p.Id, Title = "Made" };
+        await videos.AddAsync(video, [new VideoCost { Step = "code", Usd = 0.1m, Exact = true }], None);
+
+        await concepts.SetStatusAsync([c.Id], ConceptStatus.Trashed, None);
+        await concepts.DeletePermanentlyAsync([c.Id], None);
+
+        var kept = await videos.GetAsync(video.Id, None);
+        kept.ShouldNotBeNull();
+        kept.ConceptId.ShouldBeNull();
+        (await videos.CostsAsync(video.Id, None)).Single().Usd.ShouldBe(0.1m);
+    }
+
+    [Fact]
+    public async Task DeletingAProfileRemovesEverythingOfIt()
+    {
+        var (h, p) = await WithProfileAsync();
+        using var _ = h;
+        var concepts = new ConceptStore(h.Factory);
+        var c = New(p, "A");
+        await concepts.AddAsync([c], None);
+        await new QueueStore(h.Factory).AddAsync(new QueueItem { ProfileId = p.Id, ConceptId = c.Id }, None);
+        await new VideoStore(h.Factory).AddAsync(new VideoRecord { ConceptId = c.Id, ProfileId = p.Id, Title = "A" }, [], None);
+        await new ProfileStore(h.Factory).SaveImageAsync(new ProfileImage { ProfileId = p.Id, FileName = "a.png" }, None);
+
+        await new ProfileStore(h.Factory).DeleteAsync(p.Id, None);
+
+        await using var db = h.Factory.CreateDbContext();
+        var ct = TestContext.Current.CancellationToken;
+        (await db.Concepts.CountAsync(ct)).ShouldBe(0);
+        (await db.QueueItems.CountAsync(ct)).ShouldBe(0);
+        (await db.Videos.CountAsync(ct)).ShouldBe(0);
+        (await db.ProfileImages.CountAsync(ct)).ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task QueueKeepsItsOrder()
+    {
+        var (h, p) = await WithProfileAsync();
+        using var _ = h;
+        var concepts = new ConceptStore(h.Factory);
+        var a = New(p, "A");
+        var b = New(p, "B");
+        await concepts.AddAsync([a, b], None);
+        var queue = new QueueStore(h.Factory);
+        var qa = new QueueItem { ProfileId = p.Id, ConceptId = a.Id };
+        var qb = new QueueItem { ProfileId = p.Id, ConceptId = b.Id };
+        await queue.AddAsync(qa, None);
+        await queue.AddAsync(qb, None);
+        await queue.ReorderAsync(p.Id, [qb.Id, qa.Id], None);
+        (await queue.ListAsync(p.Id, None)).Select(q => q.ConceptId).ShouldBe([b.Id, a.Id]);
+    }
+
+    [Fact]
+    public async Task ApiKeysRoundTrip()
+    {
+        using var h = await StorageHarness.CreatedAsync();
+        var keys = new ApiKeyStore(h.Factory);
+        var key = new ApiKey { Provider = "anthropic", Label = "personal", Secret = "value-1" };
+        await keys.SaveAsync(key, None);
+        await keys.MarkOkAsync(key.Id, DateTimeOffset.UtcNow, None);
+        var read = (await keys.ListAsync("anthropic", None)).Single();
+        read.Secret.ShouldBe("value-1");
+        read.LastOkAtUtc.ShouldNotBeNull();
+    }
+}

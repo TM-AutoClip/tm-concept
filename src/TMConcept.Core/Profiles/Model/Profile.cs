@@ -33,6 +33,9 @@ public sealed class Profile
     /// <summary>Speech speed (1 = normal).</summary>
     public double SpeechSpeed { get; set; } = 1.0;
 
+    /// <summary>Last concept number given in this profile (numbers are never reused, even after a permanent delete).</summary>
+    public int ConceptCounter { get; set; }
+
     /// <summary>Created (UTC).</summary>
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
 
