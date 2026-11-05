@@ -92,8 +92,11 @@
                     <TextBlock Text="{Binding FileName}" Classes="small" />
                     <TextBox Text="{Binding Caption}" PlaceholderText="{DynamicResource profile.images.caption}" MaxLength="200" />
                   </StackPanel>
-                  <Button Grid.Column="2" Content="✕" VerticalAlignment="Top"
-                          Command="{Binding $parent[ItemsControl].((vm:ProfileViewModel)DataContext).RemoveImageCommand}" CommandParameter="{Binding}" />
+                  <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Top">
+                    <Button Content="{DynamicResource profile.describe}" ToolTip.Tip="{DynamicResource profile.describe.tip}"
+                            Command="{Binding $parent[ItemsControl].((vm:ProfileViewModel)DataContext).DescribeImageCommand}" CommandParameter="{Binding}" />
+                    <Button Content="✕" Command="{Binding $parent[ItemsControl].((vm:ProfileViewModel)DataContext).RemoveImageCommand}" CommandParameter="{Binding}" />
+                  </StackPanel>
                 </Grid>
               </DataTemplate>
             </ItemsControl.ItemTemplate>

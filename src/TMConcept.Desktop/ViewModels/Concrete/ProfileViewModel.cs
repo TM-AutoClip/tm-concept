@@ -19,7 +19,8 @@ namespace TMConcept.Desktop.ViewModels;
 /// value missing is not possible. Deleting a profile is confirmed and permanent; video files stay on disk.
 /// </summary>
 public sealed partial class ProfileViewModel(AppSession session, IProfileStore profiles, ITemplateSource templates, IAppPaths paths, FileDialogs dialogs,
-    IConfirmDialog confirm, IActivityLog activity, Localizer text, ILogger<ProfileViewModel> logger, ProfileSpeechViewModel speech) : PageViewModelBase
+    IConfirmDialog confirm, IActivityLog activity, Localizer text, ILogger<ProfileViewModel> logger, ProfileSpeechViewModel speech,
+    Core.Images.ImageDescriber describer) : PageViewModelBase
 {
     /// <summary>The narration part.</summary>
     public ProfileSpeechViewModel Speech { get; } = speech;
@@ -257,6 +258,53 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
                 logger.LogWarning(ex, "Sample image could not be added");
                 Status = text.Format("profile.images.failed", Path.GetFileName(file), ex.Message);
             }
+        }
+    }
+
+    /// <summary>"Describe with a model": a paid vision request after a confirmation; the caption replaces the image's text.</summary>
+    [RelayCommand]
+    private async Task DescribeImageAsync(ProfileImageViewModel? image)
+    {
+        if (image is null)
+        {
+            return;
+        }
+
+        var answer = await confirm.AskAsync(text["profile.describe.title"], text["profile.describe.message"], text["profile.describe.confirm"], danger: false)
+            .ConfigureAwait(true);
+        if (!answer.Confirmed)
+        {
+            return;
+        }
+
+        try
+        {
+            var bytes = await File.ReadAllBytesAsync(image.FullPath).ConfigureAwait(true);
+            var mime = Path.GetExtension(image.FullPath).ToLowerInvariant() switch
+            {
+                ".png" => "image/png",
+                ".webp" => "image/webp",
+                ".gif" => "image/gif",
+                _ => "image/jpeg",
+            };
+            var (caption, cost) = await describer.DescribeAsync(bytes, mime, Language?.Value ?? ContentLanguages.English, CancellationToken.None)
+                .ConfigureAwait(true);
+            image.Caption = caption;
+            activity.Add(ActivityLevel.Info, text.Format("profile.describe.done", text.Usd(cost)));
+        }
+        catch (Core.Models.ModelNotReadyException)
+        {
+            Status = text["profile.describe.no_model"];
+        }
+        catch (Core.Providers.ProviderException ex)
+        {
+            logger.LogWarning("Describe failed ({Code})", ex.Code);
+            Status = text.Format("profile.describe.failed", ProviderErrors.Text(text, ex.Code));
+        }
+        catch (IOException ex)
+        {
+            logger.LogWarning(ex, "Describe failed");
+            Status = text.Format("error.generic", ex.Message);
         }
     }
 

@@ -67,6 +67,10 @@ public static class DesktopServices
         services.AddSingleton<Core.Speech.ISpeechEngine, Speech.Speech.PiperTurkishSpeechEngine>();
         services.AddSingleton<Core.Speech.ISpeechEngine, Providers.Speech.OpenAISpeechEngine>();
         services.AddSingleton<Core.Speech.SpeechService>();
+        services.AddSingleton<Core.Images.IImageEngine, Providers.Images.FalImageEngine>();
+        services.AddSingleton<Core.Images.IImageEngine, Providers.Images.OpenAIImageEngine>();
+        services.AddSingleton<Core.Images.IImageEngine, Providers.Images.ZaiImageEngine>();
+        services.AddSingleton<Core.Images.ImageDescriber>();
         services.AddSingleton<ProfileSpeechViewModel>();
         services.AddSingleton<Engines.Tools.ToolInstaller>();
         services.AddSingleton<Engines.Engines.ChromeLocator>();

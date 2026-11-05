@@ -271,5 +271,13 @@
   "speech.supertonic.license.title": "Supertonic 3 license (OpenRAIL-M)",
   "speech.supertonic.license.message": "The Supertonic 3 voice model is licensed under OpenRAIL-M. Its use restrictions also apply to you, among them: do not publish machine-generated content without clearly saying it is machine-generated; do not impersonate a person; do not use it to harm or deceive people. The full text is in THIRD-PARTY-NOTICES. Do you accept these terms?",
   "speech.piper.license.title": "Piper Turkish voice: non-commercial only",
-  "speech.piper.license.message": "The dfki Turkish voice is licensed CC BY-NC-SA 4.0: you may NOT use it commercially (for example on a monetized channel or for a client). The license carries over to every video made with it, and those videos keep a permanent \"non-commercial\" label. Only download it if you accept this."
+  "speech.piper.license.message": "The dfki Turkish voice is licensed CC BY-NC-SA 4.0: you may NOT use it commercially (for example on a monetized channel or for a client). The license carries over to every video made with it, and those videos keep a permanent \"non-commercial\" label. Only download it if you accept this.",
+  "profile.describe": "Describe with a model",
+  "profile.describe.tip": "Paid: the image is sent to the model chosen for \"Describe a sample image\".",
+  "profile.describe.title": "Send the image to a model?",
+  "profile.describe.message": "The image is sent to the provider of the model chosen for \"Describe a sample image\" (Settings → Models). This is a paid request.",
+  "profile.describe.confirm": "Send",
+  "profile.describe.done": "The image was described · {0}",
+  "profile.describe.no_model": "Choose a vision model for \"Describe a sample image\" in Settings → Models and add its key.",
+  "profile.describe.failed": "Describing failed: {0}"
 }

@@ -271,5 +271,13 @@
   "speech.supertonic.license.title": "Supertonic 3 lisansı (OpenRAIL-M)",
   "speech.supertonic.license.message": "Supertonic 3 ses modeli OpenRAIL-M lisanslıdır. Kullanım kısıtları senin için de geçerlidir; bunlardan bazıları: makine üretimi içeriği makine üretimi olduğunu açıkça belirtmeden yayınlama; bir kişiyi taklit etme; insanlara zarar vermek ya da onları aldatmak için kullanma. Tam metin THIRD-PARTY-NOTICES'ta. Bu şartları kabul ediyor musun?",
   "speech.piper.license.title": "Piper Türkçe sesi: yalnız ticari olmayan kullanım",
-  "speech.piper.license.message": "dfki Türkçe sesi CC BY-NC-SA 4.0 lisanslıdır: ticari amaçla KULLANAMAZSIN (ör. para kazanan bir kanalda ya da bir müşteri için). Lisans bu sesle üretilen her videoya geçer ve o videolar kalıcı bir \"ticari olmayan\" etiketi taşır. Yalnız bunu kabul ediyorsan indir."
+  "speech.piper.license.message": "dfki Türkçe sesi CC BY-NC-SA 4.0 lisanslıdır: ticari amaçla KULLANAMAZSIN (ör. para kazanan bir kanalda ya da bir müşteri için). Lisans bu sesle üretilen her videoya geçer ve o videolar kalıcı bir \"ticari olmayan\" etiketi taşır. Yalnız bunu kabul ediyorsan indir.",
+  "profile.describe": "Modelle açıkla",
+  "profile.describe.tip": "Ücretli: görsel, \"Örnek görsel açıklama\" için seçilen modele gönderilir.",
+  "profile.describe.title": "Görsel modele gönderilsin mi?",
+  "profile.describe.message": "Görsel, \"Örnek görsel açıklama\" için seçilen modelin sağlayıcısına gönderilir (Ayarlar → Modeller). Bu ücretli bir istektir.",
+  "profile.describe.confirm": "Gönder",
+  "profile.describe.done": "Görsel açıklandı · {0}",
+  "profile.describe.no_model": "Ayarlar → Modeller'de \"Örnek görsel açıklama\" için bir görsel model seç ve anahtarını ekle.",
+  "profile.describe.failed": "Açıklama başarısız: {0}"
 }
