@@ -6,6 +6,9 @@
   <ItemGroup>
     <!-- Ready channel templates (read-only, one file each). -->
     <EmbeddedResource Include="Templates/Files/**/*.json" LogicalName="TMConcept.Templates.%(Filename)%(Extension)" />
+    <!-- Model prompts, one folder per content language. -->
+    <EmbeddedResource Include="Prompts/Files/tr/*.txt" LogicalName="TMConcept.Prompts.tr.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Prompts/Files/en/*.txt" LogicalName="TMConcept.Prompts.en.%(Filename)%(Extension)" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="TMConcept.Tests" />

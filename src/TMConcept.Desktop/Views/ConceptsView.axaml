@@ -1,0 +1,94 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:TMConcept.Desktop.ViewModels"
+             x:Class="TMConcept.Desktop.Views.ConceptsView"
+             x:DataType="vm:ConceptsViewModel">
+  <Grid ColumnDefinitions="260,*,300" Margin="16" ColumnSpacing="16">
+    <ScrollViewer>
+      <StackPanel Spacing="8">
+        <TextBlock Text="{DynamicResource nav.concepts}" Classes="h1" />
+        <TextBlock Text="{DynamicResource concepts.count}" FontWeight="SemiBold" />
+        <NumericUpDown Value="{Binding Count}" Minimum="1" Maximum="100" Increment="1" FormatString="0" />
+        <TextBlock Text="{DynamicResource concepts.extra}" FontWeight="SemiBold" />
+        <TextBox Text="{Binding ExtraPrompt}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="90" MaxLength="1000"
+                 PlaceholderText="{DynamicResource concepts.extra.placeholder}" />
+        <TextBlock Text="{DynamicResource concepts.model}" FontWeight="SemiBold" />
+        <ComboBox ItemsSource="{Binding Models}" SelectedItem="{Binding SelectedModel}" HorizontalAlignment="Stretch">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ModelOption">
+              <TextBlock Text="{Binding Label}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <Border Classes="badge" HorizontalAlignment="Left">
+          <TextBlock Text="{Binding Recommended}" Classes="small" TextWrapping="Wrap" />
+        </Border>
+        <TextBlock Text="{DynamicResource concepts.check}" FontWeight="SemiBold" />
+        <CheckBox IsChecked="{Binding LocalCheck}" Content="{DynamicResource concepts.check.local}" />
+        <CheckBox IsEnabled="False" Content="{DynamicResource concepts.check.semantic}" />
+        <TextBlock Text="{Binding Status}" Classes="error" TextWrapping="Wrap" />
+      </StackPanel>
+    </ScrollViewer>
+
+    <DockPanel Grid.Column="1">
+      <StackPanel DockPanel.Dock="Top" Spacing="8">
+        <Border Classes="card">
+          <StackPanel Spacing="4">
+            <TextBlock Text="{DynamicResource concepts.estimate.title}" FontWeight="SemiBold" />
+            <TextBlock Text="{Binding Estimate}" TextWrapping="Wrap" />
+            <TextBlock Text="{Binding LastCost}" Classes="ok" />
+            <TextBlock Text="{Binding PricedOn}" Classes="small" />
+          </StackPanel>
+        </Border>
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <Button Classes="accent big" Content="{DynamicResource concepts.generate}" Command="{Binding GenerateCommand}" IsEnabled="{Binding Idle}" />
+          <Button Content="{DynamicResource common.cancel}" Command="{Binding CancelCommand}" IsVisible="{Binding Busy}" />
+          <TextBlock Text="{Binding Progress}" VerticalAlignment="Center" Classes="muted" />
+          <Button Content="{Binding FillMissingText}" Command="{Binding FillMissingCommand}" IsVisible="{Binding HasMissing}" />
+        </StackPanel>
+        <TextBlock Text="{Binding NewHeader}" Classes="h2" Margin="0,8,0,0" />
+        <TextBlock Text="{DynamicResource concepts.keys}" Classes="small" />
+      </StackPanel>
+      <ListBox x:Name="NewList" ItemsSource="{Binding NewConcepts}" SelectedItem="{Binding Selected}" KeyDown="OnListKeyDown" Background="Transparent">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:ConceptCardViewModel">
+            <Border Classes="card" Padding="12">
+              <StackPanel Spacing="4">
+                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+                  <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                  <Button Grid.Column="1" Classes="accent" Content="✓" IsVisible="{Binding Expanded}" ToolTip.Tip="A"
+                          Command="{Binding $parent[ListBox].((vm:ConceptsViewModel)DataContext).ApproveCommand}" CommandParameter="{Binding}" />
+                  <Button Grid.Column="2" Classes="danger" Content="✗" IsVisible="{Binding Expanded}" ToolTip.Tip="D"
+                          Command="{Binding $parent[ListBox].((vm:ConceptsViewModel)DataContext).TrashCommand}" CommandParameter="{Binding}" />
+                </Grid>
+                <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" Classes="muted" IsVisible="{Binding !Expanded}" />
+                <TextBlock Text="{Binding Note}" Classes="warning" IsVisible="{Binding HasNote}" TextWrapping="Wrap" />
+                <ItemsControl ItemsSource="{Binding Lines}" IsVisible="{Binding Expanded}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ContentLine">
+                      <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Margin="0,2" Classes.scene="{Binding IsScene}" />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </DockPanel>
+
+    <DockPanel Grid.Column="2">
+      <StackPanel DockPanel.Dock="Top" Spacing="8">
+        <TextBlock Text="{Binding ApprovedHeader}" Classes="h2" />
+        <TextBox Text="{Binding ApprovedSearch}" PlaceholderText="{DynamicResource common.search}" />
+      </StackPanel>
+      <ListBox ItemsSource="{Binding Approved}" Background="Transparent" Margin="0,8,0,0">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:ConceptCardViewModel">
+            <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Summary}" />
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </DockPanel>
+  </Grid>
+</UserControl>

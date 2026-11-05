@@ -1,0 +1,38 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:TMConcept.Desktop.ViewModels"
+             x:Class="TMConcept.Desktop.Views.TrashView"
+             x:DataType="vm:TrashViewModel">
+  <DockPanel Margin="24">
+    <StackPanel DockPanel.Dock="Top" Spacing="8">
+      <TextBlock Text="{Binding Header}" Classes="h1" />
+      <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+        <TextBox Text="{Binding Search}" PlaceholderText="{DynamicResource common.search}" MaxWidth="400" HorizontalAlignment="Left" MinWidth="260" />
+        <Button Grid.Column="1" Content="{DynamicResource trash.restore}" Command="{Binding RestoreCommand}" />
+        <Button Grid.Column="2" Classes="danger" Content="{DynamicResource trash.delete}" Command="{Binding DeletePermanentlyCommand}" />
+      </Grid>
+      <TextBlock Text="{DynamicResource trash.hint}" Classes="small" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding Status}" Classes="error" />
+    </StackPanel>
+    <ListBox ItemsSource="{Binding Items}" SelectedItem="{Binding Selected}" Background="Transparent" Margin="0,8,0,0">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:ConceptCardViewModel">
+          <StackPanel Spacing="4">
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+              <CheckBox IsChecked="{Binding IsChecked}" />
+              <TextBlock Grid.Column="1" Text="{Binding Title}" VerticalAlignment="Center" TextWrapping="Wrap" />
+              <TextBlock Grid.Column="2" Text="{Binding DeletedAt}" Classes="small" VerticalAlignment="Center" />
+            </Grid>
+            <ItemsControl ItemsSource="{Binding Lines}" IsVisible="{Binding Expanded}" Margin="32,0,0,0">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:ContentLine">
+                  <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Classes.scene="{Binding IsScene}" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</UserControl>

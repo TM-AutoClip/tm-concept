@@ -98,6 +98,8 @@ public static class DesktopServices
     private static void AddDesktop(IServiceCollection services)
     {
         services.AddSingleton<AppSession>();
+        services.AddSingleton<ConceptEvents>();
+        services.AddSingleton<Core.Concepts.ConceptGenerator>();
         services.AddSingleton<ShellLauncher>();
         services.AddSingleton<WindowHost>();
         services.AddSingleton<FileDialogs>();
@@ -111,6 +113,8 @@ public static class DesktopServices
         services.AddTransient<UnlockViewModel>();
 
         services.AddSingleton<Dialogs.IConfirmDialog, Dialogs.ConfirmDialog>();
+        AddPage<ConceptsViewModel, ConceptsView>(services);
+        AddPage<TrashViewModel, TrashView>(services);
         AddPage<ProfileViewModel, ProfileView>(services);
         AddPage<SettingsViewModel, SettingsView>(services);
         AddSection<GeneralSettingsViewModel, GeneralSettingsView>(services);
