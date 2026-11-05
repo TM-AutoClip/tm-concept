@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=TM Concept
+Comment=Concept to short video: concepts with online models, video code, local render and narration
+Exec=tm-concept
+Icon=tm-concept
+Terminal=false
+Categories=AudioVideo;Video;
+StartupWMClass=TMConcept
