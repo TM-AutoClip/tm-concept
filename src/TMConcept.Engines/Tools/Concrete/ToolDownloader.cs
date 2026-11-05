@@ -36,6 +36,13 @@ public sealed class ToolDownloader(DownloadTransport transport, ILogger<ToolDown
                     continue;
                 }
 
+                if (response.StatusCode is System.Net.HttpStatusCode.NotFound or System.Net.HttpStatusCode.Gone)
+                {
+                    // The pinned release was removed: a retry cannot help, the caller may fall back (ffmpeg from PATH).
+                    logger.LogWarning("{Tool} {Version}: the pinned download is gone (HTTP {Status})", archive.Tool, archive.Version, (int)response.StatusCode);
+                    throw new ToolInstallException($"The pinned download is no longer available (HTTP {(int)response.StatusCode}).") { Code = "gone" };
+                }
+
                 if (!response.IsSuccessStatusCode)
                 {
                     throw new ToolInstallException($"Download failed: HTTP {(int)response.StatusCode}.") { Code = "download" };

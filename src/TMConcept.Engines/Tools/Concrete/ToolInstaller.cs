@@ -8,11 +8,17 @@ namespace TMConcept.Engines.Tools;
 /// <summary>
 /// Installs Node and ffmpeg into <c>&lt;data&gt;/tools/&lt;tool&gt;/&lt;version&gt;/</c> after the user agreed: download → SHA-256 → unpack into a
 /// temporary folder → move into place → write a marker. A tool counts as ready only with its marker and executable. On Linux a program on
-/// the system PATH may be used when the app has no copy.
+/// the system PATH may be used when the app has no copy. For <see cref="ToolManifest.FallbackToSystem"/> tools (ffmpeg) on every system:
+/// when the pinned download is gone or its hash does not match, the copy on the PATH is used (with ffprobe next to it; logged as a
+/// warning and remembered with a marker), otherwise the install fails with "unavailable" and the page shows how to install it.
 /// </summary>
 public sealed class ToolInstaller(IAppPaths paths, IToolPlatform platform, ToolDownloader downloader, ILogger<ToolInstaller> logger)
 {
+    /// <summary>Source of a tool that came from the PATH because its pinned download was not usable.</summary>
+    public const string FallbackSource = "fallback";
+
     private const string Marker = ".installed";
+    private const string FallbackMarker = "use-system";
 
     /// <summary>Pinned archives (tests give their own).</summary>
     public IReadOnlyList<ToolArchive> Archives { get; init; } = ToolManifest.Archives;
@@ -37,6 +43,11 @@ public sealed class ToolInstaller(IAppPaths paths, IToolPlatform platform, ToolD
             return new ToolStatus(tool, true, string.Empty, system, "system");
         }
 
+        if (File.Exists(FallbackFile(tool)) && SystemCopy(tool) is { } fallback)
+        {
+            return new ToolStatus(tool, true, string.Empty, fallback, FallbackSource);
+        }
+
         return new ToolStatus(tool, false, Archive(tool)?.Version ?? string.Empty, string.Empty, string.Empty);
     }
 
@@ -56,7 +67,15 @@ public sealed class ToolInstaller(IAppPaths paths, IToolPlatform platform, ToolD
         var file = Path.Combine(download, archive.Url.Segments[^1]);
         try
         {
-            await downloader.DownloadAsync(archive, file, progress, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await downloader.DownloadAsync(archive, file, progress, cancellationToken).ConfigureAwait(false);
+            }
+            catch (ToolInstallException ex) when (ex.Code is "gone" or "hash" && ToolManifest.FallbackToSystem.Contains(tool))
+            {
+                return await FallBackAsync(tool, ex, cancellationToken).ConfigureAwait(false);
+            }
+
             progress?.Report(new ToolProgress(1, "extract"));
             Delete(unpack);
             Directory.CreateDirectory(unpack);
@@ -107,6 +126,43 @@ public sealed class ToolInstaller(IAppPaths paths, IToolPlatform platform, ToolD
         var exe = Require(tool);
         return Path.Combine(Path.GetDirectoryName(exe)!, platform.Executable(name));
     }
+
+    /// <summary>The pinned download is not usable: the system's copy (with its siblings, ffprobe) is used, or the install fails clearly.</summary>
+    private async Task<ToolStatus> FallBackAsync(ToolKind tool, ToolInstallException cause, CancellationToken cancellationToken)
+    {
+        if (SystemCopy(tool) is null)
+        {
+            logger.LogError("{Tool}: the pinned download is not usable ({Code}) and there is no {Tool} on the system PATH", tool, cause.Code, tool);
+            throw new ToolInstallException($"The pinned {tool} download is not usable ({cause.Message}) and there is no {tool} on the PATH.", cause)
+            {
+                Code = "unavailable",
+            };
+        }
+
+        // The file name only: a full path would name the user's folders in the log.
+        logger.LogWarning("{Tool}: the pinned download is not usable ({Code}); using the copy on the system PATH ({Program})", tool, cause.Code,
+            platform.Executable(Name(tool)));
+        var marker = FallbackFile(tool);
+        Directory.CreateDirectory(Path.GetDirectoryName(marker)!);
+        await File.WriteAllTextAsync(marker, cause.Code, cancellationToken).ConfigureAwait(false);
+        return Status(tool);
+    }
+
+    /// <summary>The tool on the PATH when its sibling programs are next to it (ffprobe beside ffmpeg), else null.</summary>
+    private string? SystemCopy(ToolKind tool)
+    {
+        if (FindOnPath(platform.Executable(Name(tool))) is not { } exe)
+        {
+            return null;
+        }
+
+        var folder = Path.GetDirectoryName(exe)!;
+        return Siblings(tool).All(s => File.Exists(Path.Combine(folder, platform.Executable(s)))) ? exe : null;
+    }
+
+    private static IReadOnlyList<string> Siblings(ToolKind tool) => tool == ToolKind.Ffmpeg ? ["ffprobe"] : [];
+
+    private string FallbackFile(ToolKind tool) => Path.Combine(paths.ToolsDirectory, Name(tool), FallbackMarker);
 
     private static string Name(ToolKind tool) => tool switch
     {

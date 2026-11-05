@@ -4,19 +4,24 @@ namespace TMConcept.Engines.Tools;
 
 /// <summary>
 /// Pinned tool downloads. Node: the official nodejs.org archives of LTS 26.13.0 (hashes from its SHASUMS256.txt). ffmpeg: a dated BtbN
-/// FFmpeg-Builds release (GPL build, a separate program; never the floating "latest"); hashes from that release's checksums. Updating a
-/// version = new rows here with new hashes.
+/// FFmpeg-Builds release (GPL build, a separate program; never the floating "latest"); hashes from that release's checksums.sha256. BtbN
+/// keeps only the last 14 daily builds but the last build of each month for two years, so the pin is always a month-end build (here the
+/// last one of October 2026). When the pinned archive is gone or its hash does not match, ffmpeg from the system PATH is used if there is
+/// one (<see cref="FallbackToSystem"/>); an unverified download is never run. Updating a version = new rows here with new hashes.
 /// </summary>
 public static class ToolManifest
 {
     /// <summary>Node version.</summary>
     public const string NodeVersion = "26.13.0";
 
-    /// <summary>ffmpeg release tag.</summary>
-    public const string FfmpegTag = "autobuild-2026-11-04-12-51";
+    /// <summary>ffmpeg release tag (the last build of October 2026: kept by BtbN for two years).</summary>
+    public const string FfmpegTag = "autobuild-2026-10-31-12-59";
 
     /// <summary>ffmpeg build name inside the release.</summary>
-    public const string FfmpegBuild = "ffmpeg-n8.1.3-34-ga35157abb9";
+    public const string FfmpegBuild = "ffmpeg-n8.1.3-27-g8dca1586f4";
+
+    /// <summary>Tools that may come from the system PATH when their pinned download is gone (404) or does not match its hash.</summary>
+    public static readonly IReadOnlyList<ToolKind> FallbackToSystem = [ToolKind.Ffmpeg];
 
     /// <summary>Hosts a download may come from (redirect targets included).</summary>
     public static readonly IReadOnlyList<string> AllowedHosts = ["nodejs.org", "github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"];
@@ -31,10 +36,10 @@ public static class ToolManifest
         new(ToolKind.Node, NodeVersion, "linux-arm64", new Uri($"https://nodejs.org/dist/v{NodeVersion}/node-v{NodeVersion}-linux-arm64.tar.xz"),
             "406fe3fbde1c054adff8b297c16fdb5af6659db327c1ac8acd46b56ef1af9a92", $"node-v{NodeVersion}-linux-arm64", "bin/node", 30_000_000),
         new(ToolKind.Ffmpeg, "8.1.3", "win-x64", new Uri($"https://github.com/BtbN/FFmpeg-Builds/releases/download/{FfmpegTag}/{FfmpegBuild}-win64-gpl-8.1.zip"),
-            "a0c6b648d42427b348ab2c5ad50381463dde8e756a3723371c9b78ecb852d763", $"{FfmpegBuild}-win64-gpl-8.1", "bin/ffmpeg.exe", 200_000_000),
+            "401dffcf14c301082e1fc03b0bc876b92ea676bfc521fc56e80a1537d137034f", $"{FfmpegBuild}-win64-gpl-8.1", "bin/ffmpeg.exe", 200_000_000),
         new(ToolKind.Ffmpeg, "8.1.3", "linux-x64", new Uri($"https://github.com/BtbN/FFmpeg-Builds/releases/download/{FfmpegTag}/{FfmpegBuild}-linux64-gpl-8.1.tar.xz"),
-            "0fc51331600b02730e6d63485ac7e3cd203bdeeb13216cd78c8844aeb9277fb8", $"{FfmpegBuild}-linux64-gpl-8.1", "bin/ffmpeg", 130_000_000),
+            "41e9c565594c390622cf968d82fa4135d9e9a11d06c1515644288cbc844e3380", $"{FfmpegBuild}-linux64-gpl-8.1", "bin/ffmpeg", 130_000_000),
         new(ToolKind.Ffmpeg, "8.1.3", "linux-arm64", new Uri($"https://github.com/BtbN/FFmpeg-Builds/releases/download/{FfmpegTag}/{FfmpegBuild}-linuxarm64-gpl-8.1.tar.xz"),
-            "e4d93d4b858a341cf29cbcd0ce2e31271bba67018b27ff4ef3c2e1683f76b810", $"{FfmpegBuild}-linuxarm64-gpl-8.1", "bin/ffmpeg", 110_000_000),
+            "a08c0ee6e1c4e02139344b303002dcc7c37cf125d639f1fbd15dabee40fcb525", $"{FfmpegBuild}-linuxarm64-gpl-8.1", "bin/ffmpeg", 110_000_000),
     ];
 }

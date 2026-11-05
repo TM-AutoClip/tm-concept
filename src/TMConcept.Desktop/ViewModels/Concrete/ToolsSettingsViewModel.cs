@@ -56,8 +56,7 @@ public sealed partial class ToolsSettingsViewModel(ToolInstaller installer, IToo
 
         foreach (var voice in voices.Where(v => v.IsLocal))
         {
-            var note = voice.Code == Core.Speech.SpeechEngines.PiperTurkish ? text["speech.piper.note"] : text["speech.supertonic.note"];
-            Rows.Add(new ToolRowViewModel(voice.Code, voice.Name, note, voice: voice));
+            Rows.Add(new ToolRowViewModel(voice.Code, voice.Name, text["speech.supertonic.note"], voice: voice));
         }
 
         foreach (var row in Rows)
@@ -100,8 +99,13 @@ public sealed partial class ToolsSettingsViewModel(ToolInstaller installer, IToo
             text["tools.install"], danger: false).ConfigureAwait(true);
         if (answer.Confirmed)
         {
-            await RunAsync(row, progress => installer.InstallAsync(tool, agreed: true, progress, CancellationToken.None),
-                text.Format("tools.installed", row.Name, archive.Version)).ConfigureAwait(true);
+            await RunAsync(row, async progress =>
+            {
+                var status = await installer.InstallAsync(tool, agreed: true, progress, CancellationToken.None).ConfigureAwait(true);
+                return status.Source == ToolInstaller.FallbackSource
+                    ? text.Format("tools.fallback", row.Name)
+                    : text.Format("tools.installed", row.Name, archive.Version);
+            }).ConfigureAwait(true);
         }
     }
 
@@ -165,7 +169,11 @@ public sealed partial class ToolsSettingsViewModel(ToolInstaller installer, IToo
             .ConfigureAwait(true);
         if (answer.Confirmed)
         {
-            await RunAsync(row, progress => engine.InstallAsync(agreed: true, progress, CancellationToken.None), text.Format("tools.installed", engine.Name, string.Empty))
+            await RunAsync(row, async progress =>
+            {
+                await engine.InstallAsync(agreed: true, progress, CancellationToken.None).ConfigureAwait(true);
+                return text.Format("tools.installed", engine.Name, string.Empty);
+            })
                 .ConfigureAwait(true);
             foreach (var other in Rows.Where(r => r.Engine is not null))
             {
@@ -176,54 +184,49 @@ public sealed partial class ToolsSettingsViewModel(ToolInstaller installer, IToo
 
     private async Task InstallVoiceAsync(ToolRowViewModel row, Core.Speech.ISpeechEngine voice)
     {
-        var piper = voice.Code == Core.Speech.SpeechEngines.PiperTurkish;
-        var accepted = piper ? session.Settings.PiperNonCommercialAccepted : session.Settings.SupertonicLicenseAccepted;
-        if (!accepted)
+        if (!session.Settings.SupertonicLicenseAccepted)
         {
-            var license = await confirm.AskAsync(text[piper ? "speech.piper.license.title" : "speech.supertonic.license.title"],
-                text[piper ? "speech.piper.license.message" : "speech.supertonic.license.message"], text["engines.license.accept"], danger: piper)
-                .ConfigureAwait(true);
+            var license = await confirm.AskAsync(text["speech.supertonic.license.title"], text["speech.supertonic.license.message"], text["engines.license.accept"],
+                danger: false).ConfigureAwait(true);
             if (!license.Confirmed)
             {
                 return;
             }
 
-            if (piper)
-            {
-                session.Settings.PiperNonCommercialAccepted = true;
-            }
-            else
-            {
-                session.Settings.SupertonicLicenseAccepted = true;
-            }
-
+            session.Settings.SupertonicLicenseAccepted = true;
             await session.SaveAsync(session.Settings, CancellationToken.None).ConfigureAwait(true);
         }
 
-        var model = piper ? Speech.Speech.SpeechModels.PiperTurkish : Speech.Speech.SpeechModels.Supertonic;
+        var model = Speech.Speech.SpeechModels.Supertonic;
         var size = (model.ApproximateBytes / 1_000_000.0).ToString("0", CultureInfo.InvariantCulture);
         var answer = await confirm.AskAsync(text["tools.confirm.title"], text.Format("tools.confirm.message", voice.Name, model.Version, model.Url.Host, size),
             text["tools.install"], danger: false).ConfigureAwait(true);
         if (answer.Confirmed)
         {
-            await RunAsync(row, progress => voice.InstallAsync(agreed: true, progress, CancellationToken.None), text.Format("tools.installed", voice.Name, model.Version))
-                .ConfigureAwait(true);
+            await RunAsync(row, async progress =>
+            {
+                await voice.InstallAsync(agreed: true, progress, CancellationToken.None).ConfigureAwait(true);
+                return text.Format("tools.installed", voice.Name, model.Version);
+            }).ConfigureAwait(true);
         }
     }
 
-    private async Task RunAsync(ToolRowViewModel row, Func<IProgress<ToolProgress>, Task> work, string done)
+    /// <summary>Runs an install; <paramref name="work"/> returns the line for the log (a fallback to the system's copy is a warning).</summary>
+    private async Task RunAsync(ToolRowViewModel row, Func<IProgress<ToolProgress>, Task<string>> work)
     {
         row.Busy = true;
         row.Percent = 0;
         try
         {
-            await work(new Progress<ToolProgress>(p => row.Percent = p.Share * 100)).ConfigureAwait(true);
-            activity.Add(ActivityLevel.Info, done.Trim());
+            var done = await work(new Progress<ToolProgress>(p => row.Percent = p.Share * 100)).ConfigureAwait(true);
+            activity.Add(Enum.TryParse<ToolKind>(row.Code, ignoreCase: true, out var kind) && installer.Status(kind).Source == ToolInstaller.FallbackSource
+                ? ActivityLevel.Warning
+                : ActivityLevel.Info, done.Trim());
         }
         catch (ToolInstallException ex)
         {
             logger.LogError(ex, "{Tool} could not be installed ({Code})", row.Name, ex.Code);
-            activity.Add(ActivityLevel.Error, text.Format("tools.failed", row.Name, text["tools.fail." + ex.Code]));
+            activity.Add(ActivityLevel.Error, text.Format("tools.failed", row.Name, text.Format("tools.fail." + ex.Code, row.Name)));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or HttpRequestException or InvalidOperationException)
         {
@@ -258,7 +261,9 @@ public sealed partial class ToolsSettingsViewModel(ToolInstaller installer, IToo
         var tools = installer.Status(tool);
         row.Ready = tools.Ready;
         row.State = tools.Ready
-            ? "✓ " + (tools.Source == "system" ? text["tools.state.system"] : text.Format("tools.state.ready", tools.Version))
+            ? "✓ " + (tools.Source == "system" ? text["tools.state.system"]
+                : tools.Source == ToolInstaller.FallbackSource ? text["tools.state.fallback"]
+                : text.Format("tools.state.ready", tools.Version))
             : installer.Archive(tool) is null ? text["tools.state.unsupported"] : text["tools.state.missing"];
     }
 }
