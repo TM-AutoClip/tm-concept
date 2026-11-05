@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using TMConcept.Core.Settings;
+using TMConcept.Storage.Backup;
 using TMConcept.Storage.Keys;
 
 namespace TMConcept.Storage;
@@ -8,4 +9,5 @@ namespace TMConcept.Storage;
 [JsonSourceGenerationOptions(WriteIndented = false)]
 [JsonSerializable(typeof(KeyEnvelope))]
 [JsonSerializable(typeof(AppSettings))]
+[JsonSerializable(typeof(BackupKeyRecord))]
 internal sealed partial class StorageJsonContext : JsonSerializerContext;
