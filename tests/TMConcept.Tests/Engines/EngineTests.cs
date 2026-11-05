@@ -13,11 +13,11 @@ public sealed class EngineTests
 {
     private static IVideoEngine[] All(TempPaths paths)
     {
-        var platform = new WindowsToolPlatform();
+        IProcessRunner runner = new ProcessRunner(NullLogger<ProcessRunner>.Instance);
+        var platform = new WindowsToolPlatform(runner);
         var tools = new ToolInstaller(paths, platform, new ToolDownloader(DownloadTransport.Network, NullLogger<ToolDownloader>.Instance),
             NullLogger<ToolInstaller>.Instance);
         var chrome = new ChromeLocator(paths, platform, NullLogger<ChromeLocator>.Instance);
-        IProcessRunner runner = new ProcessRunner(NullLogger<ProcessRunner>.Instance);
         return
         [
             new HyperFramesEngine(paths, tools, chrome, runner, NullLogger<HyperFramesEngine>.Instance),

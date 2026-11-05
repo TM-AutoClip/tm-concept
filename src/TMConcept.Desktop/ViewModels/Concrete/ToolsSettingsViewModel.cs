@@ -20,7 +20,8 @@ namespace TMConcept.Desktop.ViewModels;
 /// the source and size; Remotion first asks for its license. A ready engine can render a sample (no model, no network). On Linux missing
 /// Chrome libraries are listed with the apt command to run (the app never uses root).
 /// </summary>
-public sealed partial class ToolsSettingsViewModel(ToolInstaller installer, IToolPlatform platform, IEnumerable<IVideoEngine> engines, SampleRender sample,
+public sealed partial class ToolsSettingsViewModel(ToolInstaller installer, IToolPlatform platform, IEnumerable<IVideoEngine> engines,
+    IEnumerable<Core.Speech.ISpeechEngine> voices, SampleRender sample,
     AppSession session, IConfirmDialog confirm, ShellLauncher shell, IActivityLog activity, Localizer text, ILogger<ToolsSettingsViewModel> logger)
     : SettingsSectionBase
 {
@@ -53,6 +54,12 @@ public sealed partial class ToolsSettingsViewModel(ToolInstaller installer, IToo
             Rows.Add(new ToolRowViewModel(engine.Kind.ToString(), engine.Name, note, engine));
         }
 
+        foreach (var voice in voices.Where(v => v.IsLocal))
+        {
+            var note = voice.Code == Core.Speech.SpeechEngines.PiperTurkish ? text["speech.piper.note"] : text["speech.supertonic.note"];
+            Rows.Add(new ToolRowViewModel(voice.Code, voice.Name, note, voice: voice));
+        }
+
         foreach (var row in Rows)
         {
             Refresh(row);
@@ -74,6 +81,12 @@ public sealed partial class ToolsSettingsViewModel(ToolInstaller installer, IToo
         if (row.Engine is { } engine)
         {
             await InstallEngineAsync(row, engine).ConfigureAwait(true);
+            return;
+        }
+
+        if (row.Voice is { } voice)
+        {
+            await InstallVoiceAsync(row, voice).ConfigureAwait(true);
             return;
         }
 
@@ -161,6 +174,43 @@ public sealed partial class ToolsSettingsViewModel(ToolInstaller installer, IToo
         }
     }
 
+    private async Task InstallVoiceAsync(ToolRowViewModel row, Core.Speech.ISpeechEngine voice)
+    {
+        var piper = voice.Code == Core.Speech.SpeechEngines.PiperTurkish;
+        var accepted = piper ? session.Settings.PiperNonCommercialAccepted : session.Settings.SupertonicLicenseAccepted;
+        if (!accepted)
+        {
+            var license = await confirm.AskAsync(text[piper ? "speech.piper.license.title" : "speech.supertonic.license.title"],
+                text[piper ? "speech.piper.license.message" : "speech.supertonic.license.message"], text["engines.license.accept"], danger: piper)
+                .ConfigureAwait(true);
+            if (!license.Confirmed)
+            {
+                return;
+            }
+
+            if (piper)
+            {
+                session.Settings.PiperNonCommercialAccepted = true;
+            }
+            else
+            {
+                session.Settings.SupertonicLicenseAccepted = true;
+            }
+
+            await session.SaveAsync(session.Settings, CancellationToken.None).ConfigureAwait(true);
+        }
+
+        var model = piper ? Speech.Speech.SpeechModels.PiperTurkish : Speech.Speech.SpeechModels.Supertonic;
+        var size = (model.ApproximateBytes / 1_000_000.0).ToString("0", CultureInfo.InvariantCulture);
+        var answer = await confirm.AskAsync(text["tools.confirm.title"], text.Format("tools.confirm.message", voice.Name, model.Version, model.Url.Host, size),
+            text["tools.install"], danger: false).ConfigureAwait(true);
+        if (answer.Confirmed)
+        {
+            await RunAsync(row, progress => voice.InstallAsync(agreed: true, progress, CancellationToken.None), text.Format("tools.installed", voice.Name, model.Version))
+                .ConfigureAwait(true);
+        }
+    }
+
     private async Task RunAsync(ToolRowViewModel row, Func<IProgress<ToolProgress>, Task> work, string done)
     {
         row.Busy = true;
@@ -189,6 +239,13 @@ public sealed partial class ToolsSettingsViewModel(ToolInstaller installer, IToo
 
     private void Refresh(ToolRowViewModel row)
     {
+        if (row.Voice is { } voice)
+        {
+            row.Ready = voice.Ready;
+            row.State = voice.Ready ? "✓ " + text["engines.ready"] : text["tools.state.missing"];
+            return;
+        }
+
         if (row.Engine is { } engine)
         {
             var status = engine.Status();

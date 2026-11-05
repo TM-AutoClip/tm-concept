@@ -111,7 +111,8 @@ public sealed class ToolInstaller(IAppPaths paths, IToolPlatform platform, ToolD
     private static string Name(ToolKind tool) => tool switch
     {
         ToolKind.Node => "node",
-        _ => "ffmpeg",
+        ToolKind.Ffmpeg => "ffmpeg",
+        _ => tool.ToString().ToLowerInvariant(),
     };
 
     private string Folder(ToolArchive archive) => Path.Combine(paths.ToolsDirectory, Name(archive.Tool), archive.Version);

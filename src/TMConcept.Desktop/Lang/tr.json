@@ -254,5 +254,22 @@
   "engines.license.accept": "Kabul ediyorum",
   "engines.sample": "Örnek render",
   "engines.sample_done": "{0}: örnek video üretildi",
-  "engines.sample_failed": "{0}: örnek render başarısız: {1}"
+  "engines.sample_failed": "{0}: örnek render başarısız: {1}",
+  "speech.title": "Seslendirme",
+  "speech.off": "Kapalı — sessiz video",
+  "speech.off.note": "Videolar sessiz üretilir; günlüğe sarı uyarı düşer. Konuşma metni dosyası yine yazılır, kendin seslendirebilirsin.",
+  "speech.local": "Yerel · {0} (ücretsiz)",
+  "speech.online": "Online · Ayarlar → Modeller'de seçilen model (ücretli)",
+  "speech.online.note": "Seslendirme adımının modeli ve anahtarı kullanılır; yalnız sağlayıcının kendi sesleri.",
+  "speech.not_installed": "Henüz kurulu değil: Ayarlar → Araçlar.",
+  "speech.supertonic.note": "Supertonic 3: ücretsiz, bu bilgisayarda çalışır. OpenRAIL-M lisansı, yayınlarken sesin yapay zekâ ile üretildiğini belirtmeni ister.",
+  "speech.piper.note": "Piper Türkçe (dfki): yalnız ticari olmayan kullanım (CC BY-NC-SA 4.0). Bununla üretilen videolar bu etiketi kalıcı olarak taşır.",
+  "speech.listen": "▶ Dinle",
+  "speech.failed": "Seslendirme başarısız: {0}",
+  "speech.sample.tr": "Merhaba! Bu, kanalının sesi böyle duyulacak.",
+  "speech.sample.en": "Hello! This is how your channel will sound.",
+  "speech.supertonic.license.title": "Supertonic 3 lisansı (OpenRAIL-M)",
+  "speech.supertonic.license.message": "Supertonic 3 ses modeli OpenRAIL-M lisanslıdır. Kullanım kısıtları senin için de geçerlidir; bunlardan bazıları: makine üretimi içeriği makine üretimi olduğunu açıkça belirtmeden yayınlama; bir kişiyi taklit etme; insanlara zarar vermek ya da onları aldatmak için kullanma. Tam metin THIRD-PARTY-NOTICES'ta. Bu şartları kabul ediyor musun?",
+  "speech.piper.license.title": "Piper Türkçe sesi: yalnız ticari olmayan kullanım",
+  "speech.piper.license.message": "dfki Türkçe sesi CC BY-NC-SA 4.0 lisanslıdır: ticari amaçla KULLANAMAZSIN (ör. para kazanan bir kanalda ya da bir müşteri için). Lisans bu sesle üretilen her videoya geçer ve o videolar kalıcı bir \"ticari olmayan\" etiketi taşır. Yalnız bunu kabul ediyorsan indir."
 }

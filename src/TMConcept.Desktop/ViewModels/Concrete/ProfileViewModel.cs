@@ -19,8 +19,11 @@ namespace TMConcept.Desktop.ViewModels;
 /// value missing is not possible. Deleting a profile is confirmed and permanent; video files stay on disk.
 /// </summary>
 public sealed partial class ProfileViewModel(AppSession session, IProfileStore profiles, ITemplateSource templates, IAppPaths paths, FileDialogs dialogs,
-    IConfirmDialog confirm, IActivityLog activity, Localizer text, ILogger<ProfileViewModel> logger) : PageViewModelBase
+    IConfirmDialog confirm, IActivityLog activity, Localizer text, ILogger<ProfileViewModel> logger, ProfileSpeechViewModel speech) : PageViewModelBase
 {
+    /// <summary>The narration part.</summary>
+    public ProfileSpeechViewModel Speech { get; } = speech;
+
     private Profile? _editing;
     private Func<Task>? _profilesChanged;
 
@@ -164,6 +167,7 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
         _editing.Format = Vertical ? VideoFormat.Vertical : VideoFormat.Horizontal;
         _editing.TargetSeconds = (int)TargetSeconds!.Value;
         _editing.ConceptText = ConceptText.Trim();
+        Speech.Apply(_editing);
         try
         {
             await profiles.SaveAsync(_editing, CancellationToken.None).ConfigureAwait(true);
@@ -324,6 +328,7 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
         Vertical = profile.Format == VideoFormat.Vertical;
         TargetSeconds = profile.TargetSeconds;
         ConceptText = profile.ConceptText;
+        Speech.Load(profile);
         SelectedTemplate = Templates.FirstOrDefault(t => t.Template.Id == profile.TemplateId);
     }
 

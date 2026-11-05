@@ -53,6 +53,31 @@
 
       <Border Classes="card">
         <StackPanel Spacing="8">
+          <TextBlock Text="{DynamicResource speech.title}" FontWeight="SemiBold" />
+          <WrapPanel>
+            <ComboBox ItemsSource="{Binding Speech.Engines}" SelectedItem="{Binding Speech.Engine}" MinWidth="300" Margin="0,0,8,8">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:ChoiceOption">
+                  <TextBlock Text="{Binding Label}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <ComboBox ItemsSource="{Binding Speech.Voices}" SelectedItem="{Binding Speech.Voice}" MinWidth="200" Margin="0,0,8,8">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:ChoiceOption">
+                  <TextBlock Text="{Binding Label}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <NumericUpDown Value="{Binding Speech.Speed}" Minimum="0.5" Maximum="2" Increment="0.05" FormatString="0.00" Width="140" Margin="0,0,8,8" />
+            <Button Content="{DynamicResource speech.listen}" Command="{Binding Speech.ListenCommand}" IsEnabled="{Binding !Speech.Busy}" Margin="0,0,8,8" />
+          </WrapPanel>
+          <TextBlock Text="{Binding Speech.Note}" Classes="small" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+
+      <Border Classes="card">
+        <StackPanel Spacing="8">
           <StackPanel Orientation="Horizontal" Spacing="8">
             <TextBlock Text="{DynamicResource profile.images}" FontWeight="SemiBold" VerticalAlignment="Center" />
             <Button Content="{DynamicResource profile.images.add}" Command="{Binding AddImagesCommand}" IsEnabled="{Binding !IsNew}" />

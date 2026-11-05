@@ -254,5 +254,22 @@
   "engines.license.accept": "I accept",
   "engines.sample": "Sample render",
   "engines.sample_done": "{0}: the sample video was rendered",
-  "engines.sample_failed": "{0}: the sample render failed: {1}"
+  "engines.sample_failed": "{0}: the sample render failed: {1}",
+  "speech.title": "Narration",
+  "speech.off": "Off — silent video",
+  "speech.off.note": "Videos are made without a voice; a yellow warning is written to the log. A narration text file is still written so you can record it yourself.",
+  "speech.local": "Local · {0} (free)",
+  "speech.online": "Online · the model chosen in Settings → Models (paid)",
+  "speech.online.note": "The speech step's model and its key are used; only the provider's own voices.",
+  "speech.not_installed": "Not installed yet: Settings → Tools.",
+  "speech.supertonic.note": "Supertonic 3: free, runs on this computer. Its OpenRAIL-M license requires that you say the voice is AI-generated when you publish.",
+  "speech.piper.note": "Piper Turkish (dfki): non-commercial use only (CC BY-NC-SA 4.0). Videos made with it carry this label permanently.",
+  "speech.listen": "▶ Listen",
+  "speech.failed": "Narration failed: {0}",
+  "speech.sample.tr": "Merhaba! Bu, kanalının sesi böyle duyulacak.",
+  "speech.sample.en": "Hello! This is how your channel will sound.",
+  "speech.supertonic.license.title": "Supertonic 3 license (OpenRAIL-M)",
+  "speech.supertonic.license.message": "The Supertonic 3 voice model is licensed under OpenRAIL-M. Its use restrictions also apply to you, among them: do not publish machine-generated content without clearly saying it is machine-generated; do not impersonate a person; do not use it to harm or deceive people. The full text is in THIRD-PARTY-NOTICES. Do you accept these terms?",
+  "speech.piper.license.title": "Piper Turkish voice: non-commercial only",
+  "speech.piper.license.message": "The dfki Turkish voice is licensed CC BY-NC-SA 4.0: you may NOT use it commercially (for example on a monetized channel or for a client). The license carries over to every video made with it, and those videos keep a permanent \"non-commercial\" label. Only download it if you accept this."
 }

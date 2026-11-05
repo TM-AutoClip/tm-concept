@@ -31,7 +31,7 @@ public sealed class LinuxToolPlatform(IProcessRunner runner) : IToolPlatform
     /// <inheritdoc />
     public async Task ExtractAsync(string archive, string targetFolder, CancellationToken cancellationToken)
     {
-        var result = await runner.RunAsync(new ProcessStart("tar", ["-xJf", archive, "-C", targetFolder], targetFolder), null, cancellationToken)
+        var result = await runner.RunAsync(new ProcessStart("tar", ["-xf", archive, "-C", targetFolder], targetFolder), null, cancellationToken)
             .ConfigureAwait(false);
         if (result.ExitCode != 0)
         {

@@ -1,6 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- Local text-to-speech (sherpa-onnx), speech cache. Depends on Core only. -->
   <ItemGroup>
+    <PackageReference Include="org.k2fsa.sherpa.onnx" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\TMConcept.Core\TMConcept.Core.csproj" />
   </ItemGroup>
   <ItemGroup>

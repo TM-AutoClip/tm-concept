@@ -8,7 +8,7 @@ namespace TMConcept.Engines.Tools;
 /// Downloads a pinned archive over HTTPS, follows redirects only to allowed hosts, hashes while writing, and deletes the file when the
 /// SHA-256 does not match. Nothing is unpacked before the hash matches.
 /// </summary>
-public sealed class ToolDownloader(DownloadTransport transport, ILogger<ToolDownloader> logger) : IDisposable
+public sealed class ToolDownloader(DownloadTransport transport, ILogger<ToolDownloader> logger) : IArchiveDownloader, IDisposable
 {
     private const int MaxRedirects = 5;
     private readonly HttpClient _http = new(transport.CreateHandler(), disposeHandler: true) { Timeout = TimeSpan.FromMinutes(30) };

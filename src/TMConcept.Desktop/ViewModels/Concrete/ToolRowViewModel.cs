@@ -4,8 +4,12 @@ using TMConcept.Core.Engines;
 namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>A tool or engine row: name, what it is for, state, install button, sample render and progress.</summary>
-public sealed partial class ToolRowViewModel(string code, string name, string purpose, IVideoEngine? engine = null) : ObservableObject
+public sealed partial class ToolRowViewModel(string code, string name, string purpose, IVideoEngine? engine = null,
+    Core.Speech.ISpeechEngine? voice = null) : ObservableObject
 {
+    /// <summary>The voice model of a voice row.</summary>
+    public Core.Speech.ISpeechEngine? Voice { get; } = voice;
+
     /// <summary>Code ("node", "ffmpeg", or the engine kind).</summary>
     public string Code { get; } = code;
 

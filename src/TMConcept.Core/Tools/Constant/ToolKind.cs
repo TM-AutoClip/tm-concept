@@ -8,4 +8,10 @@ public enum ToolKind
 
     /// <summary>ffmpeg + ffprobe (mux, subtitles, thumbnails).</summary>
     Ffmpeg = 1,
+
+    /// <summary>Supertonic 3 voice model (sherpa-onnx).</summary>
+    SupertonicVoice = 2,
+
+    /// <summary>Piper Turkish voice (dfki, non-commercial).</summary>
+    PiperTurkishVoice = 3,
 }

@@ -60,6 +60,14 @@ public static class DesktopServices
         services.AddSingleton<Core.Processes.IProcessRunner, Engines.Processes.ProcessRunner>();
         services.AddSingleton(Engines.Tools.DownloadTransport.Network);
         services.AddSingleton<Engines.Tools.ToolDownloader>();
+        services.AddSingleton<Core.Tools.IArchiveDownloader>(s => s.GetRequiredService<Engines.Tools.ToolDownloader>());
+        services.AddSingleton<Engines.Media.FfmpegMuxer>();
+        services.AddSingleton<Speech.Speech.SpeechModelInstaller>();
+        services.AddSingleton<Core.Speech.ISpeechEngine, Speech.Speech.SupertonicSpeechEngine>();
+        services.AddSingleton<Core.Speech.ISpeechEngine, Speech.Speech.PiperTurkishSpeechEngine>();
+        services.AddSingleton<Core.Speech.ISpeechEngine, Providers.Speech.OpenAISpeechEngine>();
+        services.AddSingleton<Core.Speech.SpeechService>();
+        services.AddSingleton<ProfileSpeechViewModel>();
         services.AddSingleton<Engines.Tools.ToolInstaller>();
         services.AddSingleton<Engines.Engines.ChromeLocator>();
         services.AddSingleton<Engines.Engines.SampleRender>();
