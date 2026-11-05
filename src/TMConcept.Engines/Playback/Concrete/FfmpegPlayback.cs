@@ -200,6 +200,18 @@ public sealed class FfmpegPlayback(IAudioOutputFactory audio, ChildProcessGuardB
         }
     }
 
+    /// <summary>Whether a frame is waiting to be copied (false after <see cref="ReleaseFrame"/> until a new one is decoded).</summary>
+    public bool HasFrame
+    {
+        get
+        {
+            lock (_frameLock)
+            {
+                return _latest is not null;
+            }
+        }
+    }
+
     /// <summary>Drops the newest-frame buffer (the player was closed); the next play or paused seek makes it again.</summary>
     public void ReleaseFrame()
     {

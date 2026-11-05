@@ -39,6 +39,7 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
     private bool _reporting;
     private bool _ended;
     private bool _dragging;
+    private double _seekStart;
     private CancellationTokenSource? _seek;
 
     /// <summary>Creates.</summary>
@@ -165,8 +166,12 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
     public void Close()
     {
         var had = Frame is not null;
+        CancelSeek();
         Pause();
         _dragging = false;
+
+        // Stop also ends a paused seek's single-frame decode in flight (a new generation): no frame comes back after the release.
+        _playback.Stop();
         ReleaseFrames();
         if (had)
         {
@@ -184,9 +189,10 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
 
         CancelSeek();
         _dragging = true;
+        _seekStart = PositionMs;
     }
 
-    /// <summary>The pointer was released: one seek to where the seek bar is now.</summary>
+    /// <summary>The pointer was released: one seek to where the seek bar is now; none when the thumb did not move (a plain click on it).</summary>
     public void EndSeek()
     {
         if (!_dragging)
@@ -195,7 +201,10 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         }
 
         _dragging = false;
-        SeekNow((long)PositionMs);
+        if (PositionMs != _seekStart)
+        {
+            SeekNow((long)PositionMs);
+        }
     }
 
     /// <summary>The position update (every 100 ms while playing); held while the seek bar is dragged.</summary>
@@ -398,8 +407,9 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
             _pumpPending = false;
         }
 
-        if (_source is not { } source)
+        if (_source is not { } source || !_playback.HasFrame)
         {
+            // No video, or the frames were released after this pump was queued: no bitmap is made.
             return;
         }
 

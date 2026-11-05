@@ -61,7 +61,18 @@ public sealed class PlayerTests
         }
 
         playback.PositionMs.ShouldBe(4_000);
+
+        // A press and release without moving the thumb (a plain click on it) does not seek.
+        player.BeginSeek();
+        player.EndSeek();
+        playback.PositionMs.ShouldBe(4_000);
+
+        // Closing drops a seek that was still waiting: nothing seeks afterwards.
+        player.PositionMs = 1_000;
         player.Close();
+        await Task.Delay(PlayerViewModel.SeekDelay * 3);
+        playback.PositionMs.ShouldBe(4_000);
+        playback.HasFrame.ShouldBeFalse();
         player.Frame.ShouldBeNull();
         player.HasVideo.ShouldBeTrue();
     }
@@ -122,14 +133,15 @@ public sealed class PlayerTests
     /// <summary>An empty ffmpeg (and ffprobe) on a private search path, used as the "system copy" (no real decoding happens).</summary>
     private static void PlaceholderFfmpeg(IServiceCollection services)
     {
-        var bin = Path.Combine(Path.GetTempPath(), "tmconcept-tests", "placeholder-ffmpeg-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(bin);
-        var suffix = OperatingSystem.IsWindows() ? ".exe" : string.Empty;
-        File.WriteAllBytes(Path.Combine(bin, "ffmpeg" + suffix), []);
-        File.WriteAllBytes(Path.Combine(bin, "ffprobe" + suffix), []);
         services.AddSingleton(s =>
         {
+            // Inside the harness's data folder, so it is removed with it.
             var paths = s.GetRequiredService<IAppPaths>();
+            var bin = Path.Combine(paths.DataDirectory, "placeholder-bin");
+            Directory.CreateDirectory(bin);
+            var suffix = OperatingSystem.IsWindows() ? ".exe" : string.Empty;
+            File.WriteAllBytes(Path.Combine(bin, "ffmpeg" + suffix), []);
+            File.WriteAllBytes(Path.Combine(bin, "ffprobe" + suffix), []);
             Directory.CreateDirectory(Path.Combine(paths.ToolsDirectory, "ffmpeg"));
             File.WriteAllText(Path.Combine(paths.ToolsDirectory, "ffmpeg", "use-system"), "test");
             return new ToolInstaller(paths, s.GetRequiredService<IToolPlatform>(), s.GetRequiredService<ToolDownloader>(), NullLogger<ToolInstaller>.Instance)
