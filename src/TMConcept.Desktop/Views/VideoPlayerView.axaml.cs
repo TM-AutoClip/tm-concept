@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using TMConcept.Desktop.ViewModels;
 
 namespace TMConcept.Desktop.Views;
@@ -19,6 +20,14 @@ public sealed partial class VideoPlayerView : UserControl
     {
         InitializeComponent();
         Focusable = true;
+
+        // The seek bar: pressing (on the thumb or the track, which moves the thumb there) holds the position updates, releasing seeks
+        // once. handledEventsToo: the slider and its thumb handle these events themselves.
+        var seek = this.FindControl<Slider>("SeekBar")!;
+        seek.AddHandler(PointerPressedEvent, (_, _) => _player?.BeginSeek(), RoutingStrategies.Tunnel, handledEventsToo: true);
+        seek.AddHandler(PointerReleasedEvent, (_, _) => _player?.EndSeek(), RoutingStrategies.Bubble, handledEventsToo: true);
+        seek.AddHandler(PointerCaptureLostEvent, (_, _) => _player?.EndSeek(), RoutingStrategies.Direct | RoutingStrategies.Bubble,
+            handledEventsToo: true);
         DataContextChanged += (_, _) => Attach(DataContext as PlayerViewModel);
         KeyDown += (_, e) =>
         {

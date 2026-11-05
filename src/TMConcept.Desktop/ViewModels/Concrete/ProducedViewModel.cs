@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using TMConcept.Core.Activity;
 using TMConcept.Core.Concepts;
+using TMConcept.Core.Media;
 using TMConcept.Core.Paths;
 using TMConcept.Core.Text;
 using TMConcept.Core.Videos;
@@ -21,13 +22,15 @@ namespace TMConcept.Desktop.ViewModels;
 /// outside shows "file missing"); the in-app player (a chosen video does not start by itself) with "open in the system player" beside it;
 /// details (the concept the video was made from, settings, cost per step, the AI voice note, files); open the folder; produce again (the
 /// concept goes back to the approved list of the video page; the new video is a new row); delete the record (the files can be moved to the
-/// recycle bin in the same step).
+/// recycle bin in the same step). A chosen video whose thumbnail file is missing gets it made again in the background (the same rule: the
+/// first frame that is not black), so the player and the list do not show a black area.
 /// </summary>
 public sealed partial class ProducedViewModel(AppSession session, IVideoStore videos, IConceptStore concepts, IAppPaths paths, ShellLauncher shell,
-    IRecycleBin recycleBin, IConfirmDialog confirm, ConceptEvents events, IActivityLog activity, PlayerViewModel player, Localizer text,
+    IRecycleBin recycleBin, IConfirmDialog confirm, ConceptEvents events, IActivityLog activity, PlayerViewModel player, IMediaTools media, Localizer text,
     ILogger<ProducedViewModel> logger) : PageViewModelBase
 {
     private readonly List<VideoRowViewModel> _all = [];
+    private readonly HashSet<Guid> _thumbnailing = [];
     private bool _attached;
 
     /// <inheritdoc />
@@ -66,7 +69,10 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
     public PlayerViewModel Player { get; } = player;
 
     /// <inheritdoc />
-    public override void Deactivate() => Player.Pause();
+    public override void Deactivate() => Player.Close();
+
+    /// <summary>The background thumbnail work of the chosen video (tests wait for it); a finished task when there is none.</summary>
+    internal Task ThumbnailWork { get; private set; } = Task.CompletedTask;
 
     /// <inheritdoc />
     public override Task ActivateAsync()
@@ -212,7 +218,54 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
         }
 
         Player.Load(value.File, value.Thumbnail, value.Video.Width, value.Video.Height, value.Video.Fps, value.Video.DurationMs);
+        ThumbnailWork = ThumbnailAgainAsync(value);
         _ = DetailsAsync(value);
+    }
+
+    /// <summary>
+    /// The video is there but its thumbnail file is not: it is made again (ffmpeg, in the background), saved on the record and shown in the
+    /// list and the player. A failure is logged and the area stays empty; nothing is thrown.
+    /// </summary>
+    private async Task ThumbnailAgainAsync(VideoRowViewModel row)
+    {
+        if (row.Missing || row.HasThumbnailFile || !_thumbnailing.Add(row.Video.Id))
+        {
+            return;
+        }
+
+        try
+        {
+            var name = row.Video.ThumbnailName.Length > 0 ? row.Video.ThumbnailName : VideoPipeline.ThumbnailFile;
+            var jpeg = Path.Combine(row.Folder, name);
+            logger.LogInformation("A video's thumbnail is missing; making it again");
+            var made = await Task.Run(() => media.ThumbnailAsync(row.File, jpeg, CancellationToken.None)).ConfigureAwait(true);
+            if (!made)
+            {
+                logger.LogWarning("The thumbnail could not be made again: no frame that is not black was found");
+                return;
+            }
+
+            if (row.Video.ThumbnailName != name)
+            {
+                await videos.SetThumbnailAsync(row.Video.Id, name, CancellationToken.None).ConfigureAwait(true);
+                row.Video.ThumbnailName = name;
+            }
+
+            row.RefreshThumbnail();
+            if (ReferenceEquals(Selected, row))
+            {
+                Player.Poster = row.Thumbnail;
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // ffmpeg missing (ToolInstallException), a file or database error: logged with its cause, the page goes on.
+            logger.LogError(ex, "The thumbnail could not be made again");
+        }
+        finally
+        {
+            _thumbnailing.Remove(row.Video.Id);
+        }
     }
 
     private async Task DetailsAsync(VideoRowViewModel row)

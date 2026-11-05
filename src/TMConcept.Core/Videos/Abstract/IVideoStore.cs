@@ -15,6 +15,9 @@ public interface IVideoStore
     /// <summary>Cost lines of a video.</summary>
     Task<IReadOnlyList<VideoCost>> CostsAsync(Guid videoId, CancellationToken cancellationToken);
 
+    /// <summary>Sets the thumbnail file name of a video (a missing thumbnail was made again).</summary>
+    Task SetThumbnailAsync(Guid id, string thumbnailName, CancellationToken cancellationToken);
+
     /// <summary>Deletes the record (and its cost lines) for good; files are handled by the caller.</summary>
     Task DeleteAsync(Guid id, CancellationToken cancellationToken);
 }

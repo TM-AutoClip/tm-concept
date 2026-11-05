@@ -46,6 +46,15 @@ public sealed class VideoStore(IDbContextFactory<ConceptDbContext> factory) : IV
     }
 
     /// <inheritdoc />
+    public async Task SetThumbnailAsync(Guid id, string thumbnailName, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(thumbnailName);
+        await using var db = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await db.Videos.Where(v => v.Id == id).ExecuteUpdateAsync(s => s.SetProperty(v => v.ThumbnailName, thumbnailName), cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
         await using var db = await factory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);

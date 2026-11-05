@@ -17,7 +17,10 @@ namespace TMConcept.Desktop.ViewModels;
 /// The in-app player of Produced Videos: a chosen video shows its thumbnail and does not start by itself; ▶/⏸, a seek bar, the time,
 /// the volume and full screen. Picture and sound come from <see cref="FfmpegPlayback"/> (the app's ffmpeg). Frames are copied into two
 /// bitmaps used in turn (the binding sees a new object, nothing is allocated per frame); the position is read ten times a second while
-/// playing. Moving the seek bar seeks once the hand rests for a moment (each seek restarts ffmpeg).
+/// playing. Dragging the seek bar (or pressing on its track) holds the position updates until the pointer is released, then seeks once
+/// (<see cref="BeginSeek"/> / <see cref="EndSeek"/>): the 100 ms update would otherwise pull the thumb back under the hand. Other seek bar
+/// changes (the keyboard) seek once the value rests for a moment (each seek restarts ffmpeg). <see cref="Close"/> (leaving the page) and
+/// <see cref="Unload"/> give the frame memory back.
 /// </summary>
 public sealed partial class PlayerViewModel : ObservableObject, IDisposable
 {
@@ -35,6 +38,7 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
     private bool _pumpPending;
     private bool _reporting;
     private bool _ended;
+    private bool _dragging;
     private CancellationTokenSource? _seek;
 
     /// <summary>Creates.</summary>
@@ -45,7 +49,7 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         _text = text;
         _logger = logger;
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
-        _timer.Tick += (_, _) => Report(_playback.PositionMs);
+        _timer.Tick += (_, _) => Tick();
         _playback.FrameReady += OnFrameReady;
         _playback.Stopped += stop => Dispatcher.UIThread.Post(() => OnStopped(stop));
     }
@@ -129,7 +133,7 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         HasVideo = true;
     }
 
-    /// <summary>Stops and forgets the video.</summary>
+    /// <summary>Stops and forgets the video; the frame memory is given back.</summary>
     public void Unload()
     {
         CancelSeek();
@@ -139,8 +143,9 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         HasVideo = false;
         IsPlaying = false;
         _ended = false;
-        Frame = null;
+        _dragging = false;
         Message = string.Empty;
+        ReleaseFrames();
         Report(0);
     }
 
@@ -150,6 +155,55 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         if (IsPlaying)
         {
             PlayPause();
+        }
+    }
+
+    /// <summary>
+    /// The player is closed (its page was left): pauses and gives the frame memory back. The video and its position stay; the poster shows
+    /// until ▶ again.
+    /// </summary>
+    public void Close()
+    {
+        var had = Frame is not null;
+        Pause();
+        _dragging = false;
+        ReleaseFrames();
+        if (had)
+        {
+            Memory.MemoryRelease.Now(_logger, "closing the player");
+        }
+    }
+
+    /// <summary>The pointer went down on the seek bar (its thumb or its track): position updates and seeks wait for <see cref="EndSeek"/>.</summary>
+    public void BeginSeek()
+    {
+        if (_source is null)
+        {
+            return;
+        }
+
+        CancelSeek();
+        _dragging = true;
+    }
+
+    /// <summary>The pointer was released: one seek to where the seek bar is now.</summary>
+    public void EndSeek()
+    {
+        if (!_dragging)
+        {
+            return;
+        }
+
+        _dragging = false;
+        SeekNow((long)PositionMs);
+    }
+
+    /// <summary>The position update (every 100 ms while playing); held while the seek bar is dragged.</summary>
+    internal void Tick()
+    {
+        if (!_dragging)
+        {
+            Report(_playback.PositionMs);
         }
     }
 
@@ -206,12 +260,13 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
 
     partial void OnPositionMsChanged(double value)
     {
-        if (_reporting || _source is null)
+        if (_reporting || _source is null || _dragging)
         {
+            // A drag seeks once, on release (EndSeek); the time text follows the thumb meanwhile.
             return;
         }
 
-        // The user moved the seek bar: seek when it rests (a drag would otherwise start ffmpeg for every pixel).
+        // The seek bar changed without a drag (the keyboard): seek when it rests (a drag would otherwise start ffmpeg for every pixel).
         CancelSeek();
         var cancel = _seek = new CancellationTokenSource();
         _ = SeekLaterAsync((long)value, cancel.Token);
@@ -287,13 +342,37 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
         if (stop.Ended)
         {
             _ended = true;
-            Report((long)DurationMs);
+            if (!_dragging)
+            {
+                Report((long)DurationMs);
+            }
         }
         else
         {
             Message = _text.Format("player.failed", stop.Error);
-            Report(stop.PositionMs);
+            if (!_dragging)
+            {
+                Report(stop.PositionMs);
+            }
         }
+    }
+
+    /// <summary>Drops both frame bitmaps and the engine's frame buffer (a new play makes them again).</summary>
+    private void ReleaseFrames()
+    {
+        Frame = null;
+        lock (_bitmaps)
+        {
+            for (var i = 0; i < _bitmaps.Length; i++)
+            {
+                _bitmaps[i]?.Dispose();
+                _bitmaps[i] = null;
+            }
+
+            _next = 0;
+        }
+
+        _playback.ReleaseFrame();
     }
 
     private void OnFrameReady()
@@ -346,7 +425,7 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
 
         _next = 1 - _next;
         Frame = bitmap;
-        if (!IsPlaying)
+        if (!IsPlaying && !_dragging)
         {
             Report(position);
         }
