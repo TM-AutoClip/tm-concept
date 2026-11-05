@@ -237,5 +237,22 @@
   "tools.state.system": "the system's copy is used",
   "tools.state.missing": "not installed",
   "tools.state.unsupported": "not available for this computer",
-  "tools.libraries": "Chrome needs system libraries that are missing. Run this command in a terminal (the app does not use root):"
+  "tools.libraries": "Chrome needs system libraries that are missing. Run this command in a terminal (the app does not use root):",
+  "engines.default": "Default engine: HTML + GSAP, Apache-2.0.",
+  "engines.license_short": "React based. Not open source: free for individuals and companies of up to 3 people; larger companies need a Remotion license.",
+  "engines.experimental": "Experimental: no new release for months; on ARM64 Linux it needs the system's Chromium.",
+  "engines.ready": "ready",
+  "engines.missing": "missing: {0}",
+  "engines.part.node": "Node.js",
+  "engines.part.ffmpeg": "ffmpeg",
+  "engines.part.packages": "engine packages",
+  "engines.part.browser": "Chrome Headless Shell",
+  "engines.node_first": "Install Node.js first.",
+  "engines.confirm.message": "The {0} packages (pinned versions, from the official npm registry, install scripts not run) and, if needed, Chrome Headless Shell will be downloaded into the app's tools folder (a few hundred MB).",
+  "engines.license.title": "Remotion license",
+  "engines.license.message": "Remotion is not open source. Individuals, companies with up to 3 people and non-profits may use it for free; larger companies must buy a company license from Remotion. The license is between you and Remotion; TM Concept does not distribute Remotion, it downloads it from npm with your approval. Do you accept the Remotion license?",
+  "engines.license.accept": "I accept",
+  "engines.sample": "Sample render",
+  "engines.sample_done": "{0}: the sample video was rendered",
+  "engines.sample_failed": "{0}: the sample render failed: {1}"
 }

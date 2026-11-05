@@ -61,6 +61,11 @@ public static class DesktopServices
         services.AddSingleton(Engines.Tools.DownloadTransport.Network);
         services.AddSingleton<Engines.Tools.ToolDownloader>();
         services.AddSingleton<Engines.Tools.ToolInstaller>();
+        services.AddSingleton<Engines.Engines.ChromeLocator>();
+        services.AddSingleton<Engines.Engines.SampleRender>();
+        services.AddSingleton<Core.Engines.IVideoEngine, Engines.Engines.HyperFramesEngine>();
+        services.AddSingleton<Core.Engines.IVideoEngine, Engines.Engines.RemotionEngine>();
+        services.AddSingleton<Core.Engines.IVideoEngine, Engines.Engines.RevideoEngine>();
         AddDesktop(services);
         overrides?.Invoke(services);
         services.AddSingleton(s =>

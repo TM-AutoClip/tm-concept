@@ -4,6 +4,12 @@
     <ProjectReference Include="..\TMConcept.Core\TMConcept.Core.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <!-- Pinned npm packages and scripts of each engine (unpacked into the tools folder). -->
+    <EmbeddedResource Include="Packages/hyperframes/*" LogicalName="TMConcept.Packages.hyperframes.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Packages/remotion/*" LogicalName="TMConcept.Packages.remotion.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Packages/revideo/*" LogicalName="TMConcept.Packages.revideo.%(Filename)%(Extension)" />
+  </ItemGroup>
+  <ItemGroup>
     <InternalsVisibleTo Include="TMConcept.Tests" />
   </ItemGroup>
 </Project>

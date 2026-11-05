@@ -10,7 +10,7 @@
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="vm:ToolRowViewModel">
             <Border Classes="card" Margin="0,4">
-              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+              <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12">
                 <StackPanel Spacing="2">
                   <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
                   <TextBlock Text="{Binding Purpose}" Classes="small" TextWrapping="Wrap" />
@@ -19,6 +19,8 @@
                 </StackPanel>
                 <Button Grid.Column="1" Classes="accent" Content="{DynamicResource tools.install}" VerticalAlignment="Center" IsVisible="{Binding CanInstall}"
                         Command="{Binding $parent[ItemsControl].((vm:ToolsSettingsViewModel)DataContext).InstallCommand}" CommandParameter="{Binding}" />
+                <Button Grid.Column="2" Content="{DynamicResource engines.sample}" VerticalAlignment="Center" IsVisible="{Binding CanSample}"
+                        Command="{Binding $parent[ItemsControl].((vm:ToolsSettingsViewModel)DataContext).SampleCommand}" CommandParameter="{Binding}" />
               </Grid>
             </Border>
           </DataTemplate>

@@ -1,0 +1,15 @@
+{
+  "name": "tm-concept-engine-remotion",
+  "version": "1.0.0",
+  "description": "TM Concept: Remotion engine packages (downloaded only after the user accepted the Remotion license). Versions are pinned; installed with npm ci --ignore-scripts.",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "@remotion/bundler": "4.0.539",
+    "@remotion/renderer": "4.0.539",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "remotion": "4.0.539"
+  }
+}

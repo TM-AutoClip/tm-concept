@@ -237,5 +237,22 @@
   "tools.state.system": "sistemdeki kopya kullanılıyor",
   "tools.state.missing": "kurulu değil",
   "tools.state.unsupported": "bu bilgisayar için yok",
-  "tools.libraries": "Chrome'un ihtiyaç duyduğu bazı sistem kitaplıkları eksik. Bu komutu bir uçbirimde çalıştır (uygulama kök yetkisi kullanmaz):"
+  "tools.libraries": "Chrome'un ihtiyaç duyduğu bazı sistem kitaplıkları eksik. Bu komutu bir uçbirimde çalıştır (uygulama kök yetkisi kullanmaz):",
+  "engines.default": "Varsayılan motor: HTML + GSAP, Apache-2.0.",
+  "engines.license_short": "React tabanlı. Açık kaynak değil: bireyler ve en çok 3 kişilik şirketler için ücretsiz; daha büyük şirketler Remotion lisansı almalı.",
+  "engines.experimental": "Deneysel: aylardır yeni sürüm yok; ARM64 Linux'ta sistemin Chromium'unu ister.",
+  "engines.ready": "hazır",
+  "engines.missing": "eksik: {0}",
+  "engines.part.node": "Node.js",
+  "engines.part.ffmpeg": "ffmpeg",
+  "engines.part.packages": "motor paketleri",
+  "engines.part.browser": "Chrome Headless Shell",
+  "engines.node_first": "Önce Node.js'i kur.",
+  "engines.confirm.message": "{0} paketleri (sabit sürümler, resmî npm deposundan, kurulum betikleri çalıştırılmaz) ve gerekirse Chrome Headless Shell uygulamanın araç klasörüne indirilecek (birkaç yüz MB).",
+  "engines.license.title": "Remotion lisansı",
+  "engines.license.message": "Remotion açık kaynak değildir. Bireyler, en çok 3 kişilik şirketler ve kâr amacı gütmeyen kuruluşlar ücretsiz kullanabilir; daha büyük şirketler Remotion'dan şirket lisansı almalıdır. Lisans ilişkisi seninle Remotion arasındadır; TM Concept Remotion'u dağıtmaz, onayınla npm'den indirir. Remotion lisansını kabul ediyor musun?",
+  "engines.license.accept": "Kabul ediyorum",
+  "engines.sample": "Örnek render",
+  "engines.sample_done": "{0}: örnek video üretildi",
+  "engines.sample_failed": "{0}: örnek render başarısız: {1}"
 }

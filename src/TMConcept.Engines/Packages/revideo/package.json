@@ -1,0 +1,16 @@
+{
+  "name": "tm-concept-engine-revideo",
+  "version": "1.0.0",
+  "description": "TM Concept: Revideo engine packages (experimental). Versions are pinned; installed with npm ci --ignore-scripts.",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "@revideo/2d": "0.11.0",
+    "@revideo/core": "0.11.0",
+    "@revideo/ffmpeg": "0.11.0",
+    "@revideo/renderer": "0.11.0",
+    "@revideo/ui": "0.11.0",
+    "@revideo/vite-plugin": "0.11.0"
+  }
+}

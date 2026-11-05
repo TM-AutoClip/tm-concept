@@ -7,13 +7,22 @@ namespace TMConcept.Tests.Storage;
 internal sealed class TempPaths : IAppPaths, IDisposable
 {
     public TempPaths()
+        : this(Path.Combine(Path.GetTempPath(), "tmconcept-tests", Guid.NewGuid().ToString("N")))
     {
-        DataDirectory = Path.Combine(Path.GetTempPath(), "tmconcept-tests", Guid.NewGuid().ToString("N"));
+    }
+
+    private TempPaths(string folder)
+    {
+        DataDirectory = folder;
         Directory.CreateDirectory(DataDirectory);
         Directory.CreateDirectory(BackupDirectory);
     }
 
     public string DataDirectory { get; }
+
+    public static TempPaths At(string folder) => new(folder) { Keep = true };
+
+    private bool Keep { get; init; }
 
     public string DatabaseFile => Path.Combine(DataDirectory, "concept.db");
 
@@ -32,6 +41,11 @@ internal sealed class TempPaths : IAppPaths, IDisposable
     public void Dispose()
     {
         SqliteConnection.ClearAllPools();
+        if (Keep)
+        {
+            return;
+        }
+
         try
         {
             Directory.Delete(DataDirectory, recursive: true);
