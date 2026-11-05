@@ -65,7 +65,7 @@ Windows 10 ya da 11, 64 bit.
 1. [Son sürümü](../../releases/latest) aç ve `TMConcept-<sürüm>-win-x64.exe` dosyasını indir.
 2. İsteğe bağlı ama önerilir: dosyayı sürüm sayfasındaki SHA-256 değeriyle karşılaştır. PowerShell'de:
    ```powershell
-   Get-FileHash .\TMConcept-0.1.0-win-x64.exe -Algorithm SHA256
+   Get-FileHash .\TMConcept-0.1.1-win-x64.exe -Algorithm SHA256
    ```
 3. Dosyayı kalacağı yere koy, örneğin `%LOCALAPPDATA%\Programs\TM Concept\TMConcept.exe`.
 4. Çift tıkla. Dosya kod imzalı olmadığı için Windows **"Windows bilgisayarınızı korudu"** (SmartScreen) der: **Ek bilgi**'ye, sonra
@@ -83,11 +83,11 @@ Sıradan bilgisayarlarda `linux-x64`, 64 bit ARM bilgisayarlarda (ör. 64 bit ma
 Masaüstü oturumu gerekir.
 
 1. [Son sürümden](../../releases/latest) `tm-concept-<sürüm>-linux-x64.tar.gz` (ya da `-linux-arm64`) indir.
-2. İsteğe bağlı: SHA-256 değerini denetle: `sha256sum tm-concept-0.1.0-linux-x64.tar.gz`
+2. İsteğe bağlı: SHA-256 değerini denetle: `sha256sum tm-concept-0.1.1-linux-x64.tar.gz`
 3. Kalacağı yere aç:
    ```sh
    mkdir -p ~/.local/opt
-   tar -xzf tm-concept-0.1.0-linux-x64.tar.gz -C ~/.local/opt
+   tar -xzf tm-concept-0.1.1-linux-x64.tar.gz -C ~/.local/opt
    ~/.local/opt/tm-concept/install-desktop-entry.sh   # isteğe bağlı: TM Concept'i uygulama menüsüne ekler
    ```
 4. **Anahtarlık (önerilir).** Veritabanının kendiliğinden açılması için anahtar `secret-tool` ile masaüstü anahtarlığına konur:
