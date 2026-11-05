@@ -16,8 +16,12 @@ $version = ($props.Project.PropertyGroup | Where-Object { $_.Version } | Select-
 Write-Output "Building $version from commit $commit"
 foreach ($rid in $Rids) {
     $out = Join-Path $root "artifacts/publish/$rid"
+    # Linux: no compression inside the single file. A compressed bundle is unpacked into private memory at start (about 35 MB more
+    # on Windows measurements; the Pi showed ~230 MB with the window open), while an uncompressed one is mapped from the file. The tar.gz
+    # compresses it for the download anyway. Windows keeps it compressed: the exe is downloaded as is (59 MB instead of 129 MB).
+    $compress = if ($rid.StartsWith('win')) { 'true' } else { 'false' }
     & dotnet publish (Join-Path $root 'src/TMConcept.Desktop/TMConcept.Desktop.csproj') -c Release -r $rid --self-contained true `
-        -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -p:DebugSymbols=false `
+        -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=$compress -p:DebugType=none -p:DebugSymbols=false `
         -p:SourceRevisionId=$commit -m:1 -nodeReuse:false -o $out
     if ($LASTEXITCODE -ne 0) { throw "publish failed for $rid" }
     if ($rid.StartsWith('win')) {

@@ -16,8 +16,11 @@ echo "Building $version from commit $commit"
 [ "$#" -gt 0 ] || set -- win-x64 linux-x64 linux-arm64
 for rid in "$@"; do
   out="$root/artifacts/publish/$rid"
+  # Linux: no compression inside the single file (a compressed bundle is unpacked into private memory at start; the tar.gz compresses
+  # it for the download anyway). Windows keeps it compressed: the exe is downloaded as is.
+  case "$rid" in win-*) compress=true ;; *) compress=false ;; esac
   dotnet publish "$root/src/TMConcept.Desktop/TMConcept.Desktop.csproj" -c Release -r "$rid" --self-contained true \
-    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -p:DebugSymbols=false \
+    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile="$compress" -p:DebugType=none -p:DebugSymbols=false \
     -p:SourceRevisionId="$commit" -m:1 -nodeReuse:false -o "$out"
   python3 "$root/tools/package.py" "$out" "$rid" "$version"
 done
