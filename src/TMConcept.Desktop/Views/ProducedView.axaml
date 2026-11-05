@@ -17,7 +17,7 @@
           <DataTemplate x:DataType="vm:VideoRowViewModel">
             <Grid ColumnDefinitions="72,*" ColumnSpacing="10" Margin="0,2">
               <Border Width="72" Height="72" Background="#22000000" CornerRadius="6" ClipToBounds="True">
-                <Image Source="{Binding Thumbnail, Converter={x:Static c:FileBitmapConverter.Instance}}" Stretch="UniformToFill" />
+                <Image Source="{Binding Thumbnail, Converter={x:Static c:FileBitmapConverter.Instance}, ConverterParameter=160}" Stretch="UniformToFill" />
               </Border>
               <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
                 <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />

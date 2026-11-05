@@ -143,6 +143,8 @@ public static class DesktopServices
         AddPage<TrashViewModel, TrashView>(services);
         AddPage<ProfileViewModel, ProfileView>(services);
         AddPage<SettingsViewModel, SettingsView>(services);
+        // The settings page builds its sections the first time it is shown (less memory at start).
+        services.AddSingleton<Func<IEnumerable<SettingsSectionBase>>>(s => () => s.GetServices<SettingsSectionBase>());
         AddSection<GeneralSettingsViewModel, GeneralSettingsView>(services);
         AddSection<KeysSettingsViewModel, KeysSettingsView>(services);
         AddSection<ModelsSettingsViewModel, ModelsSettingsView>(services);

@@ -8,7 +8,17 @@
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <!-- The player's PulseAudio calls pass a pinned sample buffer (LibraryImport); nothing else is unsafe. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!--
+      Memory (a Raspberry Pi 5 showed ~230 MB with the window open): workstation GC without the background (concurrent) GC thread and its
+      extra heap reserve, and GCConserveMemory, which compacts the large object heap sooner instead of growing it. Measured in
+      docs/release-notes/v0.1.2.md.
+    -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
   </PropertyGroup>
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="5" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" />
     <PackageReference Include="Avalonia.Desktop" />

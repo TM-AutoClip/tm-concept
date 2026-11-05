@@ -20,7 +20,7 @@
     </StackPanel>
     <Border Background="Black" CornerRadius="6" ClipToBounds="True" MinHeight="200">
       <Panel>
-        <Image Source="{Binding Poster, Converter={x:Static c:FileBitmapConverter.Instance}, ConverterParameter=720}" Stretch="Uniform"
+        <Image Source="{Binding Poster, Converter={x:Static c:FileBitmapConverter.Instance}, ConverterParameter=480}" Stretch="Uniform"
                IsVisible="{Binding ShowPoster}" />
         <Image Source="{Binding Frame}" Stretch="Uniform" />
         <Button Content="▶" Command="{Binding PlayPauseCommand}" IsVisible="{Binding ShowPoster}" IsEnabled="{Binding HasVideo}"

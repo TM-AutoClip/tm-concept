@@ -87,7 +87,7 @@
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:ProfileImageViewModel">
                 <Grid ColumnDefinitions="96,*,Auto" ColumnSpacing="10" Margin="0,4">
-                  <Image Source="{Binding FullPath, Converter={x:Static c:FileBitmapConverter.Instance}}" Width="96" Height="64" Stretch="UniformToFill" />
+                  <Image Source="{Binding FullPath, Converter={x:Static c:FileBitmapConverter.Instance}, ConverterParameter=192}" Width="96" Height="64" Stretch="UniformToFill" />
                   <StackPanel Grid.Column="1" Spacing="4">
                     <TextBlock Text="{Binding FileName}" Classes="small" />
                     <TextBox Text="{Binding Caption}" PlaceholderText="{DynamicResource profile.images.caption}" MaxLength="200" />

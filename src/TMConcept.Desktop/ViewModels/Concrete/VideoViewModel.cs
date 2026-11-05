@@ -361,6 +361,9 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
         {
             row.Busy = false;
             _running = null;
+
+            // The job's buffers (scene images, audio, model answers) are garbage now: give the memory back (small machines).
+            Memory.MemoryRelease.Now(logger, "a video job");
         }
     }
 

@@ -5,22 +5,25 @@ using TMConcept.Desktop.Localization;
 
 namespace TMConcept.Desktop.ViewModels;
 
-/// <summary>Settings page: one tab per registered section.</summary>
+/// <summary>
+/// Settings page: one tab per registered section. The sections (and what they hold: the model catalog, the key list, tool states) are built
+/// the first time the page is shown, not at start.
+/// </summary>
 public sealed partial class SettingsViewModel : PageViewModelBase
 {
     private readonly Localizer _text;
     private readonly ILogger<SettingsViewModel> _logger;
+    private readonly Func<IEnumerable<SettingsSectionBase>> _sections;
+    private ObservableCollection<SettingsSectionBase>? _built;
 
-    /// <summary>Collects the sections.</summary>
-    public SettingsViewModel(IEnumerable<SettingsSectionBase> sections, Localizer text, ILogger<SettingsViewModel> logger)
+    /// <summary>Takes the way to build the sections (they are built on first use).</summary>
+    public SettingsViewModel(Func<IEnumerable<SettingsSectionBase>> sections, Localizer text, ILogger<SettingsViewModel> logger)
     {
         ArgumentNullException.ThrowIfNull(text);
+        _sections = sections;
         _text = text;
         _logger = logger;
-        Sections = new ObservableCollection<SettingsSectionBase>(sections.OrderBy(s => s.Order));
-        RefreshTitles();
         _text.LanguageChanged += (_, _) => RefreshTitles();
-        SelectedSection = Sections.FirstOrDefault();
     }
 
     /// <inheritdoc />
@@ -32,15 +35,28 @@ public sealed partial class SettingsViewModel : PageViewModelBase
     /// <inheritdoc />
     public override int Order => 90;
 
-    /// <summary>Tabs.</summary>
-    public ObservableCollection<SettingsSectionBase> Sections { get; }
+    /// <summary>Tabs (built on first use; the first one is selected then).</summary>
+    public ObservableCollection<SettingsSectionBase> Sections
+    {
+        get
+        {
+            if (_built is null)
+            {
+                _built = new ObservableCollection<SettingsSectionBase>(_sections().OrderBy(s => s.Order));
+                RefreshTitles();
+                SelectedSection ??= _built.FirstOrDefault();
+            }
+
+            return _built;
+        }
+    }
 
     /// <summary>Shown tab.</summary>
     [ObservableProperty]
     public partial SettingsSectionBase? SelectedSection { get; set; }
 
     /// <inheritdoc />
-    public override Task ActivateAsync() => ActivateSectionAsync(SelectedSection);
+    public override Task ActivateAsync() => ActivateSectionAsync(Sections.Count > 0 ? SelectedSection : null);
 
     /// <summary>Shows a section by type.</summary>
     public async Task<TSection?> ShowAsync<TSection>()
@@ -74,7 +90,7 @@ public sealed partial class SettingsViewModel : PageViewModelBase
 
     private void RefreshTitles()
     {
-        foreach (var section in Sections)
+        foreach (var section in _built ?? [])
         {
             section.Title = _text[section.TitleKey];
         }
