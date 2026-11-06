@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
+using TMConcept.Core.Activity;
 using TMConcept.Desktop.Logging;
 
 namespace TMConcept.Tests.Desktop;
@@ -192,6 +193,105 @@ public sealed class LoggingTests : IDisposable
         ReadShared(file).ShouldContain("Harness: composed");
     }
 
+    [Fact]
+    public void TheScrubberMasksLibraryFolderNamesFoldersOutsideHomeAndKnownNames()
+    {
+        var scrubber = new LogScrubber(@"C:\Users\S", library: @"C:\Users\S\Documents\TM Concept", data: @"D:\Portable Stuff\TMC",
+            documents: @"\\server\home$\S\Docs");
+        var text = scrubber.Scrub(@"open C:\Users\S\Documents\TM Concept\My Channel\2026-11-06-1-Greek fire\video.mp4 now; "
+            + @"json ""C:\\Users\\S\\Documents\\TM Concept\\My Channel\\x.png"", folder 'c:/users/s/documents/tm concept/My Channel'; "
+            + @"db D:\Portable Stuff\TMC\concept.db, doc \\server\home$\S\Docs\notes.txt, other C:\Users\S\Documents\TM Concepts\keep");
+
+        text.ShouldContain(@"<library>\<profile>\<folder>\video.mp4 now");
+        text.ShouldContain(@"""<library>\\<profile>\\<folder>""");
+        text.ShouldContain("'<library>/<profile>'");
+        text.ShouldContain(@"<data>\concept.db");
+        text.ShouldContain(@"<documents>\notes.txt");
+        text.ShouldContain(@"~\Documents\TM Concepts\keep");
+        text.ShouldNotContain("My Channel");
+        text.ShouldNotContain("Greek fire");
+        text.ShouldNotContain("Portable Stuff");
+        text.ShouldNotContain("server");
+
+        // A data folder inside the home folder is written with ~ as before.
+        new LogScrubber(@"C:\Users\S", data: @"C:\Users\S\AppData\Local\TM Concept").Scrub(@"C:\Users\S\AppData\Local\TM Concept\logs")
+            .ShouldBe(@"~\AppData\Local\TM Concept\logs");
+
+        var named = scrubber.WithNames(["Byzantium Chronicles", "Greek fire", "ab", "Ali"]);
+        named.Scrub("Video \"Greek fire\" done for Byzantium Chronicles; Validation by ab, ALI said").ShouldBe(
+            "Video \"<name>\" done for <name>; Validation by ab, <name> said");
+    }
+
+    [Fact]
+    public void AnActivityLineThatNamesSomethingGoesToTheFileWithPlaceholders()
+    {
+        var logger = new ListLogger();
+        var activity = new ActivityLog(TimeProvider.System, new TypedLogger(logger));
+
+        activity.Add(ActivityLevel.Info, "Profile \"Byzantium\" created.", "Profile \"" + ActivityPlaceholders.Name + "\" created.");
+        activity.Add(ActivityLevel.Warning, "Backup skipped.");
+
+        logger.Entries[0].Message.ShouldBe("Activity: Profile \"<name>\" created.");
+        logger.Entries[1].Message.ShouldBe("Activity: Backup skipped.");
+        logger.Entries[1].Level.ShouldBe(LogLevel.Warning);
+    }
+
+    [Fact]
+    public void WhenTheNewDaysFileCannotBeOpenedAtFirstItsHeaderAndTheSweepComeWithTheFirstEntryThatOpensIt()
+    {
+        var clock = Clock(new DateTimeOffset(2026, 11, 6, 23, 59, 59, TimeSpan.Zero));
+        File.WriteAllText(Path.Combine(_folder, "app-2026-10-30.log"), "old");
+        var blocker = Path.Combine(_folder, "app-2026-11-07.log");
+        Directory.CreateDirectory(blocker);
+        using var provider = new FileLoggerProvider(_folder, LogRules.AppKind, clock);
+        var logger = provider.CreateLogger("Test");
+        logger.LogInformation("before midnight");
+
+        clock.Advance(TimeSpan.FromSeconds(2));
+        logger.LogInformation("lost: the file cannot be opened");
+        Directory.Delete(blocker);
+        logger.LogInformation("after midnight");
+
+        var second = Lines("app-2026-11-07.log");
+        second[0].ShouldStartWith("=== TM Concept ");
+        second.ShouldContain(l => l.EndsWith("Test: after midnight", StringComparison.Ordinal));
+        File.Exists(Path.Combine(_folder, "app-2026-10-30.log")).ShouldBeFalse("swept when the day's file was opened");
+    }
+
+    [Fact]
+    public void TwoProcessesOfOneKindNeverOverwriteEachOthersLines()
+    {
+        var clock = Clock(new DateTimeOffset(2026, 11, 6, 8, 0, 0, TimeSpan.Zero));
+        using var first = new FileLoggerProvider(_folder, LogRules.SpeechWorkerKind, clock);
+        using var second = new FileLoggerProvider(_folder, LogRules.SpeechWorkerKind, clock);
+
+        // Two writers with their own file handles, as two processes have: every line ends up in the file once.
+        Parallel.For(0, 2, writer =>
+        {
+            var logger = (writer == 0 ? first : second).CreateLogger("W" + writer);
+            for (var i = 0; i < 300; i++)
+            {
+                logger.LogInformation("line {Number} {Padding}", i, new string('x', 40));
+            }
+        });
+
+        var lines = Lines("speech-worker-2026-11-06.log");
+        lines.Count(l => l.StartsWith("=== TM Concept ", StringComparison.Ordinal)).ShouldBe(2);
+        lines.Count(l => l.Contains("W0: line ", StringComparison.Ordinal)).ShouldBe(300);
+        lines.Count(l => l.Contains("W1: line ", StringComparison.Ordinal)).ShouldBe(300);
+        lines.ShouldAllBe(l => l.StartsWith("=== ", StringComparison.Ordinal) || l.StartsWith("2026-11-06 ", StringComparison.Ordinal));
+        DailyLogFile.LockName(_folder, LogRules.SpeechWorkerKind).ShouldNotContain("tmconcept-tests");
+    }
+
+    [Fact]
+    public void TheShellLauncherNamesOnlyTheKindOfWhatItOpens()
+    {
+        ShellLauncherKind(_folder).ShouldBe("a folder");
+        ShellLauncherKind(Path.Combine(_folder, "Byzantium", "2026-11-06-1-Greek fire", "Video.MP4")).ShouldBe("a .mp4 file");
+    }
+
+    private static string ShellLauncherKind(string path) => TMConcept.Desktop.Os.ShellLauncher.Kind(path);
+
     private static FakeTimeProvider Clock(DateTimeOffset start)
     {
         var clock = new FakeTimeProvider(start);
@@ -224,5 +324,17 @@ public sealed class LoggingTests : IDisposable
             ArgumentNullException.ThrowIfNull(formatter);
             Entries.Add((logLevel, formatter(state, exception), exception));
         }
+    }
+
+    /// <summary><see cref="ListLogger"/> as the typed logger <see cref="ActivityLog"/> takes.</summary>
+    private sealed class TypedLogger(ListLogger inner) : ILogger<ActivityLog>
+    {
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => inner.BeginScope(state);
+
+        public bool IsEnabled(LogLevel logLevel) => inner.IsEnabled(logLevel);
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+            inner.Log(logLevel, eventId, state, exception, formatter);
     }
 }

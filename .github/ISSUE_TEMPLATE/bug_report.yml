@@ -7,9 +7,12 @@ body:
     attributes:
       value: |
         Thanks for the report. TM Concept sends nothing by itself: in the app, **Report a problem → Prepare logs** makes a zip with the
-        logs of the last 7 days and a system.txt (keys, e-mail addresses and your home folder are masked). Please attach it below.
+        logs of the last 7 days and a system.txt (keys, e-mail addresses, your home folder and the app's folders are masked; profile
+        names and titles become <name> while the app is unlocked). The logs do name the settings you changed. Open the zip and read it
+        before you attach it below: this issue is public.
 
-        Türkçe de yazabilirsin. Uygulamada **Hata bildir → Günlükleri hazırla** ile oluşan zip'i aşağıya sürükle.
+        Türkçe de yazabilirsin. Uygulamada **Hata bildir → Günlükleri hazırla** ile oluşan zip'i önce açıp oku, sonra aşağıya sürükle
+        (bu kayıt herkese açık).
 
         Never paste API keys, passwords or private data here.
   - type: textarea

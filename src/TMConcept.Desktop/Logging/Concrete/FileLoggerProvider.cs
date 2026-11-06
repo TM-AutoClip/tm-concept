@@ -24,7 +24,7 @@ public sealed class FileLoggerProvider : ILoggerProvider
         ArgumentNullException.ThrowIfNull(clock);
         _clock = clock;
         _scrubber = scrubber ?? LogScrubber.ForCurrentUser;
-        _file = new DailyLogFile(directory, kind, clock, maxBytes);
+        _file = new DailyLogFile(directory, kind, clock, maxBytes, _scrubber);
     }
 
     /// <summary>The file written now.</summary>

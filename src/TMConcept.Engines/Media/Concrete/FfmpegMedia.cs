@@ -16,11 +16,14 @@ public sealed class FfmpegMedia(FfmpegMuxer muxer, ToolInstaller tools, IProcess
     public Task MuxAsync(string folder, string silentVideo, IReadOnlyList<(string Wav, long StartMs)> clips, string? assFile, string output,
         CancellationToken cancellationToken) => muxer.MuxAsync(folder, silentVideo, clips, assFile, output, cancellationToken);
 
-    /// <summary>ffmpeg's error lines without the user's folders (they name the files it read and wrote).</summary>
-    private static string Paths(string text, string video, string jpeg, string folder) => Core.Processes.ChildOutput.Summary(text)
-        .Replace(video, Path.GetFileName(video), StringComparison.Ordinal)
-        .Replace(jpeg, Path.GetFileName(jpeg), StringComparison.Ordinal)
-        .Replace(folder, "<video folder>", StringComparison.Ordinal)
+    /// <summary>
+    /// ffmpeg's error lines without the user's folders (they name the files it read and wrote): the paths are replaced first and the text is
+    /// cut after, so a cut never leaves part of a path.
+    /// </summary>
+    internal static string Paths(string text, string video, string jpeg, string folder) => Core.Processes.ChildOutput.Summary(text
+            .Replace(video, Path.GetFileName(video), StringComparison.Ordinal)
+            .Replace(jpeg, Path.GetFileName(jpeg), StringComparison.Ordinal)
+            .Replace(folder, "<video folder>", StringComparison.Ordinal))
         .Trim();
 
     /// <inheritdoc />

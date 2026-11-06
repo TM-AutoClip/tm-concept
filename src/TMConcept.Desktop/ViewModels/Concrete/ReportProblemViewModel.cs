@@ -37,7 +37,7 @@ public sealed partial class ReportProblemViewModel(ProblemReport report, SystemR
         string zip;
         try
         {
-            zip = await Task.Run(report.Create).ConfigureAwait(true);
+            zip = await Task.Run(() => report.CreateAsync(CancellationToken.None)).ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {

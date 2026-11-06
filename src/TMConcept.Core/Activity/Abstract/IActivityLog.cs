@@ -6,6 +6,12 @@ namespace TMConcept.Core.Activity;
 /// </summary>
 public interface IActivityLog
 {
-    /// <summary>Adds a line.</summary>
+    /// <summary>Adds a line; the log file gets the same text.</summary>
     void Add(ActivityLevel level, string text);
+
+    /// <summary>
+    /// Adds a line that names a profile or a title: the panel shows <paramref name="text"/>, the log file gets <paramref name="fileText"/>,
+    /// the same line with <see cref="ActivityPlaceholders"/> in place of the names.
+    /// </summary>
+    void Add(ActivityLevel level, string text, string fileText);
 }

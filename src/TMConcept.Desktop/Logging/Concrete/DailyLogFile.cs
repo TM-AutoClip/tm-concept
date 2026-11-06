@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Logging;
 
@@ -7,9 +8,11 @@ namespace TMConcept.Desktop.Logging;
 /// <summary>
 /// The log file of one process kind: <c>&lt;kind&gt;-yyyy-MM-dd.log</c> by the local date, a new file at midnight while the program runs. Each
 /// start and each new file begins with <see cref="AppIdentity.Header"/>. The file is opened for appending and shared (another process of the
-/// same kind, or a problem report reading it, can use it at the same time); every entry is flushed. After the daily size limit one warning
-/// line is written and nothing more until the next day. Old files are swept (<see cref="LogRetention"/>) at start and at every day change; a
-/// file that cannot be deleted is written as a warning line.
+/// same kind, or a problem report reading it, can use it at the same time); every entry is flushed. Processes of the same kind take a named
+/// lock around "go to the end and write", so a second start or a second worker never overwrites lines of the other. After the daily size
+/// limit one warning line is written and nothing more until the next day. Old files are swept (<see cref="LogRetention"/>) at start and
+/// at every day change; a file that cannot be deleted is written as a warning line. When a day's file cannot be opened at first, the
+/// header and the sweep come with the first entry that opens it.
 /// </summary>
 public sealed class DailyLogFile : IDisposable
 {
@@ -18,15 +21,17 @@ public sealed class DailyLogFile : IDisposable
     private readonly string _kind;
     private readonly TimeProvider _clock;
     private readonly long _maxBytes;
+    private readonly LogScrubber _scrubber;
+    private readonly Mutex? _shared;
     private readonly Lock _gate = new();
     private FileStream? _stream;
-    private DateOnly _day;
-    private bool _opened;
+    private DateOnly _day = DateOnly.MinValue;
+    private DateOnly _headerDay = DateOnly.MinValue;
     private bool _full;
     private bool _disposed;
 
     /// <summary>Opens today's file of <paramref name="kind"/> in <paramref name="directory"/> (created if missing) and writes the header.</summary>
-    public DailyLogFile(string directory, string kind, TimeProvider clock, long maxBytes = LogRules.MaxFileBytes)
+    public DailyLogFile(string directory, string kind, TimeProvider clock, long maxBytes = LogRules.MaxFileBytes, LogScrubber? scrubber = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(directory);
         ArgumentException.ThrowIfNullOrEmpty(kind);
@@ -35,7 +40,9 @@ public sealed class DailyLogFile : IDisposable
         _kind = kind;
         _clock = clock;
         _maxBytes = maxBytes;
+        _scrubber = scrubber ?? LogScrubber.ForCurrentUser;
         Directory.CreateDirectory(directory);
+        _shared = SharedLock(directory, kind);
         lock (_gate)
         {
             Open(Today());
@@ -76,6 +83,29 @@ public sealed class DailyLogFile : IDisposable
             _disposed = true;
             _stream?.Dispose();
             _stream = null;
+            _shared?.Dispose();
+        }
+    }
+
+    /// <summary>The name of the lock the processes writing this folder's files of <paramref name="kind"/> share (no path in it).</summary>
+    internal static string LockName(string directory, string kind)
+    {
+        var full = Path.GetFullPath(directory).TrimEnd('\\', '/');
+        var key = OperatingSystem.IsWindows() ? full.ToUpperInvariant() : full;
+        return "TMConcept-log-" + kind + "-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key)))[..16];
+    }
+
+    /// <summary>The shared lock; <c>null</c> when the system refuses it (then each process still writes at the end of the file).</summary>
+    private static Mutex? SharedLock(string directory, string kind)
+    {
+        try
+        {
+            return new Mutex(false, LockName(directory, kind));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or WaitHandleCannotBeOpenedException or PlatformNotSupportedException)
+        {
+            System.Diagnostics.Debug.WriteLine("The shared log lock could not be created: " + ex.Message);
+            return null;
         }
     }
 
@@ -83,15 +113,14 @@ public sealed class DailyLogFile : IDisposable
 
     private void Open(DateOnly today)
     {
-        var newDay = !_opened || today != _day;
         _stream?.Dispose();
         _stream = null;
-        _day = today;
-        if (newDay)
+        if (today != _day)
         {
             _full = false;
         }
 
+        _day = today;
         try
         {
             _stream = new FileStream(CurrentFile, FileMode.OpenOrCreate, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete, 4096, FileOptions.None);
@@ -103,13 +132,13 @@ public sealed class DailyLogFile : IDisposable
             return;
         }
 
-        if (!newDay)
+        if (_headerDay == today)
         {
             // Reopened after a write failure on the same day: no second header, no second sweep.
             return;
         }
 
-        _opened = true;
+        _headerDay = today;
         Append(AppIdentity.Header(_kind), warnWhenFull: false);
         foreach (var failure in Sweep(today))
         {
@@ -133,7 +162,7 @@ public sealed class DailyLogFile : IDisposable
         return failures;
     }
 
-    private string Entry(LogLevel level, string message) => LogScrubber.ForCurrentUser.Scrub(LogLine.Format(_clock.GetLocalNow(), level, Category, default, message, null));
+    private string Entry(LogLevel level, string message) => _scrubber.Scrub(LogLine.Format(_clock.GetLocalNow(), level, Category, default, message, null));
 
     private void Append(string entry, bool warnWhenFull)
     {
@@ -142,9 +171,10 @@ public sealed class DailyLogFile : IDisposable
             return;
         }
 
+        var locked = TakeShared();
         try
         {
-            // Another process of the same kind may have written meanwhile: always at the end.
+            // Another process of the same kind may have written meanwhile: always at the end, under the shared lock.
             var length = _stream.Seek(0, SeekOrigin.End);
             var bytes = Utf8.GetBytes(entry + Environment.NewLine);
             if (length + bytes.Length > _maxBytes)
@@ -169,6 +199,26 @@ public sealed class DailyLogFile : IDisposable
             System.Diagnostics.Debug.WriteLine("Log file write failed: " + ex.Message);
             _stream?.Dispose();
             _stream = null;
+        }
+        finally
+        {
+            if (locked)
+            {
+                _shared!.ReleaseMutex();
+            }
+        }
+    }
+
+    /// <summary>Takes the shared lock; a process that died holding it leaves it to the next one. Waits at most 2 s, then writes anyway.</summary>
+    private bool TakeShared()
+    {
+        try
+        {
+            return _shared?.WaitOne(TimeSpan.FromSeconds(2)) ?? false;
+        }
+        catch (AbandonedMutexException)
+        {
+            return true;
         }
     }
 }

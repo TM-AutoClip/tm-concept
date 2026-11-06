@@ -161,7 +161,7 @@ videos stay where they are. Engine packages are reinstalled only when the new ve
 |---|---|---|---|
 | Database (profiles, concepts, keys) | `%LOCALAPPDATA%\TM Concept\concept.db` | `~/.local/share/tm-concept/concept.db` | yes |
 | Backups (last 10, daily) | `…\TM Concept\backups\*.tmcbak` | `~/.local/share/tm-concept/backups/` | yes (password) |
-| Logs (no keys, no personal paths; 7 days) | `…\TM Concept\logs\` | `~/.local/share/tm-concept/logs/` | no |
+| Logs (no keys; home and app folders masked; 7 days) | `…\TM Concept\logs\` | `~/.local/share/tm-concept/logs/` | no |
 | Problem report zips (last 5) | `…\TM Concept\reports\` | `~/.local/share/tm-concept/reports/` | no |
 | Tools (Node, ffmpeg, engines, voices) | `…\TM Concept\tools\` | `~/.local/share/tm-concept/tools/` | no |
 | Videos and sample images | `Documents\TM Concept\` | `~/Documents/TM Concept/` (XDG documents folder) | no |
@@ -185,8 +185,11 @@ TM Concept sends nothing by itself: no telemetry, no crash upload. If something 
 1. Click **Report a problem** at the bottom of the left menu.
 2. **Prepare logs** makes `tm-concept-logs-<date>-<time>.zip` in the data folder's `reports` folder and shows it. It holds the log files
    of the last 7 days and `system.txt` (version, operating system, architecture, .NET, interface language, drawing mode, which tools are
-   installed). Your home folder, e-mail addresses and keys are masked; the database, API keys, settings, profiles, concepts and videos are
-   never in it. Open it and read it before you share it if you like.
+   installed). Your home folder, the app's folders (library, data, documents), e-mail addresses and keys are masked, and while the app
+   is unlocked every profile name and concept or video title it knows becomes `<name>` (the log lines of 0.1.4 leave them out already).
+   The database, API keys, concept and narration texts and video files are never in it. The logs do name the settings you changed and
+   their new values (interface language, drawing mode, notifications, each step's model and effort, price overrides). Masking is a
+   safety net, not a guarantee: open the zip and read it before you share it publicly.
 3. **Report on GitHub** opens the issue form with the version and system filled in. Describe what happened and drag the zip into the
    form (a GitHub account is needed). **Copy details** copies the system information instead.
 

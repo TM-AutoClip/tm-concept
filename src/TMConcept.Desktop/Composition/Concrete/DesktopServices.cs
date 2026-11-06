@@ -45,7 +45,10 @@ public static class DesktopServices
         ArgumentNullException.ThrowIfNull(paths);
         var services = new ServiceCollection();
         // Created (and disposed: the file is closed) by the container: Information and above, one file per day, kept 7 days.
-        services.AddSingleton<ILoggerProvider>(s => new FileLoggerProvider(paths.LogDirectory, LogRules.AppKind, s.GetRequiredService<TimeProvider>()));
+        // Paths are masked with this app's folders: the library (profile and video folder names), a data or documents folder outside home.
+        services.AddSingleton(LogScrubber.For(paths));
+        services.AddSingleton<ILoggerProvider>(s => new FileLoggerProvider(paths.LogDirectory, LogRules.AppKind, s.GetRequiredService<TimeProvider>(),
+            s.GetRequiredService<LogScrubber>()));
         services.AddLogging(b => b.SetMinimumLevel(FileLoggerProvider.MinimumLevel));
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton(s => new CrashLog(s.GetRequiredService<ILoggerFactory>().CreateLogger("TMConcept.Crash")));
@@ -144,6 +147,7 @@ public static class DesktopServices
 
         services.AddSingleton<Dialogs.IConfirmDialog, Dialogs.ConfirmDialog>();
         services.AddSingleton<Reports.SystemReport>();
+        services.AddSingleton<Reports.ReportNames>();
         services.AddSingleton<Reports.ProblemReport>();
         services.AddTransient<ReportProblemViewModel>();
         services.AddSingleton<Func<ReportProblemViewModel>>(s => () => s.GetRequiredService<ReportProblemViewModel>());

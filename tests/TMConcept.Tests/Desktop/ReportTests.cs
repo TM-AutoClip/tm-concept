@@ -3,6 +3,8 @@ using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
+using TMConcept.Core.Concepts;
+using TMConcept.Core.Profiles;
 using TMConcept.Desktop.Logging;
 using TMConcept.Desktop.Os;
 using TMConcept.Desktop.Reports;
@@ -16,7 +18,7 @@ namespace TMConcept.Tests.Desktop;
 public sealed class ReportTests
 {
     [Fact]
-    public void TheZipHoldsOnlyTheKeptLogFilesScrubbedAndSystemTxt()
+    public async Task TheZipHoldsOnlyTheKeptLogFilesScrubbedAndSystemTxt()
     {
         using var h = new DesktopHarness();
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -30,7 +32,7 @@ public sealed class ReportTests
         Append(Path.Combine(logs, "notes.txt"), "not a log");
         File.WriteAllText(Path.Combine(h.Paths.DataDirectory, "concept.db"), "database");
 
-        var zip = h.Get<ProblemReport>().Create();
+        var zip = await h.Get<ProblemReport>().CreateAsync(CancellationToken.None);
 
         Path.GetDirectoryName(zip).ShouldBe(h.Paths.ReportDirectory);
         Path.GetFileName(zip).ShouldMatch(@"^tm-concept-logs-\d{8}-\d{4}\.zip$");
@@ -62,10 +64,39 @@ public sealed class ReportTests
         system.ShouldContain("Data folder: portable");
         system.ShouldContain("  Node: ");
         system.ShouldContain("Remotion: ");
+        system.ShouldContain("Names masked by value: no");
+    }
+
+    [AvaloniaFact]
+    public async Task ProfileNamesAndTitlesOfTheDatabaseAndLibraryFolderNamesAreMaskedInTheZip()
+    {
+        using var h = new DesktopHarness();
+        await FirstRunTests.CreateAsync(h);
+        var profile = new Profile { Name = "Byzantium Chronicles", ContentLanguage = ContentLanguages.English, ConceptText = "x" };
+        await h.Get<IProfileStore>().SaveAsync(profile, CancellationToken.None);
+        await h.Get<IConceptStore>().AddAsync([new Concept { ProfileId = profile.Id, Title = "Greek fire: the secret", Summary = "s", Content = "c", Language = "en" }],
+            CancellationToken.None);
+        var today = DateOnly.FromDateTime(DateTime.Now);
+
+        // An older (0.1.3) file still has names in its activity lines; an exception message names a library folder.
+        Append(Path.Combine(h.Paths.LogDirectory, "tmconcept-" + today.AddDays(-1).ToString("yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture) + ".log"),
+            "Activity: Profile \"Byzantium Chronicles\" created. Video \"Greek fire: the secret\" ready.");
+        Append(Path.Combine(h.Paths.LogDirectory, LogFileName.For(LogRules.AppKind, today)), "Could not delete '"
+            + Path.Combine(h.Paths.LibraryDirectory, "Byzantium Chronicles", "2026-11-06-1-Greek fire the secret", "video.mp4") + "': in use");
+
+        var zip = await h.Get<ProblemReport>().CreateAsync(CancellationToken.None);
+
+        using var archive = ZipFile.OpenRead(zip);
+        var all = string.Join('\n', archive.Entries.Select(Read));
+        all.ShouldNotContain("Byzantium", Case.Insensitive);
+        all.ShouldNotContain("Greek fire", Case.Insensitive);
+        all.ShouldContain("Profile \"<name>\" created");
+        all.ShouldContain("'<library>" + Path.DirectorySeparatorChar + "<profile>" + Path.DirectorySeparatorChar + "<folder>" + Path.DirectorySeparatorChar + "video.mp4'");
+        all.ShouldContain("Names masked by value: yes");
     }
 
     [Fact]
-    public void OnlyTheNewestFiveZipsAreKept()
+    public async Task OnlyTheNewestFiveZipsAreKept()
     {
         using var h = new DesktopHarness();
         Directory.CreateDirectory(h.Paths.ReportDirectory);
@@ -75,7 +106,7 @@ public sealed class ReportTests
         }
 
         File.WriteAllText(Path.Combine(h.Paths.ReportDirectory, "keep-me.zip"), "not ours");
-        var zip = h.Get<ProblemReport>().Create();
+        var zip = await h.Get<ProblemReport>().CreateAsync(CancellationToken.None);
 
         var left = Directory.EnumerateFiles(h.Paths.ReportDirectory, "tm-concept-logs-*.zip").Select(Path.GetFileName).Order(StringComparer.Ordinal).ToList();
         left.Count.ShouldBe(5);

@@ -16,7 +16,8 @@ public sealed class AppPaths : IAppPaths
         ArgumentNullException.ThrowIfNull(os);
         IsPortable = dataDirectory is not null;
         DataDirectory = dataDirectory ?? os.DefaultDataDirectory();
-        LibraryDirectory = dataDirectory is null ? Path.Combine(os.DocumentsDirectory(), "TM Concept") : Path.Combine(dataDirectory, "library");
+        DocumentsDirectory = os.DocumentsDirectory();
+        LibraryDirectory = dataDirectory is null ? Path.Combine(DocumentsDirectory, "TM Concept") : Path.Combine(dataDirectory, "library");
         Directory.CreateDirectory(DataDirectory);
         Directory.CreateDirectory(LogDirectory);
     }
@@ -50,6 +51,9 @@ public sealed class AppPaths : IAppPaths
 
     /// <inheritdoc />
     public string LibraryDirectory { get; }
+
+    /// <summary>The operating system's documents folder (the logs mask it where it is outside the home folder).</summary>
+    public string DocumentsDirectory { get; }
 
     /// <summary>Plain preferences readable before the database is unlocked (only the interface language).</summary>
     public string PreferencesFile => Path.Combine(DataDirectory, "preferences.json");

@@ -142,7 +142,7 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
             }
 
             await concepts.SetStatusAsync([concept.Id], ConceptStatus.Approved, CancellationToken.None).ConfigureAwait(true);
-            activity.Add(ActivityLevel.Info, text.Format("produced.again.done", row.Title));
+            activity.Add(ActivityLevel.Info, text.Format("produced.again.done", row.Title), text.Format("produced.again.done", ActivityPlaceholders.Title));
             Status = text.Format("produced.again.done", row.Title);
             events.Raise(this);
         }
@@ -200,7 +200,8 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
         }
 
         await videos.DeleteAsync(row.Video.Id, CancellationToken.None).ConfigureAwait(true);
-        activity.Add(ActivityLevel.Info, text.Format(answer.Checked ? "produced.deleted_files" : "produced.deleted", row.Title));
+        var deleted = answer.Checked ? "produced.deleted_files" : "produced.deleted";
+        activity.Add(ActivityLevel.Info, text.Format(deleted, row.Title), text.Format(deleted, ActivityPlaceholders.Title));
         await ReloadAsync().ConfigureAwait(true);
     }
 

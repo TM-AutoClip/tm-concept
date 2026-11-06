@@ -345,19 +345,20 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
         {
             // The pipeline wrote the cause (with its step and code); the activity line below goes to the log too.
             row.Error = Reason(ex);
-            activity.Add(ActivityLevel.Error, text.Format("video.failed", row.Title, row.Error, text.Usd(ex.SpentUsd)));
+            activity.Add(ActivityLevel.Error, text.Format("video.failed", row.Title, row.Error, text.Usd(ex.SpentUsd)),
+                text.Format("video.failed", ActivityPlaceholders.Title, row.Error, text.Usd(ex.SpentUsd)));
             notifier.Notify(new AppNotification(NotificationKind.Failed, text["video.failed.title"], row.Title));
         }
         catch (OperationCanceledException)
         {
             row.Error = text["video.canceled"];
-            activity.Add(ActivityLevel.Warning, text.Format("video.canceled.log", row.Title));
+            activity.Add(ActivityLevel.Warning, text.Format("video.canceled.log", row.Title), text.Format("video.canceled.log", ActivityPlaceholders.Title));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or Core.Speech.SpeechException)
         {
             logger.LogError(ex, "Video failed");
             row.Error = ex.Message;
-            activity.Add(ActivityLevel.Error, text.Format("video.failed", row.Title, ex.Message, text.Usd(0)));
+            activity.Add(ActivityLevel.Error, text.Format("video.failed", row.Title, ex.Message, text.Usd(0)), text.Format("video.failed", ActivityPlaceholders.Title, ex.Message, text.Usd(0)));
         }
         finally
         {
@@ -374,21 +375,22 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
         var warnings = record.Warnings.Split(',', StringSplitOptions.RemoveEmptyEntries);
         if (warnings.Contains(VideoWarnings.SpeechOff))
         {
-            activity.Add(ActivityLevel.Warning, text.Format("video.silent.off", record.Title));
+            activity.Add(ActivityLevel.Warning, text.Format("video.silent.off", record.Title), text.Format("video.silent.off", ActivityPlaceholders.Title));
         }
 
         if (warnings.Contains(VideoWarnings.SpeechFailed))
         {
-            activity.Add(ActivityLevel.Error, text.Format("video.silent.failed", record.Title));
+            activity.Add(ActivityLevel.Error, text.Format("video.silent.failed", record.Title), text.Format("video.silent.failed", ActivityPlaceholders.Title));
         }
 
         if (warnings.Contains(VideoWarnings.ImagesFailed))
         {
-            activity.Add(ActivityLevel.Warning, text.Format("video.images.failed", record.Title));
+            activity.Add(ActivityLevel.Warning, text.Format("video.images.failed", record.Title), text.Format("video.images.failed", ActivityPlaceholders.Title));
         }
 
         var seconds = (record.ElapsedMs / 1000.0).ToString("0", CultureInfo.InvariantCulture);
-        activity.Add(ActivityLevel.Info, text.Format("video.done", record.Title, text.Usd(record.TotalUsd), seconds));
+        activity.Add(ActivityLevel.Info, text.Format("video.done", record.Title, text.Usd(record.TotalUsd), seconds),
+            text.Format("video.done", ActivityPlaceholders.Title, text.Usd(record.TotalUsd), seconds));
         notifier.Notify(new AppNotification(NotificationKind.Done, text["video.done.title"], record.Title));
         events.Raise(this);
     }

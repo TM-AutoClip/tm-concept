@@ -54,17 +54,21 @@ internal static class Program
         App.Services = services;
         var graphicsCard = services.GetRequiredService<UiPreferencesFile>().Read().UseGraphicsCard;
         logger.LogInformation("Drawing with the {Renderer}", graphicsCard ? "graphics card" : "processor");
+        int exit;
         try
         {
-            var exit = BuildAvaloniaApp(graphicsCard).StartWithClassicDesktopLifetime(args);
-            logger.LogInformation("TM Concept stopped (exit code {Exit})", exit);
-            return exit;
+            exit = BuildAvaloniaApp(graphicsCard).StartWithClassicDesktopLifetime(args);
         }
         catch (Exception ex)
         {
+            // Written once here, as Critical; not thrown on (the process-wide handler would write the same crash a second time). The
+            // children end through ProcessExit, the services are disposed by the using above.
             logger.LogCritical(ex, "The app stopped with an unhandled exception");
-            throw;
+            return 1;
         }
+
+        logger.LogInformation("TM Concept stopped (exit code {Exit})", exit);
+        return exit;
     }
 
     /// <summary>
@@ -74,7 +78,9 @@ internal static class Program
     private static int RunSpeechWorker(string[] args)
     {
         var folder = Environment.GetEnvironmentVariable(Speech.Speech.SpeechWorker.LogDirectoryVariable);
-        using var provider = string.IsNullOrEmpty(folder) ? null : new FileLoggerProvider(folder, LogRules.SpeechWorkerKind, TimeProvider.System);
+        using var provider = string.IsNullOrEmpty(folder)
+            ? null
+            : new FileLoggerProvider(folder, LogRules.SpeechWorkerKind, TimeProvider.System, LogScrubber.ForLogFolder(folder));
         var logger = provider?.CreateLogger(typeof(Speech.Speech.SpeechWorker).FullName!) ?? NullLogger.Instance;
         new CrashLog(logger).Attach();
         try
@@ -83,15 +89,17 @@ internal static class Program
         }
         catch (Exception ex)
         {
+            // Once, as Critical (see Main); the app sees the worker end with code 1 and reads its error output.
             logger.LogCritical(ex, "The speech worker stopped with an unhandled exception");
-            throw;
+            Console.Error.WriteLine("The speech worker stopped: " + ex.GetType().Name + ": " + ex.Message);
+            return 1;
         }
     }
 
     /// <summary>A second start with the same data folder: asks the running app to show its window; one entry in the shared app log says so.</summary>
     private static void SignalFirst(SingleInstance instance, AppPaths paths)
     {
-        using var provider = new FileLoggerProvider(paths.LogDirectory, LogRules.AppKind, TimeProvider.System);
+        using var provider = new FileLoggerProvider(paths.LogDirectory, LogRules.AppKind, TimeProvider.System, LogScrubber.For(paths));
         instance.Logger = provider.CreateLogger(typeof(SingleInstance).FullName!);
         instance.Logger.LogInformation("TM Concept {Version} is already running for this data folder; asking it to show its window", AppIdentity.Version);
         instance.SignalFirst();

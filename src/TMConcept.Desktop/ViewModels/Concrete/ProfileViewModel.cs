@@ -192,7 +192,7 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
             logger.LogInformation("Profile {Id} saved ({State})", _editing.Id, wasNew ? "new" : "changed");
             if (wasNew)
             {
-                activity.Add(ActivityLevel.Info, text.Format("profile.created", _editing.Name));
+                activity.Add(ActivityLevel.Info, text.Format("profile.created", _editing.Name), text.Format("profile.created", ActivityPlaceholders.Name));
             }
         }
         catch (Exception ex)
@@ -366,7 +366,7 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
         try
         {
             await profiles.DeleteAsync(_editing.Id, CancellationToken.None).ConfigureAwait(true);
-            activity.Add(ActivityLevel.Info, text.Format("profile.deleted", _editing.Name));
+            activity.Add(ActivityLevel.Info, text.Format("profile.deleted", _editing.Name), text.Format("profile.deleted", ActivityPlaceholders.Name));
             _editing = null;
             HasProfile = false;
             var rest = await profiles.ListAsync(CancellationToken.None).ConfigureAwait(true);
