@@ -75,7 +75,7 @@ public sealed class ProcessRunner(ChildProcessGuardBase children, ILogger<Proces
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or PlatformNotSupportedException)
         {
-            logger.LogDebug(ex, "The priority of {Program} could not be lowered", Path.GetFileName(start.Program));
+            logger.LogWarning(ex, "The priority of {Program} could not be lowered; it runs at normal priority", Path.GetFileName(start.Program));
         }
 
         process.BeginOutputReadLine();

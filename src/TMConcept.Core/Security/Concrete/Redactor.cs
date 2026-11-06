@@ -49,7 +49,9 @@ public static partial class Redactor
         return key.Length <= 12 ? new string('•', key.Length) : key[..4] + "…" + key[^4..];
     }
 
-    [GeneratedRegex(@"(?<![A-Za-z0-9_-])(?:sk-(?:ant-|proj-|or-v1-)?[A-Za-z0-9_-]{16,}|AIza[0-9A-Za-z_-]{30,})")]
+    // Provider keys (OpenAI / Anthropic / OpenRouter / DeepSeek "sk-…", Google "AIza…", fal "uuid:hex", Z.ai "hex.secret"), GitHub tokens,
+    // AWS access key ids, Slack tokens and JSON web tokens.
+    [GeneratedRegex(@"(?<![A-Za-z0-9_-])(?:sk-(?:ant-|proj-|or-v1-)?[A-Za-z0-9_-]{16,}|AIza[0-9A-Za-z_-]{30,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[0-9a-f]{32}|[0-9a-f]{32}\.[A-Za-z0-9]{16}|(?:gh[pousr]_|github_pat_)[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|xox[abprs]-[A-Za-z0-9-]{10,}|eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,})")]
     private static partial Regex KeyLike();
 
     [GeneratedRegex(@"\b((?:api_key|apikey|key|access_token|token|password|secret)\s*)=[^&\s""']+", RegexOptions.IgnoreCase)]

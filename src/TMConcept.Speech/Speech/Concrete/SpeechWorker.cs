@@ -1,6 +1,9 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using TMConcept.Core.Speech;
 
 namespace TMConcept.Speech.Speech;
@@ -10,16 +13,21 @@ namespace TMConcept.Speech.Speech;
 /// model folder. It loads sherpa-onnx and the voice model on the first request, then reads one JSON request per line from standard input
 /// (UTF-8) and answers one JSON line per request on standard output. It ends when its input closes (the app closed it or the app is gone).
 /// The window process never loads the native speech libraries: their memory is the worker's and goes away with it, and a native failure
-/// (sherpa-onnx ends the process on some errors) cannot take the window down.
+/// (sherpa-onnx ends the process on some errors) cannot take the window down. It writes its own log file (the app passes the folder in
+/// <see cref="LogDirectoryVariable"/>): start, model load, each scene's length and time (never its text), failures and the end.
 /// </summary>
 public static class SpeechWorker
 {
     /// <summary>The first argument that starts the worker instead of the window.</summary>
     public const string Argument = "--speech-worker";
 
+    /// <summary>The environment variable that names the log folder of the worker (the app's own; empty: no log file).</summary>
+    public const string LogDirectoryVariable = "TMCONCEPT_LOG_DIR";
+
     /// <summary>Runs the worker; returns the exit code (0: input closed; 2: wrong arguments; 3: the libraries or the model could not be loaded).</summary>
-    public static int Run(IReadOnlyList<string> arguments, Stream input, Stream output, TextWriter error)
+    public static int Run(IReadOnlyList<string> arguments, Stream input, Stream output, TextWriter error, ILogger? logger = null)
     {
+        logger ??= NullLogger.Instance;
         ArgumentNullException.ThrowIfNull(arguments);
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(output);
@@ -27,8 +35,11 @@ public static class SpeechWorker
         if (arguments.Count != 3 || arguments[0] != Argument || !int.TryParse(arguments[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out var threads))
         {
             error.WriteLine("usage: " + Argument + " <library folder> <threads>");
+            logger.LogError("The speech worker was started with wrong arguments ({Count})", arguments.Count);
             return 2;
         }
+
+        logger.LogInformation("Speech worker started ({Threads} threads)", threads);
 
         var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
         using var reader = new StreamReader(input, utf8);
@@ -46,27 +57,46 @@ public static class SpeechWorker
                 SpeechWorkerReply reply;
                 try
                 {
-                    synthesizer ??= Load(arguments[1], threads);
-                    reply = Speak(synthesizer, JsonSerializer.Deserialize(line, SpeechWorkerJsonContext.Default.SpeechWorkerRequest)
-                        ?? throw new JsonException("Empty request."));
+                    if (synthesizer is null)
+                    {
+                        var loading = Stopwatch.StartNew();
+                        synthesizer = Load(arguments[1], threads);
+                        logger.LogInformation("Voice libraries loaded in {Ms} ms", loading.ElapsedMilliseconds);
+                    }
+
+                    var request = JsonSerializer.Deserialize(line, SpeechWorkerJsonContext.Default.SpeechWorkerRequest) ?? throw new JsonException("Empty request.");
+                    var watch = Stopwatch.StartNew();
+                    reply = Speak(synthesizer, request);
+                    if (reply.Ok)
+                    {
+                        logger.LogInformation("Scene spoken ({Language}, {Characters} characters): {AudioMs} ms of audio in {Ms} ms", request.Language,
+                            request.Text.Length, reply.DurationMs, watch.ElapsedMilliseconds);
+                    }
+                    else
+                    {
+                        logger.LogError("The voice could not speak a scene ({Code}): {Error}", reply.Code, reply.Error);
+                    }
                 }
                 catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException or FileNotFoundException
                     or InvalidOperationException)
                 {
                     // The libraries or the model cannot be used: answer once with the reason and stop.
                     error.WriteLine("speech worker: " + ex.GetType().Name + ": " + ex.Message);
+                    logger.LogError(ex, "The voice libraries or the model could not be loaded; the speech worker stops");
                     writer.WriteLine(JsonSerializer.Serialize(new SpeechWorkerReply(false, 0, "model", ex.Message), SpeechWorkerJsonContext.Default.SpeechWorkerReply));
                     return 3;
                 }
                 catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or ArgumentException)
                 {
                     error.WriteLine("speech worker: " + ex.GetType().Name + ": " + ex.Message);
+                    logger.LogError(ex, "A speech request failed");
                     reply = new SpeechWorkerReply(false, 0, "engine", ex.Message);
                 }
 
                 writer.WriteLine(JsonSerializer.Serialize(reply, SpeechWorkerJsonContext.Default.SpeechWorkerReply));
             }
 
+            logger.LogInformation("The speech worker's input closed; it ends");
             return 0;
         }
         finally

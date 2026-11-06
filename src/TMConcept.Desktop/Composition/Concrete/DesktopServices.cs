@@ -44,8 +44,11 @@ public static class DesktopServices
     {
         ArgumentNullException.ThrowIfNull(paths);
         var services = new ServiceCollection();
-        services.AddLogging(b => b.AddProvider(new FileLoggerProvider(paths.LogDirectory)).SetMinimumLevel(LogLevel.Information));
+        // Created (and disposed: the file is closed) by the container: Information and above, one file per day, kept 7 days.
+        services.AddSingleton<ILoggerProvider>(s => new FileLoggerProvider(paths.LogDirectory, LogRules.AppKind, s.GetRequiredService<TimeProvider>()));
+        services.AddLogging(b => b.SetMinimumLevel(FileLoggerProvider.MinimumLevel));
         services.AddSingleton(TimeProvider.System);
+        services.AddSingleton(s => new CrashLog(s.GetRequiredService<ILoggerFactory>().CreateLogger("TMConcept.Crash")));
         services.AddSingleton(paths);
         services.AddSingleton<IAppPaths>(paths);
         services.AddSingleton<UiPreferencesFile>();
@@ -65,7 +68,8 @@ public static class DesktopServices
         services.AddSingleton<Core.Media.IMediaTools, Engines.Media.FfmpegMedia>();
         services.AddSingleton<Core.Videos.VideoPipeline>();
         services.AddSingleton<Speech.Speech.SpeechModelInstaller>();
-        services.AddSingleton<Speech.Speech.SpeechWorkerClient>();
+        services.AddSingleton(s => new Speech.Speech.SpeechWorkerClient(s.GetRequiredService<Core.Processes.IChildProcessGuard>(),
+            s.GetRequiredService<ILogger<Speech.Speech.SpeechWorkerClient>>()) { LogDirectory = paths.LogDirectory });
         services.AddSingleton<Core.Speech.ISpeechEngine, Speech.Speech.SupertonicSpeechEngine>();
         services.AddSingleton<Core.Speech.ISpeechEngine, Providers.Speech.OpenAISpeechEngine>();
         services.AddSingleton<Core.Speech.SpeechService>();

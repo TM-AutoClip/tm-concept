@@ -9,6 +9,7 @@ using TMConcept.Core.Activity;
 using TMConcept.Core.Models;
 using TMConcept.Desktop.Composition;
 using TMConcept.Desktop.Localization;
+using TMConcept.Desktop.Logging;
 using TMConcept.Desktop.Paths;
 using TMConcept.Desktop.ViewModels;
 using TMConcept.Desktop.Views;
@@ -24,7 +25,7 @@ namespace TMConcept.Desktop.Startup;
 /// are ended with it) before the app closes. An exception that reaches the interface thread is logged and shown instead of ending the app.
 /// </summary>
 public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer text, LanguageResources languageResources, UiPreferencesFile preferences,
-    AppSession session, WindowHost windows, BackupService backup, IActivityLog activity, ILogger<AppStartup> logger)
+    AppSession session, WindowHost windows, BackupService backup, IActivityLog activity, CrashLog crash, ILogger<AppStartup> logger)
 {
     private IClassicDesktopStyleApplicationLifetime? _desktop;
     private Window? _main;
@@ -38,7 +39,7 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
         Dispatcher.UIThread.UnhandledException += (_, e) =>
         {
             // A command that throws (a storage error, a full disk) must not take the whole app down: logged with its cause and shown.
-            logger.LogError(e.Exception, "Unhandled exception on the interface thread");
+            crash.Interface(e.Exception);
             activity.Add(ActivityLevel.Error, text.Format("error.generic", e.Exception.Message));
             e.Handled = true;
         };
@@ -136,7 +137,8 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "The database could not be opened automatically");
+            // The keyring (DPAPI / Secret Service) failed: the key store cannot open the database; the master password window is the way left.
+            logger.LogCritical(ex, "The database could not be opened automatically (key protection: {Method})", vault.Method);
             ShowUnlock(text.Format("unlock.automatic_failed", ex.Message));
         }
     }

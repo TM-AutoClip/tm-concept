@@ -4,60 +4,43 @@ using Microsoft.Extensions.Logging;
 namespace TMConcept.Desktop.Logging;
 
 /// <summary>
-/// Daily log files in the data folder (<c>logs/tmconcept-yyyyMMdd.log</c>, 14 days kept). Every line goes through the redactor (secrets never
-/// reach the file even when a provider echoes them in an error body) and the user's home folder is written as <c>~</c> (no personal path).
+/// Daily log files in the data folder's <c>logs</c> folder, one per process kind (<see cref="DailyLogFile"/>): Information and above (no
+/// Debug), kept 7 days. Every entry goes through <see cref="LogScrubber"/> before it is written: secrets never reach the file even when a
+/// provider or a tool echoes them, the user's home folder is written as <c>~</c> and e-mail addresses are masked.
 /// </summary>
 public sealed class FileLoggerProvider : ILoggerProvider
 {
-    private const int KeepDays = 14;
-    private readonly string _directory;
-    private readonly string _home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-    private readonly ConcurrentDictionary<string, FileLogger> _loggers = new(StringComparer.Ordinal);
-    private readonly Lock _gate = new();
+    /// <summary>The lowest level written.</summary>
+    public const LogLevel MinimumLevel = LogLevel.Information;
 
-    /// <summary>Writes into <paramref name="directory"/>.</summary>
-    public FileLoggerProvider(string directory)
+    private readonly ConcurrentDictionary<string, FileLogger> _loggers = new(StringComparer.Ordinal);
+    private readonly DailyLogFile _file;
+    private readonly LogScrubber _scrubber;
+    private readonly TimeProvider _clock;
+
+    /// <summary>Writes the file of <paramref name="kind"/> (<see cref="LogRules.Kinds"/>) in <paramref name="directory"/>.</summary>
+    public FileLoggerProvider(string directory, string kind, TimeProvider clock, LogScrubber? scrubber = null, long maxBytes = LogRules.MaxFileBytes)
     {
-        _directory = directory;
-        Directory.CreateDirectory(directory);
-        Cleanup();
+        ArgumentNullException.ThrowIfNull(clock);
+        _clock = clock;
+        _scrubber = scrubber ?? LogScrubber.ForCurrentUser;
+        _file = new DailyLogFile(directory, kind, clock, maxBytes);
     }
+
+    /// <summary>The file written now.</summary>
+    public string CurrentFile => _file.CurrentFile;
 
     /// <inheritdoc />
     public ILogger CreateLogger(string categoryName) => _loggers.GetOrAdd(categoryName, name => new FileLogger(name, this));
 
     /// <inheritdoc />
-    public void Dispose() => _loggers.Clear();
-
-    /// <summary>The text with the home folder replaced by <c>~</c>.</summary>
-    internal string Scrub(string text) => _home.Length > 3 ? text.Replace(_home, "~", StringComparison.OrdinalIgnoreCase) : text;
-
-    /// <summary>Appends one line (thread-safe).</summary>
-    internal void Write(string line)
+    public void Dispose()
     {
-        var file = Path.Combine(_directory, "tmconcept-" + DateTime.Now.ToString("yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture) + ".log");
-        lock (_gate)
-        {
-            try
-            {
-                File.AppendAllText(file, line + Environment.NewLine);
-            }
-            catch (IOException ex)
-            {
-                // The log itself cannot be written: the debugger output is the last place left.
-                System.Diagnostics.Debug.WriteLine("Log file write failed: " + ex.Message);
-            }
-        }
+        _loggers.Clear();
+        _file.Dispose();
     }
 
-    private void Cleanup()
-    {
-        foreach (var file in Directory.EnumerateFiles(_directory, "tmconcept-*.log"))
-        {
-            if (File.GetLastWriteTimeUtc(file) < DateTime.UtcNow.AddDays(-KeepDays))
-            {
-                File.Delete(file);
-            }
-        }
-    }
+    /// <summary>Formats, scrubs and appends one entry.</summary>
+    internal void Write(LogLevel level, string category, EventId eventId, string message, Exception? exception) =>
+        _file.Write(_scrubber.Scrub(LogLine.Format(_clock.GetLocalNow(), level, category, eventId, message, exception)));
 }

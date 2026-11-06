@@ -1,6 +1,8 @@
 using System.IO.Pipes;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace TMConcept.Desktop.Instance;
 
@@ -32,6 +34,9 @@ public sealed class SingleInstance : IDisposable
 
     /// <summary>Raised (on a pool thread) when a second start asks for the window.</summary>
     public event EventHandler? ShowRequested;
+
+    /// <summary>Where the pipe's problems are written (set once logging exists; the lock is taken before it).</summary>
+    public ILogger Logger { get; set; } = NullLogger.Instance;
 
     /// <summary>Whether this is the first instance (it holds the lock file).</summary>
     public bool IsFirst => _lock is not null;
@@ -70,6 +75,7 @@ public sealed class SingleInstance : IDisposable
         {
             // The first instance is closing or not listening yet; nothing else to do for a second start.
             Console.Error.WriteLine("TM Concept is already running: " + ex.Message);
+            Logger.LogWarning(ex, "The running app could not be asked to show its window");
         }
     }
 
@@ -99,7 +105,7 @@ public sealed class SingleInstance : IDisposable
             }
             catch (IOException ex)
             {
-                Console.Error.WriteLine("Single instance pipe error: " + ex.Message);
+                Logger.LogWarning(ex, "The pipe that shows the window for a second start failed; it listens again in a second");
                 await Task.Delay(1000).ConfigureAwait(false);
             }
         }

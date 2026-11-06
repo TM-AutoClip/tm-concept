@@ -32,6 +32,9 @@ public sealed class SpeechWorkerClient(IChildProcessGuard children, ILogger<Spee
     /// <summary>How long a worker without requests stays (it holds the voice model in memory).</summary>
     public TimeSpan IdleTimeout { get; init; } = TimeSpan.FromSeconds(60);
 
+    /// <summary>The log folder the worker writes its own file in (<see cref="SpeechWorker.LogDirectoryVariable"/>); empty: none.</summary>
+    public string LogDirectory { get; init; } = string.Empty;
+
     /// <summary>The program started as the worker (the app's own executable; tests give their own).</summary>
     public string ProgramPath { get; init; } = Environment.ProcessPath ?? string.Empty;
 
@@ -264,6 +267,10 @@ public sealed class SpeechWorkerClient(IChildProcessGuard children, ILogger<Spee
         info.ArgumentList.Add(SpeechWorker.Argument);
         info.ArgumentList.Add(libraryFolder);
         info.ArgumentList.Add(threads.ToString(CultureInfo.InvariantCulture));
+        if (LogDirectory.Length > 0)
+        {
+            info.Environment[SpeechWorker.LogDirectoryVariable] = LogDirectory;
+        }
         var process = new Process { StartInfo = info };
         process.ErrorDataReceived += (_, e) => Error(e.Data);
         lock (_errors)
@@ -292,7 +299,7 @@ public sealed class SpeechWorkerClient(IChildProcessGuard children, ILogger<Spee
         }
         catch (Exception ex) when (ex is InvalidOperationException or Win32Exception or PlatformNotSupportedException)
         {
-            logger.LogDebug(ex, "The priority of the speech worker could not be lowered");
+            logger.LogWarning(ex, "The priority of the speech worker could not be lowered; it runs at normal priority");
         }
 
         process.BeginErrorReadLine();
