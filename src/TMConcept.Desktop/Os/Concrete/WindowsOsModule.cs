@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using TMConcept.Storage.Keys;
 
@@ -17,6 +18,11 @@ public sealed class WindowsOsModule : IOsModule
 
     /// <inheritdoc />
     public string DocumentsDirectory() => Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+
+    /// <inheritdoc />
+    public ProcessStartInfo RevealCommand(string file) =>
+        // Explorer reads "/select," and the quoted path as one argument; it opens the folder with the file selected.
+        new("explorer.exe", "/select,\"" + file + "\"") { UseShellExecute = false };
 
     /// <inheritdoc />
     public void Register(IServiceCollection services)

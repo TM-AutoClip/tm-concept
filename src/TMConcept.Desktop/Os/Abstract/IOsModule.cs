@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace TMConcept.Desktop.Os;
@@ -16,6 +17,9 @@ public interface IOsModule
 
     /// <summary>The user's documents folder.</summary>
     string DocumentsDirectory();
+
+    /// <summary>The command that shows <paramref name="file"/> (a full path) in the file manager.</summary>
+    ProcessStartInfo RevealCommand(string file);
 
     /// <summary>Registers the services.</summary>
     void Register(IServiceCollection services);

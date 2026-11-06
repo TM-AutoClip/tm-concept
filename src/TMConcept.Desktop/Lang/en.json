@@ -387,5 +387,20 @@
   "player.file_missing": "The video file is missing, so it cannot be played.",
   "player.no_ffmpeg": "The player needs ffmpeg: install it in Settings → Tools (or use Open in system player).",
   "player.no_sound": "No sound device was found, so the video plays without sound (Linux: PulseAudio or PipeWire is needed).",
-  "player.failed": "The video could not be played: {0}"
+  "player.failed": "The video could not be played: {0}",
+  "report.button": "Report a problem",
+  "report.tooltip": "Prepare the logs and open a GitHub issue. Nothing is sent automatically.",
+  "report.title": "Report a problem",
+  "report.intro": "Nothing is sent automatically. TM Concept has no telemetry: you decide what to share, and you attach it yourself.",
+  "report.contains": "“Prepare logs” makes a zip file in the data folder (reports) and shows it. It contains:\n• the log files of the last 7 days, with your home folder, e-mail addresses and keys masked\n• system.txt: version, operating system, architecture, .NET, interface language, drawing mode and which tools are installed\nIt never contains your database, API keys, setting values, profiles, concepts or videos. You can open the zip and read it before you share it.",
+  "report.steps": "“Report on GitHub” opens the issue form in your browser with the version and the system filled in: describe what happened and drag the zip into the form (a GitHub account is needed). “Copy details” copies the system information to the clipboard.",
+  "report.prepare": "Prepare logs",
+  "report.github": "Report on GitHub",
+  "report.copy": "Copy details",
+  "report.prepared": "Ready: {0} (in the reports folder, now shown). Drag it into the GitHub form.",
+  "report.prepared_hidden": "Ready: {0}, in the reports folder of the data folder. The folder could not be shown: {1}",
+  "report.failed": "The logs could not be prepared: {0}",
+  "report.github_opened": "The issue form is open in your browser. Describe what happened and drag the logs zip into it.",
+  "report.github_failed": "The browser could not be opened ({0}). The address is copied to the clipboard: paste it into your browser.",
+  "report.copied": "The details are copied to the clipboard."
 }

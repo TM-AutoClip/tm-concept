@@ -130,6 +130,7 @@ public static class DesktopServices
         services.AddSingleton<ConceptEvents>();
         services.AddSingleton<Core.Concepts.ConceptGenerator>();
         services.AddSingleton<ShellLauncher>();
+        services.AddSingleton<IShellLauncher>(s => s.GetRequiredService<ShellLauncher>());
         services.AddSingleton<WindowHost>();
         services.AddSingleton<FileDialogs>();
         services.AddSingleton<ActivityLog>();
@@ -142,6 +143,11 @@ public static class DesktopServices
         services.AddTransient<UnlockViewModel>();
 
         services.AddSingleton<Dialogs.IConfirmDialog, Dialogs.ConfirmDialog>();
+        services.AddSingleton<Reports.SystemReport>();
+        services.AddSingleton<Reports.ProblemReport>();
+        services.AddTransient<ReportProblemViewModel>();
+        services.AddSingleton<Func<ReportProblemViewModel>>(s => () => s.GetRequiredService<ReportProblemViewModel>());
+        services.AddSingleton<Dialogs.IReportDialog, Dialogs.ReportDialog>();
         services.AddSingleton<Engines.Playback.FfmpegPlayback>();
         services.AddSingleton<PlayerViewModel>();
         AddPage<ConceptsViewModel, ConceptsView>(services);

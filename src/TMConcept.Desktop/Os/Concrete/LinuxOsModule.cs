@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using TMConcept.Storage.Keys;
 
@@ -23,6 +24,15 @@ public sealed class LinuxOsModule : IOsModule
 
     /// <inheritdoc />
     public string DocumentsDirectory() => XdgDocuments(Home(), Environment.GetEnvironmentVariable("XDG_CONFIG_HOME"));
+
+    /// <inheritdoc />
+    public ProcessStartInfo RevealCommand(string file)
+    {
+        // File managers have no common "select this file" call: the folder is opened.
+        var start = new ProcessStartInfo("xdg-open") { UseShellExecute = false };
+        start.ArgumentList.Add(Path.GetDirectoryName(file) ?? file);
+        return start;
+    }
 
     /// <inheritdoc />
     public void Register(IServiceCollection services)

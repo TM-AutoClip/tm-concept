@@ -387,5 +387,20 @@
   "player.file_missing": "Video dosyası yok, oynatılamaz.",
   "player.no_ffmpeg": "Oynatıcı ffmpeg ister: Ayarlar → Araçlar'dan kur (ya da Sistem oynatıcısında aç'ı kullan).",
   "player.no_sound": "Ses aygıtı bulunamadı, video sessiz oynuyor (Linux'ta PulseAudio ya da PipeWire gerekir).",
-  "player.failed": "Video oynatılamadı: {0}"
+  "player.failed": "Video oynatılamadı: {0}",
+  "report.button": "Hata bildir",
+  "report.tooltip": "Günlükleri hazırla ve GitHub'da bir kayıt aç. Hiçbir şey kendiliğinden gönderilmez.",
+  "report.title": "Hata bildir",
+  "report.intro": "Hiçbir şey kendiliğinden gönderilmez. TM Concept'te telemetri yok: neyi paylaşacağına sen karar verirsin, dosyayı kendin eklersin.",
+  "report.contains": "“Günlükleri hazırla” veri klasöründe (reports) bir zip dosyası oluşturur ve onu gösterir. İçinde:\n• son 7 günün günlük dosyaları; ev klasörün, e-posta adresleri ve anahtarlar gizlenmiş olarak\n• system.txt: sürüm, işletim sistemi, mimari, .NET, arayüz dili, çizim kipi ve hangi araçların kurulu olduğu\nVeritabanın, API anahtarların, ayar değerlerin, profillerin, konseptlerin ya da videoların asla içinde değildir. Paylaşmadan önce zip'i açıp okuyabilirsin.",
+  "report.steps": "“GitHub'da bildir” hata formunu tarayıcında sürüm ve sistem bilgisi dolu olarak açar: ne olduğunu yaz ve zip'i forma sürükle (GitHub hesabı gerekir). “Bilgileri kopyala” sistem bilgisini panoya kopyalar.",
+  "report.prepare": "Günlükleri hazırla",
+  "report.github": "GitHub'da bildir",
+  "report.copy": "Bilgileri kopyala",
+  "report.prepared": "Hazır: {0} (reports klasöründe, şimdi gösteriliyor). GitHub formuna sürükle.",
+  "report.prepared_hidden": "Hazır: {0}, veri klasörünün reports klasöründe. Klasör gösterilemedi: {1}",
+  "report.failed": "Günlükler hazırlanamadı: {0}",
+  "report.github_opened": "Hata formu tarayıcında açıldı. Ne olduğunu yaz ve günlük zip'ini forma sürükle.",
+  "report.github_failed": "Tarayıcı açılamadı ({0}). Adres panoya kopyalandı: tarayıcına yapıştır.",
+  "report.copied": "Bilgiler panoya kopyalandı."
 }

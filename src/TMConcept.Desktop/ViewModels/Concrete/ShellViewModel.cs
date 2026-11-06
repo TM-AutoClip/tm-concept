@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using TMConcept.Core.Activity;
 using TMConcept.Core.Profiles;
+using TMConcept.Desktop.Dialogs;
 using TMConcept.Desktop.Localization;
 using TMConcept.Desktop.Logging;
 using TMConcept.Desktop.Startup;
@@ -12,8 +13,8 @@ using TMConcept.Desktop.Startup;
 namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
-/// The main window: profile selector (every page is filtered by it), the sidebar of pages, the current page and the activity log panel at
-/// the bottom.
+/// The main window: profile selector (every page is filtered by it), the sidebar of pages with "Report a problem" at its bottom, the current
+/// page and the activity log panel at the bottom.
 /// </summary>
 public sealed partial class ShellViewModel : ObservableObject
 {
@@ -23,11 +24,12 @@ public sealed partial class ShellViewModel : ObservableObject
     private readonly ActivityLog _log;
     private readonly WindowHost _host;
     private readonly ILogger<ShellViewModel> _logger;
+    private readonly IReportDialog _report;
     private bool _loadingProfiles;
 
     /// <summary>Builds the sidebar from every registered page.</summary>
     public ShellViewModel(IEnumerable<PageViewModelBase> pages, Localizer text, AppSession session, IProfileStore profiles, ActivityLog log,
-        WindowHost host, ILogger<ShellViewModel> logger)
+        WindowHost host, IReportDialog report, ILogger<ShellViewModel> logger)
     {
         ArgumentNullException.ThrowIfNull(text);
         _text = text;
@@ -36,6 +38,7 @@ public sealed partial class ShellViewModel : ObservableObject
         _log = log;
         _host = host;
         _logger = logger;
+        _report = report;
         Items = new ObservableCollection<NavItemViewModel>(pages.OrderBy(p => p.Order).Select(p => new NavItemViewModel(this, p)));
         foreach (var item in Items)
         {
@@ -228,6 +231,10 @@ public sealed partial class ShellViewModel : ObservableObject
             page.Status = _text.Format("page.load_failed", ex.Message);
         }
     }
+
+    /// <summary>Opens "Report a problem" (nothing is sent from there by itself).</summary>
+    [RelayCommand]
+    private Task ReportProblemAsync() => _report.ShowAsync();
 
     [RelayCommand]
     private void ToggleLog() => LogOpen = !LogOpen;

@@ -28,6 +28,13 @@
             </ComboBox>
             <Button Classes="link" Content="{DynamicResource profile.add}" Command="{Binding NewProfileCommand}" IsEnabled="{Binding CanSwitchProfile}" />
           </StackPanel>
+          <Button Name="ReportProblemButton" DockPanel.Dock="Bottom" Classes="nav" Command="{Binding ReportProblemCommand}" Margin="8,4,8,12"
+                  ToolTip.Tip="{DynamicResource report.tooltip}">
+            <Grid ColumnDefinitions="24,*">
+              <TextBlock Text="⚑" TextAlignment="Center" />
+              <TextBlock Grid.Column="1" Text="{DynamicResource report.button}" Margin="8,0,0,0" />
+            </Grid>
+          </Button>
           <ItemsControl ItemsSource="{Binding Items}" Margin="8,4">
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:NavItemViewModel">

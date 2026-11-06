@@ -1,0 +1,22 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:TMConcept.Desktop.ViewModels"
+        x:Class="TMConcept.Desktop.Views.ReportProblemWindow"
+        x:DataType="vm:ReportProblemViewModel"
+        Title="{DynamicResource report.title}"
+        Width="640" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+  <StackPanel Margin="24" Spacing="12">
+    <TextBlock Text="{DynamicResource report.title}" Classes="h2" />
+    <TextBlock Text="{DynamicResource report.intro}" TextWrapping="Wrap" FontWeight="SemiBold" />
+    <TextBlock Text="{DynamicResource report.contains}" TextWrapping="Wrap" />
+    <TextBlock Text="{DynamicResource report.steps}" TextWrapping="Wrap" Classes="small" />
+    <TextBlock Name="StatusLine" Text="{Binding Status}" TextWrapping="Wrap" IsVisible="{Binding HasStatus}" />
+    <WrapPanel HorizontalAlignment="Right">
+      <Button Name="PrepareButton" Classes="accent" Margin="0,0,8,8" Content="{DynamicResource report.prepare}" Command="{Binding PrepareLogsCommand}" />
+      <Button Name="GitHubButton" Margin="0,0,8,8" Content="{DynamicResource report.github}" Command="{Binding ReportOnGitHubCommand}" />
+      <Button Name="CopyButton" Margin="0,0,8,8" Content="{DynamicResource report.copy}" Command="{Binding CopyDetailsCommand}" />
+      <Button Name="CloseButton" Margin="0,0,0,8" Content="{DynamicResource common.close}" IsCancel="True" />
+    </WrapPanel>
+  </StackPanel>
+</Window>

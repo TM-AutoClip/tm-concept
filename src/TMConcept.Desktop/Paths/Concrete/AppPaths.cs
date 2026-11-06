@@ -14,6 +14,7 @@ public sealed class AppPaths : IAppPaths
     public AppPaths(string? dataDirectory, IOsModule os)
     {
         ArgumentNullException.ThrowIfNull(os);
+        IsPortable = dataDirectory is not null;
         DataDirectory = dataDirectory ?? os.DefaultDataDirectory();
         LibraryDirectory = dataDirectory is null ? Path.Combine(os.DocumentsDirectory(), "TM Concept") : Path.Combine(dataDirectory, "library");
         Directory.CreateDirectory(DataDirectory);
@@ -22,6 +23,12 @@ public sealed class AppPaths : IAppPaths
 
     /// <inheritdoc />
     public string DataDirectory { get; }
+
+    /// <summary>Whether the data folder was given (<c>--data-dir</c>, portable mode).</summary>
+    public bool IsPortable { get; }
+
+    /// <summary>Problem report zips ("Report a problem"); only the newest five are kept.</summary>
+    public string ReportDirectory => Path.Combine(DataDirectory, "reports");
 
     /// <inheritdoc />
     public string DatabaseFile => Path.Combine(DataDirectory, "concept.db");
