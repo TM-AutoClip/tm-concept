@@ -313,7 +313,8 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
     {
         var codes = new List<string>(media.RequiredComponents);
         var code = await resolver.ChoiceAsync(PipelineSteps.VideoCode, profile.Id, cancellationToken).ConfigureAwait(true);
-        if (EngineOf(code) is { } engine)
+        // Without a code model nothing can be made (each item says so): no engine is offered for download then.
+        if (!StepModelResolver.IsOff(code) && EngineOf(code) is { } engine)
         {
             codes.Add(Engines.Components.EngineComponent.CodeOf(engine.Kind));
         }

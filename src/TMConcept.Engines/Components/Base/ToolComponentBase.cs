@@ -29,7 +29,8 @@ public abstract class ToolComponentBase(ToolInstaller installer, string code, st
     /// <inheritdoc />
     public IReadOnlyList<ComponentDownload> Downloads() =>
         tools.Where(t => !Installer.Status(t).Ready).Select(Installer.Archive).OfType<ToolArchive>()
-            .Select(a => new ComponentDownload(Name + " " + a.Version, a.Url.Host, a.ApproximateBytes)).ToList();
+            .Select(a => new ComponentDownload(tools.Count > 1 ? Name + " " + a.Version + " · " + a.Url.Segments[^1] : Name + " " + a.Version, a.Url.Host,
+                a.ApproximateBytes)).ToList();
 
     /// <inheritdoc />
     public IReadOnlyList<string> Folders() => tools.Where(t => Installer.Status(t) is { Ready: true, Source: "app" }).Select(Installer.InstallFolder).ToList();
