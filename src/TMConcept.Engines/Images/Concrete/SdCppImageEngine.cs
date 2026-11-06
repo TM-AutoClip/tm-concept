@@ -30,7 +30,7 @@ public sealed class SdCppImageEngine(ToolInstaller tools, LocalImageStore store,
             ?? throw new InvalidOperationException($"There is no local image model '{request.Model.Model.Id}'.");
         if (store.Missing(model).Count > 0)
         {
-            throw new InvalidOperationException($"{model.Name} is not installed. Choose it in Settings → Models and save: it is installed then.");
+            throw new InvalidOperationException($"{model.Name} is not installed. It is installed when a video that uses it is produced (after a confirmation).");
         }
 
         var cli = tools.Require(ToolKind.ImageRuntime);

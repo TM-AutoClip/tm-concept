@@ -16,16 +16,16 @@ namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
 /// Profile (channel) editor: a ready template fills the fields (the template itself never changes), channel name, content language,
-/// format, target length, the channel's concept, optional sample images with captions and the rights warning, and the profile's models:
-/// every step starts with "Use the general setting" and can be overridden for this channel (installed on save like in Settings → Models).
-/// Saving with a required value missing is not possible. Deleting a profile is confirmed and permanent; video files stay on disk.
+/// format, target length, the channel's concept, optional sample images with captions and the rights warning, and the model that describes a
+/// sample image ("Describe with a model": chosen here, where it is used; kept for the profile). The other models are chosen on the pages
+/// that use them. Saving with a required value missing is not possible. Deleting a profile is confirmed and permanent; video files stay on disk.
 /// </summary>
 public sealed partial class ProfileViewModel(AppSession session, IProfileStore profiles, ITemplateSource templates, IAppPaths paths, FileDialogs dialogs,
-    IConfirmDialog confirm, IActivityLog activity, Localizer text, ILogger<ProfileViewModel> logger, StepSettingsViewModel steps,
+    IConfirmDialog confirm, IActivityLog activity, Localizer text, ILogger<ProfileViewModel> logger, StepPickerViewModel picker,
     Core.Images.ImageDescriber describer, BackupService backup) : PageViewModelBase
 {
-    /// <summary>The profile's models (overrides of the general settings).</summary>
-    public StepSettingsViewModel Steps { get; } = steps;
+    /// <summary>The model that describes a sample image (this profile's last choice).</summary>
+    public StepPickerViewModel Picker { get; } = picker;
 
     private Profile? _editing;
     private Func<Task>? _profilesChanged;
@@ -184,19 +184,13 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
 
             var wasNew = IsNew;
             IsNew = false;
-
-            // The models are saved after the profile (they belong to it) and BEFORE the profile is selected again: selecting reloads every
-            // page, this one too, and the reload would put the saved values back into the rows before they are stored. A step whose
-            // download was declined or failed keeps its old value; its reason is kept for the status line (the reload clears Steps.Status).
-            var allSteps = await Steps.SaveAsync().ConfigureAwait(true);
-            var stepStatus = Steps.Status;
             await session.SelectProfileAsync(_editing, CancellationToken.None).ConfigureAwait(true);
             if (_profilesChanged is not null)
             {
                 await _profilesChanged().ConfigureAwait(true);
             }
 
-            Status = allSteps ? text["common.saved"] : stepStatus;
+            Status = text["common.saved"];
             logger.LogInformation("Profile {Id} saved ({State})", _editing.Id, wasNew ? "new" : "changed");
             if (wasNew)
             {
@@ -281,10 +275,23 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
             return;
         }
 
+        if (Picker.Model(Core.Pipeline.PipelineSteps.DescribeImage) is null)
+        {
+            Status = text["profile.describe.no_model"];
+            return;
+        }
+
         var answer = await confirm.AskAsync(text["profile.describe.title"], text["profile.describe.message"], text["profile.describe.confirm"], danger: false)
             .ConfigureAwait(true);
         if (!answer.Confirmed)
         {
+            return;
+        }
+
+        // The key gate (a provider without a key gets one asked for) and the profile's choice is saved.
+        if (!await Picker.PrepareAsync([Core.Pipeline.PipelineSteps.DescribeImage], "install.purpose.describe", CancellationToken.None).ConfigureAwait(true))
+        {
+            Status = Picker.Status;
             return;
         }
 
@@ -427,7 +434,7 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
         {
             try
             {
-                await Steps.LoadAsync(profile.Id, profile.ContentLanguage).ConfigureAwait(true);
+                await Picker.LoadAsync(IsNew ? null : profile.Id, profile.ContentLanguage, Core.Pipeline.PipelineSteps.ProfilePage).ConfigureAwait(true);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

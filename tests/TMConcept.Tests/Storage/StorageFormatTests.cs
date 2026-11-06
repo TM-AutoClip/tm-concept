@@ -53,10 +53,10 @@ public sealed class StorageFormatTests
 
         sql.ShouldContain("CONSTRAINT \"FK_concepts_profiles_ProfileId\" FOREIGN KEY (\"ProfileId\") REFERENCES \"profiles\" (\"Id\") ON DELETE CASCADE");
         (await h.CountAsync("sqlite_master", "type = 'index' AND substr(name, 1, 3) = 'IX_'")).ShouldBe(11);
-        (await h.CountAsync("sqlite_master", "type = 'table'")).ShouldBe(13);
+        (await h.CountAsync("sqlite_master", "type = 'table'")).ShouldBe(12);
 
         // Opening again leaves an existing schema alone.
         await ConceptDatabase.EnsureSchemaAsync(db, CancellationToken.None);
-        (await h.CountAsync("sqlite_master", "type = 'table'")).ShouldBe(13);
+        (await h.CountAsync("sqlite_master", "type = 'table'")).ShouldBe(12);
     }
 }

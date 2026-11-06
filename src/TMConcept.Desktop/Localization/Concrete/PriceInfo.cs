@@ -1,0 +1,58 @@
+using TMConcept.Core.Models;
+using TMConcept.Core.Profiles;
+using TMConcept.Core.Runs;
+using TMConcept.Core.Videos;
+
+namespace TMConcept.Desktop.Localization;
+
+/// <summary>
+/// Price lines shown next to the estimates (since 0.1.6 Settings has nothing about models): where the prices come from and their date, and
+/// this month's spending (concept runs per provider and the videos; no limits or balances).
+/// </summary>
+public static class PriceInfo
+{
+    /// <summary>"Prices: 2026-11-06 (built-in table) · OpenRouter: 2026-11-07".</summary>
+    public static string Text(IModelCatalog catalog, Localizer text)
+    {
+        ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(text);
+        var tables = catalog.Prices;
+        var main = tables.LastOrDefault(t => t.Source != PriceSources.OpenRouter) ?? tables[0];
+        var line = text.Format("models.prices", main.PricedOn.Length > 0 ? main.PricedOn : "-", text["models.prices." + main.Source]);
+        if (tables.FirstOrDefault(t => t.Source == PriceSources.OpenRouter) is { } openRouter)
+        {
+            line += " · " + text.Format("models.prices.openrouter_date", openRouter.PricedOn);
+        }
+
+        return line;
+    }
+
+    /// <summary>"This month: $1.20 (anthropic $0.80 · videos $0.40)".</summary>
+    public static async Task<string> SpendingAsync(IRunStore runs, IProfileStore profiles, IVideoStore videos, TimeProvider clock, Localizer text,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(runs);
+        ArgumentNullException.ThrowIfNull(profiles);
+        ArgumentNullException.ThrowIfNull(videos);
+        ArgumentNullException.ThrowIfNull(clock);
+        ArgumentNullException.ThrowIfNull(text);
+        var now = clock.GetUtcNow();
+        var month = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
+        var list = await runs.ListAsync(month, cancellationToken).ConfigureAwait(true);
+        var parts = list.GroupBy(r => r.Provider).Where(g => g.Key.Length > 0 && g.Sum(r => r.ActualUsd) > 0)
+            .Select(g => g.Key + " " + text.Usd(g.Sum(r => r.ActualUsd))).ToList();
+        decimal made = 0;
+        foreach (var profile in await profiles.ListAsync(cancellationToken).ConfigureAwait(true))
+        {
+            made += (await videos.ListAsync(profile.Id, cancellationToken).ConfigureAwait(true)).Where(v => v.CreatedAtUtc >= month).Sum(v => v.TotalUsd);
+        }
+
+        if (made > 0)
+        {
+            parts.Add(text.Format("models.spending.videos", text.Usd(made)));
+        }
+
+        var total = text.Usd(list.Sum(r => r.ActualUsd) + made);
+        return parts.Count == 0 ? text.Format("models.spending.total", total) : text.Format("models.spending", total, string.Join(" · ", parts));
+    }
+}

@@ -5,8 +5,8 @@ using TMConcept.Core.Pipeline;
 namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
-/// One step of a model table (Settings → Models, or a profile): what it is for, its picker (first entry "use the general setting" on a
-/// profile, then none / off, then the models), the effort (only for a model that takes one; first entry "Automatic" sends no effort), the
+/// One step of a page's model pickers: what it is for, its picker (none / off first, the sample images for the images step, then the
+/// models: local first), the effort (only for a model that takes one; first entry "Automatic" sends no effort), the
 /// engine (video code step), voice and speed (narration step), a note (license, cost, graphics card memory) and the install progress.
 /// </summary>
 public sealed partial class StepModelRowViewModel(PipelineStep step, string title, string purpose, string recommended, string automatic) : ObservableObject
@@ -53,8 +53,8 @@ public sealed partial class StepModelRowViewModel(PipelineStep step, string titl
     [ObservableProperty]
     public partial EngineOption? Engine { get; set; }
 
-    /// <summary>Whether the engine picker is shown (not while a profile uses the general setting).</summary>
-    public bool ShowEngine => IsEngineStep && Selected is { Kind: not StepOptionKind.Inherit };
+    /// <summary>Whether the engine picker is shown.</summary>
+    public bool ShowEngine => IsEngineStep;
 
     /// <summary>Whether this is the narration step (voice, speed, listen).</summary>
     public bool IsVoiceStep => Step.Code == PipelineSteps.Speech;
@@ -81,7 +81,7 @@ public sealed partial class StepModelRowViewModel(PipelineStep step, string titl
     [ObservableProperty]
     public partial bool NoteIsWarning { get; set; }
 
-    /// <summary>The value last loaded or saved (only a changed step is installed for and logged).</summary>
+    /// <summary>The value last loaded or saved (only a changed step is saved and logged).</summary>
     public string Saved { get; set; } = string.Empty;
 
     partial void OnSelectedChanged(StepOption? value)

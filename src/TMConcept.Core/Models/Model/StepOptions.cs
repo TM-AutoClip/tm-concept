@@ -21,4 +21,10 @@ public sealed class StepOptions
 
     /// <summary>Speech speed of the narration step (1 = normal).</summary>
     public double Speed { get; set; } = 1.0;
+
+    /// <summary>
+    /// Images step with no image model: <see cref="Images.ImageSources.Samples"/> = the profile's sample images are used; empty = no images
+    /// (the video is drawn by its code only).
+    /// </summary>
+    public string ImageSource { get; set; } = string.Empty;
 }

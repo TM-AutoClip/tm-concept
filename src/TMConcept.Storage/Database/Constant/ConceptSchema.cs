@@ -1,10 +1,12 @@
 namespace TMConcept.Storage.Database;
 
 /// <summary>
-/// The schema of the database file. Created once, when the file has no table yet. Since 0.1.5 a profile keeps its models as step overrides
-/// (<c>profile_step_models</c>), the voice columns of <c>profiles</c> and the user's price overrides (<c>model_overrides</c>) are gone:
-/// <see cref="Upgrade"/> brings a file of an earlier version to this shape without keeping those values (no data is carried over before
-/// the first public data).
+/// The schema of the database file and its version (<c>PRAGMA user_version</c>). A new file gets <see cref="Create"/> and
+/// <see cref="Version"/>; an older file is brought to the same shape by the upgrade steps, one version after the other (a test compares a
+/// new file with an upgraded one, table by table and column by column). Versions: 1 = 0.1.0–0.1.4 (no version written), 2 = 0.1.5
+/// (<c>profile_step_models</c>; no version written either: told apart by that table), 3 = 0.1.6 (the models are chosen on the pages and
+/// kept per profile only: the general defaults of <c>step_models</c> are copied into every profile that had no choice of its own, then the
+/// table goes).
 /// </summary>
 internal static class ConceptSchema
 {
@@ -57,13 +59,6 @@ internal static class ConceptSchema
         CREATE TABLE "settings" (
             "Key" TEXT NOT NULL CONSTRAINT "PK_settings" PRIMARY KEY,
             "Value" TEXT NOT NULL
-        );
-        CREATE TABLE "step_models" (
-            "Step" TEXT NOT NULL CONSTRAINT "PK_step_models" PRIMARY KEY,
-            "Provider" TEXT NOT NULL,
-            "Model" TEXT NOT NULL,
-            "KeyId" TEXT NULL,
-            "OptionsJson" TEXT NOT NULL
         );
         CREATE TABLE "profile_step_models" (
             "ProfileId" TEXT NOT NULL,
@@ -180,11 +175,14 @@ internal static class ConceptSchema
         CREATE INDEX "IX_videos_ProfileId_CreatedAtUtc" ON "videos" ("ProfileId", "CreatedAtUtc");
         """;
 
-    /// <summary>The table a file of 0.1.0–0.1.4 lacks; its absence means <see cref="Upgrade"/> must run.</summary>
-    public const string NewestTable = "profile_step_models";
+    /// <summary>The version a new file is created with and every older file is brought to.</summary>
+    public const int Version = 3;
 
-    /// <summary>Brings a 0.1.0–0.1.4 file to this schema (the voice columns and the price overrides are dropped, not carried over).</summary>
-    public const string Upgrade = """
+    /// <summary>The table a file of 0.1.0–0.1.4 lacks (a file without a version number is version 2 when it has it).</summary>
+    public const string Version2Table = "profile_step_models";
+
+    /// <summary>Version 1 (0.1.0–0.1.4) → 2 (0.1.5): the voice columns and the price overrides are dropped, not carried over.</summary>
+    public const string UpgradeTo2 = """
         CREATE TABLE IF NOT EXISTS "profile_step_models" (
             "ProfileId" TEXT NOT NULL,
             "Step" TEXT NOT NULL,
@@ -200,5 +198,15 @@ internal static class ConceptSchema
         ALTER TABLE "profiles" DROP COLUMN "SpeechVoice";
         ALTER TABLE "profiles" DROP COLUMN "SpeechSpeed";
         DELETE FROM "step_models" WHERE "Step" IN ('image-prompt', 'image', 'speech');
+        """;
+
+    /// <summary>
+    /// Version 2 (0.1.5) → 3 (0.1.6): the general defaults become each profile's own choice where the profile had none (an explicit "off"
+    /// of a profile stays), then <c>step_models</c> goes.
+    /// </summary>
+    public const string UpgradeTo3 = """
+        INSERT OR IGNORE INTO "profile_step_models" ("ProfileId", "Step", "Provider", "Model", "KeyId", "OptionsJson")
+            SELECT "p"."Id", "s"."Step", "s"."Provider", "s"."Model", "s"."KeyId", "s"."OptionsJson" FROM "profiles" AS "p" CROSS JOIN "step_models" AS "s";
+        DROP TABLE IF EXISTS "step_models";
         """;
 }

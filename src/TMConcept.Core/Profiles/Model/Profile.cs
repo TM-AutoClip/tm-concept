@@ -2,7 +2,7 @@ namespace TMConcept.Core.Profiles;
 
 /// <summary>
 /// A profile = a channel: what kind of videos it makes, in which language and format. Its models (voice, images, engine…) are step
-/// overrides kept next to it (<see cref="Models.IStepModelStore"/>); a step it does not override uses the general default.
+/// choices kept next to it (<see cref="Models.IStepModelStore"/>): the last models used on each page.
 /// </summary>
 public sealed class Profile
 {

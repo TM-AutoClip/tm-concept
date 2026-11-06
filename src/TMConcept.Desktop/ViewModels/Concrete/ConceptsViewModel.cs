@@ -14,19 +14,23 @@ using TMConcept.Desktop.Startup;
 namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
-/// 💡 Generate concepts: count (1–100), extra request, model (the step's default; empty until chosen), local duplicate check. The estimate
-/// is recalculated when an input changes; after "Generate" the same box shows the exact cost. Concepts arrive batch by batch; a card shows
+/// 💡 Generate concepts: count (1–100), extra request, the concept model (with its effort) and the optional semantic duplicate check
+/// (local or online embedding) chosen right here — the selected profile's last choices are shown, a new profile starts with none; local
+/// duplicate check. The estimate is recalculated when an input or a model changes; after "Generate" the same box shows the exact cost.
+/// Generate first makes the choices ready (license, an API key asked for in a dialog when the provider has none, installs of a local model)
+/// and saves them for the profile; anything missing stops it before anything is paid for. Concepts arrive batch by batch; a card shows
 /// title and summary, opening it shows the full text; ✓ (A) approves, ✗ (D) moves to the trash. Thrown-away duplicates are not replaced
 /// automatically: a "Fill the missing" button appears.
 /// </summary>
 public sealed partial class ConceptsViewModel(AppSession session, IConceptStore concepts, ConceptGenerator generator, StepModelResolver resolver,
-    IModelCatalog catalog, ConceptEvents events, INotifier notifier, IActivityLog activity, Localizer text,
+    IModelCatalog catalog, ConceptEvents events, INotifier notifier, IActivityLog activity, Localizer text, StepPickerViewModel picker,
     ILogger<ConceptsViewModel> logger) : PageViewModelBase
 {
     private readonly List<ConceptCardViewModel> _approved = [];
     private CancellationTokenSource? _cancel;
     private bool _attached;
     private bool _loading;
+    private bool _pickerAttached;
 
     /// <inheritdoc />
     public override string TitleKey => "nav.concepts";
@@ -45,28 +49,12 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
     [ObservableProperty]
     public partial string ExtraPrompt { get; set; } = string.Empty;
 
-    /// <summary>Chat models (empty choice first).</summary>
-    public ObservableCollection<ModelOption> Models { get; } = [];
-
-    /// <summary>Chosen model.</summary>
-    [ObservableProperty]
-    public partial ModelOption? SelectedModel { get; set; }
-
-    /// <summary>"Recommended: …".</summary>
-    [ObservableProperty]
-    public partial string Recommended { get; set; } = string.Empty;
+    /// <summary>The models of this page: the concept model and the semantic duplicate check (the profile's last choices).</summary>
+    public StepPickerViewModel Picker { get; } = picker;
 
     /// <summary>Local duplicate check.</summary>
     [ObservableProperty]
     public partial bool LocalCheck { get; set; } = true;
-
-    /// <summary>Semantic duplicate check (needs an embedding model in Settings → Models).</summary>
-    [ObservableProperty]
-    public partial bool SemanticCheck { get; set; }
-
-    /// <summary>Whether an embedding model is chosen.</summary>
-    [ObservableProperty]
-    public partial bool SemanticAvailable { get; set; }
 
     /// <summary>Estimate.</summary>
     [ObservableProperty]
@@ -140,6 +128,18 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
             };
         }
 
+        if (!_pickerAttached)
+        {
+            _pickerAttached = true;
+            Picker.Changed += (_, _) =>
+            {
+                if (!_loading)
+                {
+                    _ = SafeAsync(EstimateAsync);
+                }
+            };
+        }
+
         await LoadModelsAsync().ConfigureAwait(true);
         await ReloadAsync().ConfigureAwait(true);
     }
@@ -150,8 +150,7 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         Missing = 0;
         LastCost = string.Empty;
 
-        // Each profile can have its own concept model: the new profile's choice is shown.
-        SelectedModel = null;
+        // Each profile keeps its own last choices: the new profile's are shown.
         await LoadModelsAsync().ConfigureAwait(true);
         await ReloadAsync().ConfigureAwait(true);
     }
@@ -215,14 +214,6 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
 
     partial void OnExtraPromptChanged(string value) => _ = SafeAsync(EstimateAsync);
 
-    partial void OnSelectedModelChanged(ModelOption? value)
-    {
-        if (!_loading)
-        {
-            _ = SafeAsync(EstimateAsync);
-        }
-    }
-
     partial void OnApprovedSearchChanged(string value) => Filter();
 
     partial void OnBusyChanged(bool value)
@@ -247,44 +238,36 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
             return;
         }
 
-        if (SelectedModel?.Model is not { } model)
+        // The choices are made ready (license, a key for an online provider, installs of a local embedding model) and saved for the
+        // profile; nothing is paid for before this passes.
+        var needed = new List<string> { PipelineSteps.Concepts };
+        if (Picker.Model(PipelineSteps.Embedding) is not null)
         {
-            Status = text["concepts.no_model"];
+            needed.Add(PipelineSteps.Embedding);
+        }
+
+        if (!await Picker.PrepareAsync(needed, "install.purpose.concepts", CancellationToken.None).ConfigureAwait(true))
+        {
+            Status = Picker.Status;
             return;
         }
 
         ResolvedModel resolved;
+        ResolvedModel? embedding = null;
         try
         {
-            var saved = await resolver.ChoiceAsync(PipelineSteps.Concepts, profile.Id, CancellationToken.None).ConfigureAwait(true);
-            resolved = await resolver.ResolveAsync(PipelineSteps.Concepts, new StepModelChoice
+            resolved = await resolver.ResolveAsync(PipelineSteps.Concepts, Picker.Choice(PipelineSteps.Concepts), CancellationToken.None).ConfigureAwait(true);
+            if (Picker.Model(PipelineSteps.Embedding) is not null)
             {
-                Step = PipelineSteps.Concepts,
-                Provider = model.Provider,
-                Model = model.Id,
-                KeyId = saved?.KeyId,
-                OptionsJson = saved is not null && saved.Provider == model.Provider && saved.Model == model.Id ? saved.OptionsJson : "{}",
-            }, CancellationToken.None).ConfigureAwait(true);
+                embedding = await resolver.ResolveAsync(PipelineSteps.Embedding, Picker.Choice(PipelineSteps.Embedding), CancellationToken.None)
+                    .ConfigureAwait(true);
+            }
         }
         catch (ModelNotReadyException ex)
         {
-            logger.LogWarning("Concept generation not started: the {Step} step has no {Missing} ({Provider}/{Model})", ex.Step, ex.Missing, model.Provider, model.Id);
-            Status = ex.Missing == "key" ? text.Format("concepts.no_key", model.Provider) : text["concepts.no_model"];
+            logger.LogWarning("Concept generation not started: the {Step} step has no {Missing}", ex.Step, ex.Missing);
+            Status = text["concepts.no_model"];
             return;
-        }
-
-        ResolvedModel? embedding = null;
-        if (SemanticCheck)
-        {
-            try
-            {
-                embedding = await resolver.ResolveForAsync(PipelineSteps.Embedding, profile.Id, CancellationToken.None).ConfigureAwait(true);
-            }
-            catch (ModelNotReadyException ex)
-            {
-                logger.LogWarning("Semantic check skipped: {Missing}", ex.Missing);
-                activity.Add(ActivityLevel.Warning, text["concepts.semantic.skipped"]);
-            }
         }
 
         Status = string.Empty;
@@ -363,25 +346,10 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         _loading = true;
         try
         {
-            var current = SelectedModel?.Model;
-            Models.Clear();
-            Models.Add(new ModelOption(null, text["models.none"]));
-            foreach (var model in catalog.With(ModelCapability.Chat).OrderBy(m => m.Provider, StringComparer.Ordinal).ThenBy(m => m.Name, StringComparer.Ordinal))
-            {
-                Models.Add(new ModelOption(model, model.Name + " · " + model.Provider));
-            }
-
-            var profileId = session.Profile?.Id;
-            var saved = await resolver.ChoiceAsync(PipelineSteps.Concepts, profileId, CancellationToken.None).ConfigureAwait(true);
-            SelectedModel = Models.FirstOrDefault(o => o.Model is { } m && current is not null && m.Provider == current.Provider && m.Id == current.Id)
-                ?? Models.FirstOrDefault(o => o.Model is { } m && saved is not null && m.Provider == saved.Provider && m.Id == saved.Model)
-                ?? Models[0];
-            var step = PipelineSteps.All.First(s => s.Code == PipelineSteps.Concepts);
-            Recommended = text.Format("models.recommended",
-                string.Join(" · ", step.Recommended.Select(r => catalog.All.FirstOrDefault(m => m.Provider + "/" + m.Id == r)?.Name ?? r)));
-            SemanticAvailable = !StepModelResolver.IsOff(await resolver.ChoiceAsync(PipelineSteps.Embedding, profileId, CancellationToken.None).ConfigureAwait(true));
-            SemanticCheck &= SemanticAvailable;
-            PricedOn = ModelsSettingsViewModel.PriceText(catalog, text);
+            var profile = session.Profile;
+            var language = profile?.ContentLanguage ?? (text.Language == "tr" ? Core.Profiles.ContentLanguages.Turkish : Core.Profiles.ContentLanguages.English);
+            await Picker.LoadAsync(profile?.Id, language, PipelineSteps.ConceptPage).ConfigureAwait(true);
+            PricedOn = PriceInfo.Text(catalog, text);
         }
         finally
         {
@@ -427,7 +395,14 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
 
     private async Task EstimateAsync()
     {
-        if (session.Profile is not { } profile || SelectedModel?.Model is not { } model)
+        // Two different reasons, two different messages (0.1.5 said "choose a model" also when no profile was selected).
+        if (session.Profile is not { } profile)
+        {
+            Estimate = text["concepts.estimate.no_profile"];
+            return;
+        }
+
+        if (Picker.Model(PipelineSteps.Concepts) is not { } model)
         {
             Estimate = text["concepts.estimate.none"];
             return;
@@ -435,6 +410,11 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
 
         var count = (int)Math.Clamp(Count ?? 0, ConceptLimits.CountMin, ConceptLimits.CountMax);
         var estimate = await generator.EstimateAsync(profile, count, ExtraPrompt, model, CancellationToken.None).ConfigureAwait(true);
+        if (Picker.Model(PipelineSteps.Embedding) is { } embedding)
+        {
+            estimate = estimate.Plus(generator.EstimateEmbedding(embedding, count, profile.ContentLanguage));
+        }
+
         Estimate = text.Format("concepts.estimate", model.Name, count, text.Usd(estimate.MinUsd), text.Usd(estimate.MaxUsd),
             Thousands(estimate.InputTokens), Thousands(estimate.OutputTokensMax));
     }

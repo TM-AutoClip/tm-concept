@@ -3,8 +3,9 @@ using TMConcept.Core.Models;
 namespace TMConcept.Core.Pipeline;
 
 /// <summary>
-/// The steps that call a model. Each has its own choice: the general default (Settings → Models) and, per profile, an override (Profile
-/// page); producing uses the profile's override, then the general default.
+/// The steps that call a model. Each is chosen on the page that uses it (there is no model setting in Settings): Generate concepts =
+/// concept model and the semantic duplicate check; Concept → video = video code model and engine, images, narration; Profile = describing
+/// a sample image. The last choice is kept per profile and shown again next time.
 /// </summary>
 public static class PipelineSteps
 {
@@ -38,8 +39,17 @@ public static class PipelineSteps
         new(Concepts, ModelCapability.Chat, ["anthropic/claude-sonnet-5-5", "zai/glm-5.3", "anthropic/claude-haiku-5-5"], Optional: false),
         new(VideoCode, ModelCapability.Chat, ["anthropic/claude-sonnet-5-5", "anthropic/claude-opus-5-5"], Optional: false),
         new(Images, ModelCapability.Image, ["local/flux2-klein-4b", "local/z-image-turbo", "fal/fal-ai/flux-2/flash"], Optional: true),
-        new(Speech, ModelCapability.Speech, ["local/supertonic"], Optional: true),
-        new(Embedding, ModelCapability.Embedding, ["openai/text-embedding-3-small"], Optional: true),
+        new(Speech, ModelCapability.Speech, ["local/supertonic", "local/kokoro"], Optional: true),
+        new(Embedding, ModelCapability.Embedding, ["local/multilingual-e5-small", "openai/text-embedding-3-small"], Optional: true),
         new(DescribeImage, ModelCapability.Vision, ["anthropic/claude-haiku-5-5"], Optional: true),
     ];
+
+    /// <summary>The steps chosen on the Generate concepts page.</summary>
+    public static readonly IReadOnlyList<string> ConceptPage = [Concepts, Embedding];
+
+    /// <summary>The steps chosen on the Concept → video page.</summary>
+    public static readonly IReadOnlyList<string> VideoPage = [VideoCode, Images, Speech];
+
+    /// <summary>The steps chosen on the Profile page (sample images).</summary>
+    public static readonly IReadOnlyList<string> ProfilePage = [DescribeImage];
 }

@@ -1,0 +1,29 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="using:TMConcept.Desktop.Dialogs"
+        x:Class="TMConcept.Desktop.Views.ApiKeyWindow"
+        x:DataType="d:ApiKeyPromptViewModel"
+        Title="{Binding Title}"
+        Width="620" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+  <StackPanel Margin="24" Spacing="12">
+    <TextBlock Text="{Binding Title}" Classes="h2" TextWrapping="Wrap" />
+    <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />
+    <Border Classes="card">
+      <StackPanel Spacing="8">
+        <TextBlock Text="{Binding Guide}" TextWrapping="Wrap" Classes="small" />
+        <Button Content="{DynamicResource keys.open_page}" Command="{Binding OpenKeyPageCommand}" />
+        <TextBlock Text="{Binding Policy}" Classes="small" TextWrapping="Wrap" />
+      </StackPanel>
+    </Border>
+    <TextBox Text="{Binding Label}" PlaceholderText="{DynamicResource keys.label}" />
+    <TextBox Classes="secret" Text="{Binding Secret}" PlaceholderText="{DynamicResource keys.secret}" />
+    <TextBlock Text="{Binding Result}" Classes.error="{Binding Failed}" Classes.ok="{Binding !Failed}" TextWrapping="Wrap"
+               IsVisible="{Binding Result, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+    <ProgressBar IsIndeterminate="True" IsVisible="{Binding Busy}" />
+    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+      <Button Name="CancelButton" Content="{Binding CancelText}" IsCancel="True" />
+      <Button Classes="accent" Content="{DynamicResource keygate.test_save}" Command="{Binding TestAndSaveCommand}" IsEnabled="{Binding Idle}" IsDefault="True" />
+    </StackPanel>
+  </StackPanel>
+</Window>

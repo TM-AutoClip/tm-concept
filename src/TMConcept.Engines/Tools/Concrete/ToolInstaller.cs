@@ -172,7 +172,7 @@ public sealed class ToolInstaller(IAppPaths paths, IToolPlatform platform, ToolD
     /// <summary>The executable of a tool, or an exception that tells the user to install it.</summary>
     public string Require(ToolKind tool) => Status(tool) is { Ready: true } status
         ? status.ExecutablePath
-        : throw new ToolInstallException($"{tool} is not installed. Choose the setting that needs it in Settings → Models and save: it is installed then.") { Code = "missing" };
+        : throw new ToolInstallException($"{tool} is not installed. It is installed when a process that needs it starts (after a confirmation).") { Code = "missing" };
 
     /// <summary>A sibling program of a tool (ffprobe next to ffmpeg, npm-cli next to node).</summary>
     public string Sibling(ToolKind tool, string name)

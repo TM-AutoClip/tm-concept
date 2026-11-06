@@ -70,6 +70,7 @@ public static class DesktopServices
         services.AddSingleton<Engines.Media.FfmpegMuxer>();
         services.AddSingleton<Core.Media.IMediaTools, Engines.Media.FfmpegMedia>();
         services.AddSingleton<Core.Videos.VideoPipeline>();
+        services.AddSingleton<Core.Videos.VideoCostEstimator>();
         services.AddSingleton<Speech.Speech.SpeechModelInstaller>();
         services.AddSingleton(s => new Speech.Speech.SpeechWorkerClient(s.GetRequiredService<Core.Processes.IChildProcessGuard>(),
             s.GetRequiredService<ILogger<Speech.Speech.SpeechWorkerClient>>()) { LogDirectory = paths.LogDirectory });
@@ -92,7 +93,7 @@ public static class DesktopServices
         services.AddSingleton<Core.Engines.IVideoEngine, Engines.Engines.RemotionEngine>();
         services.AddSingleton<Core.Engines.IVideoEngine, Engines.Engines.RevideoEngine>();
 
-        // Everything a setting can need on this computer (installed from Settings → Models on save, or before the first video).
+        // Everything a chosen model can need on this computer (installed when a process that uses it starts, after one confirmation).
         services.AddSingleton<Core.Components.IComponentSource, Engines.Components.EngineComponentSource>();
         services.AddSingleton<Core.Components.IComponentSource, Speech.Components.VoiceComponentSource>();
         services.AddSingleton<Core.Components.ComponentPlanner>();
@@ -152,8 +153,9 @@ public static class DesktopServices
         services.AddTransient<FirstRunViewModel>();
         services.AddTransient<UnlockViewModel>();
 
-        // One step table per page that shows one (Settings → Models, Profile).
-        services.AddTransient<StepSettingsViewModel>();
+        // One set of model pickers per page that uses models (Generate concepts, Concept → video, Profile).
+        services.AddTransient<StepPickerViewModel>();
+        services.AddSingleton<Dialogs.IApiKeyDialog, Dialogs.ApiKeyDialog>();
 
         services.AddSingleton<Dialogs.IConfirmDialog, Dialogs.ConfirmDialog>();
         services.AddSingleton<Reports.SystemReport>();
@@ -174,7 +176,6 @@ public static class DesktopServices
         services.AddSingleton<Func<IEnumerable<SettingsSectionBase>>>(s => () => s.GetServices<SettingsSectionBase>());
         AddSection<GeneralSettingsViewModel, GeneralSettingsView>(services);
         AddSection<KeysSettingsViewModel, KeysSettingsView>(services);
-        AddSection<ModelsSettingsViewModel, ModelsSettingsView>(services);
         AddSection<BackupSettingsViewModel, BackupSettingsView>(services);
         AddSection<AboutSettingsViewModel, AboutSettingsView>(services);
     }

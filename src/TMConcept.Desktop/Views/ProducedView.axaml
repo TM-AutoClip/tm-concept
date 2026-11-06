@@ -10,6 +10,7 @@
       <StackPanel DockPanel.Dock="Top" Spacing="8">
         <TextBlock Text="{DynamicResource nav.produced}" Classes="h1" />
         <TextBox Text="{Binding Search}" PlaceholderText="{DynamicResource common.search}" MaxWidth="400" HorizontalAlignment="Left" MinWidth="260" />
+        <TextBlock Text="{Binding Spending}" Classes="small" />
         <TextBlock Text="{Binding Status}" Classes="error" />
       </StackPanel>
       <ListBox ItemsSource="{Binding Items}" SelectedItem="{Binding Selected}" Background="Transparent" Margin="0,8,0,0">

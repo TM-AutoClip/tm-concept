@@ -5,24 +5,17 @@ using TMConcept.Core.Keys;
 namespace TMConcept.Core.Models;
 
 /// <summary>
-/// Finds the model and key of a step: a page's explicit choice when given, otherwise the profile's override, otherwise the general default.
-/// A paid model is never picked automatically: no choice means <see cref="ModelNotReadyException"/> (or, for an optional step, "off").
-/// A local model needs no key.
+/// Finds the model and key of a step: a page's explicit choice when given, otherwise the profile's saved choice (the last one used on the
+/// page). A paid model is never picked automatically: no choice means <see cref="ModelNotReadyException"/> (or, for an optional step,
+/// "off"). A local model needs no key.
 /// </summary>
 public sealed class StepModelResolver(IStepModelStore steps, IApiKeyStore keys, IModelCatalog catalog, ILogger<StepModelResolver> logger)
 {
-    /// <summary>The choice that applies to a step: the profile's override (also an explicit "off"), then the general default; null = none.</summary>
-    public async Task<StepModelChoice?> ChoiceAsync(string step, Guid? profileId, CancellationToken cancellationToken)
-    {
-        if (profileId is { } profile && await steps.GetAsync(step, profile, cancellationToken).ConfigureAwait(false) is { } own)
-        {
-            return own;
-        }
+    /// <summary>The profile's saved choice of a step (also an explicit "off"); null = none, or no profile.</summary>
+    public async Task<StepModelChoice?> ChoiceAsync(string step, Guid? profileId, CancellationToken cancellationToken) =>
+        profileId is { } profile ? await steps.GetAsync(step, profile, cancellationToken).ConfigureAwait(false) : null;
 
-        return await steps.GetAsync(step, null, cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <summary>Resolves the step for a profile (override → general default).</summary>
+    /// <summary>Resolves the step for a profile (its saved choice).</summary>
     public async Task<ResolvedModel> ResolveForAsync(string step, Guid? profileId, CancellationToken cancellationToken) =>
         await ResolveAsync(step, await ChoiceAsync(step, profileId, cancellationToken).ConfigureAwait(false), cancellationToken).ConfigureAwait(false);
 
@@ -33,18 +26,17 @@ public sealed class StepModelResolver(IStepModelStore steps, IApiKeyStore keys, 
         return IsOff(choice) ? null : await ResolveAsync(step, choice, cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>Resolves a choice (a page's own one, or the saved one when <paramref name="choice"/> is null: the general default).</summary>
+    /// <summary>Resolves a choice (a page's own one, or a saved one); none or "off" = not ready.</summary>
     public async Task<ResolvedModel> ResolveAsync(string step, StepModelChoice? choice, CancellationToken cancellationToken)
     {
-        var chosen = choice ?? await steps.GetAsync(step, null, cancellationToken).ConfigureAwait(false);
-        if (IsOff(chosen))
+        if (IsOff(choice))
         {
             throw new ModelNotReadyException($"No model is chosen for the step '{step}'.") { Step = step, Missing = "model" };
         }
 
-        var model = catalog.Find(chosen!.Provider, chosen.Model)
-            ?? throw new ModelNotReadyException($"The model '{chosen.Provider}/{chosen.Model}' is not in the catalog.") { Step = step, Missing = "unknown" };
-        var options = Options(chosen, out var damaged);
+        var model = catalog.Find(choice!.Provider, choice.Model)
+            ?? throw new ModelNotReadyException($"The model '{choice.Provider}/{choice.Model}' is not in the catalog.") { Step = step, Missing = "unknown" };
+        var options = Options(choice, out var damaged);
         if (damaged)
         {
             logger.LogWarning("The saved options of the step {Step} are damaged; the defaults are used", step);
@@ -56,9 +48,28 @@ public sealed class StepModelResolver(IStepModelStore steps, IApiKeyStore keys, 
         }
 
         var all = await keys.ListAsync(model.Provider, cancellationToken).ConfigureAwait(false);
-        var key = all.FirstOrDefault(k => k.Id == chosen.KeyId) ?? all.FirstOrDefault()
+        var key = all.FirstOrDefault(k => k.Id == choice.KeyId) ?? all.FirstOrDefault()
             ?? throw new ModelNotReadyException($"There is no API key for '{model.Provider}'.") { Step = step, Missing = "key" };
         return new ResolvedModel(model, key, options.Effort);
+    }
+
+    /// <summary>
+    /// The online providers among <paramref name="models"/> that have no API key yet (each once, in order): the key gate before a process
+    /// starts. Local models need none.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> ProvidersWithoutKeyAsync(IEnumerable<CatalogModel> models, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(models);
+        var missing = new List<string>();
+        foreach (var provider in models.Where(m => m.Provider != ModelProviders.Local).Select(m => m.Provider).Distinct(StringComparer.Ordinal))
+        {
+            if ((await keys.ListAsync(provider, cancellationToken).ConfigureAwait(false)).Count == 0)
+            {
+                missing.Add(provider);
+            }
+        }
+
+        return missing;
     }
 
     /// <summary>Whether a choice means "no model": none saved, an empty model, or an explicit off.</summary>

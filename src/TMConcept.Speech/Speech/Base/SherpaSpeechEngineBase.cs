@@ -55,7 +55,7 @@ public abstract class SherpaSpeechEngineBase(SpeechModelInstaller installer, ITo
         var runtime = tools.Status(ToolKind.SpeechRuntime);
         if (!runtime.Ready)
         {
-            throw new SpeechException("The speech libraries (sherpa-onnx) are not installed. Choose the local voice in Settings → Models and save: they are installed then.") { Code = "missing" };
+            throw new SpeechException("The speech libraries (sherpa-onnx) are not installed. They are installed when a process that uses a local voice starts (after a confirmation).") { Code = "missing" };
         }
 
         var reply = await worker.SpeakAsync(Path.GetDirectoryName(runtime.ExecutablePath)!, installer.Folder(model), Threads, Request(request),

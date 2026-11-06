@@ -46,30 +46,70 @@ public sealed class ConceptDatabase(IAppPaths paths, DatabaseKey key)
     }
 
     /// <summary>
-    /// Creates the tables when the file has none yet (a new database); a file of 0.1.0–0.1.4 is brought to the current schema once
-    /// (<see cref="ConceptSchema.Upgrade"/>); a current schema is left as it is.
+    /// Creates the tables when the file has none yet (a new database, version <see cref="ConceptSchema.Version"/>); an older file is
+    /// brought to the current schema one version after the other, in one transaction (all or nothing); a current file is left as it is.
+    /// Every way a database file comes in goes through here: first start, unlock, and a restored backup (a backup of an older version is
+    /// upgraded before it is used). A file of a newer version than this app is refused (it would be damaged by older code).
     /// </summary>
     public static async Task EnsureSchemaAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(connection);
-        var tables = await Sql.ScalarAsync(connection, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'", cancellationToken).ConfigureAwait(false);
-        if (tables > 0)
+        var version = await VersionAsync(connection, cancellationToken).ConfigureAwait(false);
+        if (version == ConceptSchema.Version)
         {
-            var current = await Sql.ScalarAsync(connection, $"SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = '{ConceptSchema.NewestTable}'",
-                cancellationToken).ConfigureAwait(false);
-            if (current > 0)
-            {
-                return;
-            }
-
-            await using var upgrade = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-            await Sql.ExecuteAsync(connection, ConceptSchema.Upgrade, cancellationToken, upgrade).ConfigureAwait(false);
-            await upgrade.CommitAsync(cancellationToken).ConfigureAwait(false);
             return;
         }
 
+        if (version > ConceptSchema.Version)
+        {
+            throw new InvalidOperationException(
+                $"The database was made by a newer version of TM Concept (schema {version}; this version knows {ConceptSchema.Version}). Update the app.");
+        }
+
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-        await Sql.ExecuteAsync(connection, ConceptSchema.Create, cancellationToken, transaction).ConfigureAwait(false);
+        if (version == 0)
+        {
+            await Sql.ExecuteAsync(connection, ConceptSchema.Create, cancellationToken, transaction).ConfigureAwait(false);
+        }
+        else
+        {
+            if (version < 2)
+            {
+                await Sql.ExecuteAsync(connection, ConceptSchema.UpgradeTo2, cancellationToken, transaction).ConfigureAwait(false);
+            }
+
+            if (version < 3)
+            {
+                await Sql.ExecuteAsync(connection, ConceptSchema.UpgradeTo3, cancellationToken, transaction).ConfigureAwait(false);
+            }
+        }
+
+        await Sql.ExecuteAsync(connection, "PRAGMA user_version = " + ConceptSchema.Version.ToString(System.Globalization.CultureInfo.InvariantCulture) + ";",
+            cancellationToken, transaction).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The schema version of a file: 0 = no table yet; otherwise <c>PRAGMA user_version</c>, and for a file that has none written (0.1.0–0.1.5)
+    /// 2 when it has <see cref="ConceptSchema.Version2Table"/>, else 1.
+    /// </summary>
+    public static async Task<int> VersionAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        var tables = await Sql.ScalarAsync(connection, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'", cancellationToken).ConfigureAwait(false);
+        if (tables is null or 0)
+        {
+            return 0;
+        }
+
+        var written = (int)(await Sql.ScalarAsync(connection, "PRAGMA user_version;", cancellationToken).ConfigureAwait(false) ?? 0);
+        if (written > 0)
+        {
+            return written;
+        }
+
+        var has2 = await Sql.ScalarAsync(connection, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = $name", cancellationToken, null,
+            ("$name", ConceptSchema.Version2Table)).ConfigureAwait(false);
+        return has2 > 0 ? 2 : 1;
     }
 }

@@ -143,6 +143,20 @@ public sealed class Vault(IAppPaths paths, DatabaseKey key, IEnumerable<IKeyProt
         File.Copy(databaseFile, paths.DatabaseFile, overwrite: true);
         KeyFile.Write(paths.KeyFile, envelope);
         key.Load(dek);
+
+        // A backup of an older version has an older schema: it is upgraded now, before anything uses it (0.1.5 skipped this, so a profile
+        // saved right after restoring a 0.1.4 backup failed with "no such table: profile_step_models").
+        try
+        {
+            await using var db = await new ConceptDatabase(paths, key).OpenAsync(cancellationToken).ConfigureAwait(false);
+            await ConceptDatabase.EnsureSchemaAsync(db, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            key.Clear();
+            throw;
+        }
+
         logger.LogInformation("Database installed from a backup (key protection: {Method})", protector.Method);
     }
 

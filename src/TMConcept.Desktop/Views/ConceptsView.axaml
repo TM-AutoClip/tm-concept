@@ -1,9 +1,10 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:TMConcept.Desktop.ViewModels"
+             xmlns:views="using:TMConcept.Desktop.Views"
              x:Class="TMConcept.Desktop.Views.ConceptsView"
              x:DataType="vm:ConceptsViewModel">
-  <Grid ColumnDefinitions="260,*,300" Margin="16" ColumnSpacing="16">
+  <Grid ColumnDefinitions="380,*,300" Margin="16" ColumnSpacing="16">
     <ScrollViewer>
       <StackPanel Spacing="8">
         <TextBlock Text="{DynamicResource nav.concepts}" Classes="h1" />
@@ -12,20 +13,10 @@
         <TextBlock Text="{DynamicResource concepts.extra}" FontWeight="SemiBold" />
         <TextBox Text="{Binding ExtraPrompt}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="90" MaxLength="1000"
                  PlaceholderText="{DynamicResource concepts.extra.placeholder}" />
-        <TextBlock Text="{DynamicResource concepts.model}" FontWeight="SemiBold" />
-        <ComboBox ItemsSource="{Binding Models}" SelectedItem="{Binding SelectedModel}" HorizontalAlignment="Stretch">
-          <ComboBox.ItemTemplate>
-            <DataTemplate x:DataType="vm:ModelOption">
-              <TextBlock Text="{Binding Label}" />
-            </DataTemplate>
-          </ComboBox.ItemTemplate>
-        </ComboBox>
-        <Border Classes="badge" HorizontalAlignment="Left">
-          <TextBlock Text="{Binding Recommended}" Classes="small" TextWrapping="Wrap" />
-        </Border>
         <TextBlock Text="{DynamicResource concepts.check}" FontWeight="SemiBold" />
         <CheckBox IsChecked="{Binding LocalCheck}" Content="{DynamicResource concepts.check.local}" />
-        <CheckBox IsChecked="{Binding SemanticCheck}" IsEnabled="{Binding SemanticAvailable}" Content="{DynamicResource concepts.check.semantic}" />
+        <TextBlock Text="{DynamicResource concepts.models}" FontWeight="SemiBold" Margin="0,8,0,0" />
+        <views:StepPickerView DataContext="{Binding Picker}" />
         <TextBlock Text="{Binding Status}" Classes="error" TextWrapping="Wrap" />
       </StackPanel>
     </ScrollViewer>

@@ -27,8 +27,12 @@ namespace TMConcept.Desktop.ViewModels;
 /// </summary>
 public sealed partial class ProducedViewModel(AppSession session, IVideoStore videos, IConceptStore concepts, IAppPaths paths, ShellLauncher shell,
     IRecycleBin recycleBin, IConfirmDialog confirm, ConceptEvents events, IActivityLog activity, PlayerViewModel player, IMediaTools media, Localizer text,
-    ILogger<ProducedViewModel> logger) : PageViewModelBase
+    Core.Runs.IRunStore runs, Core.Profiles.IProfileStore profiles, TimeProvider clock, ILogger<ProducedViewModel> logger) : PageViewModelBase
 {
+    /// <summary>This month's spending (concept runs and videos of every profile).</summary>
+    [ObservableProperty]
+    public partial string Spending { get; set; } = string.Empty;
+
     private readonly List<VideoRowViewModel> _all = [];
     private readonly HashSet<Guid> _thumbnailing = [];
     private bool _attached;
@@ -281,7 +285,7 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
                 .Append(text.Format("produced.detail.size", v.Width, v.Height, v.Fps, (v.SizeBytes / 1_000_000.0).ToString("0.0", CultureInfo.InvariantCulture))).Append('\n')
                 .Append(text.Format("produced.detail.speech", v.SpeechModel.Length > 0 ? v.SpeechModel : text["produced.detail.none"])).Append('\n')
                 .Append(text.Format("produced.detail.images", v.ImageModel.Length == 0 ? text["produced.detail.images_none"]
-                    : v.ImageModel == Core.Images.ImageSources.Samples ? text["video.images.samples"] : v.ImageModel)).Append('\n')
+                    : v.ImageModel == Core.Images.ImageSources.Samples ? text["step.images.samples"] : v.ImageModel)).Append('\n')
                 .Append(text.Format("produced.detail.elapsed", (v.ElapsedMs / 1000.0).ToString("0", CultureInfo.InvariantCulture))).Append('\n');
             foreach (var cost in costs)
             {
@@ -329,6 +333,7 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
     /// <summary>Reloads the list; the selected video stays selected (a video finishing in the background reloads this page).</summary>
     private async Task ReloadAsync()
     {
+        Spending = await PriceInfo.SpendingAsync(runs, profiles, videos, clock, text, CancellationToken.None).ConfigureAwait(true);
         var selected = Selected?.Video.Id;
         var profile = session.Profile;
         var list = profile is null ? [] : await videos.ListAsync(profile.Id, CancellationToken.None).ConfigureAwait(true);

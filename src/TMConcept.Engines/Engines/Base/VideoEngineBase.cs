@@ -137,7 +137,7 @@ public abstract class VideoEngineBase(EnginePackage package, ChromeLocator chrom
         var status = Status();
         if (!status.Ready)
         {
-            throw new EngineException($"{Name} is not installed (missing: {string.Join(", ", status.Missing)}). Choose it in Settings → Models and save: it is installed then.") { Code = "missing" };
+            throw new EngineException($"{Name} is not installed (missing: {string.Join(", ", status.Missing)}). It is installed when a video is produced (after a confirmation).") { Code = "missing" };
         }
     }
 

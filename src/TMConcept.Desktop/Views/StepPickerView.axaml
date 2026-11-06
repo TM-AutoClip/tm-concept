@@ -1,22 +1,22 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:TMConcept.Desktop.ViewModels"
-             x:Class="TMConcept.Desktop.Views.StepSettingsView"
-             x:DataType="vm:StepSettingsViewModel">
+             x:Class="TMConcept.Desktop.Views.StepPickerView"
+             x:DataType="vm:StepPickerViewModel">
   <StackPanel Spacing="6">
-    <!-- Locked while saving or installing: what is saved is what the rows showed when Save was pressed. -->
+    <!-- Locked while a process is prepared (keys, installs): what is saved is what the rows showed when it started. -->
     <ItemsControl ItemsSource="{Binding Rows}" IsEnabled="{Binding !Busy}">
       <ItemsControl.ItemTemplate>
         <DataTemplate x:DataType="vm:StepModelRowViewModel">
           <Border Classes="card" Margin="0,4">
-            <Grid ColumnDefinitions="220,*" ColumnSpacing="14">
+            <StackPanel Spacing="6">
               <StackPanel Spacing="2">
                 <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
                 <TextBlock Text="{Binding Purpose}" Classes="small" TextWrapping="Wrap" />
               </StackPanel>
-              <StackPanel Grid.Column="1" Spacing="6">
+              <StackPanel Spacing="6">
                 <WrapPanel>
-                  <ComboBox ItemsSource="{Binding Options}" SelectedItem="{Binding Selected}" MinWidth="340" MaxWidth="520" Margin="0,0,8,4">
+                  <ComboBox ItemsSource="{Binding Options}" SelectedItem="{Binding Selected}" MinWidth="220" MaxWidth="520" Margin="0,0,8,4">
                     <ComboBox.ItemTemplate>
                       <DataTemplate x:DataType="vm:StepOption">
                         <TextBlock Text="{Binding Label}" />
@@ -34,7 +34,7 @@
                 </WrapPanel>
                 <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding ShowEngine}">
                   <TextBlock Text="{DynamicResource models.engine}" VerticalAlignment="Center" />
-                  <ComboBox ItemsSource="{Binding Engines}" SelectedItem="{Binding Engine}" MinWidth="300">
+                  <ComboBox ItemsSource="{Binding Engines}" SelectedItem="{Binding Engine}" MinWidth="220">
                     <ComboBox.ItemTemplate>
                       <DataTemplate x:DataType="vm:EngineOption">
                         <TextBlock Text="{Binding Label}" />
@@ -54,8 +54,8 @@
                   <TextBlock Text="{DynamicResource models.speed}" VerticalAlignment="Center" Margin="0,0,8,4" />
                   <NumericUpDown Value="{Binding Speed}" Minimum="0.5" Maximum="2" Increment="0.05" FormatString="0.00" Width="130" Margin="0,0,8,4" />
                   <Button Content="{DynamicResource speech.listen}" Margin="0,0,8,4"
-                          Command="{Binding $parent[ItemsControl].((vm:StepSettingsViewModel)DataContext).ListenCommand}" CommandParameter="{Binding}"
-                          IsEnabled="{Binding !$parent[ItemsControl].((vm:StepSettingsViewModel)DataContext).Listening}" />
+                          Command="{Binding $parent[ItemsControl].((vm:StepPickerViewModel)DataContext).ListenCommand}" CommandParameter="{Binding}"
+                          IsEnabled="{Binding !$parent[ItemsControl].((vm:StepPickerViewModel)DataContext).Listening}" />
                 </WrapPanel>
                 <Border Classes="badge" HorizontalAlignment="Left">
                   <TextBlock Text="{Binding Recommended}" Classes="small" />
@@ -63,7 +63,7 @@
                 <TextBlock Text="{Binding Note}" Classes="small" Classes.warning="{Binding NoteIsWarning}" TextWrapping="Wrap"
                            IsVisible="{Binding Note, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
               </StackPanel>
-            </Grid>
+            </StackPanel>
           </Border>
         </DataTemplate>
       </ItemsControl.ItemTemplate>
@@ -72,5 +72,7 @@
       <TextBlock Text="{Binding Progress}" Classes="small" />
       <ProgressBar Value="{Binding Percent}" Maximum="100" />
     </StackPanel>
+    <TextBlock Text="{Binding Status}" Classes="warning" TextWrapping="Wrap"
+               IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
   </StackPanel>
 </UserControl>

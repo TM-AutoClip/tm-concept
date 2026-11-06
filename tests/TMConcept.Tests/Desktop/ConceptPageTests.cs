@@ -32,7 +32,8 @@ public sealed class ConceptPageTests
     {
         var page = h.Get<ConceptsViewModel>();
         await page.ActivateAsync();
-        page.SelectedModel = page.Models.First(m => m.Model?.Id == "claude-sonnet-5-5");
+        var row = page.Picker.Row(TMConcept.Core.Pipeline.PipelineSteps.Concepts)!;
+        row.Selected = row.Options.First(o => o.Model?.Id == "claude-sonnet-5-5");
         return page;
     }
 

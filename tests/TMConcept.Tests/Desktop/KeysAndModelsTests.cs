@@ -1,9 +1,8 @@
 using System.Net;
 using Avalonia.Headless.XUnit;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Shouldly;
-using TMConcept.Core.Components;
+using TMConcept.Core.Chat;
 using TMConcept.Core.Hardware;
 using TMConcept.Core.Keys;
 using TMConcept.Core.Models;
@@ -17,8 +16,11 @@ using TMConcept.Tests.Providers;
 
 namespace TMConcept.Tests.Desktop;
 
+/// <summary>API keys, the key gate, and the models chosen on the pages (kept per profile; nothing about models in Settings).</summary>
 public sealed class KeysAndModelsTests
 {
+    private const string Secret = "fake-test-key-0123456789abcdef";
+
     [AvaloniaFact]
     public async Task AKeyIsSavedTestedAndShownMasked()
     {
@@ -28,7 +30,7 @@ public sealed class KeysAndModelsTests
         var keys = h.Get<KeysSettingsViewModel>();
         await keys.ActivateAsync();
         keys.Provider = keys.Providers.First(p => p.Provider.Code == "anthropic");
-        keys.Secret = "fake-test-key-0123456789abcdef";
+        keys.Secret = Secret;
 
         await keys.AddAsync();
 
@@ -41,155 +43,7 @@ public sealed class KeysAndModelsTests
     }
 
     [AvaloniaFact]
-    public async Task NoStepHasAModelUntilTheUserChoosesOne()
-    {
-        using var h = new DesktopHarness(s => s.AddSingleton<IGpuInfo>(new FakeGpu(null)));
-        await FirstRunTests.CreateAsync(h);
-        var models = h.Get<ModelsSettingsViewModel>();
-
-        await models.ActivateAsync();
-
-        models.Rows.Count.ShouldBe(PipelineSteps.All.Count);
-        models.Rows.ShouldAllBe(r => r.Selected!.Model == null);
-        await models.SaveAsync();
-        (await h.Get<IStepModelStore>().ListAsync(null, CancellationToken.None)).ShouldBeEmpty();
-
-        var concepts = models.Rows.First(r => r.Step.Code == "concepts");
-        concepts.Selected = concepts.Options.First(o => o.Model?.Id == "claude-sonnet-5-5");
-        concepts.Effort = concepts.Efforts.First(e => e.Value == "high");
-        await models.SaveAsync();
-        var saved = (await h.Get<IStepModelStore>().ListAsync(null, CancellationToken.None)).Single();
-        saved.Model.ShouldBe("claude-sonnet-5-5");
-        StepModelResolver.Options(saved).Effort.ShouldBe("high");
-    }
-
-    [AvaloniaFact]
-    public async Task TheEffortPickerStartsWithAutomaticAndShowsOnlyForModelsThatTakeAnEffort()
-    {
-        using var h = new DesktopHarness(s => s.AddSingleton<IGpuInfo>(new FakeGpu(null)));
-        await FirstRunTests.CreateAsync(h);
-        var models = h.Get<ModelsSettingsViewModel>();
-        await models.ActivateAsync();
-        var text = h.Get<Localizer>();
-        var concepts = models.Rows.First(r => r.Step.Code == PipelineSteps.Concepts);
-
-        concepts.Selected = concepts.Options.First(o => o.Model?.Id == "claude-sonnet-5-5");
-
-        concepts.HasEfforts.ShouldBeTrue();
-        concepts.Efforts[0].Value.ShouldBeEmpty();
-        concepts.Efforts[0].Label.ShouldBe(text["models.effort.auto"]);
-        concepts.Efforts.ShouldAllBe(e => e.Label.Length > 0);
-        concepts.Effort.ShouldBe(concepts.Efforts[0]);
-
-        concepts.Selected = concepts.Options.First(o => o.Model != null && o.Model.Provider == "zai" && o.Model.Efforts.Count == 0);
-        concepts.HasEfforts.ShouldBeFalse();
-
-        concepts.Selected = concepts.Options.First(o => o.Model?.Id == "claude-haiku-5-5");
-        await models.SaveAsync();
-        var saved = (await h.Get<IStepModelStore>().GetAsync(PipelineSteps.Concepts, null, CancellationToken.None))!;
-        StepModelResolver.Options(saved).Effort.ShouldBeEmpty();
-
-        // Shown again, the saved choice keeps "Automatic".
-        await models.ActivateAsync();
-        models.Rows.First(r => r.Step.Code == PipelineSteps.Concepts).Effort!.Value.ShouldBeEmpty();
-    }
-
-    private static DesktopHarness Installing(FakeConfirm confirm, params FakeComponent[] components) => new(s =>
-    {
-        s.AddSingleton<IConfirmDialog>(confirm);
-        s.AddSingleton<IGpuInfo>(new FakeGpu(8L << 30));
-        s.RemoveAll<IComponentSource>();
-        s.AddSingleton<IComponentSource>(new FakeComponents(components));
-    });
-
-    [AvaloniaFact]
-    public async Task SavingInstallsOnlyWhatIsMissingAndSavesNothingForAStepWhoseInstallWasDeclinedOrFailed()
-    {
-        var runtime = new FakeComponent(ComponentCodes.SpeechRuntime, ready: false);
-        var voice = new FakeComponent(ComponentCodes.VoicePrefix + "supertonic", ready: false, ComponentCodes.SpeechRuntime);
-        var image = new FakeComponent(ComponentCodes.ImagePrefix + "flux2-klein-4b", ready: true, ComponentCodes.ImageRuntime);
-        var confirm = new FakeConfirm();
-        using var h = Installing(confirm, runtime, voice, image);
-        await FirstRunTests.CreateAsync(h);
-        var store = h.Get<IStepModelStore>();
-        var models = h.Get<ModelsSettingsViewModel>();
-        await models.ActivateAsync();
-        var speech = models.Rows.First(r => r.Step.Code == PipelineSteps.Speech);
-        var images = models.Rows.First(r => r.Step.Code == PipelineSteps.Images);
-        speech.Selected = speech.Options.First(o => o.Model?.Id == "supertonic");
-        images.Selected = images.Options.First(o => o.Model?.Id == "flux2-klein-4b");
-
-        // The voice's terms are accepted, the download list is declined: the voice is not saved, the image model (ready) is.
-        confirm.Answers.Enqueue(true);
-        confirm.Answers.Enqueue(false);
-        await models.SaveAsync();
-        (await store.GetAsync(PipelineSteps.Speech, null, CancellationToken.None)).ShouldBeNull();
-        (await store.GetAsync(PipelineSteps.Images, null, CancellationToken.None))!.Model.ShouldBe("flux2-klein-4b");
-        (runtime.Installs + voice.Installs + image.Installs).ShouldBe(0);
-        confirm.Messages[^1].ShouldContain(voice.Name);
-        confirm.Messages[^1].ShouldContain(runtime.Name);
-        confirm.Messages[^1].ShouldNotContain(image.Name);
-        models.Status.ShouldContain(speech.Title);
-
-        // Accepted, but the voice fails: nothing is saved for the step.
-        voice.Fail = true;
-        await models.SaveAsync();
-        (await store.GetAsync(PipelineSteps.Speech, null, CancellationToken.None)).ShouldBeNull();
-        runtime.Installs.ShouldBe(1);
-        speech.NoteIsWarning.ShouldBeTrue();
-
-        // Accepted and installed: saved; what is ready is not installed again.
-        voice.Fail = false;
-        await models.SaveAsync();
-        (await store.GetAsync(PipelineSteps.Speech, null, CancellationToken.None))!.Model.ShouldBe("supertonic");
-        runtime.Installs.ShouldBe(1);
-        voice.Installs.ShouldBe(2);
-        image.Installs.ShouldBe(0);
-        models.Status.ShouldBe(h.Get<Localizer>()["common.saved"]);
-    }
-
-    [AvaloniaFact]
-    public async Task AProfileOverridesAStepAndOtherProfilesKeepTheGeneralSetting()
-    {
-        using var h = new DesktopHarness(s => s.AddSingleton<IGpuInfo>(new FakeGpu(null)));
-        await FirstRunTests.CreateAsync(h);
-        await h.Get<IApiKeyStore>().SaveAsync(new ApiKey { Provider = "anthropic", Label = "k", Secret = "fake-test-key-models-0123" }, CancellationToken.None);
-        await h.Get<IApiKeyStore>().SaveAsync(new ApiKey { Provider = "fal", Label = "k", Secret = "fake-test-key-models-4567" }, CancellationToken.None);
-        var store = h.Get<IStepModelStore>();
-        var resolver = h.Get<StepModelResolver>();
-        var own = new Profile { Name = "Own", ConceptText = "x" };
-        var plain = new Profile { Name = "Plain", ConceptText = "x" };
-        await h.Get<IProfileStore>().SaveAsync(own, CancellationToken.None);
-        await h.Get<IProfileStore>().SaveAsync(plain, CancellationToken.None);
-        await store.SaveAsync(new StepModelChoice { Step = PipelineSteps.Concepts, Provider = "anthropic", Model = "claude-sonnet-5-5" }, CancellationToken.None);
-        await store.SaveAsync(new StepModelChoice { Step = PipelineSteps.Images, Provider = "fal", Model = "fal-ai/flux-2/flash" }, CancellationToken.None);
-
-        // The profile page lists "use the general setting" first, naming the general choice.
-        var page = h.Get<ProfileViewModel>();
-        await h.Get<AppSession>().SelectProfileAsync(own, CancellationToken.None);
-        await page.ActivateAsync();
-        var concepts = page.Steps.Rows.First(r => r.Step.Code == PipelineSteps.Concepts);
-        concepts.Selected!.Kind.ShouldBe(StepOptionKind.Inherit);
-        concepts.Selected.Label.ShouldContain("Claude Sonnet 5.5");
-        concepts.Selected = concepts.Options.First(o => o.Model?.Id == "claude-haiku-5-5");
-        var images = page.Steps.Rows.First(r => r.Step.Code == PipelineSteps.Images);
-        images.Selected = images.Options.First(o => o.Kind == StepOptionKind.None);
-        await page.SaveAsync();
-
-        (await resolver.ResolveForAsync(PipelineSteps.Concepts, own.Id, CancellationToken.None)).Model.Id.ShouldBe("claude-haiku-5-5");
-        (await resolver.ResolveForAsync(PipelineSteps.Concepts, plain.Id, CancellationToken.None)).Model.Id.ShouldBe("claude-sonnet-5-5");
-        (await resolver.ResolveOptionalAsync(PipelineSteps.Images, own.Id, CancellationToken.None)).ShouldBeNull();
-        (await resolver.ResolveOptionalAsync(PipelineSteps.Images, plain.Id, CancellationToken.None))!.Model.Id.ShouldBe("fal-ai/flux-2/flash");
-
-        // Back to the general setting: the override is gone.
-        concepts.Selected = concepts.Options.First(o => o.Kind == StepOptionKind.Inherit);
-        await page.SaveAsync();
-        (await store.GetAsync(PipelineSteps.Concepts, own.Id, CancellationToken.None)).ShouldBeNull();
-        (await resolver.ResolveForAsync(PipelineSteps.Concepts, own.Id, CancellationToken.None)).Model.Id.ShouldBe("claude-sonnet-5-5");
-    }
-
-    [AvaloniaFact]
-    public async Task TheToolsTabIsGone()
+    public async Task SettingsHasNoModelChoiceAnyMore()
     {
         using var h = new DesktopHarness();
         await FirstRunTests.CreateAsync(h);
@@ -197,8 +51,148 @@ public sealed class KeysAndModelsTests
 
         await settings.ActivateAsync();
 
+        settings.Sections.Select(s => s.TitleKey).ShouldNotContain("settings.models");
         settings.Sections.Select(s => s.TitleKey).ShouldNotContain("settings.tools");
-        h.Get<Localizer>().Strings.Keys.ShouldNotContain("settings.tools");
-        typeof(SettingsViewModel).Assembly.GetTypes().Select(t => t.Name).ShouldNotContain("ToolsSettingsViewModel");
+        h.Get<Localizer>().Strings.Keys.ShouldNotContain("settings.models");
+        var types = typeof(SettingsViewModel).Assembly.GetTypes().Select(t => t.Name).ToList();
+        types.ShouldNotContain("ModelsSettingsViewModel");
+        types.ShouldNotContain("ToolsSettingsViewModel");
+        foreach (var section in settings.Sections)
+        {
+            section.GetType().GetProperties().Select(p => p.PropertyType).ShouldNotContain(typeof(StepPickerViewModel), section.GetType().Name);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task ANewProfileStartsWithNothingChosenAndEachProfileGetsItsLastChoiceBack()
+    {
+        var fake = new FakeChat().Concepts(FakeChat.Distinct(3));
+        using var h = new DesktopHarness(s =>
+        {
+            s.AddSingleton<IChatClientFactory>(fake);
+            s.AddSingleton<IGpuInfo>(new FakeGpu(null));
+        });
+        await FirstRunTests.CreateAsync(h);
+        await h.Get<IApiKeyStore>().SaveAsync(new ApiKey { Provider = "anthropic", Label = "k", Secret = Secret }, CancellationToken.None);
+        var session = h.Get<AppSession>();
+        var first = new Profile { Name = "First", ContentLanguage = ContentLanguages.English, ConceptText = "x" };
+        var second = new Profile { Name = "Second", ContentLanguage = ContentLanguages.English, ConceptText = "y" };
+        await h.Get<IProfileStore>().SaveAsync(first, CancellationToken.None);
+        await h.Get<IProfileStore>().SaveAsync(second, CancellationToken.None);
+        await session.SelectProfileAsync(first, CancellationToken.None);
+        var page = h.Get<ConceptsViewModel>();
+        await page.ActivateAsync();
+
+        page.Picker.Rows.Select(r => r.Step.Code).ShouldBe(PipelineSteps.ConceptPage);
+        page.Picker.Rows.ShouldAllBe(r => r.Selected!.Model == null, "nothing paid is chosen for a new profile");
+        page.Picker.Rows.ShouldAllBe(r => r.Recommended.Length > 0);
+        var concepts = page.Picker.Row(PipelineSteps.Concepts)!;
+        concepts.Selected = concepts.Options.First(o => o.Model?.Id == "claude-haiku-5-5");
+        page.Count = 3;
+        await page.GenerateAsync();
+        fake.Requests.Count.ShouldBe(1);
+
+        // Saved when the process started: the other profile has its own (none), the first one gets its model back.
+        await session.SelectProfileAsync(second, CancellationToken.None);
+        await page.ProfileChangedAsync();
+        page.Picker.Row(PipelineSteps.Concepts)!.Selected!.Model.ShouldBeNull();
+        await session.SelectProfileAsync(first, CancellationToken.None);
+        await page.ProfileChangedAsync();
+        page.Picker.Row(PipelineSteps.Concepts)!.Selected!.Model!.Id.ShouldBe("claude-haiku-5-5");
+        (await h.Get<IStepModelStore>().GetAsync(PipelineSteps.Concepts, second.Id, CancellationToken.None)).ShouldBeNull();
+    }
+
+    [AvaloniaFact]
+    public async Task TheEffortPickerStartsWithAutomaticAndShowsOnlyForModelsThatTakeAnEffort()
+    {
+        using var h = new DesktopHarness(s => s.AddSingleton<IGpuInfo>(new FakeGpu(null)));
+        await FirstRunTests.CreateAsync(h);
+        var profile = new Profile { Name = "P", ConceptText = "x" };
+        await h.Get<IProfileStore>().SaveAsync(profile, CancellationToken.None);
+        var picker = h.Get<StepPickerViewModel>();
+        await picker.LoadAsync(profile.Id, ContentLanguages.English, PipelineSteps.ConceptPage);
+        var text = h.Get<Localizer>();
+        var concepts = picker.Row(PipelineSteps.Concepts)!;
+
+        concepts.Selected = concepts.Options.First(o => o.Model?.Id == "claude-sonnet-5-5");
+
+        concepts.HasEfforts.ShouldBeTrue();
+        concepts.Efforts[0].Value.ShouldBeEmpty();
+        concepts.Efforts[0].Label.ShouldBe(text["models.effort.auto"]);
+        concepts.Effort.ShouldBe(concepts.Efforts[0]);
+        concepts.Effort = concepts.Efforts.First(e => e.Value == "high");
+        concepts.Selected = concepts.Options.First(o => o.Model != null && o.Model.Provider == "zai" && o.Model.Efforts.Count == 0);
+        concepts.HasEfforts.ShouldBeFalse();
+
+        concepts.Selected = concepts.Options.First(o => o.Model?.Id == "claude-sonnet-5-5");
+        concepts.Effort = concepts.Efforts.First(e => e.Value == "high");
+        await picker.SaveAsync();
+        StepModelResolver.Options(await h.Get<IStepModelStore>().GetAsync(PipelineSteps.Concepts, profile.Id, CancellationToken.None)).Effort.ShouldBe("high");
+        await picker.LoadAsync(profile.Id, ContentLanguages.English, PipelineSteps.ConceptPage);
+        picker.Row(PipelineSteps.Concepts)!.Effort!.Value.ShouldBe("high");
+    }
+
+    [AvaloniaFact]
+    public async Task AProviderWithoutAKeyStopsTheProcessUntilAKeyIsAdded()
+    {
+        var fake = new FakeChat().Concepts(FakeChat.Distinct(2));
+        FakeApiKeyDialog? dialog = null;
+        using var h = new DesktopHarness(s =>
+        {
+            s.AddSingleton<IChatClientFactory>(fake);
+            s.AddSingleton<IApiKeyDialog>(p => dialog = new FakeApiKeyDialog(p.GetRequiredService<IApiKeyStore>()));
+        });
+        await FirstRunTests.CreateAsync(h);
+        var profile = new Profile { Name = "P", ContentLanguage = ContentLanguages.English, ConceptText = "x" };
+        await h.Get<IProfileStore>().SaveAsync(profile, CancellationToken.None);
+        await h.Get<AppSession>().SelectProfileAsync(profile, CancellationToken.None);
+        var page = h.Get<ConceptsViewModel>();
+        await page.ActivateAsync();
+        var row = page.Picker.Row(PipelineSteps.Concepts)!;
+        row.Selected = row.Options.First(o => o.Model?.Provider == "openai" && o.Model.Capabilities.HasFlag(ModelCapability.Chat));
+        page.Count = 2;
+
+        // No key and the dialog closed without one: nothing is sent, the reason names the provider, the choice is not stored.
+        await page.GenerateAsync();
+        dialog!.Asked.ShouldBe(["openai"]);
+        fake.Requests.ShouldBeEmpty();
+        page.Status.ShouldContain("openai");
+        row.NoteIsWarning.ShouldBeTrue();
+        (await h.Get<IStepModelStore>().GetAsync(PipelineSteps.Concepts, profile.Id, CancellationToken.None)).ShouldBeNull();
+
+        // A working key is added in the dialog: the same press goes on.
+        dialog.Secret = Secret;
+        await page.GenerateAsync();
+        fake.Requests.Count.ShouldBe(1);
+        fake.KeysUsed.ShouldBe([Secret]);
+        (await h.Get<IStepModelStore>().GetAsync(PipelineSteps.Concepts, profile.Id, CancellationToken.None))!.Provider.ShouldBe("openai");
+    }
+
+    [AvaloniaFact]
+    public async Task TheKeyDialogSavesOnlyAKeyThatPassedItsTest()
+    {
+        var fake = new FakeHttp().Answer(HttpStatusCode.Unauthorized, """{"error":{"message":"invalid key"}}""").Answer(HttpStatusCode.OK, """{"data":[]}""");
+        using var h = new DesktopHarness(s => s.AddSingleton(fake.Transport));
+        await FirstRunTests.CreateAsync(h);
+        var prompt = ((ApiKeyDialog)h.Get<IApiKeyDialog>()).Prompt("anthropic")!;
+        var closed = false;
+        prompt.CloseRequested += (_, _) => closed = true;
+        prompt.Secret = "fake-wrong-key-0123456789";
+
+        await prompt.TestAndSaveAsync();
+
+        prompt.Saved.ShouldBeFalse();
+        prompt.Failed.ShouldBeTrue();
+        closed.ShouldBeFalse();
+        (await h.Get<IApiKeyStore>().ListAsync("anthropic", CancellationToken.None)).ShouldBeEmpty();
+
+        prompt.Secret = Secret;
+        await prompt.TestAndSaveAsync();
+
+        prompt.Saved.ShouldBeTrue();
+        closed.ShouldBeTrue();
+        prompt.Secret.ShouldBeEmpty();
+        (await h.Get<IApiKeyStore>().ListAsync("anthropic", CancellationToken.None)).Single().LastOkAtUtc.ShouldNotBeNull();
+        fake.Requests.Count.ShouldBe(2);
     }
 }

@@ -36,8 +36,13 @@ public sealed class VideoPageTests
         await h.Get<IApiKeyStore>().SaveAsync(new ApiKey { Provider = "anthropic", Label = "k", Secret = "fake-test-key-video-0123" }, CancellationToken.None);
         var concept = new Concept { ProfileId = profile.Id, Title = "Greek fire", Summary = "s", Content = Content, Language = "en", Status = ConceptStatus.Approved };
         await h.Get<IConceptStore>().AddAsync([concept], CancellationToken.None);
-        await h.Get<IStepModelStore>().SaveAsync(new StepModelChoice { Step = PipelineSteps.VideoCode, Provider = "anthropic", Model = "claude-sonnet-5-5" },
-            CancellationToken.None);
+        await h.Get<IStepModelStore>().SaveAsync(new StepModelChoice
+        {
+            Step = PipelineSteps.VideoCode,
+            ProfileId = profile.Id,
+            Provider = "anthropic",
+            Model = "claude-sonnet-5-5",
+        }, CancellationToken.None);
         var page = h.Get<VideoViewModel>();
         await page.ActivateAsync();
         options?.Invoke(page);
@@ -123,7 +128,7 @@ public sealed class VideoPageTests
             s.AddSingleton<IComponentSource>(new FakeComponents(node, ffmpeg, new TMConcept.Engines.Components.EngineComponent(engine)));
         });
         var (page, concept) = await PrepareAsync(h);
-        page.EngineNote.ShouldContain("packages, browser");
+        page.Picker.Row(PipelineSteps.VideoCode)!.Note.ShouldContain(h.Get<TMConcept.Desktop.Localization.Localizer>()["models.installs_on_start"]);
 
         await page.ProduceAllAsync();
 
@@ -151,19 +156,22 @@ public sealed class VideoPageTests
             s.AddSingleton<IComponentSource>(new FakeComponents(imageRuntime, weights, speechRuntime, voice,
                 new TMConcept.Engines.Components.EngineComponent(engine)));
         });
-        // The profile's steps use local models that are not installed; the page turns images and narration off for the item.
-        var (page, concept) = await PrepareAsync(h, p =>
-        {
-            p.Images = p.ImageChoices.First(c => c.Value == ImageSources.None);
-            p.Speech = false;
-        });
+        // The profile's last choices are local models that are not installed; on the page images and narration are turned off.
+        var (page, concept) = await PrepareAsync(h);
         var store = h.Get<IStepModelStore>();
-        await store.SaveAsync(new StepModelChoice { Step = PipelineSteps.Images, Provider = ModelProviders.Local, Model = "z-image-turbo" }, CancellationToken.None);
-        await store.SaveAsync(new StepModelChoice { Step = PipelineSteps.Speech, Provider = ModelProviders.Local, Model = "supertonic" }, CancellationToken.None);
+        await store.SaveAsync(new StepModelChoice { Step = PipelineSteps.Images, ProfileId = concept.ProfileId, Provider = ModelProviders.Local, Model = "z-image-turbo" },
+            CancellationToken.None);
+        await store.SaveAsync(new StepModelChoice { Step = PipelineSteps.Speech, ProfileId = concept.ProfileId, Provider = ModelProviders.Local, Model = "supertonic" },
+            CancellationToken.None);
+        await page.ActivateAsync();
+        page.Picker.Row(PipelineSteps.Images)!.Selected!.Model!.Id.ShouldBe("z-image-turbo", "the profile's last choice is shown");
+        page.Picker.Row(PipelineSteps.Images)!.Selected = page.Picker.Row(PipelineSteps.Images)!.Options[0];
+        page.Picker.Row(PipelineSteps.Speech)!.Selected = page.Picker.Row(PipelineSteps.Speech)!.Options[0];
 
         await page.ProduceAllAsync();
 
         confirm.Asked.ShouldBeEmpty();
+        StepModelResolver.IsOff(await store.GetAsync(PipelineSteps.Images, concept.ProfileId, CancellationToken.None)).ShouldBeTrue("the new choice is kept");
         (weights.Installs + imageRuntime.Installs + voice.Installs + speechRuntime.Installs).ShouldBe(0);
         page.Queue.ShouldBeEmpty();
         (await h.Get<IVideoStore>().ListAsync(concept.ProfileId, CancellationToken.None)).Single().ImageModel.ShouldBeEmpty();
@@ -203,23 +211,22 @@ public sealed class VideoPageTests
     }
 
     [AvaloniaFact]
-    public async Task TheProfilesCodeModelOverridesTheGeneralDefault()
+    public async Task TheCodeModelChosenOnThePageIsUsedAndKeptForTheProfile()
     {
         var engine = new FakeEngine();
         using var h = Harness(new FakeChat().Answer(_ => Code(engine.SampleCode)), engine);
         var (page, concept) = await PrepareAsync(h);
-        await h.Get<IStepModelStore>().SaveAsync(new StepModelChoice
-        {
-            Step = PipelineSteps.VideoCode,
-            ProfileId = concept.ProfileId,
-            Provider = "anthropic",
-            Model = "claude-opus-5-5",
-        }, CancellationToken.None);
+        var code = page.Picker.Row(PipelineSteps.VideoCode)!;
+        code.Selected!.Model!.Id.ShouldBe("claude-sonnet-5-5", "the profile's last choice is preselected");
+        code.Selected = code.Options.First(o => o.Model?.Id == "claude-opus-5-5");
+        page.Estimate.ShouldContain("$");
 
         await page.ProduceAllAsync();
 
         page.Queue.ShouldBeEmpty();
         (await h.Get<IVideoStore>().ListAsync(concept.ProfileId, CancellationToken.None)).Single().CodeModel.ShouldBe("anthropic/claude-opus-5-5");
+        (await h.Get<IStepModelStore>().GetAsync(PipelineSteps.VideoCode, concept.ProfileId, CancellationToken.None))!.Model.ShouldBe("claude-opus-5-5");
+        page.LastCost.ShouldNotBeEmpty();
     }
 
     [AvaloniaFact]
@@ -234,7 +241,7 @@ public sealed class VideoPageTests
             s.AddSingleton<IImageEngine>(images);
         });
         var (page, concept) = await PrepareAsync(h);
-        page.Images!.Value.ShouldBe(ImageSources.Model);
+        page.Picker.Row(PipelineSteps.Images)!.Selected!.Kind.ShouldBe(StepOptionKind.None, "a profile starts with images off");
 
         await page.ProduceAllAsync();
 
@@ -246,11 +253,11 @@ public sealed class VideoPageTests
         var second = new Concept { ProfileId = concept.ProfileId, Title = "Iconoclasm", Summary = "s", Content = Content, Language = "en", Status = ConceptStatus.Approved };
         await h.Get<IConceptStore>().AddAsync([second], CancellationToken.None);
         await h.Get<IApiKeyStore>().SaveAsync(new ApiKey { Provider = "fal", Label = "k", Secret = "fake-test-key-video-4567" }, CancellationToken.None);
-        await h.Get<IStepModelStore>().SaveAsync(new StepModelChoice { Step = PipelineSteps.Images, Provider = "fal", Model = "fal-ai/flux-2/flash" },
-            CancellationToken.None);
         chat.Answer(_ => new ChatResponse("{\"prompts\":[\"a map\",\"burning ships\"]}", new ChatUsage(100, 0, 0, 50), null, "end_turn", "r"))
             .Answer(_ => Code(engine.SampleCode));
         await page.ActivateAsync();
+        var row = page.Picker.Row(PipelineSteps.Images)!;
+        row.Selected = row.Options.First(o => o.Model?.Id == "fal-ai/flux-2/flash");
         await page.EnqueueAsync(page.Approved.Single());
 
         await page.ProduceAllAsync();

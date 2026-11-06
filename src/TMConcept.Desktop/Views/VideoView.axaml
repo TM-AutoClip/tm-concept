@@ -1,36 +1,30 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:TMConcept.Desktop.ViewModels"
+             xmlns:views="using:TMConcept.Desktop.Views"
              x:Class="TMConcept.Desktop.Views.VideoView"
              x:DataType="vm:VideoViewModel">
   <DockPanel Margin="16">
     <Expander DockPanel.Dock="Top" Header="{DynamicResource video.settings}" IsExpanded="True" HorizontalAlignment="Stretch" Margin="0,0,0,12">
-      <StackPanel Spacing="6">
-        <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" />
-        <TextBlock Text="{Binding EngineNote}" Classes="warning" TextWrapping="Wrap"
-                   IsVisible="{Binding EngineNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-        <StackPanel Spacing="2" IsVisible="{Binding Installing}">
-          <TextBlock Text="{Binding InstallText}" Classes="small" />
-          <ProgressBar Value="{Binding InstallPercent}" Maximum="100" />
+      <Grid ColumnDefinitions="*,16,320">
+        <ScrollViewer MaxHeight="420">
+          <views:StepPickerView DataContext="{Binding Picker}" />
+        </ScrollViewer>
+        <StackPanel Grid.Column="2" Spacing="8">
+          <Border Classes="card">
+            <StackPanel Spacing="4">
+              <TextBlock Text="{DynamicResource concepts.estimate.title}" FontWeight="SemiBold" />
+              <TextBlock Text="{Binding Estimate}" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding LastCost}" Classes="ok" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding PricedOn}" Classes="small" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+          <TextBlock Text="{DynamicResource video.item_settings}" FontWeight="SemiBold" />
+          <CheckBox IsChecked="{Binding Subtitles}" Content="{DynamicResource video.subtitles}" />
+          <CheckBox IsChecked="{Binding NarrationFile}" Content="{DynamicResource video.narration_file}" />
+          <TextBlock Text="{Binding Status}" Classes="error" TextWrapping="Wrap" />
         </StackPanel>
-        <WrapPanel>
-          <StackPanel Margin="0,0,24,8" Spacing="4">
-            <TextBlock Text="{DynamicResource video.images}" FontWeight="SemiBold" />
-            <ComboBox ItemsSource="{Binding ImageChoices}" SelectedItem="{Binding Images}" MinWidth="220">
-              <ComboBox.ItemTemplate>
-                <DataTemplate x:DataType="vm:ChoiceOption">
-                  <TextBlock Text="{Binding Label}" />
-                </DataTemplate>
-              </ComboBox.ItemTemplate>
-            </ComboBox>
-          </StackPanel>
-          <StackPanel Margin="0,0,24,8" Spacing="2" VerticalAlignment="Bottom">
-            <CheckBox IsChecked="{Binding Speech}" Content="{DynamicResource video.speech}" />
-            <CheckBox IsChecked="{Binding Subtitles}" Content="{DynamicResource video.subtitles}" />
-            <CheckBox IsChecked="{Binding NarrationFile}" Content="{DynamicResource video.narration_file}" />
-          </StackPanel>
-        </WrapPanel>
-      </StackPanel>
+      </Grid>
     </Expander>
     <Grid ColumnDefinitions="*,16,*,16,*">
       <DockPanel>

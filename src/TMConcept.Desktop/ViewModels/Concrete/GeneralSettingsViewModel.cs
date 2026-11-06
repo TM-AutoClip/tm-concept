@@ -19,7 +19,7 @@ namespace TMConcept.Desktop.ViewModels;
 /// <summary>
 /// General settings: interface language (changes at once), drawing (after a restart), the bottom-right notifications, and the installed
 /// components (read-only list with sizes of what is on disk, an incomplete one marked; Remove after a confirmation; a ready engine can
-/// render its sample; on Linux the apt command for Chrome's missing libraries). Components are installed from Settings → Models when a setting that needs them is saved.
+/// render its sample; on Linux the apt command for Chrome's missing libraries). Components are installed when a process that needs them starts (after one confirmation).
 /// </summary>
 public sealed partial class GeneralSettingsViewModel(AppSession session, Localizer text, UiPreferencesFile preferences, INotifier notifier,
     ComponentPlanner components, IToolPlatform platform, Engines.Engines.SampleRender sample, IConfirmDialog confirm, ShellLauncher shell,

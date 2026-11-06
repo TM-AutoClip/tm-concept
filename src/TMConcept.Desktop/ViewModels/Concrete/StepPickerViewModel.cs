@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using TMConcept.Core.Engines;
 using TMConcept.Core.Hardware;
+using TMConcept.Core.Images;
 using TMConcept.Core.Models;
 using TMConcept.Core.Paths;
 using TMConcept.Core.Pipeline;
@@ -22,23 +23,31 @@ using TMConcept.Engines.Components;
 namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
-/// The step table shared by Settings → Models (the general defaults) and the Profile page (a profile's overrides; every step starts with
-/// "Use the general setting"). Saving installs what a changed step needs first: licenses (Remotion, Supertonic) are asked, then ONE
-/// confirmation lists every download, the install runs with progress, and only a step whose needs are ready afterwards is saved; a step
-/// that was declined or failed keeps its old value and the reason is shown and logged. A paid model is never chosen automatically.
+/// The model pickers of one page (Generate concepts, Concept → video, Profile): only the steps that page uses, shown with the selected
+/// profile's last choices (a new profile starts with nothing paid chosen; the "Recommended" chips stay). There is no Save button: before the
+/// page starts a process, <see cref="PrepareAsync"/> makes the choices ready and saves them for the profile — licenses (Remotion,
+/// Supertonic) are asked, a provider without an API key is offered a key right there (tested; only a working key is kept), then ONE
+/// confirmation lists every download, the install runs with progress, and only then the choices are saved and the process may start.
+/// Anything declined, missing or failed stops the process before anything is paid for, with the reason on the page and in the log.
 /// </summary>
-public sealed partial class StepSettingsViewModel(IModelCatalog catalog, IStepModelStore steps, IEnumerable<IVideoEngine> engines, SpeechService speech,
-    ComponentInstallFlow installs, AppSession session, IConfirmDialog confirm, IGpuInfo gpu, IAppPaths paths, ShellLauncher shell, Localizer text,
-    ILogger<StepSettingsViewModel> logger) : ObservableObject
+public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepModelStore steps, StepModelResolver resolver, IEnumerable<IVideoEngine> engines,
+    SpeechService speech, ComponentInstallFlow installs, AppSession session, IConfirmDialog confirm, IApiKeyDialog keyDialog, IGpuInfo gpu, IAppPaths paths,
+    ShellLauncher shell, Localizer text, ILogger<StepPickerViewModel> logger) : ObservableObject
 {
     private readonly IReadOnlyList<IVideoEngine> _engines = engines.OrderBy(e => e.Kind).ToList();
     private Guid? _profile;
     private string _language = ContentLanguages.English;
 
-    /// <summary>The steps.</summary>
+    /// <summary>Raised when a choice changes (the page updates its estimate).</summary>
+    public event EventHandler? Changed;
+
+    /// <summary>The steps of the page.</summary>
     public ObservableCollection<StepModelRowViewModel> Rows { get; } = [];
 
-    /// <summary>Saving or installing.</summary>
+    /// <summary>The profile whose choices are shown.</summary>
+    public Guid? ProfileId => _profile;
+
+    /// <summary>Preparing (keys, installs) or saving: the pickers are locked.</summary>
     [ObservableProperty]
     public partial bool Busy { get; set; }
 
@@ -50,7 +59,7 @@ public sealed partial class StepSettingsViewModel(IModelCatalog catalog, IStepMo
     [ObservableProperty]
     public partial string Progress { get; set; } = string.Empty;
 
-    /// <summary>Result of the last save.</summary>
+    /// <summary>Why the last <see cref="PrepareAsync"/> did not start the process (empty when it did).</summary>
     [ObservableProperty]
     public partial string Status { get; set; } = string.Empty;
 
@@ -58,23 +67,29 @@ public sealed partial class StepSettingsViewModel(IModelCatalog catalog, IStepMo
     [ObservableProperty]
     public partial bool Listening { get; set; }
 
-    /// <summary>Shows the general defaults (<paramref name="profileId"/> null) or a profile's overrides, for voices of <paramref name="language"/>.</summary>
-    public async Task LoadAsync(Guid? profileId, string language)
+    /// <summary>Shows the steps <paramref name="stepCodes"/> with the saved choices of <paramref name="profileId"/>, voices of <paramref name="language"/>.</summary>
+    public async Task LoadAsync(Guid? profileId, string language, IReadOnlyList<string> stepCodes)
     {
+        ArgumentNullException.ThrowIfNull(stepCodes);
         _profile = profileId;
         _language = language;
+
         // A Node.js on the PATH counts as installed only once it was looked at (once per run): before any note says "not installed".
         await installs.Planner.RefreshAllAsync(CancellationToken.None).ConfigureAwait(true);
-        var saved = await steps.ListAsync(profileId, CancellationToken.None).ConfigureAwait(true);
-        var general = profileId is null ? saved : await steps.ListAsync(null, CancellationToken.None).ConfigureAwait(true);
+        var saved = profileId is { } id ? await steps.ListAsync(id, CancellationToken.None).ConfigureAwait(true) : [];
+        foreach (var old in Rows)
+        {
+            old.PropertyChanged -= OnRowChanged;
+        }
+
         Rows.Clear();
         Status = string.Empty;
-        foreach (var step in PipelineSteps.All)
+        foreach (var step in PipelineSteps.All.Where(s => stepCodes.Contains(s.Code)))
         {
-            var row = Row(step, general);
+            var row = Row(step);
             var choice = saved.FirstOrDefault(s => s.Step == step.Code);
             var options = StepModelResolver.Options(choice);
-            row.Selected = Select(row, choice);
+            row.Selected = Select(row, choice, options);
             row.Effort = row.Efforts.FirstOrDefault(e => e.Value == options.Effort) ?? row.Efforts.FirstOrDefault();
             row.Engine = row.Engines.FirstOrDefault(e => e.Kind == options.Engine) ?? row.Engines.FirstOrDefault();
             row.Speed = (decimal)Math.Clamp(options.Speed, ProfileLimits.SpeedMin, ProfileLimits.SpeedMax);
@@ -86,84 +101,118 @@ public sealed partial class StepSettingsViewModel(IModelCatalog catalog, IStepMo
         }
     }
 
+    /// <summary>The row of a step (null when the page does not show it).</summary>
+    public StepModelRowViewModel? Row(string step) => Rows.FirstOrDefault(r => r.Step.Code == step);
+
+    /// <summary>The model chosen for a step now (null = none / off).</summary>
+    public CatalogModel? Model(string step) => Row(step)?.Selected?.Model;
+
+    /// <summary>The choice a row shows now, as it would be saved (null = nothing chosen for a required step).</summary>
+    public StepModelChoice? Choice(string step) => Row(step) is { } row ? Desired(row) : null;
+
     /// <summary>
-    /// Saves the changed steps and installs what a step needs and this computer does not have: a changed step, and an unchanged one whose
-    /// component was removed meanwhile (or never finished). True when every such step was saved (or is ready now). What is saved is what
-    /// the rows showed when Save was pressed (the rows are locked while it runs).
+    /// Makes the choices of <paramref name="needed"/> ready for a process and saves every row of the page for the profile. A required step
+    /// without a model, a declined license, a provider without a working key (the user can add one in the dialog), a declined or failed
+    /// install: false, with the reason in <see cref="Status"/> and the log; nothing was started or paid for. <paramref name="purposeKey"/>
+    /// names what waits in the download confirmation; <paramref name="components"/> are installed in the same confirmation (ffmpeg for a video).
     /// </summary>
-    public async Task<bool> SaveAsync()
+    public async Task<bool> PrepareAsync(IReadOnlyList<string> needed, string purposeKey, CancellationToken cancellationToken,
+        IReadOnlyList<string>? components = null)
     {
+        ArgumentNullException.ThrowIfNull(needed);
         if (Busy)
         {
             return false;
         }
 
+        if (_profile is null)
+        {
+            Status = text["picker.no_profile"];
+            return false;
+        }
+
         Busy = true;
         Status = string.Empty;
-        var skipped = new List<(StepModelRowViewModel Row, string Reason)>();
         try
         {
-            await installs.Planner.RefreshAllAsync(CancellationToken.None).ConfigureAwait(true);
-            var todo = Rows.Where(r => Key(r) != r.Saved || NeedsInstall(r)).ToList();
-            var wanted = todo.ToDictionary(r => r, r => (Choice: Desired(r), Key: Key(r), Label: Describe(r), Requires: Requirements(r)));
-            foreach (var row in todo)
+            var rows = Rows.Where(r => needed.Contains(r.Step.Code)).ToList();
+            foreach (var row in rows.Where(r => !r.Step.Optional && r.Selected?.Model is null))
+            {
+                row.Note = text["picker.choose_model"];
+                row.NoteIsWarning = true;
+                logger.LogWarning("Process not started: the step {Step} has no model", row.Step.Code);
+                Status = text.Format("picker.not_started.model", row.Title);
+                return false;
+            }
+
+            foreach (var row in rows)
             {
                 if (!await LicensesAsync(row).ConfigureAwait(true))
                 {
-                    skipped.Add((row, text["models.license_declined"]));
+                    row.Note = text["models.license_declined"];
+                    row.NoteIsWarning = true;
+                    logger.LogInformation("Process not started: the license of the step {Step} was declined", row.Step.Code);
+                    Status = text.Format("picker.not_started.license", row.Title);
+                    return false;
                 }
             }
 
-            var pending = todo.Where(r => skipped.All(s => s.Row != r)).ToList();
-            var codes = pending.SelectMany(r => wanted[r].Requires).Distinct(StringComparer.Ordinal).ToList();
-            var reason = text["install.not_ready"];
+            if (!await KeysAsync(rows, cancellationToken).ConfigureAwait(true))
+            {
+                return false;
+            }
+
+            var codes = (components ?? []).Concat(rows.SelectMany(Requirements)).Distinct(StringComparer.Ordinal).ToList();
             if (codes.Count > 0)
             {
                 Percent = 0;
-                var outcome = await installs.EnsureAsync(codes, "install.purpose.save", InstallProgress(), CancellationToken.None).ConfigureAwait(true);
+                var outcome = await installs.EnsureAsync(codes, purposeKey, InstallProgress(), cancellationToken).ConfigureAwait(true);
                 Progress = string.Empty;
-                if (!outcome.Ready)
+                foreach (var row in rows)
                 {
-                    reason = outcome.Reason;
-                }
-            }
-
-            foreach (var row in pending)
-            {
-                var want = wanted[row];
-                if (!want.Requires.All(c => installs.Planner.Find(c) is not { } component || component.Ready))
-                {
-                    skipped.Add((row, reason));
-                }
-                else if (want.Key != row.Saved)
-                {
-                    await StoreAsync(row, want).ConfigureAwait(true);
-                }
-                else
-                {
-                    // Unchanged, only installed again: the note no longer says "installed when you save".
                     await NoteAsync(row).ConfigureAwait(true);
                 }
+
+                if (!outcome.Ready)
+                {
+                    logger.LogWarning("Process not started: what the chosen models need is not installed");
+                    Status = text.Format("picker.not_started.install", outcome.Reason);
+                    return false;
+                }
             }
 
-            foreach (var (row, why) in skipped)
-            {
-                logger.LogWarning("Setting not saved: {Scope} step {Step} needs something that is not installed or a license that was not accepted",
-                    _profile is null ? "general" : "profile", row.Step.Code);
-                await NoteAsync(row).ConfigureAwait(true);
-                row.Note = why;
-                row.NoteIsWarning = true;
-            }
-
-            Status = skipped.Count == 0
-                ? text["common.saved"]
-                : text.Format("models.not_saved", string.Join(" · ", skipped.Select(s => s.Row.Title)));
-            return skipped.Count == 0;
+            await SaveAsync().ConfigureAwait(true);
+            return true;
         }
         finally
         {
             Progress = string.Empty;
             Busy = false;
+        }
+    }
+
+    /// <summary>Saves the rows that changed since they were loaded or last saved (the profile's last choices).</summary>
+    public async Task SaveAsync()
+    {
+        if (_profile is not { } profile)
+        {
+            return;
+        }
+
+        foreach (var row in Rows.Where(r => Key(r) != r.Saved))
+        {
+            var choice = Desired(row);
+            if (choice is null)
+            {
+                await steps.ClearAsync(row.Step.Code, profile, CancellationToken.None).ConfigureAwait(true);
+            }
+            else
+            {
+                await steps.SaveAsync(choice, CancellationToken.None).ConfigureAwait(true);
+            }
+
+            row.Saved = Key(row);
+            logger.LogInformation("Profile choice saved: step {Step} uses {Model}", row.Step.Code, Describe(row));
         }
     }
 
@@ -179,41 +228,17 @@ public sealed partial class StepSettingsViewModel(IModelCatalog catalog, IStepMo
         Listening = true;
         try
         {
-            if (speech.EngineOf(model) is { IsLocal: true, Ready: false })
+            if (speech.EngineOf(model) is { IsLocal: true, Ready: false } || model.Provider != ModelProviders.Local)
             {
-                // The same flow as Save: the voice's terms, then one confirmation listing the downloads.
-                if (!await LicensesAsync(row).ConfigureAwait(true))
+                // The same way as a process: the voice's terms, a key for an online voice, one confirmation listing the downloads.
+                if (!await PrepareRowAsync(row, "install.purpose.listen").ConfigureAwait(true))
                 {
-                    row.Note = text["models.license_declined"];
-                    row.NoteIsWarning = true;
                     return;
                 }
-
-                Busy = true;
-                InstallOutcome outcome;
-                try
-                {
-                    Percent = 0;
-                    outcome = await installs.EnsureAsync(Requirements(row), "install.purpose.listen", InstallProgress(), CancellationToken.None).ConfigureAwait(true);
-                }
-                finally
-                {
-                    Progress = string.Empty;
-                    Busy = false;
-                }
-
-                if (!outcome.Ready)
-                {
-                    logger.LogInformation("Listen not started: the local voice is not installed");
-                    row.Note = outcome.Reason;
-                    row.NoteIsWarning = true;
-                    return;
-                }
-
-                await NoteAsync(row).ConfigureAwait(true);
             }
 
-            var setup = await speech.SetupAsync(Desired(row) ?? new StepModelChoice(), CancellationToken.None).ConfigureAwait(true);
+            var choice = Desired(row) ?? new StepModelChoice();
+            var setup = await speech.SetupAsync(choice, CancellationToken.None).ConfigureAwait(true);
             var wav = Path.Combine(paths.WorkDirectory, "listen", "sample.wav");
             await speech.SynthesizeAsync(setup, _language, text[_language == ContentLanguages.Turkish ? "speech.sample.tr" : "speech.sample.en"], wav,
                 CancellationToken.None).ConfigureAwait(true);
@@ -231,19 +256,83 @@ public sealed partial class StepSettingsViewModel(IModelCatalog catalog, IStepMo
         }
     }
 
-    private StepModelRowViewModel Row(PipelineStep step, IReadOnlyList<StepModelChoice> general)
+    private async Task<bool> PrepareRowAsync(StepModelRowViewModel row, string purposeKey)
+    {
+        if (!await LicensesAsync(row).ConfigureAwait(true))
+        {
+            row.Note = text["models.license_declined"];
+            row.NoteIsWarning = true;
+            return false;
+        }
+
+        Busy = true;
+        try
+        {
+            if (!await KeysAsync([row], CancellationToken.None).ConfigureAwait(true))
+            {
+                row.Note = Status;
+                row.NoteIsWarning = true;
+                return false;
+            }
+
+            Percent = 0;
+            var outcome = await installs.EnsureAsync(Requirements(row), purposeKey, InstallProgress(), CancellationToken.None).ConfigureAwait(true);
+            if (!outcome.Ready)
+            {
+                logger.LogInformation("Listen not started: the local voice is not installed");
+                row.Note = outcome.Reason;
+                row.NoteIsWarning = true;
+                return false;
+            }
+        }
+        finally
+        {
+            Progress = string.Empty;
+            Busy = false;
+        }
+
+        await NoteAsync(row).ConfigureAwait(true);
+        return true;
+    }
+
+    /// <summary>
+    /// The key gate: every online provider of the rows needs an API key. A missing one is asked for in a dialog (tested there; only a key
+    /// that works is saved); declined = the process does not start.
+    /// </summary>
+    private async Task<bool> KeysAsync(IReadOnlyList<StepModelRowViewModel> rows, CancellationToken cancellationToken)
+    {
+        var models = rows.Select(r => r.Selected?.Model).OfType<CatalogModel>().ToList();
+        foreach (var provider in await resolver.ProvidersWithoutKeyAsync(models, cancellationToken).ConfigureAwait(true))
+        {
+            logger.LogWarning("The provider {Provider} has no API key; one is asked for before the process starts", provider);
+            if (!await keyDialog.AddKeyAsync(provider).ConfigureAwait(true))
+            {
+                logger.LogWarning("Process not started: no API key was added for {Provider}", provider);
+                Status = text.Format("picker.not_started.key", ProviderName(provider));
+                foreach (var row in rows.Where(r => r.Selected?.Model?.Provider == provider))
+                {
+                    row.Note = text.Format("picker.no_key", ProviderName(provider));
+                    row.NoteIsWarning = true;
+                }
+
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private string ProviderName(string provider) => keyDialog.ProviderName(provider);
+
+    private StepModelRowViewModel Row(PipelineStep step)
     {
         var recommended = step.Recommended.Select(r => catalog.All.FirstOrDefault(m => m.Provider + "/" + m.Id == r)?.Name ?? r);
         var row = new StepModelRowViewModel(step, text["step." + step.Code], text["step." + step.Code + ".purpose"],
             text.Format("models.recommended", string.Join(" · ", recommended)), text["models.effort.auto"]);
-        if (_profile is not null)
+        row.Options.Add(new StepOption(StepOptionKind.None, null, step.Optional ? text["step." + step.Code + ".off"] : text["models.none"]));
+        if (step.Code == PipelineSteps.Images)
         {
-            row.Options.Add(new StepOption(StepOptionKind.Inherit, null, text.Format("models.inherit", GeneralLabel(step, general))));
-        }
-
-        if (_profile is null || step.Optional)
-        {
-            row.Options.Add(new StepOption(StepOptionKind.None, null, step.Optional ? text["step." + step.Code + ".off"] : text["models.none"]));
+            row.Options.Add(new StepOption(StepOptionKind.Samples, null, text["step.images.samples"]));
         }
 
         foreach (var model in catalog.With(step.Capability).Where(m => Usable(step, m))
@@ -261,40 +350,26 @@ public sealed partial class StepSettingsViewModel(IModelCatalog catalog, IStepMo
         return row;
     }
 
-    private StepOption Select(StepModelRowViewModel row, StepModelChoice? choice)
+    private StepOption Select(StepModelRowViewModel row, StepModelChoice? choice, StepOptions options)
     {
-        if (choice is null)
-        {
-            return row.Options[0];
-        }
-
         if (StepModelResolver.IsOff(choice))
         {
-            return row.Options.FirstOrDefault(o => o.Kind == StepOptionKind.None) ?? row.Options[0];
+            return choice is not null && options.ImageSource == ImageSources.Samples && row.Options.FirstOrDefault(o => o.Kind == StepOptionKind.Samples) is { } samples
+                ? samples
+                : row.Options[0];
         }
 
-        if (row.Options.FirstOrDefault(o => o.Model is { } m && m.Provider == choice.Provider && m.Id == choice.Model) is { } found)
+        if (row.Options.FirstOrDefault(o => o.Model is { } m && m.Provider == choice!.Provider && m.Id == choice.Model) is { } found)
         {
             return found;
         }
 
-        logger.LogWarning("The saved model of the step {Step} is not in the catalog any more; the step shows no model", row.Step.Code);
-        return row.Options.FirstOrDefault(o => o.Kind == StepOptionKind.None) ?? row.Options[0];
+        logger.LogWarning("The saved model of the step {Step} is not offered any more (catalog or content language); the step shows no model", row.Step.Code);
+        return row.Options[0];
     }
 
     private bool Usable(PipelineStep step, CatalogModel model) =>
         step.Capability != ModelCapability.Speech || speech.EngineOf(model) is { } engine && engine.Supports(_language);
-
-    private string GeneralLabel(PipelineStep step, IReadOnlyList<StepModelChoice> general)
-    {
-        var choice = general.FirstOrDefault(s => s.Step == step.Code);
-        if (StepModelResolver.IsOff(choice))
-        {
-            return step.Optional ? text["models.off_short"] : text["models.none_short"];
-        }
-
-        return catalog.Find(choice!.Provider, choice.Model)?.Name ?? choice.Model;
-    }
 
     private string Label(CatalogModel model)
     {
@@ -330,7 +405,8 @@ public sealed partial class StepSettingsViewModel(IModelCatalog catalog, IStepMo
 
     private async void OnRowChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (sender is not StepModelRowViewModel row || e.PropertyName is not (nameof(StepModelRowViewModel.Selected) or nameof(StepModelRowViewModel.Engine)))
+        if (sender is not StepModelRowViewModel row || e.PropertyName is not (nameof(StepModelRowViewModel.Selected) or nameof(StepModelRowViewModel.Engine)
+            or nameof(StepModelRowViewModel.Effort)))
         {
             return;
         }
@@ -342,7 +418,11 @@ public sealed partial class StepSettingsViewModel(IModelCatalog catalog, IStepMo
                 FillVoices(row, row.Voice?.Value ?? string.Empty);
             }
 
-            await NoteAsync(row).ConfigureAwait(true);
+            Changed?.Invoke(this, EventArgs.Empty);
+            if (e.PropertyName != nameof(StepModelRowViewModel.Effort))
+            {
+                await NoteAsync(row).ConfigureAwait(true);
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -355,9 +435,15 @@ public sealed partial class StepSettingsViewModel(IModelCatalog catalog, IStepMo
     {
         row.NoteIsWarning = false;
         var selected = row.Selected;
-        if (selected is null || selected.Kind == StepOptionKind.Inherit)
+        if (selected is null)
         {
             row.Note = string.Empty;
+            return;
+        }
+
+        if (selected.Kind == StepOptionKind.Samples)
+        {
+            row.Note = text["step.images.samples.note"];
             return;
         }
 
@@ -378,7 +464,7 @@ public sealed partial class StepSettingsViewModel(IModelCatalog catalog, IStepMo
 
         if (row.IsVoiceStep)
         {
-            parts.Add(text[model.Provider == ModelProviders.Local ? "speech.supertonic.note" : "speech.online.note"]);
+            parts.Add(text[model.Provider != ModelProviders.Local ? "speech.online.note" : "speech." + model.Id + ".note"]);
         }
 
         if (model.MinVideoMemoryGb > 0)
@@ -392,10 +478,15 @@ public sealed partial class StepSettingsViewModel(IModelCatalog catalog, IStepMo
             row.NoteIsWarning = memory is null || gigabytes + 0.25 < model.MinVideoMemoryGb;
         }
 
+        if (model.Provider != ModelProviders.Local && (await resolver.ProvidersWithoutKeyAsync([model], CancellationToken.None).ConfigureAwait(true)).Count > 0)
+        {
+            parts.Add(text.Format("picker.key_asked", ProviderName(model.Provider)));
+        }
+
         install |= NeedsInstall(row);
         if (install)
         {
-            parts.Add(text["models.installs_on_save"]);
+            parts.Add(text["models.installs_on_start"]);
         }
 
         row.Note = string.Join(" ", parts);
@@ -466,6 +557,7 @@ public sealed partial class StepSettingsViewModel(IModelCatalog catalog, IStepMo
             Engine = row.Engine?.Kind ?? EngineKind.HyperFrames,
             Voice = row.Voice?.Value ?? string.Empty,
             Speed = (double)Math.Clamp(row.Speed ?? 1, (decimal)ProfileLimits.SpeedMin, (decimal)ProfileLimits.SpeedMax),
+            ImageSource = row.Selected?.Kind == StepOptionKind.Samples ? ImageSources.Samples : string.Empty,
         };
         var choice = new StepModelChoice { Step = row.Step.Code, ProfileId = _profile, OptionsJson = StepModelResolver.OptionsJson(options) };
         switch (row.Selected?.Kind)
@@ -474,7 +566,8 @@ public sealed partial class StepSettingsViewModel(IModelCatalog catalog, IStepMo
                 choice.Provider = row.Selected.Model!.Provider;
                 choice.Model = row.Selected.Model.Id;
                 return choice;
-            case StepOptionKind.None when _profile is not null:
+            case StepOptionKind.Samples:
+            case StepOptionKind.None when row.Step.Optional:
                 choice.Provider = ModelProviders.Off;
                 return choice;
             case StepOptionKind.None when row.IsEngineStep && options.Engine != EngineKind.HyperFrames:
@@ -485,27 +578,12 @@ public sealed partial class StepSettingsViewModel(IModelCatalog catalog, IStepMo
         }
     }
 
-    private async Task StoreAsync(StepModelRowViewModel row, (StepModelChoice? Choice, string Key, string Label, IReadOnlyList<string> Requires) want)
-    {
-        if (want.Choice is null)
-        {
-            await steps.ClearAsync(row.Step.Code, _profile, CancellationToken.None).ConfigureAwait(true);
-        }
-        else
-        {
-            await steps.SaveAsync(want.Choice, CancellationToken.None).ConfigureAwait(true);
-        }
-
-        row.Saved = want.Key;
-        logger.LogInformation("Setting changed: {Scope} step {Step} uses {Model}", _profile is null ? "general" : "profile", row.Step.Code, want.Label);
-    }
-
     /// <summary>What a row will be saved as, for the log (no personal data: model codes, effort, engine).</summary>
     private static string Describe(StepModelRowViewModel row)
     {
         var model = row.Selected switch
         {
-            { Kind: StepOptionKind.Inherit } => "the general setting",
+            { Kind: StepOptionKind.Samples } => "the sample images",
             { Model: { } m } => m.Provider + "/" + m.Id,
             _ => row.Step.Optional ? "nothing (off)" : "no model",
         };

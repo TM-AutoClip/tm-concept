@@ -69,7 +69,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         var warnings = new List<string>();
         var spent = new List<VideoCost>();
 
-        // The profile's narration and image models (override → general default). A model that is not ready means a silent video or no
+        // The profile's narration and image models (its choices on the video page). A model that is not ready means a silent video or no
         // images, with a warning; an image step that is off makes no image call at all.
         SpeechSetup? voice = null;
         if (options.Speech)

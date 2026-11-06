@@ -11,7 +11,7 @@ namespace TMConcept.Core.Speech;
 
 /// <summary>
 /// The narration step: a local model names its engine by its id ("local/supertonic"), an online model by its provider. The choice comes
-/// from the profile's override, then the general default (off = a silent video). A cache keeps every spoken text: the key is the SHA-256 of
+/// from the profile's choice made on the video page (off = a silent video). A cache keeps every spoken text: the key is the SHA-256 of
 /// text, engine, model, voice and speed, so a repeated scene is not spoken (or paid) twice.
 /// </summary>
 public sealed class SpeechService(IEnumerable<ISpeechEngine> engines, StepModelResolver resolver, IAppPaths paths, ILogger<SpeechService> logger)
@@ -28,7 +28,7 @@ public sealed class SpeechService(IEnumerable<ISpeechEngine> engines, StepModelR
             : Engines.FirstOrDefault(e => !e.IsLocal && e.Code == model.Provider);
     }
 
-    /// <summary>The narration of a profile (override → general default); null when it is off.</summary>
+    /// <summary>The narration of a profile (its saved choice); null when it is off.</summary>
     public async Task<SpeechSetup?> ResolveAsync(Guid? profileId, CancellationToken cancellationToken)
     {
         var choice = await resolver.ChoiceAsync(PipelineSteps.Speech, profileId, cancellationToken).ConfigureAwait(false);
@@ -52,7 +52,7 @@ public sealed class SpeechService(IEnumerable<ISpeechEngine> engines, StepModelR
         var engine = EngineOf(model.Model) ?? throw new SpeechException($"{model.Model.Provider}/{model.Model.Id} has no voice engine.") { Code = "model" };
         if (engine.IsLocal && !engine.Ready)
         {
-            throw new SpeechException($"{engine.Name} is not installed. Choose it in Settings → Models and save: it is installed then.") { Code = "missing" };
+            throw new SpeechException($"{engine.Name} is not installed. It is installed when a process that uses it starts (after a confirmation).") { Code = "missing" };
         }
 
         var options = StepModelResolver.Options(choice);

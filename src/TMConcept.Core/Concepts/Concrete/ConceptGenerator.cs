@@ -56,6 +56,27 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
         return total;
     }
 
+    /// <summary>
+    /// The estimate of the semantic duplicate check: title and summary of every new concept are embedded once (about
+    /// <see cref="EmbeddingTokensPerConcept"/> tokens each); a local model costs nothing.
+    /// </summary>
+    public CostEstimate EstimateEmbedding(Models.CatalogModel model, int count, string language)
+    {
+        ArgumentNullException.ThrowIfNull(model);
+        if (model.Provider == Models.ModelProviders.Local)
+        {
+            return CostEstimate.Zero;
+        }
+
+        var tokens = Math.Clamp(count, ConceptLimits.CountMin, ConceptLimits.CountMax) * (long)EmbeddingTokensPerConcept
+            * (language == Profiles.ContentLanguages.Turkish ? 2 : 1);
+        var usd = tokens * model.InputUsd / 1_000_000m;
+        return new CostEstimate(usd, usd, tokens, 0, 0);
+    }
+
+    /// <summary>Tokens of one concept's title and summary in English (Turkish counts about twice).</summary>
+    public const int EmbeddingTokensPerConcept = 80;
+
     /// <summary>Generates in batches; <paramref name="progress"/> gets every saved batch.</summary>
     public async Task<ConceptRunResult> GenerateAsync(ConceptRequest request, IProgress<ConceptBatch>? progress, CancellationToken cancellationToken)
     {
