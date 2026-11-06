@@ -42,7 +42,8 @@ veritabanını şifreli tutar.
 - **Bildirimler** sağ altta (konseptler hazır, video hazır, hata). Varsayılan 1 dakika; Ayarlar'dan süresi değişir ya da kapatılır.
   Alttaki işlem günlüğü her şeyi tutar (sarı uyarı, kırmızı hata).
 - **Şifreli.** Veritabanı (API anahtarların dahil) SQLite3 Multiple Ciphers ile şifrelidir. Anahtarı Windows (DPAPI), Linux anahtarlığı ya
-  da bir ana parola korur. Günlük yedekler (son 10) parolalı dosyalardır (Argon2id + AES-256-GCM); API anahtarları yedeğe asla girmez.
+  da bir ana parola korur. Günlük yedekler (son 10) parolalı dosyalardır (Argon2id + AES-256-GCM); içine neyin gireceğini sen seçersin
+  (API anahtarları yalnız işaretlersen).
 - **İki arayüz dili:** Türkçe ve İngilizce.
 
 Başka kanalları **okumaz**, referans video kullanmaz, ses klonlamaz.
@@ -50,13 +51,14 @@ Başka kanalları **okumaz**, referans video kullanmaz, ses klonlamaz.
 ## Ne kadar tutar
 
 Program ücretsizdir. Yapay zekâ sağlayıcılarına yalnız kullandığın kadar doğrudan ödersin; program önce tahmini, sonra kesin ücreti
-gösterir. Kabaca (5 Kas 2026 fiyatları; güncelleri Ayarlar → Modeller'de, kendiliğinden güncellenir):
+gösterir. Kabaca (5 Kas 2026 fiyatları; güncelleri sayfalarda her tahminin yanında, kendiliğinden güncellenir):
 
 | Ne | Yaklaşık ücret |
 |---|---|
 | Claude Sonnet 5.5 ile 20 konsept | 0,15–0,25 $ |
 | Claude Sonnet 5.5 ile 60–90 sn'lik bir videonun kodu | 0,10 $ |
-| Yerel Supertonic 3 sesiyle seslendirme | ücretsiz |
+| Yerel bir sesle seslendirme (Supertonic 3 ya da İngilizce için Kokoro) | ücretsiz |
+| Yerel modelle anlamca tekrar denetimi | ücretsiz |
 | Video başına 8 YZ görseli (fal FLUX 2 Flash) | 0,08 $ |
 | Yerel modelle 8 görsel (FLUX.2 klein 4B ya da Z-Image Turbo, kendi ekran kartın) | ücretsiz |
 
@@ -105,15 +107,18 @@ Masaüstü oturumu gerekir.
 ## İlk açılış
 
 1. **Dil:** iki büyük düğme, Türkçe ve English (sistem dilin önde). Sonra Ayarlar'dan değişir.
-2. **Yeni başla ya da yedekten yükle:** yalnız veri yokken görünür. *Yedekten yükle* bir `.tmcbak` dosyası ve parolasını ister.
+2. **Yeni başla ya da yedekten yükle:** yalnız veri yokken görünür. *Yedekten yükle* bir `.tmcbak` dosyası ve parolasını ister, sonra
+   dosyanın neler içerdiğini gösterir (profiller, konseptler, ayarlar, yedeklendiyse API anahtarları) ve geri yüklemeden önce sorar.
 3. **Koruma ve yedek parolası:** veritabanı anahtarını Windows / anahtarlık ya da bir ana parola korur. **Yedek parolası** zorunludur
    (en az 12 karakter): günlük yedekler onunla şifrelenir. Bir yere yaz; parolasız yedek açılamaz.
 4. **İlk profil:** bir şablon seç ya da kanalını doldur.
 
 ## Modeller ve kurdukları
 
-Ayarlar → **Modeller** her adımın genel ayarını tutar; bir profil istediğini değiştirebilir (Profil → *Bu profilin modelleri*, ilk seçenek
-*Genel ayarı kullan*). Her adım ne işe yaradığını yazar:
+Ayarlar'da model seçimi yok: her model onu kullanan sayfada seçilir ve son seçim **profil başına** saklanır (yeni profilde ücretli hiçbir
+şey seçili değildir; "Önerilen" önerilenleri gösterir). **Konsept üret** sayfasında konsept modeli ve anlamca tekrar denetimi;
+**Konseptten video**'da video kodu modeli ve motor, görseller ve seslendirme; **Profil** sayfasında örnek görseli açıklayan model var. Her
+adım ne işe yaradığını yazar:
 
 - **Konsept üretimi** ve **Video kodu** — ücretini ödediğin online modeller. **Çaba** yalnız bunu alan modelde görünür; *Otomatik* çaba
   göndermez (sağlayıcının varsayılanı). **Video kodu**'nda **video motoru** da var: HyperFrames (varsayılan), Remotion (lisansını kabul
@@ -121,15 +126,17 @@ Ayarlar → **Modeller** her adımın genel ayarını tutar; bir profil istediğ
 - **Görseller** — *Kapalı* (varsayılan: video yalnız koddan çizilir), bir online görsel modeli ya da ekran kartında çalışan bir yerel model:
   **FLUX.2 klein 4B** (hızlı) ya da **Z-Image Turbo** (daha iyi görsel); ikisi de en az 6 GB ekran kartı belleği ister (ölçüldükleri kart). Kartın küçük görünürse
   sayfa uyarır; Windows'ta NVIDIA kart (CUDA), Linux x64'te Vulkan sürücüsü ister; Linux ARM64 için yok.
-- **Seslendirme** — *Kapalı* (sessiz video, sarı uyarı), **Supertonic 3** (yerel, ücretsiz; Türkçe ve İngilizce) ya da bir online ses. Ses,
-  hız ve ▶ Dinle adımın içinde.
-- **Anlamca tekrar denetimi** ve **Örnek görsel açıklama** — isteğe bağlı, ucuz online yardımcılar.
+- **Görseller** profilin kendi örnek görsellerini de kullanabilir (ücretsiz).
+- **Seslendirme** — *Kapalı* (sessiz video, sarı uyarı), **Supertonic 3** (yerel, ücretsiz; Türkçe ve İngilizce), **Kokoro 82M** (yerel,
+  ücretsiz; yalnız İngilizce, Amerikan ve İngiliz sesleri) ya da bir online ses. Ses, hız ve ▶ Dinle adımın içinde.
+- **Anlamca tekrar denetimi** — isteğe bağlı: yerel **Multilingual MiniLM** (ücretsiz, bu bilgisayarda, Türkçe dahil 50'den fazla dil) ya
+  da bir online model. **Örnek görsel açıklama** — isteğe bağlı, ucuz bir online yardımcı.
 
-**Kaydet**'e bastığında bir seçim bu bilgisayarda henüz olmayan bir şey gerektiriyorsa **tek bir onay bütün indirmeleri listeler** (ad,
-kaynak, boyut). Onaysız hiçbir şey indirilmez. Sonra ilerlemeyle (sayfada ve günlükte) kurar ve kaydeder; vazgeçersen ya da kurulum
-başarısız olursa o adım kaydedilmez ve sebebi görünür. Kayıtlı bir seçimin bileşeni sonradan kaldırıldıysa bir sonraki Kaydet onu yeniden
-kurar. İlk videodan önce kuyruktaki videoların hâlâ gerektirdiği bir şey (ör. ffmpeg; yerel ses ya da görsel modeli yalnız video
-seslendirme ya da model görselleri kullanıyorsa) aynı yolla sorulur.
+**Üret**'e ya da **Kuyruğu üret**'e bastığında önce seçimler hazırlanır: henüz API anahtarı olmayan sağlayıcının adı söylenir ve anahtarı
+oracıkta yapıştırabilirsin (ücretsiz bir istekle denenir, yalnız çalışırsa saklanır); sonra bir seçim bu bilgisayarda olmayan bir şey
+gerektiriyorsa **tek bir onay bütün indirmeleri listeler** (ad, kaynak, boyut). Onaysız hiçbir şey indirilmez. İlerlemeyle (sayfada ve
+günlükte) kurulur, seçimler profil için saklanır ve iş başlar. Onaylamazsan, vazgeçersen ya da kurulum başarısız olursa hiçbir şey
+başlamaz, hiçbir şey ödenmez; sebebi görünür. Saklanan bir seçimin bileşeni sonradan kaldırıldıysa bir dahaki sefere yeniden kurulur.
 
 | Bileşen | Kaynak | Yaklaşık |
 |---|---|---|
@@ -137,6 +144,8 @@ seslendirme ya da model görselleri kullanıyorsa) aynı yolla sorulur.
 | ffmpeg 8.1.3 (GPL derlemesi, ayrı program; Linux'ta dağıtımın kopyası varsa o) | github.com (BtbN) | 130–200 MB |
 | Motor paketleri + Chrome Headless Shell | registry.npmjs.org, storage.googleapis.com | 200–350 MB |
 | Supertonic 3 + sherpa-onnx 2.0.1 | github.com (k2-fsa) | 140 MB |
+| Kokoro 82M v1.0 int8 (sherpa-onnx gerekir) | github.com (k2-fsa) | 130 MB |
+| Multilingual MiniLM (paraphrase-multilingual-MiniLM-L12-v2, int8 ONNX + tokenizer; sherpa-onnx gerekir) | huggingface.co | 127 MB |
 | stable-diffusion.cpp master-890 (Windows: CUDA 12 derlemesi + CUDA kitaplıkları; Linux x64: Vulkan derlemesi) | github.com (leejet) | 900 MB / 40 MB |
 | FLUX.2 klein 4B ağırlıkları (model, Qwen3-4B metin kodlayıcı, VAE) | huggingface.co | 5,3 GB |
 | Z-Image Turbo ağırlıkları (model, Qwen3-4B-Instruct metin kodlayıcı, VAE) | huggingface.co | 9,4 GB |
@@ -148,8 +157,8 @@ ya da artık kullanılamayan *eksik* diye işaretlenir), kaldırabilir ve bir mo
 videosunu modelsiz, ağsız render edebilir.
 
 Fiyatlar kendiliğinden, günde en çok bir kez güncellenir: program bu deponun `pricing/prices.json` dosyasını ve OpenRouter'ın herkese açık
-model listesini okur (anahtar gönderilmez), denetler ve son iyi kopyayı saklar; internet yoksa yerleşik tablo kullanılır. Ayarlar →
-Modeller tarihi ve kaynağı gösterir.
+model listesini okur (anahtar gönderilmez), denetler ve son iyi kopyayı saklar; internet yoksa yerleşik tablo kullanılır. Tahmin
+kutuları tarihi ve kaynağı gösterir; Üretilen videolar sayfası bu ayın harcamasını gösterir.
 
 Pencereyi varsayılan olarak işlemci çizer (görünüm aynı, yaklaşık 50–70 MB daha az bellek). Kaydırma ya da oynatıcı yavaş gelirse
 Ayarlar → **Genel** → **Pencereyi ekran kartıyla çiz** seçeneğini aç ve programı yeniden başlat.
@@ -157,10 +166,12 @@ Ayarlar → **Genel** → **Pencereyi ekran kartıyla çiz** seçeneğini aç ve
 ## API anahtarları
 
 Ayarlar → **Anahtarlar**: sağlayıcıyı seç, anahtarı yapıştır, **Kaydet ve bağlantıyı dene**'ye bas (ücretsiz bir istek; fal'da ücretsiz
-deneme yok). Anahtarlar şifreli veritabanında durur, yalnız kendi sağlayıcısına gider, günlüğe yazılmaz, yedeğe girmez. Her sağlayıcı
+deneme yok). Anahtarlar şifreli veritabanında durur, yalnız kendi sağlayıcısına gider, günlüğe yazılmaz. Yedeğe yalnız Ayarlar → Yedek
+altında *API anahtarları*'nı işaretlersen girer (yedek dosyası yedek parolanla şifrelidir). Anahtarı olmayan bir sağlayıcıya ihtiyaç duyan
+sayfa, başlamadan önce anahtarı sorar. Her sağlayıcı
 için adım adım rehber: [docs/api-keys.tr.md](docs/api-keys.tr.md).
 
-Sonra Ayarlar → **Modeller**: her adım için bir model seç. Ücretli hiçbir şey senin yerine seçilmez; "Önerilen" önerilenleri gösterir.
+Sonra modelleri onları kullanan sayfalarda seç (yukarıya bak). Ücretli hiçbir şey senin yerine seçilmez.
 
 ## İlk videonu üret
 
@@ -197,6 +208,7 @@ Taşınabilir kip: programı `--data-dir <klasör>` ile başlat; videolar dahil 
 
 - **Supertonic 3** (varsayılan ses): OpenRAIL-M. Yayınlarken sesin yapay zekâ ile üretildiğini belirt; kimseyi taklit etme. Video
   ayrıntısı bunu hatırlatır.
+- **Kokoro 82M**: Apache-2.0. **Multilingual MiniLM** (sentence-transformers): Apache-2.0.
 - **Remotion**: açık kaynak değil; bireyler ve en çok 3 kişilik şirketler ücretsiz, daha büyük şirketler Remotion lisansı almalı.
 - **Örnek görseller**: kullanım hakkı sende olmalı.
 - **ffmpeg**: GPL, ayrı bir program olarak indirilir.

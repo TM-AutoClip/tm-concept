@@ -3,10 +3,13 @@
 **English** · [Türkçe](api-keys.tr.md)
 
 TM Concept uses online models with **your own keys**. You pay the provider directly. Keys are stored only in the encrypted database on
-your computer, are sent only to their own provider, never written to logs and never put in backups.
+your computer, are sent only to their own provider and never written to logs. They go into a backup only when you tick *API keys* in
+Settings → Backup (the backup file is encrypted with your backup password).
 
 In TM Concept: Settings → **Keys** → choose the provider → paste the key → **Save and test the connection**. The test is a free request
-(a model or key listing). A provider can have several keys (for example "personal" and "work").
+(a model or key listing). A provider can have several keys (for example "personal" and "work"). You can also add a key when a page
+needs it: pressing Generate or Produce with a model of a provider that has no key opens a window for it; the key is tested and kept only
+when it works.
 
 API use is billed separately from chat subscriptions (Claude Pro, ChatGPT Plus…): a subscription does not include API credit.
 

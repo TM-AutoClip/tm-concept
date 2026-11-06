@@ -3,10 +3,13 @@
 [English](api-keys.md) · **Türkçe**
 
 TM Concept online modelleri **kendi anahtarlarınla** kullanır. Ücreti sağlayıcıya doğrudan ödersin. Anahtarlar yalnız bilgisayarındaki
-şifreli veritabanında durur, yalnız kendi sağlayıcısına gönderilir, günlüğe yazılmaz ve yedeğe girmez.
+şifreli veritabanında durur, yalnız kendi sağlayıcısına gönderilir ve günlüğe yazılmaz. Yedeğe yalnız Ayarlar → Yedek altında
+*API anahtarları*'nı işaretlersen girer (yedek dosyası yedek parolanla şifrelidir).
 
 TM Concept'te: Ayarlar → **Anahtarlar** → sağlayıcıyı seç → anahtarı yapıştır → **Kaydet ve bağlantıyı dene**. Deneme ücretsiz bir
-istektir (model ya da anahtar listesi). Bir sağlayıcıya birden çok anahtar eklenebilir (ör. "kişisel" ve "iş").
+istektir (model ya da anahtar listesi). Bir sağlayıcıya birden çok anahtar eklenebilir (ör. "kişisel" ve "iş"). Anahtarı sayfa
+istediğinde de ekleyebilirsin: anahtarı olmayan bir sağlayıcının modeliyle Üret'e ya da Kuyruğu üret'e basınca bir pencere açılır;
+anahtar denenir ve yalnız çalışırsa saklanır.
 
 API kullanımı sohbet aboneliklerinden (Claude Pro, ChatGPT Plus…) ayrı ücretlenir: abonelik API kredisi içermez.
 
