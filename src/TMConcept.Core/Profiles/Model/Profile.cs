@@ -1,6 +1,9 @@
 namespace TMConcept.Core.Profiles;
 
-/// <summary>A profile = a channel: what kind of videos it makes, in which language and format, with which voice.</summary>
+/// <summary>
+/// A profile = a channel: what kind of videos it makes, in which language and format. Its models (voice, images, engine…) are step
+/// overrides kept next to it (<see cref="Models.IStepModelStore"/>); a step it does not override uses the general default.
+/// </summary>
 public sealed class Profile
 {
     /// <summary>Id.</summary>
@@ -23,15 +26,6 @@ public sealed class Profile
 
     /// <summary>The template the fields were filled from (information only; the template never changes the profile later).</summary>
     public string? TemplateId { get; set; }
-
-    /// <summary>Speech engine code (empty = no narration).</summary>
-    public string SpeechEngine { get; set; } = string.Empty;
-
-    /// <summary>Voice id of the speech engine.</summary>
-    public string SpeechVoice { get; set; } = string.Empty;
-
-    /// <summary>Speech speed (1 = normal).</summary>
-    public double SpeechSpeed { get; set; } = 1.0;
 
     /// <summary>Last concept number given in this profile (numbers are never reused, even after a permanent delete).</summary>
     public int ConceptCounter { get; set; }

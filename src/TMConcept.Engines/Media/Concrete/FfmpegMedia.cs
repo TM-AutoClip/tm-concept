@@ -13,6 +13,9 @@ public sealed class FfmpegMedia(FfmpegMuxer muxer, ToolInstaller tools, IProcess
     private static readonly double[] Moments = [0.6, 1.2, 2.5, 4, 6, 9];
 
     /// <inheritdoc />
+    public IReadOnlyList<string> RequiredComponents { get; } = [Core.Components.ComponentCodes.Ffmpeg];
+
+    /// <inheritdoc />
     public Task MuxAsync(string folder, string silentVideo, IReadOnlyList<(string Wav, long StartMs)> clips, string? assFile, string output,
         CancellationToken cancellationToken) => muxer.MuxAsync(folder, silentVideo, clips, assFile, output, cancellationToken);
 

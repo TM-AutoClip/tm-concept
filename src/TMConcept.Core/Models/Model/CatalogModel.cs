@@ -4,7 +4,8 @@ namespace TMConcept.Core.Models;
 
 /// <summary>
 /// A model of a provider with its prices (USD per one million tokens unless noted) and limits. Comes from the embedded catalog of its
-/// provider (prices dated by <see cref="PricedOn"/>) or from a price the user entered.
+/// provider (prices dated by <see cref="PricedOn"/>), with prices updated from <see cref="PriceSource"/>. Local models (provider
+/// <see cref="ModelProviders.Local"/>) are free and name the components they need (<see cref="Requires"/>).
 /// </summary>
 public sealed class CatalogModel
 {
@@ -63,6 +64,12 @@ public sealed class CatalogModel
     /// <summary>Date the provider retires the model (ISO), empty when unknown.</summary>
     public string RetiresOn { get; set; } = string.Empty;
 
-    /// <summary>Whether the price was entered by the user.</summary>
-    public bool UserPrice { get; set; }
+    /// <summary>Where the price comes from (<see cref="PriceSources"/>; empty = the built-in table).</summary>
+    public string PriceSource { get; set; } = string.Empty;
+
+    /// <summary>Components a local model needs on this computer (installed on save after a confirmation).</summary>
+    public List<string> Requires { get; set; } = [];
+
+    /// <summary>Least graphics card memory (GB) a local model needs to run well (0 = no graphics card needed). A warning, never a block.</summary>
+    public int MinVideoMemoryGb { get; set; }
 }

@@ -107,7 +107,8 @@ public sealed class EnginePackage(string name, IAppPaths paths, ToolInstaller to
         return line.Length <= 400 ? line : line[..400] + "…";
     }
 
-    private static string? NpmCli(string node)
+    /// <summary>npm's script next to a Node.js (the app's copy or a system one); null when there is none.</summary>
+    public static string? NpmCli(string node)
     {
         var folder = Path.GetDirectoryName(node)!;
         string[] candidates =

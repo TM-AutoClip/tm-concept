@@ -22,6 +22,7 @@ public static class ProviderServices
         services.AddSingleton(ProviderTransport.Network);
         services.AddSingleton<ProviderHttp>();
         services.AddSingleton<IModelCatalog, EmbeddedModelCatalog>();
+        services.AddSingleton<Providers.Pricing.PriceUpdater>();
         services.AddSingleton<ICostCalculator, CostCalculator>();
         services.AddSingleton<StepModelResolver>();
         services.AddSingleton<IChatClientFactory, ChatClientFactory>();

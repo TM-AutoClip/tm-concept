@@ -13,7 +13,7 @@ internal sealed class ProfileTable : TableBase<Profile>
     public override string Name => "profiles";
 
     /// <inheritdoc />
-    public override IReadOnlyList<string> Columns { get; } = ["Id", "Name", "ContentLanguage", "Format", "TargetSeconds", "ConceptText", "TemplateId", "SpeechEngine", "SpeechVoice", "SpeechSpeed", "ConceptCounter", "CreatedAtUtc", "UpdatedAtUtc"];
+    public override IReadOnlyList<string> Columns { get; } = ["Id", "Name", "ContentLanguage", "Format", "TargetSeconds", "ConceptText", "TemplateId", "ConceptCounter", "CreatedAtUtc", "UpdatedAtUtc"];
 
     /// <inheritdoc />
     public override IReadOnlyList<string> Key { get; } = ["Id"];
@@ -31,12 +31,9 @@ internal sealed class ProfileTable : TableBase<Profile>
             TargetSeconds = reader.GetInt32(4),
             ConceptText = reader.GetString(5),
             TemplateId = Sql.ReadOptionalText(reader, 6),
-            SpeechEngine = reader.GetString(7),
-            SpeechVoice = reader.GetString(8),
-            SpeechSpeed = reader.GetDouble(9),
-            ConceptCounter = reader.GetInt32(10),
-            CreatedAtUtc = Sql.ReadTime(reader, 11),
-            UpdatedAtUtc = Sql.ReadTime(reader, 12),
+            ConceptCounter = reader.GetInt32(7),
+            CreatedAtUtc = Sql.ReadTime(reader, 8),
+            UpdatedAtUtc = Sql.ReadTime(reader, 9),
         };
     }
 
@@ -53,9 +50,6 @@ internal sealed class ProfileTable : TableBase<Profile>
             row.TargetSeconds,
             row.ConceptText,
             row.TemplateId,
-            row.SpeechEngine,
-            row.SpeechVoice,
-            row.SpeechSpeed,
             row.ConceptCounter,
             Sql.Ticks(row.CreatedAtUtc),
             Sql.Ticks(row.UpdatedAtUtc),

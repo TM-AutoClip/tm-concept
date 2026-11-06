@@ -10,7 +10,8 @@ namespace TMConcept.Engines.Tools;
 /// temporary folder → move into place → write a marker. A tool counts as ready only with its marker and executable. On Linux a program on
 /// the system PATH may be used when the app has no copy. For <see cref="ToolManifest.FallbackToSystem"/> tools (ffmpeg) on every system:
 /// when the pinned download is gone or its hash does not match, the copy on the PATH is used (with ffprobe next to it; logged as a
-/// warning and remembered with a marker), otherwise the install fails with "unavailable" and the page shows how to install it.
+/// warning and remembered with a marker), otherwise the install fails with "unavailable" and the page shows how to install it. A Node.js
+/// of at least <see cref="ToolManifest.NodeMinimumMajor"/> found on the PATH (<see cref="UseSystemNode"/>) is used instead of a download.
 /// </summary>
 public sealed class ToolInstaller(IAppPaths paths, IToolPlatform platform, ToolDownloader downloader, ILogger<ToolInstaller> logger) : IToolLocator
 {
@@ -26,8 +27,19 @@ public sealed class ToolInstaller(IAppPaths paths, IToolPlatform platform, ToolD
     /// <summary>The folders searched for a system copy (the PATH; tests give their own).</summary>
     public string SearchPath { get; init; } = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
 
+    private volatile string? _systemNode;
+
     /// <summary>The pinned archive of a tool on this computer.</summary>
     public ToolArchive? Archive(ToolKind tool) => Archives.FirstOrDefault(a => a.Tool == tool && a.Rid == platform.Rid);
+
+    /// <summary>Uses a suitable Node.js of the system (checked by the caller: version and npm); null forgets it.</summary>
+    public void UseSystemNode(string? executable) => _systemNode = executable;
+
+    /// <summary>A program on the PATH (<see cref="SearchPath"/>), or null.</summary>
+    public string? FindProgram(string name) => FindOnPath(platform.Executable(name));
+
+    /// <summary>The folder a tool's pinned version is installed into.</summary>
+    public string InstallFolder(ToolKind tool) => Archive(tool) is { } archive ? Folder(archive) : Path.Combine(paths.ToolsDirectory, Name(tool));
 
     /// <inheritdoc />
     public ToolStatus Status(ToolKind tool)
@@ -41,13 +53,19 @@ public sealed class ToolInstaller(IAppPaths paths, IToolPlatform platform, ToolD
             }
         }
 
+        if (tool == ToolKind.Node && _systemNode is { } node && File.Exists(node))
+        {
+            return new ToolStatus(tool, true, string.Empty, node, "system");
+        }
+
         if (ToolManifest.Libraries.Contains(tool))
         {
             // A library is used only from the app's own pinned copy.
             return new ToolStatus(tool, false, Archive(tool)?.Version ?? string.Empty, string.Empty, string.Empty);
         }
 
-        if (platform.UseSystemPrograms && FindOnPath(platform.Executable(Name(tool))) is { } system)
+        // Node.js from the system only after its version was checked (UseSystemNode): an old distribution Node cannot run HyperFrames.
+        if (tool != ToolKind.Node && platform.UseSystemPrograms && FindOnPath(platform.Executable(Name(tool))) is { } system)
         {
             return new ToolStatus(tool, true, string.Empty, system, "system");
         }
@@ -154,7 +172,7 @@ public sealed class ToolInstaller(IAppPaths paths, IToolPlatform platform, ToolD
     /// <summary>The executable of a tool, or an exception that tells the user to install it.</summary>
     public string Require(ToolKind tool) => Status(tool) is { Ready: true } status
         ? status.ExecutablePath
-        : throw new ToolInstallException($"{tool} is not installed. Install it in Settings → Tools.") { Code = "missing" };
+        : throw new ToolInstallException($"{tool} is not installed. Choose the setting that needs it in Settings → Models and save: it is installed then.") { Code = "missing" };
 
     /// <summary>A sibling program of a tool (ffprobe next to ffmpeg, npm-cli next to node).</summary>
     public string Sibling(ToolKind tool, string name)
@@ -205,6 +223,8 @@ public sealed class ToolInstaller(IAppPaths paths, IToolPlatform platform, ToolD
         ToolKind.Node => "node",
         ToolKind.Ffmpeg => "ffmpeg",
         ToolKind.SpeechRuntime => "sherpa-onnx",
+        ToolKind.ImageRuntime => "sd-cpp",
+        ToolKind.ImageRuntimeCuda => "sd-cpp-cuda",
         _ => tool.ToString().ToLowerInvariant(),
     };
 

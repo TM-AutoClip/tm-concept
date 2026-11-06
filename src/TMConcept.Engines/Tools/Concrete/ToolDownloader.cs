@@ -96,7 +96,8 @@ public sealed class ToolDownloader(DownloadTransport transport, ILogger<ToolDown
 
     private static void Check(Uri address)
     {
-        if (address.Scheme != Uri.UriSchemeHttps || !ToolManifest.AllowedHosts.Contains(address.Host, StringComparer.OrdinalIgnoreCase))
+        if (address.Scheme != Uri.UriSchemeHttps || !(ToolManifest.AllowedHosts.Contains(address.Host, StringComparer.OrdinalIgnoreCase)
+            || ToolManifest.AllowedHostSuffixes.Any(s => address.Host.EndsWith(s, StringComparison.OrdinalIgnoreCase))))
         {
             throw new ToolInstallException($"Downloads from {address.Host} are not allowed.") { Code = "host" };
         }

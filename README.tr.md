@@ -12,7 +12,7 @@ veritabanını şifreli tutar.
 - [Windows'a kurulum](#windowsa-kurulum)
 - [Linux'a kurulum (x64 ve arm64)](#linuxa-kurulum-x64-ve-arm64)
 - [İlk açılış](#ilk-açılış)
-- [Araçlar: Node.js, ffmpeg, motorlar, ses](#araçlar-nodejs-ffmpeg-motorlar-ses)
+- [Modeller ve kurdukları](#modeller-ve-kurdukları)
 - [API anahtarları](#api-anahtarları)
 - [İlk videonu üret](#ilk-videonu-üret)
 - [Güncelleme](#güncelleme)
@@ -25,14 +25,15 @@ veritabanını şifreli tutar.
 ## Ne yapar
 
 - **Profil = kanal.** Kanal adı, içerik dili (Türkçe ya da İngilizce), dikey kısa ya da yatay video, hedef süre (15–180 sn), kanalın
-  konsepti, isteğe bağlı örnek görseller ve seslendirme sesi. Dört hazır şablon alanları doldurur (tarih: Bizans, Osmanlı; teknoloji:
+  konsepti, isteğe bağlı örnek görseller ve genel ayardan farklı olmasını istediğin her adım için kendi modelleri (ses, görseller, motor…). Dört hazır şablon alanları doldurur (tarih: Bizans, Osmanlı; teknoloji:
   antik, modern).
 - **Konsept üret.** Tek basışta 1–100 konsept, 20'şerlik turlarla. Basmadan önce tahmini ücret aralığı, sonra sağlayıcının bildirdiği
   kullanımdan kesin ücret görünür. Tekrar dört katmanda önlenir: istemde bütün konseptlerin geçmişi (önbellekli), ücretsiz yerel benzerlik
   denetimi, gömme modeliyle isteğe bağlı anlamsal denetim ve liste büyüyünce sıkıştırılmış geçmiş. ✓ (A tuşu) onaylar, ✗ (D tuşu) siler.
   Silinenler **Silinenler** sayfasında süresiz durur (tekrar denetiminde sayılmaya devam eder); oradan kalıcı silinebilir.
-- **Konseptten video.** Onaylı konseptleri sıraya al, motoru (varsayılan HyperFrames, Remotion, Revideo), kod modelini, görselleri (yok,
-  örnek görsellerin ya da bir görsel modeli), seslendirmeyi, altyazıyı ve konuşma metni dosyasını seç, **Sıradakileri sırayla üret**'e bas.
+- **Konseptten video.** Onaylı konseptleri sıraya al, görselleri (profilin Görseller adımına göre, örnek görsellerin ya da yok),
+  seslendirmeyi, altyazıyı ve konuşma metni dosyasını seç, **Sıradakileri sırayla üret**'e bas. Motor (varsayılan HyperFrames, Remotion,
+  Revideo), kod modeli, görsel modeli ve ses profilden (ya da genel ayardan) gelir.
   Model tek bir kod dosyası yazar; hiçbir şey çalıştırılmadan önce güvenlik denetimi yapılır; denetim ya da render hatasında tek onarım
   istenir. Videolar en çok 3 dakikadır.
 - **Üretilen videolar.** Küçük resim, program içi oynatıcı (oynat/duraklat, sarma çubuğu, süre, ses düzeyi, tam ekran; kendiliğinden
@@ -49,7 +50,7 @@ Başka kanalları **okumaz**, referans video kullanmaz, ses klonlamaz.
 ## Ne kadar tutar
 
 Program ücretsizdir. Yapay zekâ sağlayıcılarına yalnız kullandığın kadar doğrudan ödersin; program önce tahmini, sonra kesin ücreti
-gösterir. Kabaca (5 Kas 2026 fiyatları; Ayarlar → Modeller'de güncelini gör):
+gösterir. Kabaca (5 Kas 2026 fiyatları; güncelleri Ayarlar → Modeller'de, kendiliğinden güncellenir):
 
 | Ne | Yaklaşık ücret |
 |---|---|
@@ -57,6 +58,7 @@ gösterir. Kabaca (5 Kas 2026 fiyatları; Ayarlar → Modeller'de güncelini gö
 | Claude Sonnet 5.5 ile 60–90 sn'lik bir videonun kodu | 0,10 $ |
 | Yerel Supertonic 3 sesiyle seslendirme | ücretsiz |
 | Video başına 8 YZ görseli (fal FLUX 2 Flash) | 0,08 $ |
+| Yerel modelle 8 görsel (FLUX.2 klein 4B ya da Z-Image Turbo, kendi ekran kartın) | ücretsiz |
 
 ## Windows'a kurulum
 
@@ -93,7 +95,7 @@ Masaüstü oturumu gerekir.
 4. **Anahtarlık (önerilir).** Veritabanının kendiliğinden açılması için anahtar `secret-tool` ile masaüstü anahtarlığına konur:
    Debian / Ubuntu / Raspberry Pi OS: `sudo apt install libsecret-tools` · Fedora: `sudo dnf install libsecret` · Arch:
    `sudo pacman -S libsecret`. Anahtarlık yoksa program her açılışta ana parola sorar.
-5. **Chrome kitaplıkları.** Video motorları başsız bir Chrome çalıştırır. Eksik kitaplık varsa Ayarlar → Araçlar tam
+5. **Chrome kitaplıkları.** Video motorları başsız bir Chrome çalıştırır. Eksik kitaplık varsa Ayarlar → Genel (Kurulu bileşenler) tam
    `sudo apt install …` komutunu gösterir (program kök yetkisi kullanmaz). Tipik liste: `libnss3 libatk-bridge2.0-0 libcups2 libdrm2
    libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libpango-1.0-0 libasound2`.
 6. **ARM64:** Puppeteer'ın ARM64 Chrome'u yok. Remotion'u kur (kendi ARM64 tarayıcısını getirir) ya da sistem Chromium'unu kur
@@ -108,22 +110,42 @@ Masaüstü oturumu gerekir.
    (en az 12 karakter): günlük yedekler onunla şifrelenir. Bir yere yaz; parolasız yedek açılamaz.
 4. **İlk profil:** bir şablon seç ya da kanalını doldur.
 
-## Araçlar: Node.js, ffmpeg, motorlar, ses
+## Modeller ve kurdukları
 
-Ayarlar → **Araçlar**. Her kalem, kaynağını ve boyutunu gösteren onay penceresinden sonra resmî kaynağından indirilir ve sabitlenmiş
-SHA-256 ile denetlenir (npm paketleri: kilit dosyasının bütünlük değerleri). Hepsi programın kendi veri klasörüne gider.
+Ayarlar → **Modeller** her adımın genel ayarını tutar; bir profil istediğini değiştirebilir (Profil → *Bu profilin modelleri*, ilk seçenek
+*Genel ayarı kullan*). Her adım ne işe yaradığını yazar:
 
-1. **Node.js** (≈ 35 MB) — motorları çalıştırır.
-2. **ffmpeg** (≈ 130–200 MB, GPL derlemesi, ayrı bir program) — sesi ve videoyu birleştirir, altyazıyı yakar, küçük resim çıkarır,
-   videoları program içinde oynatır. Linux'ta dağıtımın ffmpeg'i varsa o kullanılır. Sabitlenen indirme bir gün kaldırılırsa ya da SHA-256'sı
-   tutmazsa PATH'teki ffmpeg kullanılır (uyarıyla); o da yoksa program nasıl kurulacağını gösterir.
-3. **Bir motor:** HyperFrames (varsayılan) ve/veya Remotion (önce lisansını kabul etmeni ister) ve/veya Revideo (deneysel). Motor paketleri
-   ve Chrome Headless Shell birkaç yüz MB tutar. **Örnek render** motoru modelsiz ve ağsız dener.
-4. **Ses:** Supertonic 3 (≈ 130 MB; önce OpenRAIL-M şartlarını gösterir; Türkçe ve İngilizce), kitaplıklarıyla birlikte: sherpa-onnx
-   (≈ 8–13 MB; yalnız ses konuşurken ayrı bir süreçte çalışır). Ses yoksa videolar sessiz üretilir ve
-   günlüğe sarı uyarı düşer.
+- **Konsept üretimi** ve **Video kodu** — ücretini ödediğin online modeller. **Çaba** yalnız bunu alan modelde görünür; *Otomatik* çaba
+  göndermez (sağlayıcının varsayılanı). **Video kodu**'nda **video motoru** da var: HyperFrames (varsayılan), Remotion (lisansını kabul
+  etmeni ister: bireyler ve en çok 3 kişilik şirketler için ücretsiz), Revideo (deneysel). Görsel istemlerini de video kodu modeli yazar.
+- **Görseller** — *Kapalı* (varsayılan: video yalnız koddan çizilir), bir online görsel modeli ya da ekran kartında çalışan bir yerel model:
+  **FLUX.2 klein 4B** (hızlı, en az 4 GB ekran kartı belleği) ya da **Z-Image Turbo** (daha iyi görsel, en az 6 GB). Kartın küçük görünürse
+  sayfa uyarır; Windows'ta NVIDIA kart (CUDA), Linux x64'te Vulkan sürücüsü ister; Linux ARM64 için yok.
+- **Seslendirme** — *Kapalı* (sessiz video, sarı uyarı), **Supertonic 3** (yerel, ücretsiz; Türkçe ve İngilizce) ya da bir online ses. Ses,
+  hız ve ▶ Dinle adımın içinde.
+- **Anlamca tekrar denetimi** ve **Örnek görsel açıklama** — isteğe bağlı, ucuz online yardımcılar.
 
-Bir motor ve sesle toplam disk: yaklaşık 0,6–1 GB.
+**Kaydet**'e bastığında bir seçim bu bilgisayarda henüz olmayan bir şey gerektiriyorsa **tek bir onay bütün indirmeleri listeler** (ad,
+kaynak, boyut). Onaysız hiçbir şey indirilmez. Sonra ilerlemeyle (sayfada ve günlükte) kurar ve kaydeder; vazgeçersen ya da kurulum
+başarısız olursa o adım kaydedilmez ve sebebi görünür. İlk videodan önce hâlâ eksik olan bir şey (ör. ffmpeg) aynı yolla sorulur.
+
+| Bileşen | Kaynak | Yaklaşık |
+|---|---|---|
+| Node.js 26.13.0 (yalnız PATH'te npm'li bir Node.js 22 ya da yenisi yoksa) | nodejs.org | 35 MB |
+| ffmpeg 8.1.3 (GPL derlemesi, ayrı program; Linux'ta dağıtımın kopyası varsa o) | github.com (BtbN) | 130–200 MB |
+| Motor paketleri + Chrome Headless Shell | registry.npmjs.org, storage.googleapis.com | 200–350 MB |
+| Supertonic 3 + sherpa-onnx 2.0.1 | github.com (k2-fsa) | 140 MB |
+| stable-diffusion.cpp master-890 (Windows: CUDA 12 derlemesi + CUDA kitaplıkları; Linux x64: Vulkan derlemesi) | github.com (leejet) | 900 MB / 40 MB |
+| FLUX.2 klein 4B ağırlıkları (model, Qwen3-4B metin kodlayıcı, VAE) | huggingface.co | 5,3 GB |
+| Z-Image Turbo ağırlıkları (model, Qwen3-4B-Instruct metin kodlayıcı, VAE) | huggingface.co | 9,4 GB |
+
+Sabitlenen her indirme SHA-256 ile denetlenir (npm paketleri: kilit dosyasının bütünlük değerleri) ve programın kendi veri klasörüne gider;
+sistem PATH'i değişmez. Ayarlar → **Genel** → *Kurulu bileşenler* kurulu olanları boyutlarıyla listeler, kaldırabilir ve bir motorun örnek
+videosunu modelsiz, ağsız render edebilir.
+
+Fiyatlar kendiliğinden, günde en çok bir kez güncellenir: program bu deponun `pricing/prices.json` dosyasını ve OpenRouter'ın herkese açık
+model listesini okur (anahtar gönderilmez), denetler ve son iyi kopyayı saklar; internet yoksa yerleşik tablo kullanılır. Ayarlar →
+Modeller tarihi ve kaynağı gösterir.
 
 Pencereyi varsayılan olarak işlemci çizer (görünüm aynı, yaklaşık 50–70 MB daha az bellek). Kaydırma ya da oynatıcı yavaş gelirse
 Ayarlar → **Genel** → **Pencereyi ekran kartıyla çiz** seçeneğini aç ve programı yeniden başlat.
@@ -134,7 +156,7 @@ Ayarlar → **Anahtarlar**: sağlayıcıyı seç, anahtarı yapıştır, **Kayde
 deneme yok). Anahtarlar şifreli veritabanında durur, yalnız kendi sağlayıcısına gider, günlüğe yazılmaz, yedeğe girmez. Her sağlayıcı
 için adım adım rehber: [docs/api-keys.tr.md](docs/api-keys.tr.md).
 
-Sonra Ayarlar → **Modeller**: her adım için bir model seç. Senin yerine seçilmez; rozet önerilenleri gösterir.
+Sonra Ayarlar → **Modeller**: her adım için bir model seç. Ücretli hiçbir şey senin yerine seçilmez; "Önerilen" önerilenleri gösterir.
 
 ## İlk videonu üret
 
@@ -146,7 +168,7 @@ Sonra Ayarlar → **Modeller**: her adım için bir model seç. Senin yerine se�
 ## Güncelleme
 
 Yeni sürümü indir, program dosyasını değiştir (Windows: `.exe`; Linux: eski klasörün üstüne aç). Verin, araçların ve videoların yerinde
-kalır. Motor paketleri yalnız yeni sürüm başka sürümleri sabitlediyse yeniden kurulur (Ayarlar → Araçlar gösterir).
+kalır. Motor paketleri yalnız yeni sürüm başka sürümleri sabitlediyse yeniden kurulur (sonraki videodan önce sorulur).
 
 ## Kaldırma
 
@@ -162,7 +184,7 @@ kalır. Motor paketleri yalnız yeni sürüm başka sürümleri sabitlediyse yen
 | Yedekler (son 10, günlük) | `…\TM Concept\backups\*.tmcbak` | `~/.local/share/tm-concept/backups/` | evet (parola) |
 | Günlükler (anahtarsız; ev ve program klasörleri gizli; 7 gün) | `…\TM Concept\logs\` | `~/.local/share/tm-concept/logs/` | hayır |
 | Hata bildirimi zip'leri (son 5) | `…\TM Concept\reports\` | `~/.local/share/tm-concept/reports/` | hayır |
-| Araçlar (Node, ffmpeg, motorlar, sesler) | `…\TM Concept\tools\` | `~/.local/share/tm-concept/tools/` | hayır |
+| Araçlar (Node, ffmpeg, motorlar, sesler, görsel modelleri) | `…\TM Concept\tools\` | `~/.local/share/tm-concept/tools/` | hayır |
 | Videolar ve örnek görseller | `Belgeler\TM Concept\` | `~/Documents/TM Concept/` (XDG belgeler klasörü) | hayır |
 
 Taşınabilir kip: programı `--data-dir <klasör>` ile başlat; videolar dahil her şey o klasörün altında kalır.
@@ -174,6 +196,8 @@ Taşınabilir kip: programı `--data-dir <klasör>` ile başlat; videolar dahil 
 - **Remotion**: açık kaynak değil; bireyler ve en çok 3 kişilik şirketler ücretsiz, daha büyük şirketler Remotion lisansı almalı.
 - **Örnek görseller**: kullanım hakkı sende olmalı.
 - **ffmpeg**: GPL, ayrı bir program olarak indirilir.
+- **Yerel görsel modelleri**: FLUX.2 klein 4B, Z-Image Turbo ve metin kodlayıcıları / VAE'leri Apache-2.0; stable-diffusion.cpp MIT.
+  Yalnız onayından sonra Hugging Face / GitHub'dan indirilir.
 
 Ayrıntı: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
@@ -187,7 +211,7 @@ TM Concept kendiliğinden hiçbir şey göndermez: telemetri yok, çökme raporu
    olduğu) vardır. Ev klasörün, programın klasörleri (kitaplık, veri, belgeler), e-posta adresleri ve anahtarlar gizlenir; program kilidi
    açıkken bildiği her profil adı ile konsept ve video başlığı `<name>` olur (0.1.4'ün günlük satırları bunları zaten yazmaz).
    Veritabanı, API anahtarları, konsept ve anlatım metinleri ve video dosyaları asla içinde değildir. Günlükler değiştirdiğin ayarları ve
-   yeni değerlerini yazar (arayüz dili, çizim kipi, bildirimler, her adımın modeli ve çaba düzeyi, fiyat düzeltmeleri). Gizleme bir
+   yeni değerlerini yazar (arayüz dili, çizim kipi, bildirimler, her adımın modeli, çaba düzeyi ve motoru). Gizleme bir
    güvenlik ağıdır, garanti değildir: herkese açık paylaşmadan önce zip'i açıp oku.
 3. **GitHub'da bildir**, hata formunu sürüm ve sistem bilgisi dolu olarak açar. Ne olduğunu yaz ve zip'i forma sürükle (GitHub hesabı
    gerekir). **Bilgileri kopyala** ise sistem bilgisini panoya kopyalar.

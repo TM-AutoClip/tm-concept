@@ -6,13 +6,14 @@ using TMConcept.Core.Profiles;
 
 namespace TMConcept.Core.Images;
 
-/// <summary>"Describe with a model": sends one sample image to the vision model of the describe step and returns a one-line caption (paid).</summary>
+/// <summary>"Describe with a model": sends one sample image to the vision model of the profile's describe step and returns a one-line caption (paid).</summary>
 public sealed class ImageDescriber(StepModelResolver resolver, IChatClientFactory chats, ICostCalculator costs)
 {
     /// <summary>A caption and its cost.</summary>
-    public async Task<(string Caption, decimal CostUsd)> DescribeAsync(byte[] image, string mimeType, string language, CancellationToken cancellationToken)
+    public async Task<(string Caption, decimal CostUsd)> DescribeAsync(byte[] image, string mimeType, string language, Guid? profileId,
+        CancellationToken cancellationToken)
     {
-        var model = await resolver.ResolveAsync(PipelineSteps.DescribeImage, null, cancellationToken).ConfigureAwait(false);
+        var model = await resolver.ResolveForAsync(PipelineSteps.DescribeImage, profileId, cancellationToken).ConfigureAwait(false);
         var client = chats.Create(model.Model, model.Key.Secret);
         var system = language == ContentLanguages.Turkish
             ? "Görseli tek cümleyle, en çok 150 karakterle anlat: ne görünüyor (yer, nesne, dönem, bakış açısı). Yalnız cümleyi yaz."

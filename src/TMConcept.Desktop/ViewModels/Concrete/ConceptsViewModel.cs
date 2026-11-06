@@ -20,7 +20,7 @@ namespace TMConcept.Desktop.ViewModels;
 /// automatically: a "Fill the missing" button appears.
 /// </summary>
 public sealed partial class ConceptsViewModel(AppSession session, IConceptStore concepts, ConceptGenerator generator, StepModelResolver resolver,
-    IStepModelStore steps, IModelCatalog catalog, ConceptEvents events, INotifier notifier, IActivityLog activity, Localizer text,
+    IModelCatalog catalog, ConceptEvents events, INotifier notifier, IActivityLog activity, Localizer text,
     ILogger<ConceptsViewModel> logger) : PageViewModelBase
 {
     private readonly List<ConceptCardViewModel> _approved = [];
@@ -145,11 +145,15 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
     }
 
     /// <inheritdoc />
-    public override Task ProfileChangedAsync()
+    public override async Task ProfileChangedAsync()
     {
         Missing = 0;
         LastCost = string.Empty;
-        return ReloadAsync();
+
+        // Each profile can have its own concept model: the new profile's choice is shown.
+        SelectedModel = null;
+        await LoadModelsAsync().ConfigureAwait(true);
+        await ReloadAsync().ConfigureAwait(true);
     }
 
     /// <summary>Generates.</summary>
@@ -252,7 +256,7 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         ResolvedModel resolved;
         try
         {
-            var saved = await steps.GetAsync(PipelineSteps.Concepts, CancellationToken.None).ConfigureAwait(true);
+            var saved = await resolver.ChoiceAsync(PipelineSteps.Concepts, profile.Id, CancellationToken.None).ConfigureAwait(true);
             resolved = await resolver.ResolveAsync(PipelineSteps.Concepts, new StepModelChoice
             {
                 Step = PipelineSteps.Concepts,
@@ -274,7 +278,7 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         {
             try
             {
-                embedding = await resolver.ResolveAsync(PipelineSteps.Embedding, null, CancellationToken.None).ConfigureAwait(true);
+                embedding = await resolver.ResolveForAsync(PipelineSteps.Embedding, profile.Id, CancellationToken.None).ConfigureAwait(true);
             }
             catch (ModelNotReadyException ex)
             {
@@ -367,16 +371,17 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
                 Models.Add(new ModelOption(model, model.Name + " · " + model.Provider));
             }
 
-            var saved = await steps.GetAsync(PipelineSteps.Concepts, CancellationToken.None).ConfigureAwait(true);
+            var profileId = session.Profile?.Id;
+            var saved = await resolver.ChoiceAsync(PipelineSteps.Concepts, profileId, CancellationToken.None).ConfigureAwait(true);
             SelectedModel = Models.FirstOrDefault(o => o.Model is { } m && current is not null && m.Provider == current.Provider && m.Id == current.Id)
                 ?? Models.FirstOrDefault(o => o.Model is { } m && saved is not null && m.Provider == saved.Provider && m.Id == saved.Model)
                 ?? Models[0];
             var step = PipelineSteps.All.First(s => s.Code == PipelineSteps.Concepts);
             Recommended = text.Format("models.recommended",
                 string.Join(" · ", step.Recommended.Select(r => catalog.All.FirstOrDefault(m => m.Provider + "/" + m.Id == r)?.Name ?? r)));
-            SemanticAvailable = await steps.GetAsync(PipelineSteps.Embedding, CancellationToken.None).ConfigureAwait(true) is not null;
+            SemanticAvailable = !StepModelResolver.IsOff(await resolver.ChoiceAsync(PipelineSteps.Embedding, profileId, CancellationToken.None).ConfigureAwait(true));
             SemanticCheck &= SemanticAvailable;
-            PricedOn = text.Format("concepts.priced_on", catalog.All.Select(m => m.PricedOn).Where(d => d.Length > 0).DefaultIfEmpty("-").Max()!);
+            PricedOn = ModelsSettingsViewModel.PriceText(catalog, text);
         }
         finally
         {

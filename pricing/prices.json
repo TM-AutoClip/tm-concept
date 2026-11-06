@@ -1,0 +1,159 @@
+{
+  "schema": 1,
+  "pricedOn": "2026-11-05",
+  "models": [
+    {
+      "provider": "anthropic",
+      "id": "claude-sonnet-5-5",
+      "inputUsd": 2.0,
+      "outputUsd": 10.0,
+      "cacheReadUsd": 0.2,
+      "cacheWriteUsd": 2.5
+    },
+    {
+      "provider": "anthropic",
+      "id": "claude-opus-5-5",
+      "inputUsd": 4.0,
+      "outputUsd": 20.0,
+      "cacheReadUsd": 0.2,
+      "cacheWriteUsd": 5.0
+    },
+    {
+      "provider": "anthropic",
+      "id": "claude-haiku-5-5",
+      "inputUsd": 0.1,
+      "outputUsd": 0.5,
+      "cacheReadUsd": 0.01,
+      "cacheWriteUsd": 0.125,
+      "longInputUsd": 0.5,
+      "longOutputUsd": 2.5
+    },
+    {
+      "provider": "anthropic",
+      "id": "claude-fable-5-1",
+      "inputUsd": 10.0,
+      "outputUsd": 50.0,
+      "cacheReadUsd": 0.25,
+      "cacheWriteUsd": 12.5
+    },
+    {
+      "provider": "deepseek",
+      "id": "deepseek-v4-pro",
+      "inputUsd": 1.32,
+      "outputUsd": 3.96
+    },
+    {
+      "provider": "deepseek",
+      "id": "deepseek-flash",
+      "inputUsd": 0.3,
+      "outputUsd": 1.2
+    },
+    {
+      "provider": "fal",
+      "id": "fal-ai/flux-2/flash",
+      "imageUsd": 0.01
+    },
+    {
+      "provider": "fal",
+      "id": "fal-ai/z-image/turbo",
+      "imageUsd": 0.01
+    },
+    {
+      "provider": "fal",
+      "id": "fal-ai/nano-banana-2",
+      "imageUsd": 0.08
+    },
+    {
+      "provider": "mistral",
+      "id": "mistral-large-latest",
+      "inputUsd": 0.5,
+      "outputUsd": 1.5
+    },
+    {
+      "provider": "openai",
+      "id": "gpt-image-1",
+      "imageUsd": 0.063
+    },
+    {
+      "provider": "openai",
+      "id": "gpt-6.1-sol",
+      "inputUsd": 2.0,
+      "outputUsd": 10.0
+    },
+    {
+      "provider": "openai",
+      "id": "gpt-6.1-terra",
+      "inputUsd": 1.0,
+      "outputUsd": 5.0
+    },
+    {
+      "provider": "openai",
+      "id": "gpt-6-luna",
+      "inputUsd": 0.1,
+      "outputUsd": 0.5
+    },
+    {
+      "provider": "openai",
+      "id": "text-embedding-3-small",
+      "inputUsd": 0.02,
+      "outputUsd": 0
+    },
+    {
+      "provider": "openai",
+      "id": "gpt-4o-mini-tts",
+      "inputUsd": 0,
+      "outputUsd": 0,
+      "speechUsdPerMillionCharacters": 15.0
+    },
+    {
+      "provider": "openrouter",
+      "id": "anthropic/claude-sonnet-5.5",
+      "inputUsd": 2.0,
+      "outputUsd": 10.0
+    },
+    {
+      "provider": "openrouter",
+      "id": "anthropic/claude-haiku-5.5",
+      "inputUsd": 0.1,
+      "outputUsd": 0.5
+    },
+    {
+      "provider": "openrouter",
+      "id": "z-ai/glm-5.3",
+      "inputUsd": 1.4,
+      "outputUsd": 4.4,
+      "cacheReadUsd": 0.26
+    },
+    {
+      "provider": "openrouter",
+      "id": "deepseek/deepseek-v4-pro",
+      "inputUsd": 1.32,
+      "outputUsd": 3.96
+    },
+    {
+      "provider": "openrouter",
+      "id": "openai/text-embedding-3-small",
+      "inputUsd": 0.02,
+      "outputUsd": 0
+    },
+    {
+      "provider": "zai",
+      "id": "glm-image",
+      "imageUsd": 0.015
+    },
+    {
+      "provider": "zai",
+      "id": "glm-5.3",
+      "inputUsd": 1.4,
+      "outputUsd": 4.4,
+      "cacheReadUsd": 0.26
+    },
+    {
+      "provider": "zai",
+      "id": "glm-5.3-flash",
+      "inputUsd": 0.15,
+      "outputUsd": 0.5,
+      "cacheReadUsd": 0.03
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "provider": "local",
+  "pricedOn": "2026-11-06",
+  "models": [
+    { "id": "supertonic", "name": "Supertonic 3", "capabilities": "Speech", "requires": ["voice.supertonic"] },
+    { "id": "flux2-klein-4b", "name": "FLUX.2 klein 4B", "capabilities": "Image", "requires": ["image.flux2-klein-4b"], "minVideoMemoryGb": 4 },
+    { "id": "z-image-turbo", "name": "Z-Image Turbo", "capabilities": "Image", "requires": ["image.z-image-turbo"], "minVideoMemoryGb": 6 }
+  ]
+}

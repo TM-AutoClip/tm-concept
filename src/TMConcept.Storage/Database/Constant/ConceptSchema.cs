@@ -1,8 +1,10 @@
 namespace TMConcept.Storage.Database;
 
 /// <summary>
-/// The schema of the database file: exactly what EF Core 10 created for 0.1.0–0.1.2 (EnsureCreated), so files of those versions open
-/// unchanged. Created once, when the file has no table yet; no migrations before the first public data.
+/// The schema of the database file. Created once, when the file has no table yet. Since 0.1.5 a profile keeps its models as step overrides
+/// (<c>profile_step_models</c>), the voice columns of <c>profiles</c> and the user's price overrides (<c>model_overrides</c>) are gone:
+/// <see cref="Upgrade"/> brings a file of an earlier version to this shape without keeping those values (no data is carried over before
+/// the first public data).
 /// </summary>
 internal static class ConceptSchema
 {
@@ -16,16 +18,6 @@ internal static class ConceptSchema
             "CreatedAtUtc" INTEGER NOT NULL,
             "LastOkAtUtc" INTEGER NULL
         );
-        CREATE TABLE "model_overrides" (
-            "Provider" TEXT NOT NULL,
-            "ModelId" TEXT NOT NULL,
-            "InputUsd" TEXT NOT NULL,
-            "OutputUsd" TEXT NOT NULL,
-            "CacheReadUsd" TEXT NOT NULL,
-            "Note" TEXT NOT NULL,
-            "UpdatedAtUtc" INTEGER NOT NULL,
-            CONSTRAINT "PK_model_overrides" PRIMARY KEY ("Provider", "ModelId")
-        );
         CREATE TABLE "profiles" (
             "Id" TEXT NOT NULL CONSTRAINT "PK_profiles" PRIMARY KEY,
             "Name" TEXT NOT NULL,
@@ -34,9 +26,6 @@ internal static class ConceptSchema
             "TargetSeconds" INTEGER NOT NULL,
             "ConceptText" TEXT NOT NULL,
             "TemplateId" TEXT NULL,
-            "SpeechEngine" TEXT NOT NULL,
-            "SpeechVoice" TEXT NOT NULL,
-            "SpeechSpeed" REAL NOT NULL,
             "ConceptCounter" INTEGER NOT NULL,
             "CreatedAtUtc" INTEGER NOT NULL,
             "UpdatedAtUtc" INTEGER NOT NULL
@@ -75,6 +64,16 @@ internal static class ConceptSchema
             "Model" TEXT NOT NULL,
             "KeyId" TEXT NULL,
             "OptionsJson" TEXT NOT NULL
+        );
+        CREATE TABLE "profile_step_models" (
+            "ProfileId" TEXT NOT NULL,
+            "Step" TEXT NOT NULL,
+            "Provider" TEXT NOT NULL,
+            "Model" TEXT NOT NULL,
+            "KeyId" TEXT NULL,
+            "OptionsJson" TEXT NOT NULL,
+            CONSTRAINT "PK_profile_step_models" PRIMARY KEY ("ProfileId", "Step"),
+            CONSTRAINT "FK_profile_step_models_profiles_ProfileId" FOREIGN KEY ("ProfileId") REFERENCES "profiles" ("Id") ON DELETE CASCADE
         );
         CREATE TABLE "concepts" (
             "Id" TEXT NOT NULL CONSTRAINT "PK_concepts" PRIMARY KEY,
@@ -179,5 +178,27 @@ internal static class ConceptSchema
         CREATE INDEX "IX_video_costs_VideoId" ON "video_costs" ("VideoId");
         CREATE INDEX "IX_videos_ConceptId" ON "videos" ("ConceptId");
         CREATE INDEX "IX_videos_ProfileId_CreatedAtUtc" ON "videos" ("ProfileId", "CreatedAtUtc");
+        """;
+
+    /// <summary>The table a file of 0.1.0–0.1.4 lacks; its absence means <see cref="Upgrade"/> must run.</summary>
+    public const string NewestTable = "profile_step_models";
+
+    /// <summary>Brings a 0.1.0–0.1.4 file to this schema (the voice columns and the price overrides are dropped, not carried over).</summary>
+    public const string Upgrade = """
+        CREATE TABLE IF NOT EXISTS "profile_step_models" (
+            "ProfileId" TEXT NOT NULL,
+            "Step" TEXT NOT NULL,
+            "Provider" TEXT NOT NULL,
+            "Model" TEXT NOT NULL,
+            "KeyId" TEXT NULL,
+            "OptionsJson" TEXT NOT NULL,
+            CONSTRAINT "PK_profile_step_models" PRIMARY KEY ("ProfileId", "Step"),
+            CONSTRAINT "FK_profile_step_models_profiles_ProfileId" FOREIGN KEY ("ProfileId") REFERENCES "profiles" ("Id") ON DELETE CASCADE
+        );
+        DROP TABLE IF EXISTS "model_overrides";
+        ALTER TABLE "profiles" DROP COLUMN "SpeechEngine";
+        ALTER TABLE "profiles" DROP COLUMN "SpeechVoice";
+        ALTER TABLE "profiles" DROP COLUMN "SpeechSpeed";
+        DELETE FROM "step_models" WHERE "Step" IN ('image-prompt', 'image', 'speech');
         """;
 }

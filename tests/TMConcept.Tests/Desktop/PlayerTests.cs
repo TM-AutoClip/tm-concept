@@ -153,6 +153,8 @@ public sealed class PlayerTests
 
     private sealed class FakeMedia : IMediaTools
     {
+        public IReadOnlyList<string> RequiredComponents { get; } = [];
+
         public bool Fail { get; set; }
 
         public int Calls { get; private set; }

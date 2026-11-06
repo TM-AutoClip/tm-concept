@@ -23,8 +23,9 @@ namespace TMConcept.Core.Videos;
 
 /// <summary>
 /// Concept → video (plan §6.1): 0 the engine and ffmpeg must be installed (checked before anything is paid for) · A prepare (scenes, no
-/// model) · B narration per scene (cached; off or failed = silent video with a warning) · C timing in C# · D images (samples or an image
-/// model; generated images and their prompts are kept per concept until the video is made, so a retry does not pay for them again) · E
+/// model) · B narration per scene with the profile's narration step (cached; off or failed = silent video with a warning) · C timing in C#
+/// · D images (samples, or the profile's images step: off = no image call at all; the prompts are written by the video code model; generated
+/// images and their prompts are kept per concept until the video is made, so a retry does not pay for them again) · E
 /// video code from the model, safety check, one repair · F render (processor only), one repair with the error text · H mux into the work
 /// folder, then the finished file is moved into the library folder; subtitles (.srt always, burned ASS when chosen), narration text file ·
 /// I thumbnail, video and cost rows, concept marked produced. Every paid call is counted in the cost, also when it fails (a cut-off code
@@ -65,16 +66,48 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         }
 
         var id = Guid.NewGuid();
-        logger.LogInformation("Video {Id} started: concept {Concept}, {Engine}, code model {Provider}/{Model}, voice {Voice}, images {Images}", id, job.Concept.Id,
-            engine.Name, job.CodeModel.Model.Provider, job.CodeModel.Model.Id, options.Speech && profile.SpeechEngine != SpeechEngines.Off ? profile.SpeechEngine : "off",
-            options.Images);
-        var work = Path.Combine(paths.WorkDirectory, "videos", id.ToString("N"));
         var warnings = new List<string>();
         var spent = new List<VideoCost>();
+
+        // The profile's narration and image models (override → general default). A model that is not ready means a silent video or no
+        // images, with a warning; an image step that is off makes no image call at all.
+        SpeechSetup? voice = null;
+        if (options.Speech)
+        {
+            try
+            {
+                voice = await speech.ResolveAsync(profile.Id, cancellationToken).ConfigureAwait(false);
+            }
+            catch (SpeechException ex)
+            {
+                logger.LogError(ex, "The narration model is not ready ({Code}); the video will be silent", ex.Code);
+                warnings.Add(VideoWarnings.SpeechFailed);
+            }
+        }
+
+        ResolvedModel? imageModel = null;
+        if (options.Images == ImageSources.Model)
+        {
+            try
+            {
+                imageModel = await resolver.ResolveOptionalAsync(PipelineSteps.Images, profile.Id, cancellationToken).ConfigureAwait(false);
+            }
+            catch (ModelNotReadyException ex)
+            {
+                logger.LogError("The image model is not ready (no {Missing}); the video is made without images", ex.Missing);
+                warnings.Add(VideoWarnings.ImagesFailed);
+            }
+        }
+
+        var imagesOn = options.Images == ImageSources.Samples || imageModel is not null;
+        logger.LogInformation("Video {Id} started: concept {Concept}, {Engine}, code model {Provider}/{Model}, voice {Voice}, images {Images}", id, job.Concept.Id,
+            engine.Name, job.CodeModel.Model.Provider, job.CodeModel.Model.Id, voice is null ? "off" : voice.Model.Provider + "/" + voice.Model.Id,
+            imageModel is null ? (imagesOn ? options.Images : "off") : imageModel.Model.Provider + "/" + imageModel.Model.Id);
+        var work = Path.Combine(paths.WorkDirectory, "videos", id.ToString("N"));
         string? folder = null;
         var folderCreated = false;
-        var speechOn = options.Speech && profile.SpeechEngine != SpeechEngines.Off;
-        var active = Weights.Where(w => (w.Step != "speech" || speechOn) && (w.Step != "images" || options.Images != ImageSources.None)).ToList();
+        var speechOn = voice is not null;
+        var active = Weights.Where(w => (w.Step != "speech" || speechOn) && (w.Step != "images" || imagesOn)).ToList();
         var total = active.Sum(w => w.Weight);
         var done = 0.0;
         void Report(string step, double inside, string detail = "")
@@ -104,7 +137,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
 
             // B. narration
             var clips = new List<SpeechClip?>();
-            if (!speechOn)
+            if (!speechOn && !warnings.Contains(VideoWarnings.SpeechFailed))
             {
                 warnings.Add(VideoWarnings.SpeechOff);
                 logger.LogWarning("Narration is off; the video will be silent");
@@ -117,9 +150,8 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                     for (var i = 0; i < split.Scenes.Count; i++)
                     {
                         var narration = split.Scenes[i].Narration;
-                        var clip = narration.Length == 0 ? null : await speech.SynthesizeAsync(profile.SpeechEngine, profile.SpeechVoice, profile.SpeechSpeed,
-                            profile.ContentLanguage, narration, Path.Combine(work, "audio", (i + 1).ToString(CultureInfo.InvariantCulture) + ".wav"), cancellationToken)
-                            .ConfigureAwait(false);
+                        var clip = narration.Length == 0 ? null : await speech.SynthesizeAsync(voice!, profile.ContentLanguage, narration,
+                            Path.Combine(work, "audio", (i + 1).ToString(CultureInfo.InvariantCulture) + ".wav"), cancellationToken).ConfigureAwait(false);
                         speechCost += clip?.CostUsd ?? 0;
                         clips.Add(clip);
                         Report("speech", (i + 1.0) / split.Scenes.Count);
@@ -147,13 +179,13 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
 
             // C. timing
             var (width, height) = RenderInputBuilder.Size(profile.Format);
-            var sceneImages = await ImagesAsync(job, split.Scenes, work, warnings, spent, id, width, height, p => Report("images", p), cancellationToken)
-                .ConfigureAwait(false);
+            var sceneImages = !imagesOn ? [] : await ImagesAsync(job, imageModel, split.Scenes, work, warnings, spent, id, width, height, p => Report("images", p),
+                cancellationToken).ConfigureAwait(false);
             var sources = split.Scenes.Select((s, i) => new RenderSceneSource(s.Visual, s.Narration, sceneImages.ElementAtOrDefault(i) ?? string.Empty,
                 clips.ElementAtOrDefault(i)?.DurationMs ?? EstimateMs(s.Narration, profile))).ToList();
             var input = RenderInputBuilder.Build(job.Concept.Title, profile.ContentLanguage, sources, width, height, 30);
             Finish("timing");
-            if (options.Images != ImageSources.None)
+            if (imagesOn)
             {
                 Finish("images");
             }
@@ -284,8 +316,8 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                 SizeBytes = new FileInfo(output).Length,
                 Engine = engine.Name,
                 CodeModel = job.CodeModel.Model.Provider + "/" + job.CodeModel.Model.Id,
-                SpeechModel = speechOn && !warnings.Contains(VideoWarnings.SpeechFailed) ? profile.SpeechEngine + ":" + profile.SpeechVoice : string.Empty,
-                ImageModel = options.Images,
+                SpeechModel = speechOn && !warnings.Contains(VideoWarnings.SpeechFailed) ? voice!.Model.Provider + "/" + voice.Model.Id + ":" + voice.Voice : string.Empty,
+                ImageModel = imageModel is not null ? imageModel.Model.Provider + "/" + imageModel.Model.Id : imagesOn ? options.Images : string.Empty,
                 SettingsJson = JsonSerializer.Serialize(options, Render.CoreJsonContext.Default.VideoOptions),
                 PromptVersion = VideoCodePrompt.Version,
                 TotalUsd = spent.Sum(c => c.Usd),
@@ -390,8 +422,8 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         return EngineCodeCheck.ExtractCode(answer.Text);
     }
 
-    private async Task<List<string>> ImagesAsync(VideoJob job, IReadOnlyList<Scene> scenes, string work, List<string> warnings, List<VideoCost> spent, Guid id,
-        int width, int height, Action<double> report, CancellationToken cancellationToken)
+    private async Task<List<string>> ImagesAsync(VideoJob job, ResolvedModel? imageModel, IReadOnlyList<Scene> scenes, string work, List<string> warnings,
+        List<VideoCost> spent, Guid id, int width, int height, Action<double> report, CancellationToken cancellationToken)
     {
         var names = new List<string>();
         var publicFolder = Path.Combine(work, "project", "public");
@@ -433,10 +465,10 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                     warnings.Add(VideoWarnings.ImagesFailed);
                 }
             }
-            else if (job.Options.Images == ImageSources.Model)
+            else if (imageModel is not null)
             {
-                var promptModel = await resolver.ResolveAsync(PipelineSteps.ImagePrompt, null, cancellationToken).ConfigureAwait(false);
-                var imageModel = await resolver.ResolveAsync(PipelineSteps.Image, null, cancellationToken).ConfigureAwait(false);
+                // The video code model writes the image prompts (one model less to choose).
+                var promptModel = job.CodeModel;
                 var engine = images.FirstOrDefault(e => e.Code == imageModel.Model.Provider)
                     ?? throw new VideoException($"{imageModel.Model.Provider} has no image engine.") { Code = "images" };
                 var visuals = scenes.Select(s => s.Visual.Length > 0 ? s.Visual : s.Narration).ToList();
@@ -462,14 +494,14 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                     }
                     catch (Providers.ProviderException ex) when (ex.ChargedUsage is { } charged)
                     {
-                        spent.Add(new VideoCost { VideoId = id, Step = PipelineSteps.ImagePrompt, Usd = costs.Exact(promptModel.Model, charged), Exact = true });
+                        spent.Add(new VideoCost { VideoId = id, Step = PipelineSteps.ImagePromptCost, Usd = costs.Exact(promptModel.Model, charged), Exact = true });
                         throw;
                     }
 
                     spent.Add(new VideoCost
                     {
                         VideoId = id,
-                        Step = PipelineSteps.ImagePrompt,
+                        Step = PipelineSteps.ImagePromptCost,
                         Usd = costs.Exact(promptModel.Model, answer.Usage, answer.ReportedCostUsd),
                         Exact = true,
                     });
@@ -484,7 +516,9 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                     if (!File.Exists(file))
                     {
                         var result = await engine.GenerateAsync(new ImageRequest(prompts[i], width, height, file, imageModel), cancellationToken).ConfigureAwait(false);
-                        spent.Add(new VideoCost { VideoId = id, Step = PipelineSteps.Image, Usd = result.CostUsd, Exact = false });
+                        logger.LogInformation("Scene image {Number} of {Count} made with {Provider}/{Model}", i + 1, prompts.Count, imageModel.Model.Provider,
+                            imageModel.Model.Id);
+                        spent.Add(new VideoCost { VideoId = id, Step = PipelineSteps.Images, Usd = result.CostUsd, Exact = result.CostUsd == 0 });
                     }
 
                     Place(file, Path.GetFileName(file));
@@ -493,7 +527,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                 }
             }
         }
-        catch (Exception ex) when (ex is ModelNotReadyException or Providers.ProviderException or IOException or VideoException)
+        catch (Exception ex) when (ex is ModelNotReadyException or Providers.ProviderException or IOException or VideoException or InvalidOperationException)
         {
             logger.LogError(ex, "Scene images failed; the video is made without them");
             warnings.Add(VideoWarnings.ImagesFailed);

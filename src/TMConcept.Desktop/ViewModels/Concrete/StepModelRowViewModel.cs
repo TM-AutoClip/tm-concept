@@ -4,8 +4,12 @@ using TMConcept.Core.Pipeline;
 
 namespace TMConcept.Desktop.ViewModels;
 
-/// <summary>One step of the step model table: its models (empty choice first), the recommended ones, effort.</summary>
-public sealed partial class StepModelRowViewModel(PipelineStep step, string title, string recommended) : ObservableObject
+/// <summary>
+/// One step of a model table (Settings → Models, or a profile): what it is for, its picker (first entry "use the general setting" on a
+/// profile, then none / off, then the models), the effort (only for a model that takes one; first entry "Automatic" sends no effort), the
+/// engine (video code step), voice and speed (narration step), a note (license, cost, graphics card memory) and the install progress.
+/// </summary>
+public sealed partial class StepModelRowViewModel(PipelineStep step, string title, string purpose, string recommended, string automatic) : ObservableObject
 {
     /// <summary>Step.</summary>
     public PipelineStep Step { get; } = step;
@@ -13,24 +17,77 @@ public sealed partial class StepModelRowViewModel(PipelineStep step, string titl
     /// <summary>Title.</summary>
     public string Title { get; } = title;
 
+    /// <summary>One line: what the step is used for.</summary>
+    public string Purpose { get; } = purpose;
+
     /// <summary>"Recommended: …" text.</summary>
     public string Recommended { get; } = recommended;
 
-    /// <summary>Models of the step's capability.</summary>
-    public ObservableCollection<ModelOption> Options { get; } = [];
+    /// <summary>The entries of the picker.</summary>
+    public ObservableCollection<StepOption> Options { get; } = [];
 
-    /// <summary>Chosen model.</summary>
+    /// <summary>Chosen entry.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Efforts), nameof(HasEfforts))]
-    public partial ModelOption? Selected { get; set; }
+    [NotifyPropertyChangedFor(nameof(HasEfforts), nameof(ShowEngine), nameof(ShowVoice))]
+    public partial StepOption? Selected { get; set; }
 
-    /// <summary>Effort levels of the chosen model (empty first = the model's default).</summary>
-    public IReadOnlyList<string> Efforts => Selected?.Model is { Efforts.Count: > 0 } m ? ["", .. m.Efforts] : [];
+    /// <summary>Effort levels of the chosen model: "Automatic" (no effort parameter) first; empty for a model without effort levels.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasEfforts))]
+    public partial IReadOnlyList<ChoiceOption> Efforts { get; set; } = [];
 
     /// <summary>Whether effort can be chosen.</summary>
     public bool HasEfforts => Efforts.Count > 0;
 
-    /// <summary>Chosen effort.</summary>
+    /// <summary>Chosen effort (value "" = Automatic).</summary>
     [ObservableProperty]
-    public partial string? Effort { get; set; }
+    public partial ChoiceOption? Effort { get; set; }
+
+    /// <summary>Whether this is the video code step (it has the engine picker).</summary>
+    public bool IsEngineStep => Step.Code == PipelineSteps.VideoCode;
+
+    /// <summary>The engines.</summary>
+    public ObservableCollection<EngineOption> Engines { get; } = [];
+
+    /// <summary>Chosen engine.</summary>
+    [ObservableProperty]
+    public partial EngineOption? Engine { get; set; }
+
+    /// <summary>Whether the engine picker is shown (not while a profile uses the general setting).</summary>
+    public bool ShowEngine => IsEngineStep && Selected is { Kind: not StepOptionKind.Inherit };
+
+    /// <summary>Whether this is the narration step (voice, speed, listen).</summary>
+    public bool IsVoiceStep => Step.Code == PipelineSteps.Speech;
+
+    /// <summary>Whether voice and speed are shown (a voice model is chosen).</summary>
+    public bool ShowVoice => IsVoiceStep && Selected is { Kind: StepOptionKind.Model };
+
+    /// <summary>Voices of the chosen narration model.</summary>
+    public ObservableCollection<ChoiceOption> Voices { get; } = [];
+
+    /// <summary>Chosen voice.</summary>
+    [ObservableProperty]
+    public partial ChoiceOption? Voice { get; set; }
+
+    /// <summary>Speech speed.</summary>
+    [ObservableProperty]
+    public partial decimal? Speed { get; set; } = 1.0m;
+
+    /// <summary>Note under the picker (license, cost, memory).</summary>
+    [ObservableProperty]
+    public partial string Note { get; set; } = string.Empty;
+
+    /// <summary>Whether the note is a warning (yellow).</summary>
+    [ObservableProperty]
+    public partial bool NoteIsWarning { get; set; }
+
+    /// <summary>The value last loaded or saved (only a changed step is installed for and logged).</summary>
+    public string Saved { get; set; } = string.Empty;
+
+    partial void OnSelectedChanged(StepOption? value)
+    {
+        var keep = Effort?.Value ?? string.Empty;
+        Efforts = value?.Model is { Efforts.Count: > 0 } model ? [new ChoiceOption(string.Empty, automatic), .. model.Efforts.Select(e => new ChoiceOption(e, e))] : [];
+        Effort = Efforts.FirstOrDefault(e => e.Value == keep) ?? Efforts.FirstOrDefault();
+    }
 }

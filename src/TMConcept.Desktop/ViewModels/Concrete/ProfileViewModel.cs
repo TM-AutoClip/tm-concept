@@ -16,15 +16,16 @@ namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
 /// Profile (channel) editor: a ready template fills the fields (the template itself never changes), channel name, content language,
-/// format, target length, the channel's concept and optional sample images with captions and the rights warning. Saving with a required
-/// value missing is not possible. Deleting a profile is confirmed and permanent; video files stay on disk.
+/// format, target length, the channel's concept, optional sample images with captions and the rights warning, and the profile's models:
+/// every step starts with "Use the general setting" and can be overridden for this channel (installed on save like in Settings → Models).
+/// Saving with a required value missing is not possible. Deleting a profile is confirmed and permanent; video files stay on disk.
 /// </summary>
 public sealed partial class ProfileViewModel(AppSession session, IProfileStore profiles, ITemplateSource templates, IAppPaths paths, FileDialogs dialogs,
-    IConfirmDialog confirm, IActivityLog activity, Localizer text, ILogger<ProfileViewModel> logger, ProfileSpeechViewModel speech,
+    IConfirmDialog confirm, IActivityLog activity, Localizer text, ILogger<ProfileViewModel> logger, StepSettingsViewModel steps,
     Core.Images.ImageDescriber describer, BackupService backup) : PageViewModelBase
 {
-    /// <summary>The narration part.</summary>
-    public ProfileSpeechViewModel Speech { get; } = speech;
+    /// <summary>The profile's models (overrides of the general settings).</summary>
+    public StepSettingsViewModel Steps { get; } = steps;
 
     private Profile? _editing;
     private Func<Task>? _profilesChanged;
@@ -100,6 +101,7 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
         Images.Clear();
         HasProfile = true;
         Status = string.Empty;
+        _ = LoadStepsAsync();
     }
 
     /// <inheritdoc />
@@ -121,6 +123,7 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
         IsNew = false;
         Fill(_editing);
         await LoadImagesAsync().ConfigureAwait(true);
+        await LoadStepsAsync().ConfigureAwait(true);
         HasProfile = true;
     }
 
@@ -170,7 +173,6 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
         _editing.Format = Vertical ? VideoFormat.Vertical : VideoFormat.Horizontal;
         _editing.TargetSeconds = (int)TargetSeconds!.Value;
         _editing.ConceptText = ConceptText.Trim();
-        Speech.Apply(_editing);
         try
         {
             await profiles.SaveAsync(_editing, CancellationToken.None).ConfigureAwait(true);
@@ -188,7 +190,9 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
                 await _profilesChanged().ConfigureAwait(true);
             }
 
-            Status = text["common.saved"];
+            // The models are saved after the profile (they belong to it); a step whose download was declined or failed keeps its old value.
+            var allSteps = await Steps.SaveAsync().ConfigureAwait(true);
+            Status = allSteps ? text["common.saved"] : Steps.Status;
             logger.LogInformation("Profile {Id} saved ({State})", _editing.Id, wasNew ? "new" : "changed");
             if (wasNew)
             {
@@ -290,7 +294,7 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
                 ".gif" => "image/gif",
                 _ => "image/jpeg",
             };
-            var (caption, cost) = await describer.DescribeAsync(bytes, mime, Language?.Value ?? ContentLanguages.English, CancellationToken.None)
+            var (caption, cost) = await describer.DescribeAsync(bytes, mime, Language?.Value ?? ContentLanguages.English, _editing?.Id, CancellationToken.None)
                 .ConfigureAwait(true);
             image.Caption = caption;
             activity.Add(ActivityLevel.Info, text.Format("profile.describe.done", text.Usd(cost)));
@@ -410,8 +414,23 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
         Vertical = profile.Format == VideoFormat.Vertical;
         TargetSeconds = profile.TargetSeconds;
         ConceptText = profile.ConceptText;
-        Speech.Load(profile);
         SelectedTemplate = Templates.FirstOrDefault(t => t.Template.Id == profile.TemplateId);
+    }
+
+    private async Task LoadStepsAsync()
+    {
+        if (_editing is { } profile)
+        {
+            try
+            {
+                await Steps.LoadAsync(profile.Id, profile.ContentLanguage).ConfigureAwait(true);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(ex, "The profile's models could not be shown");
+                Status = text.Format("error.generic", ex.Message);
+            }
+        }
     }
 
     private async Task LoadImagesAsync()

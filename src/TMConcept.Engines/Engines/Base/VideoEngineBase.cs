@@ -41,6 +41,9 @@ public abstract class VideoEngineBase(EnginePackage package, ChromeLocator chrom
     /// <summary>The packages.</summary>
     protected EnginePackage Package { get; } = package;
 
+    /// <summary>The folder of the engine's packages (its size and what Remove takes away).</summary>
+    public string PackageRoot => Package.Root;
+
     /// <summary>The browser.</summary>
     protected ChromeLocator Chrome { get; } = chrome;
 
@@ -85,7 +88,12 @@ public abstract class VideoEngineBase(EnginePackage package, ChromeLocator chrom
             throw new InvalidOperationException("An engine is installed only after the user agreed.");
         }
 
-        await Package.InstallAsync(progress, cancellationToken).ConfigureAwait(false);
+        // Packages that are installed with today's lock are not downloaded again (only the browser may be missing).
+        if (!Package.Ready(PackageProbe))
+        {
+            await Package.InstallAsync(progress, cancellationToken).ConfigureAwait(false);
+        }
+
         await InstallBrowserAsync(progress, cancellationToken).ConfigureAwait(false);
         progress?.Report(new ToolProgress(1, Name));
     }
@@ -129,7 +137,7 @@ public abstract class VideoEngineBase(EnginePackage package, ChromeLocator chrom
         var status = Status();
         if (!status.Ready)
         {
-            throw new EngineException($"{Name} is not installed (missing: {string.Join(", ", status.Missing)}). Install it in Settings → Tools.") { Code = "missing" };
+            throw new EngineException($"{Name} is not installed (missing: {string.Join(", ", status.Missing)}). Choose it in Settings → Models and save: it is installed then.") { Code = "missing" };
         }
     }
 

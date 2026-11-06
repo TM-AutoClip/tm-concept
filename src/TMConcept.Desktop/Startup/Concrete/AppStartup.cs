@@ -147,8 +147,20 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
     {
         await session.LoadAsync(CancellationToken.None).ConfigureAwait(true);
         text.Use(session.Settings.Language);
-        services.GetRequiredService<IModelCatalog>().UseOverrides(
-            await services.GetRequiredService<IPriceOverrideStore>().ListAsync(CancellationToken.None).ConfigureAwait(true));
+        // Prices: the last good copies now (no network); a check for newer ones at most once a day, in the background (offline = built-in).
+        var prices = services.GetRequiredService<Providers.Pricing.PriceUpdater>();
+        prices.LoadSaved();
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await prices.UpdateAsync(force: false, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+            {
+                logger.LogWarning(ex, "The daily price check failed; the last good prices stay");
+            }
+        });
         var shell = services.GetRequiredService<ShellViewModel>();
         var window = new MainWindow { DataContext = shell, Icon = AppIcon() };
         window.Closing += (_, e) => OnClosing(window, shell, e);

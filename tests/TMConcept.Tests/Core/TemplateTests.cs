@@ -25,11 +25,11 @@ public sealed class TemplateTests
     {
         var source = new EmbeddedTemplateSource();
         var template = source.Find("technology.modern")!;
-        var profile = new Profile { ContentLanguage = ContentLanguages.Turkish, SpeechVoice = "3" };
+        var profile = new Profile { ContentLanguage = ContentLanguages.Turkish, ConceptCounter = 3 };
         TemplateApplier.Apply(template, profile);
         profile.Name.ShouldBe("İçinde Ne Var?");
         profile.TargetSeconds.ShouldBe(60);
-        profile.SpeechVoice.ShouldBe("3");
+        profile.ConceptCounter.ShouldBe(3);
 
         profile.ConceptText = "changed by the user";
         template.Concept.Tr = "changed copy";

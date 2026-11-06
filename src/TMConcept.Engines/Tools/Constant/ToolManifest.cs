@@ -9,8 +9,10 @@ namespace TMConcept.Engines.Tools;
 /// last one of October 2026). When the pinned archive is gone or its hash does not match, ffmpeg from the system PATH is used if there is
 /// one (<see cref="FallbackToSystem"/>); an unverified download is never run. sherpa-onnx: the official "-lib" archives of the v2.0.1
 /// release (only the shared libraries with ONNX Runtime; Windows: the MT build, which needs no Visual C++ runtime), hashes from the
-/// release's asset digests; the speech worker loads them, the app itself carries no speech library. Updating a version = new rows here with
-/// new hashes.
+/// release's asset digests; the speech worker loads them, the app itself carries no speech library. stable-diffusion.cpp (MIT, leejet): the
+/// master-890-74988b2 release the prototype measured (hashes from the release's asset digests): on Windows the CUDA 12 build with its
+/// CUDA runtime libraries (NVIDIA graphics cards), on Linux x64 the Vulkan build; none for Linux ARM64. Updating a version = new rows here
+/// with new hashes.
 /// </summary>
 public static class ToolManifest
 {
@@ -26,14 +28,29 @@ public static class ToolManifest
     /// <summary>sherpa-onnx version (must match the C structures in TMConcept.Speech).</summary>
     public const string SherpaVersion = "2.0.1";
 
+    /// <summary>stable-diffusion.cpp release.</summary>
+    public const string SdCppTag = "master-890-74988b2";
+
+    /// <summary>
+    /// The oldest Node.js major version the engines run on: HyperFrames 0.8 asks for Node 22 or newer (Remotion and Revideo for 18), so a
+    /// Node.js of at least this version already on the PATH, with npm next to it, is used instead of downloading one.
+    /// </summary>
+    public const int NodeMinimumMajor = 22;
+
     /// <summary>Tools that are libraries, not programs: never looked for on the system PATH.</summary>
-    public static readonly IReadOnlyList<ToolKind> Libraries = [ToolKind.SpeechRuntime];
+    public static readonly IReadOnlyList<ToolKind> Libraries = [ToolKind.SpeechRuntime, ToolKind.ImageRuntime, ToolKind.ImageRuntimeCuda, ToolKind.ImageWeights];
 
     /// <summary>Tools that may come from the system PATH when their pinned download is gone (404) or does not match its hash.</summary>
     public static readonly IReadOnlyList<ToolKind> FallbackToSystem = [ToolKind.Ffmpeg];
 
     /// <summary>Hosts a download may come from (redirect targets included).</summary>
-    public static readonly IReadOnlyList<string> AllowedHosts = ["nodejs.org", "github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"];
+    public static readonly IReadOnlyList<string> AllowedHosts =
+    [
+        "nodejs.org", "github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com", "huggingface.co",
+    ];
+
+    /// <summary>Host suffixes a download may be redirected to: Hugging Face's own file servers (us.aws.cdn.hf.co, cas-bridge.xethub.hf.co …).</summary>
+    public static readonly IReadOnlyList<string> AllowedHostSuffixes = [".hf.co"];
 
     /// <summary>Every pinned archive.</summary>
     public static readonly IReadOnlyList<ToolArchive> Archives =
@@ -62,5 +79,14 @@ public static class ToolManifest
             new Uri($"https://github.com/k2-fsa/sherpa-onnx/releases/download/v{SherpaVersion}/sherpa-onnx-v{SherpaVersion}-linux-aarch64-shared-cpu-lib.tar.bz2"),
             "15bd737eae467da32ec97e3740a329a535fd21e33caca4f327b0081451d11533", $"sherpa-onnx-v{SherpaVersion}-linux-aarch64-shared-cpu-lib",
             "lib/libsherpa-onnx-c-api.so", 12_500_491),
+        new(ToolKind.ImageRuntime, SdCppTag, "win-x64",
+            new Uri($"https://github.com/leejet/stable-diffusion.cpp/releases/download/{SdCppTag}/sd-master-74988b2-bin-win-cuda12-x64.zip"),
+            "e9b86c2166aaf3a89f3e13326312d34b79ec1a2b61101d0ccff2805e7ee7b269", string.Empty, "sd-cli.exe", 333_039_461),
+        new(ToolKind.ImageRuntimeCuda, SdCppTag, "win-x64",
+            new Uri($"https://github.com/leejet/stable-diffusion.cpp/releases/download/{SdCppTag}/cudart-sd-bin-win-cu12-x64.zip"),
+            "fe20366827d357c00797eebb58244dddab7fd9a348d70090c3871004c320f38d", string.Empty, "cudart64_12.dll", 563_452_046),
+        new(ToolKind.ImageRuntime, SdCppTag, "linux-x64",
+            new Uri($"https://github.com/leejet/stable-diffusion.cpp/releases/download/{SdCppTag}/sd-master-74988b2-bin-Linux-Ubuntu-24.04-x86_64-vulkan.zip"),
+            "158d593c803d4e50ad0a93a12811dc4c638b998fd8a4cd43f484d4bba7f780b2", string.Empty, "sd-cli", 38_541_512),
     ];
 }

@@ -33,8 +33,9 @@ are downloaded like the other tools (below).
 
 ## Downloaded after your approval (not distributed with TM Concept)
 
-These are downloaded from their official sources into the app's data folder only when you press "Install" and confirm. TM Concept checks
-each download against a pinned SHA-256 (npm packages: the integrity values of the lock file).
+These are downloaded from their official sources into the app's data folder only when a setting you save (Settings → Models, a profile's
+models) or the first video needs them and you confirm the list of downloads. TM Concept checks each download against a pinned SHA-256
+(npm packages: the integrity values of the lock file).
 
 | Component | License | Notes |
 |---|---|---|
@@ -46,6 +47,9 @@ each download against a pinned SHA-256 (npm packages: the integrity values of th
 | Revideo | MIT | npm (experimental engine) |
 | sherpa-onnx 2.0.1 shared libraries with ONNX Runtime | Apache-2.0 (sherpa-onnx), MIT (ONNX Runtime) | The official "-lib" archives of the sherpa-onnx v2.0.1 GitHub release (Windows: the MT build). Loaded only by the app's speech worker process. 2.0.1 is used on purpose: the 1.13.8 library still contained espeak-ng (GPL-3.0); 2.0.1 does not. |
 | Supertonic 3 voice model | Model weights: OpenRAIL-M; code: MIT | sherpa-onnx tts-models release. The OpenRAIL-M use restrictions apply to you (below). |
+| stable-diffusion.cpp master-890-74988b2 (sd-cli) | MIT | github.com/leejet/stable-diffusion.cpp releases: the Windows CUDA 12 build with its CUDA runtime archive (NVIDIA CUDA runtime libraries under the NVIDIA CUDA EULA, as published in that release; TM Concept does not distribute them), the Linux x64 Vulkan build. Runs the local image models as a separate process. |
+| FLUX.2 klein 4B (GGUF Q4_0 by leejet) | Apache-2.0 | Black Forest Labs. Only the 4B model is used: the 9B model has a non-commercial license. With the FLUX.2 VAE (Comfy-Org, Apache-2.0) and Qwen3-4B (Qwen, Apache-2.0; GGUF by unsloth). huggingface.co |
+| Z-Image Turbo (GGUF Q8_0 by leejet) | Apache-2.0 | Tongyi-MAI. With its VAE (Comfy-Org, Apache-2.0) and Qwen3-4B-Instruct-2507 (Qwen, Apache-2.0; GGUF by unsloth). huggingface.co |
 
 ### Supertonic 3 (OpenRAIL-M) use restrictions, short form
 

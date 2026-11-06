@@ -21,15 +21,18 @@ namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
 /// 🎬 Concept → video: approved concepts (left), the queue (middle; click moves a concept between the two, ↑↓ orders the queue) and the
-/// latest videos (right). Settings: engine, code model, images, narration, subtitles, narration file; they are stored with each queue
-/// item (an item stored without a code model takes the page's choice, then the saved default). "Produce the queue in order" makes the
+/// latest videos (right). The engine, the code model, the image model and the voice come from the profile's models (its override, then the
+/// general default; a line shows what will be used); the page sets images on/off (or the profile's sample images), narration, subtitles
+/// and the narration file per queue item. Before the first item, anything the settings need and that is missing (ffmpeg, the engine,
+/// the local voice or image model) is installed after one confirmation; declined = nothing is made. "Produce the queue in order" makes the
 /// videos one by one (one job at a time): before each item the queue is read again, so a removed item is not made, a new one is, and the
 /// order follows ↑↓; each item is made with its own profile. A failed item stays in the queue with its error and can be retried; cancel
 /// stops after the running step. Rows keep their progress across reloads (coming back to the page, adding to the queue).
 /// </summary>
 public sealed partial class VideoViewModel(AppSession session, IConceptStore concepts, IQueueStore queue, IVideoStore videos, IProfileStore profiles,
-    VideoPipeline pipeline, IEnumerable<IVideoEngine> engines, IModelCatalog catalog, IStepModelStore steps, StepModelResolver resolver, ConceptEvents events,
-    INotifier notifier, IActivityLog activity, Localizer text, ILogger<VideoViewModel> logger) : PageViewModelBase
+    VideoPipeline pipeline, IEnumerable<IVideoEngine> engines, IModelCatalog catalog, StepModelResolver resolver, Core.Media.IMediaTools media,
+    Components.ComponentInstallFlow installs, ConceptEvents events, INotifier notifier, IActivityLog activity, Localizer text, ILogger<VideoViewModel> logger)
+    : PageViewModelBase
 {
     private readonly IReadOnlyList<IVideoEngine> _engines = engines.ToList();
     private CancellationTokenSource? _cancel;
@@ -45,25 +48,25 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
     /// <inheritdoc />
     public override int Order => 20;
 
-    /// <summary>Engines.</summary>
-    public IReadOnlyList<EngineOption> Engines { get; } = engines.OrderBy(e => e.Kind)
-        .Select(e => new EngineOption(e.Kind, e.Name + (e.Experimental ? " · " + text["video.experimental"] : e.NeedsLicenseConsent ? " · " + text["video.license"] : string.Empty)))
-        .ToList();
-
-    /// <summary>Chosen engine.</summary>
+    /// <summary>What the selected profile's videos are made with (engine, code model, images, voice).</summary>
     [ObservableProperty]
-    public partial EngineOption? Engine { get; set; }
+    public partial string Summary { get; set; } = string.Empty;
 
-    /// <summary>Red note when the chosen engine (or ffmpeg) is not installed yet; empty when it is ready.</summary>
+    /// <summary>Note when the profile's engine (or ffmpeg) is not installed yet: it is installed after a confirmation when producing.</summary>
     [ObservableProperty]
     public partial string EngineNote { get; set; } = string.Empty;
 
-    /// <summary>Code models.</summary>
-    public ObservableCollection<ModelOption> Models { get; } = [];
-
-    /// <summary>Chosen code model.</summary>
+    /// <summary>Install progress 0–100 (before the first video).</summary>
     [ObservableProperty]
-    public partial ModelOption? CodeModel { get; set; }
+    public partial double InstallPercent { get; set; }
+
+    /// <summary>What is being installed.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Installing))]
+    public partial string InstallText { get; set; } = string.Empty;
+
+    /// <summary>Whether an install runs.</summary>
+    public bool Installing => InstallText.Length > 0;
 
     /// <summary>Image choices.</summary>
     public IReadOnlyList<ChoiceOption> ImageChoices { get; } =
@@ -126,20 +129,20 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
             };
         }
 
-        Engine ??= Engines.FirstOrDefault();
-        Images ??= ImageChoices[0];
-        if (!Busy)
-        {
-            Speech = session.Profile?.SpeechEngine is { Length: > 0 };
-        }
-
-        RefreshEngineNote();
-        await LoadModelsAsync().ConfigureAwait(true);
+        Images ??= ImageChoices.First(c => c.Value == ImageSources.Model);
+        await SummaryAsync().ConfigureAwait(true);
         await ReloadAsync().ConfigureAwait(true);
     }
 
     /// <inheritdoc />
-    public override Task ProfileChangedAsync() => Busy ? Task.CompletedTask : ReloadAsync();
+    public override async Task ProfileChangedAsync()
+    {
+        if (!Busy)
+        {
+            await SummaryAsync().ConfigureAwait(true);
+            await ReloadAsync().ConfigureAwait(true);
+        }
+    }
 
     /// <inheritdoc />
     public override void CancelWork() => Cancel();
@@ -209,6 +212,11 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
         var tried = new HashSet<Guid>();
         try
         {
+            if (!await EnsureComponentsAsync(profile, cancel.Token).ConfigureAwait(true))
+            {
+                return;
+            }
+
             // The queue is read again before every item: ✕, ↑↓ and new items during the run count; a failed item is tried once per press.
             while (!cancel.IsCancellationRequested)
             {
@@ -251,6 +259,11 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
         _cancel = cancel;
         try
         {
+            if (session.Profile is { } profile && !await EnsureComponentsAsync(profile, cancel.Token).ConfigureAwait(true))
+            {
+                return;
+            }
+
             await ProduceAsync(row, cancel.Token).ConfigureAwait(true);
         }
         finally
@@ -267,18 +280,75 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
 
     partial void OnBusyChanged(bool value) => Working = value;
 
-    partial void OnEngineChanged(EngineOption? value) => RefreshEngineNote();
-
-    private void RefreshEngineNote()
+    /// <summary>The summary line and the engine note of the selected profile.</summary>
+    private async Task SummaryAsync()
     {
-        if (Engine is null || _engines.FirstOrDefault(e => e.Kind == Engine.Kind) is not { } engine)
+        if (session.Profile is not { } profile)
         {
+            Summary = string.Empty;
             EngineNote = string.Empty;
             return;
         }
 
-        var status = engine.Status();
-        EngineNote = status.Ready ? string.Empty : text.Format("video.engine.missing", engine.Name, string.Join(", ", status.Missing));
+        var code = await resolver.ChoiceAsync(PipelineSteps.VideoCode, profile.Id, CancellationToken.None).ConfigureAwait(true);
+        var images = await resolver.ChoiceAsync(PipelineSteps.Images, profile.Id, CancellationToken.None).ConfigureAwait(true);
+        var voice = await resolver.ChoiceAsync(PipelineSteps.Speech, profile.Id, CancellationToken.None).ConfigureAwait(true);
+        var engine = EngineOf(code);
+        string Name(StepModelChoice? choice, string off) =>
+            StepModelResolver.IsOff(choice) ? off : catalog.Find(choice!.Provider, choice.Model)?.Name ?? choice.Model;
+        Summary = text.Format("video.summary", engine?.Name ?? "-", Name(code, text["models.none_short"]), Name(images, text["models.off_short"]),
+            Name(voice, text["models.off_short"]));
+        var status = engine?.Status();
+        EngineNote = engine is null || status!.Ready ? string.Empty : text.Format("video.engine.missing", engine.Name, string.Join(", ", status.Missing));
+    }
+
+    private IVideoEngine? EngineOf(StepModelChoice? code) =>
+        _engines.FirstOrDefault(e => e.Kind == StepModelResolver.Options(code).Engine) ?? _engines.FirstOrDefault();
+
+    /// <summary>
+    /// Installs what the profile's settings need before the first item (one confirmation): ffmpeg, the engine, the local voice and image
+    /// model. Declined or failed: every queued item gets the reason and nothing is made.
+    /// </summary>
+    private async Task<bool> EnsureComponentsAsync(Profile profile, CancellationToken cancellationToken)
+    {
+        var codes = new List<string>(media.RequiredComponents);
+        var code = await resolver.ChoiceAsync(PipelineSteps.VideoCode, profile.Id, cancellationToken).ConfigureAwait(true);
+        if (EngineOf(code) is { } engine)
+        {
+            codes.Add(Engines.Components.EngineComponent.CodeOf(engine.Kind));
+        }
+
+        foreach (var step in new[] { PipelineSteps.Speech, PipelineSteps.Images })
+        {
+            var choice = await resolver.ChoiceAsync(step, profile.Id, cancellationToken).ConfigureAwait(true);
+            if (!StepModelResolver.IsOff(choice) && catalog.Find(choice!.Provider, choice.Model) is { } model)
+            {
+                codes.AddRange(model.Requires);
+            }
+        }
+
+        var progress = new Progress<Core.Tools.ToolProgress>(p =>
+        {
+            InstallPercent = Math.Round(p.Share * 100);
+            InstallText = p.Share >= 1 ? string.Empty : text.Format("video.installing", p.Text);
+        });
+        var outcome = await installs.EnsureAsync(codes.Distinct(StringComparer.Ordinal).ToList(), "install.purpose.video", progress, cancellationToken)
+            .ConfigureAwait(true);
+        InstallText = string.Empty;
+        await SummaryAsync().ConfigureAwait(true);
+        if (outcome.Ready)
+        {
+            return true;
+        }
+
+        logger.LogWarning("Videos not started: what the settings need is not installed");
+        foreach (var row in Queue)
+        {
+            row.Error = text["video.error.missing"] + " " + outcome.Reason;
+        }
+
+        activity.Add(ActivityLevel.Warning, text["video.error.missing"] + " " + outcome.Reason);
+        return false;
     }
 
     private async Task ProduceAsync(QueueRowViewModel row, CancellationToken cancellationToken)
@@ -306,31 +376,24 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
             }
 
             var options = JsonSerializer.Deserialize(stored.SettingsJson, Core.Render.CoreJsonContext.Default.VideoOptions) ?? Options();
-            if (options.CodeProvider.Length == 0 && CodeModel?.Model is { } chosen)
-            {
-                // Queued before a code model was chosen: the page's current choice is used.
-                options.CodeProvider = chosen.Provider;
-                options.CodeModel = chosen.Id;
-            }
 
+            // The code model and the engine are the profile's (override → general default) at the time the item is made.
             ResolvedModel model;
+            var choice = await resolver.ChoiceAsync(PipelineSteps.VideoCode, profile.Id, CancellationToken.None).ConfigureAwait(true);
             try
             {
-                var saved = await steps.GetAsync(PipelineSteps.VideoCode, CancellationToken.None).ConfigureAwait(true);
-                model = await resolver.ResolveAsync(PipelineSteps.VideoCode, options.CodeProvider.Length == 0 ? null : new StepModelChoice
-                {
-                    Step = PipelineSteps.VideoCode,
-                    Provider = options.CodeProvider,
-                    Model = options.CodeModel,
-                    OptionsJson = saved?.OptionsJson ?? "{}",
-                }, CancellationToken.None).ConfigureAwait(true);
+                model = await resolver.ResolveAsync(PipelineSteps.VideoCode, choice ?? new StepModelChoice(), CancellationToken.None).ConfigureAwait(true);
             }
             catch (ModelNotReadyException ex)
             {
                 logger.LogWarning("Video not started: the {Step} step has no {Missing}", ex.Step, ex.Missing);
-                row.Error = ex.Missing == "key" ? text.Format("concepts.no_key", options.CodeProvider) : text["video.no_model"];
+                row.Error = ex.Missing == "key" ? text.Format("concepts.no_key", choice?.Provider ?? string.Empty) : text["video.no_model"];
                 return;
             }
+
+            options.Engine = StepModelResolver.Options(choice).Engine;
+            options.CodeProvider = model.Model.Provider;
+            options.CodeModel = model.Model.Id;
 
             var progress = new Progress<VideoProgress>(p =>
             {
@@ -401,10 +464,7 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
 
     private VideoOptions Options() => new()
     {
-        Engine = Engine?.Kind ?? EngineKind.HyperFrames,
-        CodeProvider = CodeModel?.Model?.Provider ?? string.Empty,
-        CodeModel = CodeModel?.Model?.Id ?? string.Empty,
-        Images = Images?.Value ?? ImageSources.None,
+        Images = Images?.Value ?? ImageSources.Model,
         Speech = Speech,
         Subtitles = Subtitles,
         NarrationFile = NarrationFile,
@@ -426,22 +486,6 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
 
         Queue.Move(index, target);
         await queue.ReorderAsync(profile.Id, Queue.Select(r => r.Item.Id).ToList(), CancellationToken.None).ConfigureAwait(true);
-    }
-
-    private async Task LoadModelsAsync()
-    {
-        var current = CodeModel?.Model;
-        Models.Clear();
-        Models.Add(new ModelOption(null, text["models.none"]));
-        foreach (var model in catalog.With(ModelCapability.Chat).OrderBy(m => m.Provider, StringComparer.Ordinal).ThenBy(m => m.Name, StringComparer.Ordinal))
-        {
-            Models.Add(new ModelOption(model, model.Name + " · " + model.Provider));
-        }
-
-        var saved = await steps.GetAsync(PipelineSteps.VideoCode, CancellationToken.None).ConfigureAwait(true);
-        CodeModel = Models.FirstOrDefault(o => o.Model is { } m && current is not null && m.Provider == current.Provider && m.Id == current.Id)
-            ?? Models.FirstOrDefault(o => o.Model is { } m && saved is not null && m.Provider == saved.Provider && m.Id == saved.Model)
-            ?? Models[0];
     }
 
     /// <summary>

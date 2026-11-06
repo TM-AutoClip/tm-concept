@@ -14,4 +14,13 @@ public enum ToolKind
 
     /// <summary>sherpa-onnx with ONNX Runtime: the native libraries the speech worker loads for the local voice (not in the app itself).</summary>
     SpeechRuntime = 3,
+
+    /// <summary>stable-diffusion.cpp (sd-cli) that runs the local image models.</summary>
+    ImageRuntime = 4,
+
+    /// <summary>The CUDA runtime libraries next to the Windows CUDA build of stable-diffusion.cpp (NVIDIA graphics cards).</summary>
+    ImageRuntimeCuda = 5,
+
+    /// <summary>A weights file of a local image model (one file, not an archive).</summary>
+    ImageWeights = 6,
 }

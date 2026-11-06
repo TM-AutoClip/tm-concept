@@ -79,8 +79,10 @@ public static class DesktopServices
         services.AddSingleton<Core.Images.IImageEngine, Providers.Images.FalImageEngine>();
         services.AddSingleton<Core.Images.IImageEngine, Providers.Images.OpenAIImageEngine>();
         services.AddSingleton<Core.Images.IImageEngine, Providers.Images.ZaiImageEngine>();
+        services.AddSingleton<Engines.Images.LocalImageStore>();
+        services.AddSingleton<Core.Images.IImageEngine, Engines.Images.SdCppImageEngine>();
         services.AddSingleton<Core.Images.ImageDescriber>();
-        services.AddSingleton<ProfileSpeechViewModel>();
+        services.AddSingleton<Core.Hardware.IGpuInfo, Engines.Hardware.NvidiaGpuInfo>();
         services.AddSingleton<Engines.Tools.ToolInstaller>();
         services.AddSingleton<Core.Tools.IToolLocator>(s => s.GetRequiredService<Engines.Tools.ToolInstaller>());
         services.AddSingleton<Core.Processes.IChildProcessGuard>(s => s.GetRequiredService<Engines.Processes.ChildProcessGuardBase>());
@@ -89,6 +91,12 @@ public static class DesktopServices
         services.AddSingleton<Core.Engines.IVideoEngine, Engines.Engines.HyperFramesEngine>();
         services.AddSingleton<Core.Engines.IVideoEngine, Engines.Engines.RemotionEngine>();
         services.AddSingleton<Core.Engines.IVideoEngine, Engines.Engines.RevideoEngine>();
+
+        // Everything a setting can need on this computer (installed from Settings → Models on save, or before the first video).
+        services.AddSingleton<Core.Components.IComponentSource, Engines.Components.EngineComponentSource>();
+        services.AddSingleton<Core.Components.IComponentSource, Speech.Components.VoiceComponentSource>();
+        services.AddSingleton<Core.Components.ComponentPlanner>();
+        services.AddSingleton<Components.ComponentInstallFlow>();
         AddDesktop(services);
         overrides?.Invoke(services);
         services.AddSingleton(s =>
@@ -123,7 +131,6 @@ public static class DesktopServices
         services.AddSingleton<IVideoStore, VideoStore>();
         services.AddSingleton<IApiKeyStore, ApiKeyStore>();
         services.AddSingleton<IStepModelStore, StepModelStore>();
-        services.AddSingleton<IPriceOverrideStore, PriceOverrideStore>();
         services.AddSingleton<IEmbeddingStore, EmbeddingStore>();
     }
 
@@ -145,6 +152,9 @@ public static class DesktopServices
         services.AddTransient<FirstRunViewModel>();
         services.AddTransient<UnlockViewModel>();
 
+        // One step table per page that shows one (Settings → Models, Profile).
+        services.AddTransient<StepSettingsViewModel>();
+
         services.AddSingleton<Dialogs.IConfirmDialog, Dialogs.ConfirmDialog>();
         services.AddSingleton<Reports.SystemReport>();
         services.AddSingleton<Reports.ReportNames>();
@@ -165,7 +175,6 @@ public static class DesktopServices
         AddSection<GeneralSettingsViewModel, GeneralSettingsView>(services);
         AddSection<KeysSettingsViewModel, KeysSettingsView>(services);
         AddSection<ModelsSettingsViewModel, ModelsSettingsView>(services);
-        AddSection<ToolsSettingsViewModel, ToolsSettingsView>(services);
         AddSection<BackupSettingsViewModel, BackupSettingsView>(services);
         AddSection<AboutSettingsViewModel, AboutSettingsView>(services);
     }

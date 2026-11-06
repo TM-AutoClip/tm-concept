@@ -1,22 +1,19 @@
-using System.Collections.ObjectModel;
-using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Microsoft.Extensions.Logging;
 using TMConcept.Core.Models;
-using TMConcept.Core.Pipeline;
 using TMConcept.Core.Runs;
 using TMConcept.Desktop.Localization;
 
 namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
-/// Default model of every step. The choice starts empty and shows a "Recommended" note: a paid model is never chosen automatically.
-/// Also: the date of the price table, a price override for a model whose price changed (or is missing), and this month's spending per
-/// provider (from the runs; no limits or balances are shown).
+/// The general default of every step (a profile can override any of them on its own page). Saving installs what a chosen setting needs
+/// (see <see cref="StepSettingsViewModel"/>). Also: where the prices come from and their date (updated by themselves), and this month's
+/// spending: concept runs per provider and the videos (no limits or balances are shown).
 /// </summary>
-public sealed partial class ModelsSettingsViewModel(IModelCatalog catalog, IStepModelStore steps, IPriceOverrideStore prices, IRunStore runs,
-    Localizer text, TimeProvider clock, ILogger<ModelsSettingsViewModel> logger) : SettingsSectionBase
+public sealed partial class ModelsSettingsViewModel(StepSettingsViewModel steps, IModelCatalog catalog, IRunStore runs, Core.Profiles.IProfileStore profiles,
+    Core.Videos.IVideoStore videos, Localizer text, TimeProvider clock)
+    : SettingsSectionBase
 {
     /// <inheritdoc />
     public override string TitleKey => "settings.models";
@@ -24,126 +21,51 @@ public sealed partial class ModelsSettingsViewModel(IModelCatalog catalog, IStep
     /// <inheritdoc />
     public override int Order => 30;
 
-    /// <summary>Steps.</summary>
-    public ObservableCollection<StepModelRowViewModel> Rows { get; } = [];
+    /// <summary>The step table.</summary>
+    public StepSettingsViewModel Steps { get; } = steps;
+
+    /// <summary>The steps (shortcut for tests).</summary>
+    public System.Collections.ObjectModel.ObservableCollection<StepModelRowViewModel> Rows => Steps.Rows;
 
     /// <summary>Spending this month.</summary>
     [ObservableProperty]
     public partial string Spending { get; set; } = string.Empty;
 
-    /// <summary>Price table note.</summary>
+    /// <summary>"Prices: date (source)".</summary>
     [ObservableProperty]
     public partial string PricedOn { get; set; } = string.Empty;
-
-    /// <summary>Override: provider code.</summary>
-    [ObservableProperty]
-    public partial string OverrideProvider { get; set; } = string.Empty;
-
-    /// <summary>Override: model id.</summary>
-    [ObservableProperty]
-    public partial string OverrideModel { get; set; } = string.Empty;
-
-    /// <summary>Override: input price.</summary>
-    [ObservableProperty]
-    public partial decimal? OverrideInput { get; set; }
-
-    /// <summary>Override: output price.</summary>
-    [ObservableProperty]
-    public partial decimal? OverrideOutput { get; set; }
-
-    /// <summary>Override: cache read price.</summary>
-    [ObservableProperty]
-    public partial decimal? OverrideCacheRead { get; set; }
-
-    // Each step's choice as loaded or last saved ("provider/model|effort"): only a step that changed is written to the log.
-    private readonly Dictionary<string, string> _saved = new(StringComparer.Ordinal);
 
     /// <inheritdoc />
     public override async Task ActivateAsync()
     {
-        Rows.Clear();
-        _saved.Clear();
-        var saved = await steps.ListAsync(CancellationToken.None).ConfigureAwait(true);
-        foreach (var step in PipelineSteps.All)
-        {
-            var recommended = step.Recommended.Select(r => Label(catalog.All.FirstOrDefault(m => m.Provider + "/" + m.Id == r)) ?? r);
-            var row = new StepModelRowViewModel(step, text["step." + step.Code],
-                step.Recommended.Count > 0 ? text.Format("models.recommended", string.Join(" · ", recommended)) : text["models.recommended.local"]);
-            row.Options.Add(new ModelOption(null, text["models.none"]));
-            foreach (var model in catalog.With(step.Capability).OrderBy(m => m.Provider, StringComparer.Ordinal).ThenBy(m => m.Name, StringComparer.Ordinal))
-            {
-                row.Options.Add(new ModelOption(model, Label(model)!));
-            }
-
-            var choice = saved.FirstOrDefault(s => s.Step == step.Code);
-            row.Selected = row.Options.FirstOrDefault(o => o.Model is { } m && choice is not null && m.Provider == choice.Provider && m.Id == choice.Model) ?? row.Options[0];
-            row.Effort = choice is null ? string.Empty : StepModelResolver.Options(choice).Effort;
-            _saved[step.Code] = Choice(row);
-            Rows.Add(row);
-        }
-
-        PricedOn = text.Format("models.priced_on", catalog.All.Select(m => m.PricedOn).Where(d => d.Length > 0).DefaultIfEmpty("-").Max()!);
+        await Steps.LoadAsync(null, text.Language == "tr" ? Core.Profiles.ContentLanguages.Turkish : Core.Profiles.ContentLanguages.English)
+            .ConfigureAwait(true);
+        PricedOn = PriceText(catalog, text);
         await SpendingAsync().ConfigureAwait(true);
     }
 
-    /// <summary>Saves every step's default.</summary>
+    /// <summary>Saves every changed step (after installing what it needs).</summary>
     [RelayCommand]
     public async Task SaveAsync()
     {
-        foreach (var row in Rows)
-        {
-            if (row.Selected?.Model is { } model)
-            {
-                await steps.SaveAsync(new StepModelChoice
-                {
-                    Step = row.Step.Code,
-                    Provider = model.Provider,
-                    Model = model.Id,
-                    OptionsJson = StepModelResolver.OptionsJson(new StepOptions { Effort = row.Effort ?? string.Empty }),
-                }, CancellationToken.None).ConfigureAwait(true);
-            }
-            else
-            {
-                await steps.ClearAsync(row.Step.Code, CancellationToken.None).ConfigureAwait(true);
-            }
-
-            var now = Choice(row);
-            if (!_saved.TryGetValue(row.Step.Code, out var before) || before != now)
-            {
-                logger.LogInformation("Setting changed: step {Step} uses {Model} (effort {Effort})", row.Step.Code,
-                    row.Selected?.Model is { } chosen ? chosen.Provider + "/" + chosen.Id : "no model", row.Effort is { Length: > 0 } effort ? effort : "default");
-                _saved[row.Step.Code] = now;
-            }
-        }
-
-        Status = text["common.saved"];
+        await Steps.SaveAsync().ConfigureAwait(true);
+        Status = Steps.Status;
     }
 
-    private static string Choice(StepModelRowViewModel row) =>
-        (row.Selected?.Model is { } model ? model.Provider + "/" + model.Id : string.Empty) + "|" + (row.Effort ?? string.Empty);
-
-    /// <summary>Saves a price override and applies it at once.</summary>
-    [RelayCommand]
-    public async Task SaveOverrideAsync()
+    /// <summary>"Prices: 2026-11-06 (built-in table) · OpenRouter: 2026-11-07".</summary>
+    public static string PriceText(IModelCatalog catalog, Localizer text)
     {
-        if (OverrideProvider.Trim().Length == 0 || OverrideModel.Trim().Length == 0 || OverrideInput is null || OverrideOutput is null)
+        ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(text);
+        var tables = catalog.Prices;
+        var main = tables.LastOrDefault(t => t.Source != PriceSources.OpenRouter) ?? tables[0];
+        var line = text.Format("models.prices", main.PricedOn.Length > 0 ? main.PricedOn : "-", text["models.prices." + main.Source]);
+        if (tables.FirstOrDefault(t => t.Source == PriceSources.OpenRouter) is { } openRouter)
         {
-            Status = text["models.override.invalid"];
-            return;
+            line += " · " + text.Format("models.prices.openrouter_date", openRouter.PricedOn);
         }
 
-        await prices.SaveAsync(new ModelPriceOverride
-        {
-            Provider = OverrideProvider.Trim(),
-            ModelId = OverrideModel.Trim(),
-            InputUsd = OverrideInput.Value,
-            OutputUsd = OverrideOutput.Value,
-            CacheReadUsd = OverrideCacheRead ?? 0,
-        }, CancellationToken.None).ConfigureAwait(true);
-        logger.LogInformation("Setting changed: price override for {Provider}/{Model}", OverrideProvider.Trim(), OverrideModel.Trim());
-        catalog.UseOverrides(await prices.ListAsync(CancellationToken.None).ConfigureAwait(true));
-        await ActivateAsync().ConfigureAwait(true);
-        Status = text["common.saved"];
+        return line;
     }
 
     private async Task SpendingAsync()
@@ -151,23 +73,20 @@ public sealed partial class ModelsSettingsViewModel(IModelCatalog catalog, IStep
         var now = clock.GetUtcNow();
         var month = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
         var list = await runs.ListAsync(month, CancellationToken.None).ConfigureAwait(true);
-        var total = list.Sum(r => r.ActualUsd);
-        var parts = list.GroupBy(r => r.Provider).Where(g => g.Key.Length > 0).Select(g => g.Key + " " + text.Usd(g.Sum(r => r.ActualUsd)));
-        Spending = text.Format("models.spending", text.Usd(total), string.Join(" · ", parts));
-    }
-
-    private string? Label(CatalogModel? model)
-    {
-        if (model is null)
+        var parts = list.GroupBy(r => r.Provider).Where(g => g.Key.Length > 0 && g.Sum(r => r.ActualUsd) > 0)
+            .Select(g => g.Key + " " + text.Usd(g.Sum(r => r.ActualUsd))).ToList();
+        decimal made = 0;
+        foreach (var profile in await profiles.ListAsync(CancellationToken.None).ConfigureAwait(true))
         {
-            return null;
+            made += (await videos.ListAsync(profile.Id, CancellationToken.None).ConfigureAwait(true)).Where(v => v.CreatedAtUtc >= month).Sum(v => v.TotalUsd);
         }
 
-        var price = model.Capabilities.HasFlag(ModelCapability.Image)
-            ? text.Usd(model.ImageUsd) + "/img"
-            : model.Capabilities.HasFlag(ModelCapability.Speech)
-                ? text.Usd(model.SpeechUsdPerMillionCharacters) + "/1M chr"
-                : string.Create(CultureInfo.InvariantCulture, $"{model.InputUsd:0.##} / {model.OutputUsd:0.##} $");
-        return model.Name + " · " + model.Provider + " · " + price;
+        if (made > 0)
+        {
+            parts.Add(text.Format("models.spending.videos", text.Usd(made)));
+        }
+
+        var total = text.Usd(list.Sum(r => r.ActualUsd) + made);
+        Spending = parts.Count == 0 ? text.Format("models.spending.total", total) : text.Format("models.spending", total, string.Join(" · ", parts));
     }
 }

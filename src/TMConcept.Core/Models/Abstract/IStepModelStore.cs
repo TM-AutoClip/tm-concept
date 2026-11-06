@@ -1,17 +1,17 @@
 namespace TMConcept.Core.Models;
 
-/// <summary>Default models of the pipeline steps.</summary>
+/// <summary>The models of the pipeline steps: the general defaults (<c>profileId</c> null) and each profile's overrides.</summary>
 public interface IStepModelStore
 {
-    /// <summary>Every saved choice.</summary>
-    Task<IReadOnlyList<StepModelChoice>> ListAsync(CancellationToken cancellationToken);
+    /// <summary>Every saved choice of the general defaults (<paramref name="profileId"/> null) or of one profile's overrides.</summary>
+    Task<IReadOnlyList<StepModelChoice>> ListAsync(Guid? profileId, CancellationToken cancellationToken);
 
-    /// <summary>The choice of a step; <c>null</c> when none (the step's model must be picked).</summary>
-    Task<StepModelChoice?> GetAsync(string step, CancellationToken cancellationToken);
+    /// <summary>The saved choice of a step; <c>null</c> when none (general: not chosen; profile: uses the general default).</summary>
+    Task<StepModelChoice?> GetAsync(string step, Guid? profileId, CancellationToken cancellationToken);
 
-    /// <summary>Saves.</summary>
+    /// <summary>Saves (<see cref="StepModelChoice.ProfileId"/> says where).</summary>
     Task SaveAsync(StepModelChoice choice, CancellationToken cancellationToken);
 
-    /// <summary>Clears a step.</summary>
-    Task ClearAsync(string step, CancellationToken cancellationToken);
+    /// <summary>Clears a step (general: back to not chosen; profile: back to the general default).</summary>
+    Task ClearAsync(string step, Guid? profileId, CancellationToken cancellationToken);
 }

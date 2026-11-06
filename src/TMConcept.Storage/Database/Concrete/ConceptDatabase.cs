@@ -45,13 +45,26 @@ public sealed class ConceptDatabase(IAppPaths paths, DatabaseKey key)
         }
     }
 
-    /// <summary>Creates the tables when the file has none yet (a new database); an existing schema is left as it is.</summary>
+    /// <summary>
+    /// Creates the tables when the file has none yet (a new database); a file of 0.1.0–0.1.4 is brought to the current schema once
+    /// (<see cref="ConceptSchema.Upgrade"/>); a current schema is left as it is.
+    /// </summary>
     public static async Task EnsureSchemaAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(connection);
         var tables = await Sql.ScalarAsync(connection, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'", cancellationToken).ConfigureAwait(false);
         if (tables > 0)
         {
+            var current = await Sql.ScalarAsync(connection, $"SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = '{ConceptSchema.NewestTable}'",
+                cancellationToken).ConfigureAwait(false);
+            if (current > 0)
+            {
+                return;
+            }
+
+            await using var upgrade = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            await Sql.ExecuteAsync(connection, ConceptSchema.Upgrade, cancellationToken, upgrade).ConfigureAwait(false);
+            await upgrade.CommitAsync(cancellationToken).ConfigureAwait(false);
             return;
         }
 

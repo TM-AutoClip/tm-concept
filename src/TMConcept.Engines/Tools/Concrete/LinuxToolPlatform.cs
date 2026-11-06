@@ -5,7 +5,8 @@ using TMConcept.Core.Tools;
 namespace TMConcept.Engines.Tools;
 
 /// <summary>
-/// Linux: tar.xz archives unpacked with the system <c>tar</c>, plain names, the distribution's programs may be used, and Chrome's shared
+/// Linux: tar.xz archives unpacked with the system <c>tar</c>, zip archives (stable-diffusion.cpp) with .NET (file modes kept, programs made
+/// executable), plain names, the distribution's programs may be used, and Chrome's shared
 /// libraries are checked with <c>ldconfig -p</c> (the app never uses root; it shows the apt command instead).
 /// </summary>
 public sealed class LinuxToolPlatform(IProcessRunner runner) : IToolPlatform
@@ -31,6 +32,25 @@ public sealed class LinuxToolPlatform(IProcessRunner runner) : IToolPlatform
     /// <inheritdoc />
     public async Task ExtractAsync(string archive, string targetFolder, CancellationToken cancellationToken)
     {
+        if (archive.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+        {
+            await Task.Run(() =>
+            {
+                System.IO.Compression.ZipFile.ExtractToDirectory(archive, targetFolder, overwriteFiles: false);
+                if (OperatingSystem.IsWindows())
+                {
+                    return;
+                }
+
+                foreach (var file in Directory.EnumerateFiles(targetFolder, "*", SearchOption.AllDirectories).Where(f => Path.GetExtension(f).Length == 0
+                    || Path.GetFileName(f).Contains(".so", StringComparison.Ordinal)))
+                {
+                    File.SetUnixFileMode(file, File.GetUnixFileMode(file) | UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute);
+                }
+            }, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         var result = await runner.RunAsync(new ProcessStart("tar", ["-xf", archive, "-C", targetFolder], targetFolder), null, cancellationToken)
             .ConfigureAwait(false);
         if (result.ExitCode != 0)

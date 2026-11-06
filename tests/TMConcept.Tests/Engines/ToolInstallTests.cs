@@ -208,6 +208,37 @@ public sealed class ToolInstallTests
         environment.Keys.ShouldBe(["PATH", "HOME"], ignoreOrder: true);
     }
 
+    [Theory]
+    [InlineData("v22.11.0", true)]
+    [InlineData("v18.19.1", false)]
+    public async Task ANodeOnThePathIsUsedOnlyWhenItIsNewEnoughAndHasNpm(string version, bool used)
+    {
+        var paths = new TempPaths();
+        var bin = Path.Combine(paths.DataDirectory, "system-node");
+        Directory.CreateDirectory(Path.Combine(bin, "node_modules", "npm", "bin"));
+        await File.WriteAllTextAsync(Path.Combine(bin, "node.exe"), "x", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(Path.Combine(bin, "node_modules", "npm", "bin", "npm-cli.js"), "x", TestContext.Current.CancellationToken);
+        var installer = Installer(paths, new FakeDownloads([1]), ToolKind.Node, [1], bin);
+        var node = new TMConcept.Engines.Components.NodeComponent(installer, new VersionRunner(version),
+            NullLogger<TMConcept.Engines.Components.NodeComponent>.Instance);
+
+        await node.RefreshAsync(TestContext.Current.CancellationToken);
+
+        node.Ready.ShouldBe(used);
+        node.Downloads().Count.ShouldBe(used ? 0 : 1);
+        node.Folders().ShouldBeEmpty();
+    }
+
+    private sealed class VersionRunner(string version) : TMConcept.Core.Processes.IProcessRunner
+    {
+        public Task<TMConcept.Core.Processes.ProcessResult> RunAsync(TMConcept.Core.Processes.ProcessStart start, Action<string>? onLine,
+            CancellationToken cancellationToken)
+        {
+            onLine?.Invoke(version);
+            return Task.FromResult(new TMConcept.Core.Processes.ProcessResult(0, version));
+        }
+    }
+
     private sealed class FakePlatform : IToolPlatform
     {
         public string Rid => "win-x64";

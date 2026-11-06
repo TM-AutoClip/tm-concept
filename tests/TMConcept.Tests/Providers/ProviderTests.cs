@@ -67,6 +67,20 @@ public sealed class ProviderTests
     }
 
     [Fact]
+    public async Task AutomaticEffortSendsNoEffortParameter()
+    {
+        var fake = new FakeHttp().Answer(HttpStatusCode.OK, Stream, "text/event-stream");
+        var provider = new AnthropicProvider(Http(fake), NullLogger<AnthropicProvider>.Instance);
+        var client = provider.CreateChat(Catalog.Find("anthropic", "claude-sonnet-5-5")!, Key);
+
+        await client.SendAsync(new ChatRequest("system text", "user text", Effort: string.Empty), CancellationToken.None);
+
+        var body = JsonNode.Parse(fake.Requests.Single().Body)!;
+        (body["output_config"]?["effort"]).ShouldBeNull();
+        body.ToJsonString().ShouldNotContain("effort");
+    }
+
+    [Fact]
     public async Task ACutOffAnswerIsAnErrorThatKeepsTheBilledUsage()
     {
         var cut = Stream.Replace("end_turn", "max_tokens", StringComparison.Ordinal);
@@ -224,7 +238,7 @@ public sealed class ProviderTests
     public void TheCatalogPricesEveryModel()
     {
         Catalog.All.Count.ShouldBeGreaterThan(10);
-        foreach (var model in Catalog.All)
+        foreach (var model in Catalog.All.Where(m => m.Provider != ModelProviders.Local))
         {
             model.PricedOn.ShouldNotBeNullOrEmpty();
             var priced = model.InputUsd > 0 || model.OutputUsd > 0 || model.ImageUsd > 0 || model.SpeechUsdPerMillionCharacters > 0;
@@ -243,20 +257,5 @@ public sealed class ProviderTests
         var haiku = Catalog.Find("anthropic", "claude-haiku-5-5")!;
         costs.Exact(haiku, new ChatUsage(50_000, 0, 0, 0)).ShouldBe(0.005m);
         costs.Exact(haiku, new ChatUsage(200_000, 0, 0, 0)).ShouldBe(0.10m);
-    }
-
-    [Fact]
-    public void APriceOverrideReplacesAPriceAndAddsAMissingModel()
-    {
-        var catalog = new EmbeddedModelCatalog();
-        catalog.UseOverrides(
-        [
-            new ModelPriceOverride { Provider = "anthropic", ModelId = "claude-sonnet-5-5", InputUsd = 9, OutputUsd = 9 },
-            new ModelPriceOverride { Provider = "openrouter", ModelId = "someone/new-model", InputUsd = 1, OutputUsd = 2 },
-        ]);
-
-        catalog.Find("anthropic", "claude-sonnet-5-5")!.InputUsd.ShouldBe(9);
-        catalog.Find("openrouter", "someone/new-model")!.Capabilities.HasFlag(ModelCapability.Chat).ShouldBeTrue();
-        new EmbeddedModelCatalog().Find("anthropic", "claude-sonnet-5-5")!.InputUsd.ShouldBe(2.00m);
     }
 }

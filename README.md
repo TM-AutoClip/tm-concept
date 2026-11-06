@@ -11,7 +11,7 @@ needed) and narrates it with a **free local voice**. It runs on Windows and Linu
 - [Install on Windows](#install-on-windows)
 - [Install on Linux (x64 and arm64)](#install-on-linux-x64-and-arm64)
 - [First start](#first-start)
-- [Tools: Node.js, ffmpeg, engines, voice](#tools-nodejs-ffmpeg-engines-voice)
+- [Models and what they install](#models-and-what-they-install)
 - [API keys](#api-keys)
 - [Make your first video](#make-your-first-video)
 - [Update](#update)
@@ -24,15 +24,17 @@ needed) and narrates it with a **free local voice**. It runs on Windows and Linu
 ## What it does
 
 - **Profiles = channels.** Channel name, content language (Turkish or English), vertical short or horizontal video, target length
-  (15–180 s), the channel's concept in your words, optional sample images and the narration voice. Four ready templates fill the fields
+  (15–180 s), the channel's concept in your words, optional sample images, and its own models for any step (voice, images, engine…)
+  where it should differ from the general setting. Four ready templates fill the fields
   (history: Byzantine, Ottoman; technology: ancient, modern).
 - **Generate concepts.** 1–100 concepts per press, in batches of 20. Before you press, the app shows an estimated price range; afterwards
   the exact price from the provider's usage. Duplicates are prevented in four layers: the history of every concept in the prompt (cached),
   a free local similarity check, an optional semantic check with an embedding model, and a compressed history when the list grows.
   Approve with ✓ (key A) or delete with ✗ (key D). Deleted concepts stay in **Trash** forever (they still count against duplicates) until
   you delete them permanently.
-- **Concept to video.** Queue approved concepts, choose the engine (HyperFrames by default, Remotion, Revideo), the code model, images
-  (none, your sample images or an image model), narration, subtitles and a narration text file, then press **Produce the queue in order**.
+- **Concept to video.** Queue approved concepts, choose images (as set in the profile's Images step, your sample images, or none),
+  narration, subtitles and a narration text file, then press **Produce the queue in order**. The engine (HyperFrames by default, Remotion,
+  Revideo), the code model, the image model and the voice come from the profile (or the general setting).
   The model writes one code file; a safety check runs before anything is executed; a failed check or render gets one repair request.
   Videos are at most 3 minutes.
 - **Produced videos.** Thumbnail, a built-in player (play/pause, seek bar, time, volume, full screen; nothing starts by itself), details
@@ -50,7 +52,7 @@ It does **not** read other channels, does not use reference videos and does not 
 ## What it costs
 
 The app is free. You pay your AI providers directly, only for what you use; the app shows the estimate before and the exact cost after.
-Rough numbers (prices of 5 Nov 2026; check Settings → Models):
+Rough numbers (prices of 5 Nov 2026; Settings → Models shows the current ones — they update by themselves):
 
 | What | Typical cost |
 |---|---|
@@ -58,6 +60,7 @@ Rough numbers (prices of 5 Nov 2026; check Settings → Models):
 | Video code for one 60–90 s video with Claude Sonnet 5.5 | about 0.10 $ |
 | Narration with the local Supertonic 3 voice | free |
 | 8 AI images per video (fal FLUX 2 Flash) | about 0.08 $ |
+| 8 images with a local model (FLUX.2 klein 4B or Z-Image Turbo, your graphics card) | free |
 
 ## Install on Windows
 
@@ -94,7 +97,7 @@ desktop session is required.
 4. **Keyring (recommended).** To open the database automatically, the key is stored in your desktop keyring with `secret-tool`:
    Debian / Ubuntu / Raspberry Pi OS: `sudo apt install libsecret-tools` · Fedora: `sudo dnf install libsecret` · Arch:
    `sudo pacman -S libsecret`. Without a keyring the app asks a master password at every start.
-5. **Chrome's libraries.** The video engines run a headless Chrome. If libraries are missing, Settings → Tools shows the exact
+5. **Chrome's libraries.** The video engines run a headless Chrome. If libraries are missing, Settings → General (Installed components) shows the exact
    `sudo apt install …` command (the app never uses root). Typical list: `libnss3 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0
    libxcomposite1 libxdamage1 libxrandr2 libgbm1 libpango-1.0-0 libasound2`.
 6. **ARM64:** Puppeteer has no ARM64 Chrome. Install Remotion (it brings its own ARM64 browser) or the system Chromium
@@ -109,22 +112,44 @@ desktop session is required.
    password** is required (at least 12 characters): daily backups are encrypted with it. Write it down; without it a backup cannot be opened.
 4. **First profile:** choose a template or fill in your channel.
 
-## Tools: Node.js, ffmpeg, engines, voice
+## Models and what they install
 
-Settings → **Tools**. Each item is downloaded from its official source only after you confirm a dialog that shows the source and size, and
-is checked against a pinned SHA-256 (npm packages: the lock file's integrity values). Everything goes into the app's own data folder.
+Settings → **Models** holds the general setting of every step; a profile can change any of them (Profile → *Models of this profile*,
+first entry *Use the general setting*). Each step says what it is for:
 
-1. **Node.js** (≈ 35 MB) — runs the engines.
-2. **ffmpeg** (≈ 130–200 MB, GPL build, a separate program) — joins voice and video, burns subtitles, makes thumbnails, plays videos in
-   the app. On Linux the distribution's ffmpeg is used when present. If the pinned download is ever removed or does not match its
-   SHA-256, the ffmpeg already on your PATH is used (with a warning); without one the app shows how to install it.
-3. **An engine:** HyperFrames (default) and/or Remotion (asks you to accept its license first) and/or Revideo (experimental). The engine
-   packages and Chrome Headless Shell take a few hundred MB. **Sample render** checks the engine without any model or network.
-4. **Voice:** Supertonic 3 (≈ 130 MB; shows its OpenRAIL-M terms first; Turkish and English) with its libraries, sherpa-onnx (≈ 8–13 MB;
-   they run in a separate process only while the voice speaks). Without a voice the videos are silent and a
-   yellow warning appears in the log.
+- **Concept generation** and **Video code** — the online models you pay for. **Effort** appears only for a model that takes one; *Automatic*
+  sends no effort (the provider's default). **Video code** also has the **video engine**: HyperFrames (default), Remotion (asks you to
+  accept its license: free for individuals and companies of up to 3 people), Revideo (experimental). The video code model also writes
+  the image prompts.
+- **Images** — *Off* (default: the video is drawn by its code only), an online image model, or a local one that runs on your graphics card:
+  **FLUX.2 klein 4B** (fast, at least 4 GB of graphics memory) or **Z-Image Turbo** (better pictures, at least 6 GB). The page warns when
+  your card looks too small; on Windows they need an NVIDIA card (CUDA), on Linux x64 a Vulkan driver; there is none for Linux ARM64.
+- **Narration** — *Off* (silent video, yellow warning), **Supertonic 3** (local, free; Turkish and English), or an online voice. Voice,
+  speed and ▶ Listen are in the step.
+- **Duplicate check by meaning** and **Describe a sample image** — optional, cheap online helpers.
 
-Total disk use with one engine and the voice: about 0.6–1 GB.
+When you press **Save** and a choice needs something this computer does not have yet, **one confirmation lists every download** (name,
+source, size). Nothing is downloaded without it. Then it installs with progress (the page and the log) and saves; if you cancel or an
+install fails, that step is not saved and the reason is shown. Before the first video, anything still missing (ffmpeg, for example) is
+offered the same way.
+
+| Component | From | About |
+|---|---|---|
+| Node.js 26.13.0 (only when no Node.js 22 or newer with npm is on your PATH) | nodejs.org | 35 MB |
+| ffmpeg 8.1.3 (GPL build, a separate program; on Linux the distribution's copy is used when present) | github.com (BtbN builds) | 130–200 MB |
+| Engine packages + Chrome Headless Shell | registry.npmjs.org, storage.googleapis.com | 200–350 MB |
+| Supertonic 3 + sherpa-onnx 2.0.1 | github.com (k2-fsa) | 140 MB |
+| stable-diffusion.cpp master-890 (Windows: CUDA 12 build + CUDA runtime; Linux x64: Vulkan build) | github.com (leejet) | 900 MB / 40 MB |
+| FLUX.2 klein 4B weights (model, Qwen3-4B text encoder, VAE) | huggingface.co | 5.3 GB |
+| Z-Image Turbo weights (model, Qwen3-4B-Instruct text encoder, VAE) | huggingface.co | 9.4 GB |
+
+Every pinned download is checked against its SHA-256 (npm packages: the lock file's integrity values) and goes into the app's own data
+folder; the system PATH is never changed. Settings → **General** → *Installed components* lists what is installed with its size, can
+remove it, and can render an engine's sample without any model or network.
+
+Prices update by themselves, at most once a day: the app reads `pricing/prices.json` of this repository and OpenRouter's public model
+list (no key is sent), checks them and keeps the last good copy; offline, the built-in table is used. Settings → Models shows the date
+and the source.
 
 The window is drawn by the processor by default (same look, about 50–70 MB less memory). If scrolling or the player feels slow, turn on
 Settings → **General** → **Draw the window with the graphics card** and restart.
@@ -135,7 +160,7 @@ Settings → **Keys**: choose the provider, paste the key, press **Save and test
 Keys stay in the encrypted database, are sent only to their own provider, are never written to logs and never put in backups.
 Step-by-step guides for every provider: [docs/api-keys.md](docs/api-keys.md).
 
-Then Settings → **Models**: choose a model for each step. Nothing is chosen for you; the badge shows the recommended ones.
+Then Settings → **Models**: choose a model for each step. Nothing paid is chosen for you; "Recommended" shows the suggested ones.
 
 ## Make your first video
 
@@ -147,7 +172,7 @@ Then Settings → **Models**: choose a model for each step. Nothing is chosen fo
 ## Update
 
 Download the new release and replace the program file (Windows: the `.exe`; Linux: unpack over the old folder). Your data, tools and
-videos stay where they are. Engine packages are reinstalled only when the new version pins other versions (Settings → Tools shows it).
+videos stay where they are. Engine packages are reinstalled only when the new version pins other versions (you are asked before the next video).
 
 ## Uninstall
 
@@ -163,7 +188,7 @@ videos stay where they are. Engine packages are reinstalled only when the new ve
 | Backups (last 10, daily) | `…\TM Concept\backups\*.tmcbak` | `~/.local/share/tm-concept/backups/` | yes (password) |
 | Logs (no keys; home and app folders masked; 7 days) | `…\TM Concept\logs\` | `~/.local/share/tm-concept/logs/` | no |
 | Problem report zips (last 5) | `…\TM Concept\reports\` | `~/.local/share/tm-concept/reports/` | no |
-| Tools (Node, ffmpeg, engines, voices) | `…\TM Concept\tools\` | `~/.local/share/tm-concept/tools/` | no |
+| Tools (Node, ffmpeg, engines, voices, image models) | `…\TM Concept\tools\` | `~/.local/share/tm-concept/tools/` | no |
 | Videos and sample images | `Documents\TM Concept\` | `~/Documents/TM Concept/` (XDG documents folder) | no |
 
 Portable mode: start the program with `--data-dir <folder>`; then everything, videos included, stays under that folder.
@@ -175,6 +200,8 @@ Portable mode: start the program with `--data-dir <folder>`; then everything, vi
 - **Remotion**: not open source; free for individuals and companies of up to 3 people, larger companies need a Remotion license.
 - **Sample images**: you must have the right to use them.
 - **ffmpeg**: GPL, downloaded as a separate program.
+- **Local image models**: FLUX.2 klein 4B, Z-Image Turbo and their text encoders / VAEs are Apache-2.0; stable-diffusion.cpp is MIT.
+  They are downloaded from Hugging Face / GitHub only after you confirm.
 
 Details: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
@@ -188,7 +215,7 @@ TM Concept sends nothing by itself: no telemetry, no crash upload. If something 
    installed). Your home folder, the app's folders (library, data, documents), e-mail addresses and keys are masked, and while the app
    is unlocked every profile name and concept or video title it knows becomes `<name>` (the log lines of 0.1.4 leave them out already).
    The database, API keys, concept and narration texts and video files are never in it. The logs do name the settings you changed and
-   their new values (interface language, drawing mode, notifications, each step's model and effort, price overrides). Masking is a
+   their new values (interface language, drawing mode, notifications, each step's model, effort and engine). Masking is a
    safety net, not a guarantee: open the zip and read it before you share it publicly.
 3. **Report on GitHub** opens the issue form with the version and system filled in. Describe what happened and drag the zip into the
    form (a GitHub account is needed). **Copy details** copies the system information instead.
