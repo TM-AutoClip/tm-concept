@@ -68,6 +68,22 @@ public sealed class ToolInstallTests
     }
 
     [Fact]
+    public async Task TwoInstallsOfTheSameToolAtOnceDownloadOnceAndBothEndReady()
+    {
+        var body = Zip("node-v26.13.0-win-x64", "node.exe");
+        var (installer, fake, paths) = Create(body);
+
+        var both = await Task.WhenAll(
+            Task.Run(() => installer.InstallAsync(ToolKind.Node, agreed: true, null, CancellationToken.None)),
+            Task.Run(() => installer.InstallAsync(ToolKind.Node, agreed: true, null, CancellationToken.None)));
+
+        both.ShouldAllBe(s => s.Ready);
+        fake.Requests.Count.ShouldBe(1);
+        Directory.GetDirectories(paths.ToolsDirectory, "*.unpack", SearchOption.AllDirectories).ShouldBeEmpty();
+        paths.Dispose();
+    }
+
+    [Fact]
     public async Task AMatchingArchiveIsUnpackedAndMarkedReady()
     {
         var body = Zip("node-v26.13.0-win-x64", "node.exe");

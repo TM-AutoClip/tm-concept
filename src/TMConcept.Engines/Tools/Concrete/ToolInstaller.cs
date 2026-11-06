@@ -60,7 +60,11 @@ public sealed class ToolInstaller(IAppPaths paths, IToolPlatform platform, ToolD
         return new ToolStatus(tool, false, Archive(tool)?.Version ?? string.Empty, string.Empty, string.Empty);
     }
 
-    /// <summary>Installs a tool (only after the user agreed; <paramref name="agreed"/> must be true).</summary>
+    /// <summary>
+    /// Installs a tool (only after the user agreed; <paramref name="agreed"/> must be true). One install per tool at a time: two rows on the
+    /// Tools page can need the same tool (the sherpa-onnx row and a local voice), and two installs would share the download and unpack
+    /// paths. A second request waits for the first and returns at once when the first one installed the same version.
+    /// </summary>
     public async Task<ToolStatus> InstallAsync(ToolKind tool, bool agreed, IProgress<ToolProgress>? progress, CancellationToken cancellationToken)
     {
         if (!agreed)
@@ -69,6 +73,29 @@ public sealed class ToolInstaller(IAppPaths paths, IToolPlatform platform, ToolD
         }
 
         var archive = Archive(tool) ?? throw new ToolInstallException($"There is no {tool} download for {platform.Rid}.") { Code = "missing" };
+        var gate = _installGates.GetOrAdd(tool, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (Status(tool) is { Ready: true, Source: "app" } ready && ready.Version == archive.Version)
+            {
+                logger.LogInformation("{Tool} {Version} was installed by another request meanwhile", tool, archive.Version);
+                progress?.Report(new ToolProgress(1, "extract"));
+                return ready;
+            }
+
+            return await InstallLockedAsync(tool, archive, progress, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<ToolKind, SemaphoreSlim> _installGates = new();
+
+    private async Task<ToolStatus> InstallLockedAsync(ToolKind tool, ToolArchive archive, IProgress<ToolProgress>? progress, CancellationToken cancellationToken)
+    {
         var folder = Folder(archive);
         var download = Path.Combine(paths.ToolsDirectory, "downloads");
         var unpack = folder + ".unpack";
