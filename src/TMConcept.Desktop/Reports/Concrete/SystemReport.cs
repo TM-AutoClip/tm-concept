@@ -31,7 +31,7 @@ public sealed class SystemReport(Localizer text, UiPreferencesFile preferences, 
         report.AppendLine(c, $"Drawing: {(preferences.Read().UseGraphicsCard ? "graphics card" : "processor")} (as set; takes effect at start)");
         report.AppendLine(c, $"Data folder: {(paths.IsPortable ? "portable (--data-dir)" : "default")}");
         report.AppendLine("Tools:");
-        foreach (var tool in Enum.GetValues<ToolKind>().Where(t => t != ToolKind.ImageWeights))
+        foreach (var tool in Enum.GetValues<ToolKind>().Where(t => t is not (ToolKind.ImageWeights or ToolKind.EmbeddingWeights)))
         {
             var status = tools.Status(tool);
             var state = !status.Ready ? "not installed"

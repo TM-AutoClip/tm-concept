@@ -45,6 +45,7 @@ public static class SpeechWorker
         using var reader = new StreamReader(input, utf8);
         using var writer = new StreamWriter(output, utf8) { AutoFlush = true, NewLine = "\n" };
         SherpaSynthesizer? synthesizer = null;
+        Embeddings.OnnxEmbedder? embedder = null;
         try
         {
             while (reader.ReadLine() is { } line)
@@ -57,16 +58,36 @@ public static class SpeechWorker
                 SpeechWorkerReply reply;
                 try
                 {
-                    if (synthesizer is null)
+                    if (synthesizer is null && embedder is null)
                     {
                         var loading = Stopwatch.StartNew();
-                        synthesizer = Load(arguments[1], threads);
-                        logger.LogInformation("Voice libraries loaded in {Ms} ms", loading.ElapsedMilliseconds);
+                        if (Embeddings.OnnxEmbedder.IsHere())
+                        {
+                            embedder = new Embeddings.OnnxEmbedder(arguments[1], Math.Clamp(threads, 1, 16));
+                            logger.LogInformation("Embedding model loaded in {Ms} ms (ONNX Runtime {Version})", loading.ElapsedMilliseconds, embedder.RuntimeVersion);
+                        }
+                        else
+                        {
+                            synthesizer = Load(arguments[1], threads);
+                            logger.LogInformation("Voice libraries loaded in {Ms} ms", loading.ElapsedMilliseconds);
+                        }
                     }
 
                     var request = JsonSerializer.Deserialize(line, SpeechWorkerJsonContext.Default.SpeechWorkerRequest) ?? throw new JsonException("Empty request.");
                     var watch = Stopwatch.StartNew();
-                    reply = Speak(synthesizer, request);
+                    if (request.Texts is { } texts)
+                    {
+                        reply = embedder is null
+                            ? new SpeechWorkerReply(false, 0, "engine", "This worker holds a voice, not the embedding model.")
+                            : new SpeechWorkerReply(true, 0, string.Empty, string.Empty, embedder.Embed(texts));
+                        logger.LogInformation("Embedded {Count} texts in {Ms} ms", texts.Count, watch.ElapsedMilliseconds);
+                        writer.WriteLine(JsonSerializer.Serialize(reply, SpeechWorkerJsonContext.Default.SpeechWorkerReply));
+                        continue;
+                    }
+
+                    reply = synthesizer is null
+                        ? new SpeechWorkerReply(false, 0, "engine", "This worker holds the embedding model, not a voice.")
+                        : Speak(synthesizer, request);
                     if (reply.Ok)
                     {
                         logger.LogInformation("Scene spoken ({Language}, {Characters} characters): {AudioMs} ms of audio in {Ms} ms", request.Language,
@@ -77,7 +98,7 @@ public static class SpeechWorker
                         logger.LogError("The voice could not speak a scene ({Code}): {Error}", reply.Code, reply.Error);
                     }
                 }
-                catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException or FileNotFoundException
+                catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException or FileNotFoundException or InvalidDataException
                     or InvalidOperationException)
                 {
                     // The libraries or the model cannot be used: answer once with the reason and stop.
@@ -102,6 +123,7 @@ public static class SpeechWorker
         finally
         {
             synthesizer?.Dispose();
+            embedder?.Dispose();
         }
     }
 
@@ -112,6 +134,7 @@ public static class SpeechWorker
         {
             throw new FileNotFoundException("The speech library " + missing + " is missing.", missing);
         }
+
 
         SherpaNative.Use(libraryFolder);
         return new SherpaSynthesizer(Math.Clamp(threads, 1, 16));

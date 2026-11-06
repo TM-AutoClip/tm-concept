@@ -55,7 +55,7 @@ public sealed class SemanticTests
             {"data":[{"index":1,"embedding":[0,1]},{"index":0,"embedding":[1,0]}],"usage":{"prompt_tokens":12,"total_tokens":12}}
             """);
         var http = new ProviderHttp(fake.Transport, NullLogger<ProviderHttp>.Instance);
-        var service = new EmbeddingService([new OpenAIEmbeddings(new OpenAIProvider(http, NullLogger<OpenAIProvider>.Instance), http)]);
+        var service = new EmbeddingService([new OpenAIEmbeddings(new OpenAIProvider(http, NullLogger<OpenAIProvider>.Instance), http)], []);
         var model = new EmbeddedModelCatalog().All.First(m => m.Provider == "openai" && m.Capabilities.HasFlag(ModelCapability.Embedding));
 
         var result = await service.EmbedAsync(new ResolvedModel(model, new ApiKey { Secret = "fake-test-key-embed-0123" }, string.Empty), ["a", "b"], CancellationToken.None);
@@ -75,7 +75,7 @@ public sealed class SemanticTests
         [
             new OpenAIEmbeddings(new OpenAIProvider(http, NullLogger<OpenAIProvider>.Instance), http),
             new OpenRouterEmbeddings(new OpenRouterProvider(http, NullLogger<OpenRouterProvider>.Instance), http),
-        ]);
+        ], []);
         var model = new EmbeddedModelCatalog().All.First(m => m.Provider == "openrouter" && m.Capabilities.HasFlag(ModelCapability.Embedding));
 
         var result = await service.EmbedAsync(new ResolvedModel(model, new ApiKey { Secret = "fake-test-key-embed-0123" }, string.Empty), ["a"], CancellationToken.None);

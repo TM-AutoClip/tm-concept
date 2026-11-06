@@ -5,4 +5,7 @@ public static class SpeechEngines
 {
     /// <summary>Local Supertonic 3 (the suggested narration).</summary>
     public const string Supertonic = "supertonic";
+
+    /// <summary>Local Kokoro 82M (English only).</summary>
+    public const string Kokoro = "kokoro";
 }

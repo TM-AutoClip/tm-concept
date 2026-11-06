@@ -4,9 +4,10 @@ using System.Text.Json;
 namespace TMConcept.Speech.Speech;
 
 /// <summary>
-/// One loaded Supertonic model in the speech worker (processor only). The model files are named relative to the current folder (the worker
-/// starts in the model folder), so no path with the user's folder names crosses into the native library: its file functions take narrow
-/// strings, which on Windows would mangle a non-ASCII user name.
+/// One loaded voice model in the speech worker (processor only): Supertonic 3 or Kokoro, told apart by the files of the current folder. The
+/// model files are named relative to the current folder (the worker starts in the model folder), so no path with the user's folder names
+/// crosses into the native library: its file functions take narrow strings, which on Windows would mangle a non-ASCII user name. Kokoro reads
+/// English words from its dictionary (sherpa-onnx 2.x has no espeak-ng; the engine spells numbers out before).
 /// </summary>
 internal sealed class SherpaSynthesizer : IDisposable
 {
@@ -17,12 +18,17 @@ internal sealed class SherpaSynthesizer : IDisposable
         "voice.bin",
     ];
 
+    /// <summary>The files of the Kokoro model: model, voices, tokens, the American English dictionary.</summary>
+    public static readonly IReadOnlyList<string> KokoroFiles = ["model.int8.onnx", "voices.bin", "tokens.txt", "lexicon-us-en.txt"];
+
     private IntPtr _tts;
 
-    /// <summary>Loads the Supertonic model of the current folder with <paramref name="threads"/> processor threads.</summary>
+    /// <summary>Loads the model of the current folder with <paramref name="threads"/> processor threads.</summary>
     public SherpaSynthesizer(int threads)
     {
-        var missing = ModelFiles.FirstOrDefault(f => !File.Exists(f));
+        var kokoro = File.Exists(KokoroFiles[1]) && !File.Exists(ModelFiles[4]);
+        var files = kokoro ? KokoroFiles : ModelFiles;
+        var missing = files.FirstOrDefault(f => !File.Exists(f));
         if (missing is not null)
         {
             throw new FileNotFoundException("The voice model is incomplete: " + missing + " is missing.", missing);
@@ -42,16 +48,34 @@ internal sealed class SherpaSynthesizer : IDisposable
             config.Model.NumThreads = threads;
             config.Model.Debug = 0;
             config.Model.Provider = Text("cpu");
-            config.Model.Supertonic = new SherpaSupertonicConfig
+            if (kokoro)
             {
-                DurationPredictor = Text(ModelFiles[0]),
-                TextEncoder = Text(ModelFiles[1]),
-                VectorEstimator = Text(ModelFiles[2]),
-                Vocoder = Text(ModelFiles[3]),
-                TtsJson = Text(ModelFiles[4]),
-                UnicodeIndexer = Text(ModelFiles[5]),
-                VoiceStyle = Text(ModelFiles[6]),
-            };
+                config.Model.Kokoro = new SherpaKokoroConfig
+                {
+                    Model = Text(KokoroFiles[0]),
+                    Voices = Text(KokoroFiles[1]),
+                    Tokens = Text(KokoroFiles[2]),
+                    DataDir = Text(string.Empty),
+                    LengthScale = 1.0f,
+                    DictDir = Text(string.Empty),
+                    Lexicon = Text(KokoroFiles[3]),
+                    Lang = Text(string.Empty),
+                };
+            }
+            else
+            {
+                config.Model.Supertonic = new SherpaSupertonicConfig
+                {
+                    DurationPredictor = Text(ModelFiles[0]),
+                    TextEncoder = Text(ModelFiles[1]),
+                    VectorEstimator = Text(ModelFiles[2]),
+                    Vocoder = Text(ModelFiles[3]),
+                    TtsJson = Text(ModelFiles[4]),
+                    UnicodeIndexer = Text(ModelFiles[5]),
+                    VoiceStyle = Text(ModelFiles[6]),
+                };
+            }
+
             config.RuleFsts = Text(string.Empty);
             config.RuleFars = Text(string.Empty);
             _tts = SherpaNative.SherpaOnnxCreateOfflineTts(in config);

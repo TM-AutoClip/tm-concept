@@ -38,7 +38,7 @@ public static class ToolManifest
     public const int NodeMinimumMajor = 22;
 
     /// <summary>Tools that are libraries, not programs: never looked for on the system PATH.</summary>
-    public static readonly IReadOnlyList<ToolKind> Libraries = [ToolKind.SpeechRuntime, ToolKind.ImageRuntime, ToolKind.ImageRuntimeCuda, ToolKind.ImageWeights];
+    public static readonly IReadOnlyList<ToolKind> Libraries = [ToolKind.SpeechRuntime, ToolKind.ImageRuntime, ToolKind.ImageRuntimeCuda, ToolKind.ImageWeights, ToolKind.EmbeddingWeights];
 
     /// <summary>Tools that may come from the system PATH when their pinned download is gone (404) or does not match its hash.</summary>
     public static readonly IReadOnlyList<ToolKind> FallbackToSystem = [ToolKind.Ffmpeg];

@@ -75,6 +75,9 @@ public static class DesktopServices
         services.AddSingleton(s => new Speech.Speech.SpeechWorkerClient(s.GetRequiredService<Core.Processes.IChildProcessGuard>(),
             s.GetRequiredService<ILogger<Speech.Speech.SpeechWorkerClient>>()) { LogDirectory = paths.LogDirectory });
         services.AddSingleton<Core.Speech.ISpeechEngine, Speech.Speech.SupertonicSpeechEngine>();
+        services.AddSingleton<Core.Speech.ISpeechEngine, Speech.Speech.KokoroSpeechEngine>();
+        services.AddSingleton<Speech.Embeddings.LocalEmbedder>();
+        services.AddSingleton<Core.Duplicates.ILocalEmbedder>(s => s.GetRequiredService<Speech.Embeddings.LocalEmbedder>());
         services.AddSingleton<Core.Speech.ISpeechEngine, Providers.Speech.OpenAISpeechEngine>();
         services.AddSingleton<Core.Speech.SpeechService>();
         services.AddSingleton<Core.Images.IImageEngine, Providers.Images.FalImageEngine>();
@@ -96,6 +99,7 @@ public static class DesktopServices
         // Everything a chosen model can need on this computer (installed when a process that uses it starts, after one confirmation).
         services.AddSingleton<Core.Components.IComponentSource, Engines.Components.EngineComponentSource>();
         services.AddSingleton<Core.Components.IComponentSource, Speech.Components.VoiceComponentSource>();
+        services.AddSingleton<Core.Components.IComponentSource, Speech.Components.EmbeddingComponentSource>();
         services.AddSingleton<Core.Components.ComponentPlanner>();
         services.AddSingleton<Components.ComponentInstallFlow>();
         AddDesktop(services);

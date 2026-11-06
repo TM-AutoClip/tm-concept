@@ -51,7 +51,28 @@ public sealed class SpeechWorkerClient(IChildProcessGuard children, ILogger<Spee
     }
 
     /// <summary>Speaks one request with the libraries of <paramref name="libraryFolder"/> and the model of <paramref name="modelFolder"/>.</summary>
-    public async Task<SpeechWorkerReply> SpeakAsync(string libraryFolder, string modelFolder, int threads, SpeechWorkerRequest request,
+    public Task<SpeechWorkerReply> SpeakAsync(string libraryFolder, string modelFolder, int threads, SpeechWorkerRequest request,
+        CancellationToken cancellationToken) => RequestAsync(libraryFolder, modelFolder, threads, request, cancellationToken);
+
+    /// <summary>
+    /// Turns <paramref name="texts"/> into vectors with the local embedding model of <paramref name="modelFolder"/> (the same worker program;
+    /// a worker of another model folder is ended and a new one started).
+    /// </summary>
+    public async Task<IReadOnlyList<float[]>> EmbedAsync(string libraryFolder, string modelFolder, int threads, IReadOnlyList<string> texts,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(texts);
+        var reply = await RequestAsync(libraryFolder, modelFolder, threads, new SpeechWorkerRequest(string.Empty, string.Empty, 0, 1, 0, string.Empty, texts),
+            cancellationToken).ConfigureAwait(false);
+        if (!reply.Ok || reply.Vectors is not { } vectors || vectors.Count != texts.Count)
+        {
+            throw new SpeechException("The local embedding model failed: " + (reply.Error.Length > 0 ? reply.Error : "no vectors")) { Code = "engine" };
+        }
+
+        return vectors;
+    }
+
+    private async Task<SpeechWorkerReply> RequestAsync(string libraryFolder, string modelFolder, int threads, SpeechWorkerRequest request,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -223,7 +244,7 @@ public sealed class SpeechWorkerClient(IChildProcessGuard children, ILogger<Spee
         Stop("cancelled");
         try
         {
-            if (File.Exists(request.OutputWav))
+            if (request.OutputWav.Length > 0 && File.Exists(request.OutputWav))
             {
                 File.Delete(request.OutputWav);
             }

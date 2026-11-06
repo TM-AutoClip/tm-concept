@@ -23,4 +23,10 @@ public enum ToolKind
 
     /// <summary>A weights file of a local image model (one file, not an archive).</summary>
     ImageWeights = 6,
+
+    /// <summary>Kokoro 82M voice model (sherpa-onnx, English).</summary>
+    KokoroVoice = 7,
+
+    /// <summary>A file of the local embedding model (one file, not an archive; run with the ONNX Runtime of the speech libraries).</summary>
+    EmbeddingWeights = 8,
 }

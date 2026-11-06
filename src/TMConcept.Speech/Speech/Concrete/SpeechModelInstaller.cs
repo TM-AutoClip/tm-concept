@@ -45,6 +45,11 @@ public sealed class SpeechModelInstaller(IAppPaths paths, IArchiveDownloader dow
                 throw new ToolInstallException($"The voice archive has no {model.ExecutablePath}.") { Code = "extract" };
             }
 
+            foreach (var unused in SpeechModels.Unused)
+            {
+                Delete(Path.Combine(unpack, model.Root, unused));
+            }
+
             Delete(target);
             Directory.Move(unpack, target);
             await File.WriteAllTextAsync(Path.Combine(target, Marker), model.Sha256, cancellationToken).ConfigureAwait(false);

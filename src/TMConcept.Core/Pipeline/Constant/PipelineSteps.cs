@@ -40,7 +40,7 @@ public static class PipelineSteps
         new(VideoCode, ModelCapability.Chat, ["anthropic/claude-sonnet-5-5", "anthropic/claude-opus-5-5"], Optional: false),
         new(Images, ModelCapability.Image, ["local/flux2-klein-4b", "local/z-image-turbo", "fal/fal-ai/flux-2/flash"], Optional: true),
         new(Speech, ModelCapability.Speech, ["local/supertonic", "local/kokoro"], Optional: true),
-        new(Embedding, ModelCapability.Embedding, ["local/multilingual-e5-small", "openai/text-embedding-3-small"], Optional: true),
+        new(Embedding, ModelCapability.Embedding, ["local/paraphrase-multilingual-minilm", "openai/text-embedding-3-small"], Optional: true),
         new(DescribeImage, ModelCapability.Vision, ["anthropic/claude-haiku-5-5"], Optional: true),
     ];
 

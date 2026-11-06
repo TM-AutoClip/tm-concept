@@ -23,4 +23,7 @@ public static class ComponentCodes
 
     /// <summary>Prefix of image model components ("image.z-image-turbo").</summary>
     public const string ImagePrefix = "image.";
+
+    /// <summary>Prefix of local embedding model components ("embedding.paraphrase-multilingual-minilm").</summary>
+    public const string EmbeddingPrefix = "embedding.";
 }
