@@ -1,0 +1,75 @@
+name: Bug report
+description: Something does not work as it should. / Bir şey olması gerektiği gibi çalışmıyor.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. TM Concept sends nothing by itself: in the app, **Report a problem → Prepare logs** makes a zip with the
+        logs of the last 7 days and a system.txt (keys, e-mail addresses and your home folder are masked). Please attach it below.
+
+        Türkçe de yazabilirsin. Uygulamada **Hata bildir → Günlükleri hazırla** ile oluşan zip'i aşağıya sürükle.
+
+        Never paste API keys, passwords or private data here.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you see? Copy the error text from the activity log if there is one.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What did you do, step by step? Which page, engine, model or voice?
+      placeholder: |
+        1. Open Concept to video
+        2. Choose …
+        3. Click …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Filled in by the app (Settings → About shows it too), e.g. 0.1.4+1a2b3c4.
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      description: For example Windows 11 23H2, Ubuntu 24.04, Raspberry Pi OS.
+    validations:
+      required: true
+  - type: input
+    id: architecture
+    attributes:
+      label: Architecture
+      description: X64 or Arm64.
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs zip
+      description: |
+        Drag the tm-concept-logs-….zip file here (Report a problem → Prepare logs). Open it first if you want to see what it holds.
+        Zip dosyasını buraya sürükle.
+    validations:
+      required: false
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy
+      options:
+        - label: This report holds no API key, password or other private data.
+          required: true

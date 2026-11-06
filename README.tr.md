@@ -160,7 +160,8 @@ kalır. Motor paketleri yalnız yeni sürüm başka sürümleri sabitlediyse yen
 |---|---|---|---|
 | Veritabanı (profiller, konseptler, anahtarlar) | `%LOCALAPPDATA%\TM Concept\concept.db` | `~/.local/share/tm-concept/concept.db` | evet |
 | Yedekler (son 10, günlük) | `…\TM Concept\backups\*.tmcbak` | `~/.local/share/tm-concept/backups/` | evet (parola) |
-| Günlükler (anahtarsız, kişisel yolsuz) | `…\TM Concept\logs\` | `~/.local/share/tm-concept/logs/` | hayır |
+| Günlükler (anahtarsız, kişisel yolsuz; 7 gün) | `…\TM Concept\logs\` | `~/.local/share/tm-concept/logs/` | hayır |
+| Hata bildirimi zip'leri (son 5) | `…\TM Concept\reports\` | `~/.local/share/tm-concept/reports/` | hayır |
 | Araçlar (Node, ffmpeg, motorlar, sesler) | `…\TM Concept\tools\` | `~/.local/share/tm-concept/tools/` | hayır |
 | Videolar ve örnek görseller | `Belgeler\TM Concept\` | `~/Documents/TM Concept/` (XDG belgeler klasörü) | hayır |
 
@@ -175,6 +176,21 @@ Taşınabilir kip: programı `--data-dir <klasör>` ile başlat; videolar dahil 
 - **ffmpeg**: GPL, ayrı bir program olarak indirilir.
 
 Ayrıntı: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
+## Hata bildirme
+
+TM Concept kendiliğinden hiçbir şey göndermez: telemetri yok, çökme raporu yüklemesi yok. Bir sorun olursa:
+
+1. Sol menünün altındaki **Hata bildir**'e tıkla.
+2. **Günlükleri hazırla**, veri klasörünün `reports` klasöründe `tm-concept-logs-<tarih>-<saat>.zip` oluşturur ve onu gösterir. İçinde
+   son 7 günün günlük dosyaları ve `system.txt` (sürüm, işletim sistemi, mimari, .NET, arayüz dili, çizim kipi, hangi araçların kurulu
+   olduğu) vardır. Ev klasörün, e-posta adresleri ve anahtarlar gizlenir; veritabanı, API anahtarları, ayarlar, profiller, konseptler ve
+   videolar asla içinde değildir. İstersen paylaşmadan önce açıp oku.
+3. **GitHub'da bildir**, hata formunu sürüm ve sistem bilgisi dolu olarak açar. Ne olduğunu yaz ve zip'i forma sürükle (GitHub hesabı
+   gerekir). **Bilgileri kopyala** ise sistem bilgisini panoya kopyalar.
+
+Günlükler gün başına bir düz metin dosyasıdır (`app-2026-11-06.log`, yerel ses için `speech-worker-….log`) ve veri klasörünün `logs`
+klasöründedir (yukarıdaki tablo). 7 günden eski dosyalar kendiliğinden silinir; bir günün dosyası 20 MB'ta durur.
 
 ## Bilinen kısıtlar
 

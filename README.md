@@ -161,7 +161,8 @@ videos stay where they are. Engine packages are reinstalled only when the new ve
 |---|---|---|---|
 | Database (profiles, concepts, keys) | `%LOCALAPPDATA%\TM Concept\concept.db` | `~/.local/share/tm-concept/concept.db` | yes |
 | Backups (last 10, daily) | `…\TM Concept\backups\*.tmcbak` | `~/.local/share/tm-concept/backups/` | yes (password) |
-| Logs (no keys, no personal paths) | `…\TM Concept\logs\` | `~/.local/share/tm-concept/logs/` | no |
+| Logs (no keys, no personal paths; 7 days) | `…\TM Concept\logs\` | `~/.local/share/tm-concept/logs/` | no |
+| Problem report zips (last 5) | `…\TM Concept\reports\` | `~/.local/share/tm-concept/reports/` | no |
 | Tools (Node, ffmpeg, engines, voices) | `…\TM Concept\tools\` | `~/.local/share/tm-concept/tools/` | no |
 | Videos and sample images | `Documents\TM Concept\` | `~/Documents/TM Concept/` (XDG documents folder) | no |
 
@@ -176,6 +177,21 @@ Portable mode: start the program with `--data-dir <folder>`; then everything, vi
 - **ffmpeg**: GPL, downloaded as a separate program.
 
 Details: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
+## Reporting a problem
+
+TM Concept sends nothing by itself: no telemetry, no crash upload. If something goes wrong:
+
+1. Click **Report a problem** at the bottom of the left menu.
+2. **Prepare logs** makes `tm-concept-logs-<date>-<time>.zip` in the data folder's `reports` folder and shows it. It holds the log files
+   of the last 7 days and `system.txt` (version, operating system, architecture, .NET, interface language, drawing mode, which tools are
+   installed). Your home folder, e-mail addresses and keys are masked; the database, API keys, settings, profiles, concepts and videos are
+   never in it. Open it and read it before you share it if you like.
+3. **Report on GitHub** opens the issue form with the version and system filled in. Describe what happened and drag the zip into the
+   form (a GitHub account is needed). **Copy details** copies the system information instead.
+
+The logs are plain text files, one per day (`app-2026-11-06.log`, and `speech-worker-….log` for the local voice), in the `logs` folder
+of the data folder (table above). Files older than 7 days are deleted automatically; one day's file stops at 20 MB.
 
 ## Known limits
 
