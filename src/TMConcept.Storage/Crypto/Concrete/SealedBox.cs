@@ -32,6 +32,15 @@ public static class SealedBox
         return new DerivedKey(salt, kdf, DeriveKey(password, salt, kdf));
     }
 
+    /// <summary>The key of a password with a known salt and parameters (checks a password against a stored derived key).</summary>
+    public static byte[] Derive(string password, byte[] salt, KdfParameters kdf)
+    {
+        ArgumentNullException.ThrowIfNull(password);
+        ArgumentNullException.ThrowIfNull(salt);
+        ArgumentNullException.ThrowIfNull(kdf);
+        return DeriveKey(password, salt, kdf);
+    }
+
     /// <summary>Seals <paramref name="plaintext"/> with a password.</summary>
     public static byte[] Seal(ReadOnlySpan<byte> magic, string password, ReadOnlySpan<byte> plaintext, KdfParameters kdf)
     {

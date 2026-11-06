@@ -49,7 +49,7 @@
         <Button Grid.Column="1" Content="{DynamicResource common.browse}" Command="{Binding BrowseBackupCommand}" />
       </Grid>
       <TextBox Classes="secret" Text="{Binding BackupPassword}" PlaceholderText="{DynamicResource restore.password}" />
-      <TextBlock Text="{DynamicResource restore.keys_note}" Classes="small" TextWrapping="Wrap" />
+      <TextBlock Text="{DynamicResource firstrun.restore.hint}" Classes="small" TextWrapping="Wrap" />
     </StackPanel>
 
     <StackPanel Spacing="10" IsVisible="{Binding IsNewStep}">

@@ -10,4 +10,6 @@ namespace TMConcept.Storage;
 [JsonSerializable(typeof(KeyEnvelope))]
 [JsonSerializable(typeof(AppSettings))]
 [JsonSerializable(typeof(BackupKeyRecord))]
+[JsonSerializable(typeof(BackupContents))]
+[JsonSerializable(typeof(BackupHeader))]
 internal sealed partial class StorageJsonContext : JsonSerializerContext;

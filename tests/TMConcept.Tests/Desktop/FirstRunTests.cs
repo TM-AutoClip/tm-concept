@@ -57,9 +57,10 @@ public sealed class FirstRunTests
         using var source = new DesktopHarness();
         await CreateAsync(source);
         await source.Get<TMConcept.Core.Profiles.IProfileStore>().SaveAsync(new TMConcept.Core.Profiles.Profile { Name = "Restored" }, CancellationToken.None);
-        var file = await source.Get<BackupService>().CreateInFolderAsync(CancellationToken.None);
+        var file = await source.Get<BackupService>().CreateInFolderAsync(null, CancellationToken.None);
 
-        using var target = new DesktopHarness();
+        var confirm = new FakeConfirm();
+        using var target = new DesktopHarness(s => Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<TMConcept.Desktop.Dialogs.IConfirmDialog>(s, confirm));
         var model = target.Get<FirstRunViewModel>();
         model.Step = FirstRunStep.Restore;
         model.UseMasterPassword = true;
@@ -74,6 +75,7 @@ public sealed class FirstRunTests
         target.Get<Vault>().State.ShouldBe(VaultState.Open);
         target.Get<AppSession>().Profile!.Name.ShouldBe("Restored");
         target.Get<AppSession>().PendingMessage.ShouldNotBeNull();
+        confirm.Messages.Single().ShouldContain("1 ");
     }
 
     [AvaloniaFact]

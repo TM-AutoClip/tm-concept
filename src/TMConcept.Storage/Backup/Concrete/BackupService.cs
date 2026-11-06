@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -12,34 +13,32 @@ using TMConcept.Storage.Keys;
 namespace TMConcept.Storage.Backup;
 
 /// <summary>
-/// Backups as one file (<c>.tmcbak</c>): <see cref="SealedBox"/> with the magic word <c>TMCBAK02</c> around
-/// [key length (1) | database key (32) | encrypted database copy]. The copy is made with SQLite's online backup into a file encrypted with
-/// the same key, so no plain data is written to disk at any moment; API keys, the stored backup key and the backup bookkeeping are deleted
-/// from the copy before it is sealed (decision: keys never go into a backup). Only the database is backed up: videos and sample images
-/// stay in the user's folder.
-/// The backup password is required at the first start; the key derived from it is kept only in the encrypted database (never in a backup
-/// file), so daily backups need no password. Opening a backup always needs the password; after a restore the key is derived again from
-/// it. A forgotten backup password cannot be recovered. A restore is possible only while there is no database yet (first start).
-/// Format 02 (0.1.1): format 01 kept the derived key inside the sealed copy; 01 files are not read (0.1.0 had no users).
-/// The time of the last backup is kept in its own row written only here (it was a field of the settings document, which the app saved
-/// back from an older copy and so reset it: a "daily" backup ran on every start).
+/// Backups as one file (<c>.tmcbak</c>): <see cref="SealedBox"/> (Argon2id + AES-256-GCM, the backup password) with the magic word
+/// <c>TMCBAK03</c> around [header length (4, LE) | header JSON (<see cref="BackupHeader"/>) | database key (32) | encrypted database copy |
+/// sample image files]. What goes in is chosen (<see cref="BackupContents"/>): API keys only when chosen (allowed because the whole file is
+/// password-encrypted), profiles with their model choices and their sample image files, concepts with the trash, the video list and the
+/// costs, settings. The copy is made with SQLite's online backup into a file encrypted with the same key, so no plain data is written to
+/// disk at any moment; what was not chosen, the stored backup key and the backup bookkeeping are deleted from the copy before it is sealed.
+/// Videos are never in a backup. The backup password is required at the first start; the key derived from it is kept only in the encrypted
+/// database (never in a backup file), so daily backups need no password. Opening a backup always needs the password; changing it needs the
+/// current one. A forgotten backup password cannot be recovered. A restore is possible only while there is no database yet (first start),
+/// says what the file holds before anything is replaced, and brings back exactly that. Format 02 (0.1.1–0.1.5, no keys, no image files) is
+/// still read; 01 is not (0.1.0 had no users).
 /// </summary>
 public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault, ConceptDatabase database, KdfParameters kdf,
     TimeProvider clock, ILogger<BackupService> logger)
 {
     private const string KeySetting = "backup-key";
     private const string LastSetting = "backup-last";
+    private const string ContentsSetting = "backup-contents";
 
-    /// <summary>Removed from the copy before it is sealed: API keys, the stored backup key, the backup bookkeeping.</summary>
-    private const string ScrubCopy = "PRAGMA secure_delete = ON; DELETE FROM api_keys; DELETE FROM settings WHERE \"Key\" IN ('" + KeySetting + "', '" + LastSetting
-        + "'); VACUUM;";
-
-    private static readonly byte[] Magic = Encoding.ASCII.GetBytes("TMCBAK02");
+    private static readonly byte[] Magic = Encoding.ASCII.GetBytes("TMCBAK03");
+    private static readonly byte[] Magic2 = Encoding.ASCII.GetBytes("TMCBAK02");
 
     /// <summary>Whether a backup password was set.</summary>
     public async Task<bool> HasPasswordAsync(CancellationToken cancellationToken) => await LoadKeyAsync(cancellationToken).ConfigureAwait(false) is not null;
 
-    /// <summary>Sets (or changes) the backup password; later backups open with the new password, older files with the old one.</summary>
+    /// <summary>Sets the backup password (first start, restore); later backups open with it. A change goes through <see cref="ChangePasswordAsync"/>.</summary>
     public async Task SetPasswordAsync(string password, CancellationToken cancellationToken)
     {
         if (!BackupPasswordPolicy.IsAcceptable(password))
@@ -61,6 +60,46 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
         logger.LogInformation("Backup password set");
     }
 
+    /// <summary>Whether <paramref name="password"/> is the current backup password (false when none is set).</summary>
+    public async Task<bool> VerifyPasswordAsync(string password, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(password);
+        if (await LoadKeyAsync(cancellationToken).ConfigureAwait(false) is not { } stored)
+        {
+            return false;
+        }
+
+        var candidate = SealedBox.Derive(password, stored.Salt, stored.Kdf);
+        try
+        {
+            return CryptographicOperations.FixedTimeEquals(candidate, stored.Key);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(candidate);
+            CryptographicOperations.ZeroMemory(stored.Key);
+        }
+    }
+
+    /// <summary>
+    /// Changes the backup password: refused (false, logged as a warning without any password) when <paramref name="current"/> is not the
+    /// current one, so a person at an unlocked computer cannot take the backups over. Later backups open with the new password, older files
+    /// with the old one.
+    /// </summary>
+    public async Task<bool> ChangePasswordAsync(string current, string password, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(current);
+        if (!await VerifyPasswordAsync(current, cancellationToken).ConfigureAwait(false))
+        {
+            logger.LogWarning("Backup password change refused: the current password was wrong");
+            return false;
+        }
+
+        await SetPasswordAsync(password, cancellationToken).ConfigureAwait(false);
+        logger.LogInformation("Backup password changed");
+        return true;
+    }
+
     /// <summary>When the last backup (daily, manual or before a change) was written; <c>null</c> before the first.</summary>
     public async Task<DateTimeOffset?> LastBackupAsync(CancellationToken cancellationToken)
     {
@@ -70,15 +109,55 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
             : null;
     }
 
-    /// <summary>Writes a backup of the open database to <paramref name="target"/>.</summary>
-    public async Task CreateAsync(string target, CancellationToken cancellationToken)
+    /// <summary>What automatic backups hold (<see cref="BackupContents.Automatic"/> until the user saves a choice).</summary>
+    public async Task<BackupContents> AutomaticContentsAsync(CancellationToken cancellationToken)
+    {
+        var row = await SettingAsync(ContentsSetting, cancellationToken).ConfigureAwait(false);
+        if (row is null)
+        {
+            return BackupContents.Automatic;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize(row.Value, StorageJsonContext.Default.BackupContents) is { IsValid: true } saved ? saved : BackupContents.Automatic;
+        }
+        catch (JsonException ex)
+        {
+            logger.LogWarning(ex, "The saved contents of automatic backups are damaged; the default (everything except the keys) is used");
+            return BackupContents.Automatic;
+        }
+    }
+
+    /// <summary>Saves what automatic backups hold.</summary>
+    public async Task SaveAutomaticContentsAsync(BackupContents contents, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(contents);
+        if (!contents.IsValid)
+        {
+            throw new ArgumentException("Nothing is chosen, or concepts without their profiles.", nameof(contents));
+        }
+
+        await WriteSettingAsync(ContentsSetting, JsonSerializer.Serialize(contents, StorageJsonContext.Default.BackupContents), cancellationToken).ConfigureAwait(false);
+        logger.LogInformation("Setting changed: automatic backups hold {Contents}", contents);
+    }
+
+    /// <summary>Writes a backup of the open database with <paramref name="contents"/> to <paramref name="target"/>.</summary>
+    public async Task CreateAsync(string target, BackupContents contents, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrEmpty(target);
+        ArgumentNullException.ThrowIfNull(contents);
+        if (!contents.IsValid)
+        {
+            throw new ArgumentException("Nothing is chosen, or concepts without their profiles.", nameof(contents));
+        }
+
         var backupKey = await LoadKeyAsync(cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException("No backup password was set.");
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(target))!);
         var copy = TemporaryFile();
         var dek = key.Copy();
+        byte[]? plain = null;
         try
         {
             var passphrase = key.Passphrase();
@@ -89,38 +168,73 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
                 destination.Open();
                 source.BackupDatabase(destination);
                 using var command = destination.CreateCommand();
-                command.CommandText = ScrubCopy;
+                command.CommandText = Scrub(contents);
                 command.ExecuteNonQuery();
             }
 
+            var header = new BackupHeader { CreatedAtUtc = clock.GetUtcNow(), Contents = contents };
+            var images = new List<byte[]>();
+            await using (var db = await ConceptDatabase.OpenAsync(ConceptDatabase.ConnectionString(copy, passphrase), cancellationToken).ConfigureAwait(false))
+            {
+                header.KeyCount = await ApiKeyTable.Instance.CountAsync(db, string.Empty, cancellationToken).ConfigureAwait(false);
+                header.ProfileCount = await ProfileTable.Instance.CountAsync(db, string.Empty, cancellationToken).ConfigureAwait(false);
+                header.ConceptCount = await ConceptTable.Instance.CountAsync(db, string.Empty, cancellationToken).ConfigureAwait(false);
+                header.VideoCount = await VideoTable.Instance.CountAsync(db, string.Empty, cancellationToken).ConfigureAwait(false);
+                foreach (var image in await ProfileImageTable.Instance.ListAsync(db, string.Empty, cancellationToken).ConfigureAwait(false))
+                {
+                    if (await ReadImageAsync(image.FileName, cancellationToken).ConfigureAwait(false) is { } bytes)
+                    {
+                        images.Add(bytes);
+                        header.Images.Add(new BackupImage { Path = image.FileName, Length = bytes.Length, Sha256 = Convert.ToHexStringLower(SHA256.HashData(bytes)) });
+                    }
+                }
+            }
+
             SqliteConnection.ClearAllPools();
-            var database = await File.ReadAllBytesAsync(copy, cancellationToken).ConfigureAwait(false);
-            var plain = new byte[1 + dek.Length + database.Length];
-            plain[0] = (byte)dek.Length;
-            dek.CopyTo(plain, 1);
-            database.CopyTo(plain, 1 + dek.Length);
+            var databaseBytes = await File.ReadAllBytesAsync(copy, cancellationToken).ConfigureAwait(false);
+            header.DatabaseLength = databaseBytes.Length;
+            var headerBytes = JsonSerializer.SerializeToUtf8Bytes(header, StorageJsonContext.Default.BackupHeader);
+            plain = new byte[4 + headerBytes.Length + dek.Length + databaseBytes.Length + images.Sum(i => i.Length)];
+            BinaryPrimitives.WriteInt32LittleEndian(plain, headerBytes.Length);
+            var at = 4;
+            foreach (var part in new[] { headerBytes, dek, databaseBytes }.Concat(images))
+            {
+                part.CopyTo(plain, at);
+                at += part.Length;
+            }
+
+            CryptographicOperations.ZeroMemory(databaseBytes);
             var sealedData = SealedBox.Seal(Magic, backupKey, plain);
-            CryptographicOperations.ZeroMemory(plain);
             var temporary = target + ".tmp";
             await File.WriteAllBytesAsync(temporary, sealedData, cancellationToken).ConfigureAwait(false);
             File.Move(temporary, target, overwrite: true);
-            logger.LogInformation("Backup written ({Kilobytes} KB)", sealedData.Length / 1024);
+            logger.LogInformation("Backup written ({Kilobytes} KB; holds {Contents}; {Images} sample images)", sealedData.Length / 1024, contents, header.Images.Count);
         }
         finally
         {
+            if (plain is not null)
+            {
+                CryptographicOperations.ZeroMemory(plain);
+            }
+
             CryptographicOperations.ZeroMemory(dek);
             CryptographicOperations.ZeroMemory(backupKey.Key);
             Delete(copy);
         }
     }
 
-    /// <summary>Writes a backup into the backup folder now and keeps the last <see cref="BackupRules.Keep"/>.</summary>
-    public Task<string> CreateInFolderAsync(CancellationToken cancellationToken) => CreateNamedAsync(BackupRules.Prefix, cancellationToken);
+    /// <summary>
+    /// Writes a backup into the backup folder now and keeps the last <see cref="BackupRules.Keep"/>: with <paramref name="contents"/> (Back
+    /// up now), or what automatic backups hold when null.
+    /// </summary>
+    public async Task<string> CreateInFolderAsync(BackupContents? contents, CancellationToken cancellationToken) =>
+        await CreateNamedAsync(BackupRules.Prefix, contents ?? await AutomaticContentsAsync(cancellationToken).ConfigureAwait(false), cancellationToken)
+            .ConfigureAwait(false);
 
     /// <summary>
     /// The extra backup before a large change (a profile deleted, <see cref="BackupRules.BulkChange"/> or more concepts deleted for good):
-    /// taken before the change, so the data can come back. Kept apart from the daily ones (the last <see cref="BackupRules.Keep"/> of each),
-    /// so a busy day does not push the older days out. <c>null</c> when no backup password is set (logged).
+    /// taken before the change, so the data can come back, with what automatic backups hold. Kept apart from the daily ones (the last
+    /// <see cref="BackupRules.Keep"/> of each), so a busy day does not push the older days out. <c>null</c> when no backup password is set (logged).
     /// </summary>
     public async Task<string?> CreateBeforeChangeAsync(string reason, CancellationToken cancellationToken)
     {
@@ -130,7 +244,8 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
             return null;
         }
 
-        var file = await CreateNamedAsync(BackupRules.ChangePrefix, cancellationToken).ConfigureAwait(false);
+        var file = await CreateNamedAsync(BackupRules.ChangePrefix, await AutomaticContentsAsync(cancellationToken).ConfigureAwait(false), cancellationToken)
+            .ConfigureAwait(false);
         logger.LogInformation("Backup before a change written ({Reason})", reason);
         return file;
     }
@@ -153,7 +268,7 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
             return null;
         }
 
-        return await CreateInFolderAsync(cancellationToken).ConfigureAwait(false);
+        return await CreateInFolderAsync(null, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>The backups in the backup folder, newest first.</summary>
@@ -171,8 +286,32 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
             .ToList();
     }
 
+    /// <summary>What a backup holds, without restoring anything (shown before a restore). <see cref="SealedBoxException"/> as for a restore.</summary>
+    public async Task<RestoreReport> InspectAsync(string source, string password, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(source);
+        var payload = await OpenAsync(source, password, cancellationToken).ConfigureAwait(false);
+        var copy = TemporaryFile();
+        try
+        {
+            if (payload.Header.Format >= 3)
+            {
+                return Report(payload.Header);
+            }
+
+            await File.WriteAllBytesAsync(copy, payload.Database.ToArray(), cancellationToken).ConfigureAwait(false);
+            return await CountAsync(copy, payload.Key, payload.Header, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            payload.Clear();
+            Delete(copy);
+        }
+    }
+
     /// <summary>
-    /// Restores a backup into this computer's data folder. Allowed only before a database exists (first start). The key is sealed again with
+    /// Restores a backup into this computer's data folder: exactly what it holds (the database copy, and the sample image files of its
+    /// profiles into the library folder). Allowed only before a database exists (first start). The key is sealed again with
     /// <paramref name="protector"/> (this computer's keyring or a master password). <see cref="SealedBoxException"/> for a wrong password or
     /// a damaged file — the two are deliberately not told apart.
     /// </summary>
@@ -185,36 +324,174 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
             throw new InvalidOperationException("A backup can be restored only at the first start, before any data exists.");
         }
 
-        var sealedData = await File.ReadAllBytesAsync(source, cancellationToken).ConfigureAwait(false);
-        var plain = SealedBox.Open(Magic, password, sealedData);
+        var payload = await OpenAsync(source, password, cancellationToken).ConfigureAwait(false);
         var copy = TemporaryFile();
         try
         {
-            if (plain.Length < 33 || plain[0] != 32)
-            {
-                throw new SealedBoxException("The backup content is damaged.");
-            }
-
-            var dek = plain.AsSpan(1, 32).ToArray();
-            await File.WriteAllBytesAsync(copy, plain.AsMemory(33).ToArray(), cancellationToken).ConfigureAwait(false);
-            await VerifyAsync(copy, dek, cancellationToken).ConfigureAwait(false);
+            await File.WriteAllBytesAsync(copy, payload.Database.ToArray(), cancellationToken).ConfigureAwait(false);
+            await VerifyAsync(copy, payload.Key, cancellationToken).ConfigureAwait(false);
             if (File.Exists(paths.DatabaseFile))
             {
                 // A database file without a key file cannot be opened by anyone; it is moved aside, never deleted.
                 File.Move(paths.DatabaseFile, paths.DatabaseFile + ".orphan-" + clock.GetUtcNow().ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture));
             }
 
-            await vault.InstallAsync(copy, dek, protector, cancellationToken).ConfigureAwait(false);
-            CryptographicOperations.ZeroMemory(dek);
+            // Installing also brings a backup of an older version to the current schema.
+            await vault.InstallAsync(copy, payload.Key, protector, cancellationToken).ConfigureAwait(false);
+            var images = await RestoreImagesAsync(payload, cancellationToken).ConfigureAwait(false);
 
             // The backup carries no backup key: it is derived again from the password just entered, so daily backups go on without asking.
             await SetPasswordAsync(password, cancellationToken).ConfigureAwait(false);
-            return await ReportAsync(cancellationToken).ConfigureAwait(false);
+            var report = await ReportAsync(payload.Header, images, cancellationToken).ConfigureAwait(false);
+            logger.LogInformation("Restore finished: {Keys} API keys, {Profiles} profiles, {Images} sample images, {Concepts} concepts, {Videos} videos (holds {Contents})",
+                report.Keys, report.Profiles, report.Images, report.Concepts, report.Videos, report.Contents);
+            return report;
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(plain);
+            payload.Clear();
             Delete(copy);
+        }
+    }
+
+    /// <summary>The SQL that removes from the copy what was not chosen, and always the stored backup key and the backup bookkeeping.</summary>
+    private static string Scrub(BackupContents contents)
+    {
+        var sql = new StringBuilder("PRAGMA secure_delete = ON; ");
+        sql.Append("DELETE FROM \"settings\" WHERE \"Key\" IN ('" + KeySetting + "', '" + LastSetting + "'); ");
+        if (!contents.Keys)
+        {
+            sql.Append("DELETE FROM \"api_keys\"; ");
+        }
+
+        if (!contents.Concepts || !contents.Profiles)
+        {
+            sql.Append("DELETE FROM \"queue_items\"; DELETE FROM \"video_costs\"; DELETE FROM \"videos\"; DELETE FROM \"concept_embeddings\"; ");
+            sql.Append("DELETE FROM \"concepts\"; DELETE FROM \"history_digests\"; DELETE FROM \"runs\"; ");
+        }
+
+        if (!contents.Profiles)
+        {
+            sql.Append("DELETE FROM \"profile_images\"; DELETE FROM \"profile_step_models\"; DELETE FROM \"profiles\"; ");
+        }
+
+        if (!contents.Settings)
+        {
+            sql.Append("DELETE FROM \"settings\"; ");
+        }
+
+        return sql.Append("VACUUM;").ToString();
+    }
+
+    private async Task<byte[]?> ReadImageAsync(string stored, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var file = Core.Paths.LibraryPaths.Resolve(paths.LibraryDirectory, stored);
+            if (File.Exists(file))
+            {
+                return await File.ReadAllBytesAsync(file, cancellationToken).ConfigureAwait(false);
+            }
+
+            logger.LogWarning("A sample image file is missing; the backup holds its record without the file");
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarning(ex, "A sample image could not be read for the backup; it holds its record without the file");
+        }
+
+        return null;
+    }
+
+    /// <summary>Writes the image files back; a different file already at a path is moved aside (never overwritten or deleted).</summary>
+    private async Task<int> RestoreImagesAsync(BackupPayload payload, CancellationToken cancellationToken)
+    {
+        var written = 0;
+        var at = 0;
+        foreach (var image in payload.Header.Images)
+        {
+            var bytes = payload.Images.Slice(at, checked((int)image.Length)).ToArray();
+            at += bytes.Length;
+            try
+            {
+                if (!string.Equals(Convert.ToHexStringLower(SHA256.HashData(bytes)), image.Sha256, StringComparison.Ordinal))
+                {
+                    logger.LogWarning("A sample image in the backup does not match its checksum; it is not restored");
+                    continue;
+                }
+
+                var target = Core.Paths.LibraryPaths.Resolve(paths.LibraryDirectory, image.Path);
+                if (File.Exists(target))
+                {
+                    var existing = await File.ReadAllBytesAsync(target, cancellationToken).ConfigureAwait(false);
+                    if (string.Equals(Convert.ToHexStringLower(SHA256.HashData(existing)), image.Sha256, StringComparison.Ordinal))
+                    {
+                        written++;
+                        continue;
+                    }
+
+                    File.Move(target, target + ".before-restore-" + clock.GetUtcNow().ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture));
+                }
+
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                await File.WriteAllBytesAsync(target, bytes, cancellationToken).ConfigureAwait(false);
+                written++;
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
+            {
+                logger.LogWarning(ex, "A sample image of the backup could not be written back");
+            }
+        }
+
+        return written;
+    }
+
+    private static async Task<BackupPayload> OpenAsync(string source, string password, CancellationToken cancellationToken)
+    {
+        var sealedData = await File.ReadAllBytesAsync(source, cancellationToken).ConfigureAwait(false);
+        if (sealedData.Length >= 8 && sealedData.AsSpan(0, 8).SequenceEqual(Magic2))
+        {
+            // 0.1.1–0.1.5: [key length (1) | key (32) | database]; no keys, no image files.
+            var old = SealedBox.Open(Magic2, password, sealedData);
+            if (old.Length < 33 || old[0] != 32)
+            {
+                CryptographicOperations.ZeroMemory(old);
+                throw new SealedBoxException("The backup content is damaged.");
+            }
+
+            return new BackupPayload(new BackupHeader { Format = 2, Contents = BackupContents.Version2, DatabaseLength = old.Length - 33 }, old, 1, 33, old.Length);
+        }
+
+        var plain = SealedBox.Open(Magic, password, sealedData);
+        try
+        {
+            var length = plain.Length >= 4 ? BinaryPrimitives.ReadInt32LittleEndian(plain) : -1;
+            if (length <= 0 || 4L + length + 32 > plain.Length)
+            {
+                throw new SealedBoxException("The backup content is damaged.");
+            }
+
+            var header = JsonSerializer.Deserialize(plain.AsSpan(4, length), StorageJsonContext.Default.BackupHeader)
+                ?? throw new SealedBoxException("The backup content is damaged.");
+            var keyAt = 4 + length;
+            var databaseAt = keyAt + 32;
+            var imagesAt = databaseAt + header.DatabaseLength;
+            if (header.DatabaseLength <= 0 || imagesAt + header.Images.Sum(i => i.Length) != plain.Length || header.Images.Any(i => i.Length < 0))
+            {
+                throw new SealedBoxException("The backup content is damaged.");
+            }
+
+            return new BackupPayload(header, plain, keyAt, databaseAt, checked((int)imagesAt));
+        }
+        catch (JsonException ex)
+        {
+            CryptographicOperations.ZeroMemory(plain);
+            throw new SealedBoxException("The backup content is damaged.", ex);
+        }
+        catch (SealedBoxException)
+        {
+            CryptographicOperations.ZeroMemory(plain);
+            throw;
         }
     }
 
@@ -232,11 +509,11 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
             Convert.FromBase64String(record.Key));
     }
 
-    private async Task<string> CreateNamedAsync(string prefix, CancellationToken cancellationToken)
+    private async Task<string> CreateNamedAsync(string prefix, BackupContents contents, CancellationToken cancellationToken)
     {
         var now = clock.GetUtcNow();
         var target = Path.Combine(paths.BackupDirectory, prefix + now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + BackupRules.Extension);
-        await CreateAsync(target, cancellationToken).ConfigureAwait(false);
+        await CreateAsync(target, contents, cancellationToken).ConfigureAwait(false);
         Prune(prefix);
         await WriteSettingAsync(LastSetting, now.UtcTicks.ToString(CultureInfo.InvariantCulture), cancellationToken).ConfigureAwait(false);
         return target;
@@ -291,18 +568,47 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
         }
     }
 
-    private async Task<RestoreReport> ReportAsync(CancellationToken cancellationToken)
+    /// <summary>The counts of an old (format 02) backup's database copy.</summary>
+    private static async Task<RestoreReport> CountAsync(string file, byte[] dek, BackupHeader header, CancellationToken cancellationToken)
     {
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        var report = new RestoreReport(
-            await ProfileTable.Instance.CountAsync(db, string.Empty, cancellationToken).ConfigureAwait(false),
-            await ConceptTable.Instance.CountAsync(db, string.Empty, cancellationToken).ConfigureAwait(false),
-            await VideoTable.Instance.CountAsync(db, string.Empty, cancellationToken).ConfigureAwait(false));
-        logger.LogInformation("Restore finished: {Profiles} profiles, {Concepts} concepts, {Videos} videos", report.Profiles, report.Concepts, report.Videos);
-        return report;
+        try
+        {
+            await using var db = await ConceptDatabase.OpenAsync(ConceptDatabase.ConnectionString(file, Convert.ToHexString(dek)), cancellationToken)
+                .ConfigureAwait(false);
+            header.ProfileCount = await ProfileTable.Instance.CountAsync(db, string.Empty, cancellationToken).ConfigureAwait(false);
+            header.ConceptCount = await ConceptTable.Instance.CountAsync(db, string.Empty, cancellationToken).ConfigureAwait(false);
+            header.VideoCount = await VideoTable.Instance.CountAsync(db, string.Empty, cancellationToken).ConfigureAwait(false);
+            return Report(header);
+        }
+        catch (SqliteException ex)
+        {
+            throw new SealedBoxException("The database inside the backup does not open; the backup is damaged.", ex);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+        }
     }
 
-    private string TemporaryFile() => System.IO.Path.Combine(paths.DataDirectory, "backup-" + Guid.NewGuid().ToString("N") + ".tmp");
+    private static RestoreReport Report(BackupHeader header) => new(header.Format >= 3 ? header.CreatedAtUtc : null, header.Contents, header.KeyCount,
+        header.ProfileCount, header.Images.Count, header.ConceptCount, header.VideoCount);
+
+    private async Task<RestoreReport> ReportAsync(BackupHeader header, int images, CancellationToken cancellationToken)
+    {
+        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
+        return new RestoreReport(header.Format >= 3 ? header.CreatedAtUtc : null, header.Contents,
+            await ApiKeyTable.Instance.CountAsync(db, string.Empty, cancellationToken).ConfigureAwait(false),
+            await ProfileTable.Instance.CountAsync(db, string.Empty, cancellationToken).ConfigureAwait(false),
+            images,
+            await ConceptTable.Instance.CountAsync(db, string.Empty, cancellationToken).ConfigureAwait(false),
+            await VideoTable.Instance.CountAsync(db, string.Empty, cancellationToken).ConfigureAwait(false));
+    }
+
+    private string TemporaryFile()
+    {
+        Directory.CreateDirectory(paths.DataDirectory);
+        return System.IO.Path.Combine(paths.DataDirectory, "backup-" + Guid.NewGuid().ToString("N") + ".tmp");
+    }
 
     private void Delete(string file)
     {

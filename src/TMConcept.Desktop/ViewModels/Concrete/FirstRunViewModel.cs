@@ -12,11 +12,12 @@ namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
 /// First run: language (two big buttons; Turkish first on a Turkish system), then a new start (keyring protection or a master password; the
-/// backup password is required) or a restore from a backup (only now, while there is no data). Everything is in one window; a step cannot
+/// backup password is required) or a restore from a backup (only now, while there is no data; what the file holds is shown and confirmed
+/// before anything is restored). Everything is in one window; a step cannot
 /// finish with a required value missing.
 /// </summary>
 public sealed partial class FirstRunViewModel(Vault vault, BackupService backup, AppSession session, UiMasterPassword masterPassword,
-    UiPreferencesFile preferences, FileDialogs dialogs, Localizer text, ILogger<FirstRunViewModel> logger) : ObservableObject
+    UiPreferencesFile preferences, FileDialogs dialogs, Dialogs.IConfirmDialog confirm, Localizer text, ILogger<FirstRunViewModel> logger) : ObservableObject
 {
     /// <summary>Raised when the database is open.</summary>
     public event EventHandler? Completed;
@@ -158,10 +159,45 @@ public sealed partial class FirstRunViewModel(Vault vault, BackupService backup,
 
         await RunAsync(async () =>
         {
+            // What the backup holds is said first; nothing is replaced before the user agrees.
+            var held = await backup.InspectAsync(BackupFile, BackupPassword, CancellationToken.None).ConfigureAwait(true);
+            var when = held.CreatedAtUtc is { } at ? at.ToLocalTime().ToString("g", text.Culture) : "-";
+            var answer = await confirm.AskAsync(text["restore.contents.title"], text.Format("restore.contents.message", when, Describe(held)),
+                text["restore.contents.confirm"], danger: false).ConfigureAwait(true);
+            if (!answer.Confirmed)
+            {
+                logger.LogInformation("Restore declined after seeing what the backup holds");
+                return;
+            }
+
             var report = await backup.RestoreAsync(BackupFile, BackupPassword, Protector(), CancellationToken.None).ConfigureAwait(true);
-            session.PendingMessage = text.Format("restore.done", report.Profiles, report.Concepts, report.Videos);
+            session.PendingMessage = text.Format("restore.done", Describe(report));
             await FinishAsync().ConfigureAwait(true);
         }).ConfigureAwait(true);
+    }
+
+    /// <summary>"2 profiles with their model choices, 3 sample images, 40 concepts, 5 video records, the settings, 2 API keys".</summary>
+    private string Describe(RestoreReport report)
+    {
+        var parts = new List<string>();
+        if (report.Contents.Profiles)
+        {
+            parts.Add(text.Format("restore.contents.profiles", report.Profiles));
+            parts.Add(text.Format("restore.contents.images", report.Images));
+        }
+
+        if (report.Contents.Concepts)
+        {
+            parts.Add(text.Format("restore.contents.concepts", report.Concepts, report.Videos));
+        }
+
+        if (report.Contents.Settings)
+        {
+            parts.Add(text["restore.contents.settings"]);
+        }
+
+        parts.Add(report.Contents.Keys && report.Keys > 0 ? text.Format("restore.contents.keys", report.Keys) : text["restore.contents.no_keys"]);
+        return string.Join(", ", parts);
     }
 
     private void ChooseLanguage(string code)

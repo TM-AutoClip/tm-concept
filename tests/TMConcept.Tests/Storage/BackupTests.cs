@@ -27,7 +27,7 @@ public sealed class BackupTests
         var service = Service(h);
         await service.SetPasswordAsync(Password, None);
         var file = Path.Combine(h.Paths.DataDirectory, "manual" + BackupRules.Extension);
-        await service.CreateAsync(file, None);
+        await service.CreateAsync(file, BackupContents.Automatic, None);
         return (h, file);
     }
 
@@ -116,11 +116,7 @@ public sealed class BackupTests
         using var _ = source;
 
         // Opened like an attacker with the password would: the sealed copy has no stored key and no API key.
-        var sealedFile = await File.ReadAllBytesAsync(file, None);
-        var plain = SealedBox.Open(System.Text.Encoding.ASCII.GetBytes("TMCBAK02"), Password, sealedFile);
-        var copy = Path.Combine(source.Paths.DataDirectory, "inspect.db");
-        await File.WriteAllBytesAsync(copy, plain.AsMemory(33).ToArray(), None);
-        var inspect = TMConcept.Storage.Database.ConceptDatabase.ConnectionString(copy, Convert.ToHexString(plain.AsSpan(1, 32)));
+        var inspect = await OpenCopyAsync(file, source.Paths.DataDirectory);
         (await StorageHarness.CountAsync(inspect, "settings", "\"Key\" IN ('backup-key', 'backup-last')")).ShouldBe(0);
         (await StorageHarness.CountAsync(inspect, "api_keys")).ShouldBe(0);
 
@@ -131,9 +127,122 @@ public sealed class BackupTests
 
         // Daily backups go on without asking, and the new file opens with the same password.
         (await service.HasPasswordAsync(None)).ShouldBeTrue();
-        var next = await service.CreateInFolderAsync(None);
+        var next = await service.CreateInFolderAsync(null, None);
         var nextFile = await File.ReadAllBytesAsync(next, None);
-        SealedBox.Open(System.Text.Encoding.ASCII.GetBytes("TMCBAK02"), Password, nextFile).Length.ShouldBeGreaterThan(33);
+        SealedBox.Open(System.Text.Encoding.ASCII.GetBytes("TMCBAK03"), Password, nextFile).Length.ShouldBeGreaterThan(36);
+    }
+
+    [Fact]
+    public async Task WhatIsChosenGoesInAndARestoreBringsBackExactlyThat()
+    {
+        var (source, _) = await BackupAsync();
+        using var __ = source;
+        var profile = (await new ProfileStore(source.Database).ListAsync(None)).Single();
+        Directory.CreateDirectory(Path.Combine(source.Paths.LibraryDirectory, "Kept channel", "images"));
+        await File.WriteAllBytesAsync(Path.Combine(source.Paths.LibraryDirectory, "Kept channel", "images", "a.png"), [1, 2, 3, 4], None);
+        await new ProfileStore(source.Database).SaveImageAsync(new ProfileImage { ProfileId = profile.Id, FileName = "Kept channel/images/a.png" }, None);
+        await new StepModelStore(source.Database).SaveAsync(new TMConcept.Core.Models.StepModelChoice
+        {
+            Step = "concepts",
+            ProfileId = profile.Id,
+            Provider = "anthropic",
+            Model = "claude-haiku-5-5",
+        }, None);
+        var service = Service(source);
+        var withKeys = Path.Combine(source.Paths.DataDirectory, "keys" + BackupRules.Extension);
+        var keysOnly = Path.Combine(source.Paths.DataDirectory, "only-keys" + BackupRules.Extension);
+        await service.CreateAsync(withKeys, new BackupContents { Keys = true }, None);
+        await service.CreateAsync(keysOnly, new BackupContents { Keys = true, Profiles = false, Concepts = false, Settings = false }, None);
+        await Should.ThrowAsync<ArgumentException>(() => service.CreateAsync(keysOnly, new BackupContents { Profiles = false }, None));
+
+        // Everything with the keys: the restore says so first, then brings back keys, profile, its model choice and its image file.
+        using (var target = new StorageHarness())
+        {
+            var held = await Service(target).InspectAsync(withKeys, Password, None);
+            (held.Keys, held.Profiles, held.Images, held.Contents.Keys).ShouldBe((1, 1, 1, true));
+            target.Vault.State.ShouldBe(VaultState.NotCreated, "looking inside restores nothing");
+            var report = await Service(target).RestoreAsync(withKeys, Password, target.Protector, None);
+            report.Keys.ShouldBe(1);
+            (await new ApiKeyStore(target.Database).ListAsync("openai", None)).Single().Secret.ShouldBe("never-in-backup-1");
+            (await new StepModelStore(target.Database).GetAsync("concepts", profile.Id, None))!.Model.ShouldBe("claude-haiku-5-5");
+            (await File.ReadAllBytesAsync(Path.Combine(target.Paths.LibraryDirectory, "Kept channel", "images", "a.png"), None)).ShouldBe([1, 2, 3, 4]);
+        }
+
+        // Only the keys: no profile comes back, no image file is written.
+        using (var target = new StorageHarness())
+        {
+            var report = await Service(target).RestoreAsync(keysOnly, Password, target.Protector, None);
+            (report.Keys, report.Profiles, report.Images).ShouldBe((1, 0, 0));
+            (await new ProfileStore(target.Database).ListAsync(None)).ShouldBeEmpty();
+            File.Exists(Path.Combine(target.Paths.LibraryDirectory, "Kept channel", "images", "a.png")).ShouldBeFalse();
+        }
+    }
+
+    [Fact]
+    public async Task AutomaticBackupsHoldEverythingButTheKeysUntilAnotherChoiceIsSaved()
+    {
+        using var h = await StorageHarness.CreatedAsync();
+        await new ApiKeyStore(h.Database).SaveAsync(new ApiKey { Provider = "openai", Label = "x", Secret = "kept-in-this-one-1" }, None);
+        var service = Service(h);
+        await service.SetPasswordAsync(Password, None);
+        (await service.AutomaticContentsAsync(None)).ToString().ShouldBe("profiles, concepts, settings");
+        var first = await service.CreateInFolderAsync(null, None);
+        (await service.InspectAsync(first, Password, None)).Keys.ShouldBe(0);
+
+        await service.SaveAutomaticContentsAsync(new BackupContents { Keys = true }, None);
+        var second = await service.CreateBeforeChangeAsync("test", None);
+        (await service.InspectAsync(second!, Password, None)).Keys.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task ABackupOfVersion015StillRestores()
+    {
+        var (source, _) = await BackupAsync();
+        using var __ = source;
+        SqliteConnection.ClearAllPools();
+        var database = await File.ReadAllBytesAsync(source.Paths.DatabaseFile, None);
+        var dek = source.Key.Copy();
+        var plain = new byte[33 + database.Length];
+        plain[0] = 32;
+        dek.CopyTo(plain, 1);
+        database.CopyTo(plain, 33);
+        var old = Path.Combine(source.Paths.DataDirectory, "old" + BackupRules.Extension);
+        await File.WriteAllBytesAsync(old, SealedBox.Seal(System.Text.Encoding.ASCII.GetBytes("TMCBAK02"), Password, plain, KdfParameters.Fast), None);
+
+        using var target = new StorageHarness();
+        (await Service(target).InspectAsync(old, Password, None)).Profiles.ShouldBe(1);
+        var report = await Service(target).RestoreAsync(old, Password, target.Protector, None);
+        report.Profiles.ShouldBe(1);
+        report.Contents.Keys.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task ChangingTheBackupPasswordNeedsTheCurrentOne()
+    {
+        using var h = await StorageHarness.CreatedAsync();
+        var service = Service(h);
+        await service.SetPasswordAsync(Password, None);
+
+        (await service.ChangePasswordAsync("not the current one", "a brand new password", None)).ShouldBeFalse();
+        (await service.VerifyPasswordAsync(Password, None)).ShouldBeTrue("a wrong current password changes nothing");
+
+        (await service.ChangePasswordAsync(Password, "a brand new password", None)).ShouldBeTrue();
+        (await service.VerifyPasswordAsync("a brand new password", None)).ShouldBeTrue();
+        (await service.VerifyPasswordAsync(Password, None)).ShouldBeFalse();
+    }
+
+    /// <summary>Opens a format 03 backup by hand and writes its database copy out; returns its connection string.</summary>
+    private static async Task<string> OpenCopyAsync(string file, string folder)
+    {
+        var sealedData = await File.ReadAllBytesAsync(file, None);
+        var plain = SealedBox.Open(System.Text.Encoding.ASCII.GetBytes("TMCBAK03"), Password, sealedData);
+        var length = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(plain);
+        using var header = System.Text.Json.JsonDocument.Parse(plain.AsMemory(4, length));
+        var databaseLength = header.RootElement.GetProperty("DatabaseLength").GetInt32();
+        var passphrase = Convert.ToHexString(plain, 4 + length, 32);
+        var copy = Path.Combine(folder, "inspect-" + Guid.NewGuid().ToString("N") + ".db");
+        await File.WriteAllBytesAsync(copy, plain.AsMemory(4 + length + 32, databaseLength).ToArray(), None);
+        return TMConcept.Storage.Database.ConceptDatabase.ConnectionString(copy, passphrase);
     }
 
     [Fact]

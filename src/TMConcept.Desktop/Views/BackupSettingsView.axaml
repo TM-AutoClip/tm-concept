@@ -13,12 +13,37 @@
         <TextBlock Text="{Binding Count}" />
         <TextBlock Text="{DynamicResource backup.files}" />
       </StackPanel>
-      <StackPanel Orientation="Horizontal" Spacing="8">
-        <Button Classes="accent" Content="{DynamicResource backup.now}" Command="{Binding BackupNowCommand}" IsEnabled="{Binding !Busy}" />
-        <Button Content="{DynamicResource backup.open_folder}" Command="{Binding OpenFolderCommand}" />
-      </StackPanel>
+
+      <Border Classes="card">
+        <StackPanel Spacing="6">
+          <TextBlock Text="{DynamicResource backup.now.title}" FontWeight="SemiBold" />
+          <CheckBox IsChecked="{Binding NowProfiles}" Content="{DynamicResource backup.contents.profiles}" />
+          <CheckBox IsChecked="{Binding NowConcepts}" Content="{DynamicResource backup.contents.concepts}" />
+          <CheckBox IsChecked="{Binding NowSettings}" Content="{DynamicResource backup.contents.settings}" />
+          <CheckBox IsChecked="{Binding NowKeys}" Content="{DynamicResource backup.contents.keys}" />
+          <TextBlock Text="{DynamicResource backup.contents.keys.note}" Classes="small warning" TextWrapping="Wrap" IsVisible="{Binding NowKeys}" />
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Classes="accent" Content="{DynamicResource backup.now}" Command="{Binding BackupNowCommand}" IsEnabled="{Binding !Busy}" />
+            <Button Content="{DynamicResource backup.open_folder}" Command="{Binding OpenFolderCommand}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <Border Classes="card">
+        <StackPanel Spacing="6">
+          <TextBlock Text="{DynamicResource backup.auto.title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+          <CheckBox IsChecked="{Binding AutoProfiles}" Content="{DynamicResource backup.contents.profiles}" />
+          <CheckBox IsChecked="{Binding AutoConcepts}" Content="{DynamicResource backup.contents.concepts}" />
+          <CheckBox IsChecked="{Binding AutoSettings}" Content="{DynamicResource backup.contents.settings}" />
+          <CheckBox IsChecked="{Binding AutoKeys}" Content="{DynamicResource backup.contents.keys}" />
+          <TextBlock Text="{DynamicResource backup.contents.keys.note}" Classes="small warning" TextWrapping="Wrap" IsVisible="{Binding AutoKeys}" />
+          <Button Content="{DynamicResource backup.auto.save}" Command="{Binding SaveAutomaticCommand}" />
+        </StackPanel>
+      </Border>
+
       <TextBlock Text="{DynamicResource backup.change_password}" Classes="h2" Margin="0,12,0,0" />
       <TextBlock Text="{DynamicResource backup.password.change_explain}" Classes="small" TextWrapping="Wrap" />
+      <TextBox Classes="secret" Text="{Binding CurrentPassword}" PlaceholderText="{DynamicResource backup.password.current}" Width="360" HorizontalAlignment="Left" />
       <TextBox Classes="secret" Text="{Binding NewPassword}" PlaceholderText="{DynamicResource backup.password.field}" Width="360" HorizontalAlignment="Left" />
       <TextBox Classes="secret" Text="{Binding NewPasswordRepeat}" PlaceholderText="{DynamicResource password.repeat}" Width="360" HorizontalAlignment="Left" />
       <Button Content="{DynamicResource backup.change_password}" Command="{Binding ChangePasswordCommand}" IsEnabled="{Binding !Busy}" />
