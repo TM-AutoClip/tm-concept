@@ -128,7 +128,8 @@ adım ne işe yaradığını yazar:
   sayfa uyarır; Windows'ta NVIDIA kart (CUDA), Linux x64'te Vulkan sürücüsü ister; Linux ARM64 için yok.
 - **Görseller** profilin kendi örnek görsellerini de kullanabilir (ücretsiz).
 - **Seslendirme** — *Kapalı* (sessiz video, sarı uyarı), **Supertonic 3** (yerel, ücretsiz; Türkçe ve İngilizce), **Kokoro 82M** (yerel,
-  ücretsiz; yalnız İngilizce, Amerikan ve İngiliz sesleri) ya da bir online ses. Ses, hız ve ▶ Dinle adımın içinde.
+  ücretsiz; yalnız İngilizce, Amerikan ve İngiliz sesleri; sözlüklü bir ses: bilmediği adları ve kelimeleri seste atlar, uyarı verir) ya da
+  bir online ses. Ses, hız ve ▶ Dinle adımın içinde.
 - **Anlamca tekrar denetimi** — isteğe bağlı: yerel **Multilingual MiniLM** (ücretsiz, bu bilgisayarda, Türkçe dahil 50'den fazla dil) ya
   da bir online model. **Örnek görsel açıklama** — isteğe bağlı, ucuz bir online yardımcı.
 

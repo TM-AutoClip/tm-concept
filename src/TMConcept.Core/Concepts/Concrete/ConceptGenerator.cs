@@ -264,6 +264,7 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
             var stored = await embeddings.ListAsync(request.Profile.Id, model.Model.Id, cancellationToken).ConfigureAwait(false);
             var byId = history.ToDictionary(h => h.Id);
             var pool = stored.Where(e => byId.ContainsKey(e.ConceptId)).Select(e => (Subject: byId[e.ConceptId], Vector: SemanticCheck.FromBytes(e.Vector))).ToList();
+            await BackfillAsync(request, run, model, history, pool, cancellationToken).ConfigureAwait(false);
             var candidates = verdicts.Where(v => v.Result.Accepted).ToList();
             var result = await embedder.EmbedAsync(model, candidates.Select(v => SemanticCheck.Text(v.Subject.Title, v.Subject.Summary)).ToList(), cancellationToken)
                 .ConfigureAwait(false);
@@ -308,6 +309,44 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
             return (verdicts, true);
         }
     }
+
+    /// <summary>
+    /// The earlier concepts of the profile that have no vector of this model yet (made before the meaning check was turned on, or with
+    /// another model) are embedded now, the newest <see cref="BackfillLimit"/> per run, and stored; so the check compares with them too.
+    /// </summary>
+    private async Task BackfillAsync(ConceptRequest request, Run run, Models.ResolvedModel model, IReadOnlyList<DuplicateSubject> history,
+        List<(DuplicateSubject Subject, float[] Vector)> pool, CancellationToken cancellationToken)
+    {
+        var known = pool.Select(p => p.Subject.Id).ToHashSet();
+        var missing = history.Where(h => !known.Contains(h.Id)).OrderByDescending(h => h.Number).Take(BackfillLimit).ToList();
+        if (missing.Count == 0)
+        {
+            return;
+        }
+
+        var result = await embedder.EmbedAsync(model, missing.Select(h => SemanticCheck.Text(h.Title, h.Summary)).ToList(), cancellationToken).ConfigureAwait(false);
+        run.ActualUsd += result.Tokens * model.Model.InputUsd / 1_000_000m;
+        var rows = new List<ConceptEmbedding>();
+        for (var i = 0; i < missing.Count; i++)
+        {
+            pool.Add((missing[i], result.Vectors[i]));
+            rows.Add(new ConceptEmbedding
+            {
+                ConceptId = missing[i].Id,
+                ProfileId = request.Profile.Id,
+                Model = model.Model.Id,
+                Dimensions = result.Vectors[i].Length,
+                Vector = SemanticCheck.ToBytes(result.Vectors[i]),
+            });
+        }
+
+        await embeddings.SaveAsync(rows, CancellationToken.None).ConfigureAwait(false);
+        logger.LogInformation("Meaning check: {Count} earlier concepts without a vector of {Model} were embedded ({Tokens} tokens)", rows.Count,
+            model.Model.Id, result.Tokens);
+    }
+
+    /// <summary>Earlier concepts embedded per run at most when the meaning check is turned on or its model changes.</summary>
+    public const int BackfillLimit = 300;
 
     private static IReadOnlyList<string> Titles(IReadOnlyList<DuplicateSubject> subjects) =>
         HistoryCompressor.Lines(subjects.OrderBy(s => s.Number).Select(s => s.Title).ToList());

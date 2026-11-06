@@ -1,6 +1,6 @@
 namespace TMConcept.Core.Keys;
 
-/// <summary>API keys (encrypted database only; never in backups).</summary>
+/// <summary>API keys (encrypted database; included in a password-encrypted backup only when the user chooses).</summary>
 public interface IApiKeyStore
 {
     /// <summary>Keys, optionally of one provider.</summary>

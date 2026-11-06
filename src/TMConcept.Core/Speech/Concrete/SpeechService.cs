@@ -28,15 +28,19 @@ public sealed class SpeechService(IEnumerable<ISpeechEngine> engines, StepModelR
             : Engines.FirstOrDefault(e => !e.IsLocal && e.Code == model.Provider);
     }
 
-    /// <summary>The narration of a profile (its saved choice); null when it is off.</summary>
-    public async Task<SpeechSetup?> ResolveAsync(Guid? profileId, CancellationToken cancellationToken)
+    /// <summary>The narration of a profile (its saved choice) for text in <paramref name="language"/>; null when it is off.</summary>
+    public async Task<SpeechSetup?> ResolveAsync(Guid? profileId, string language, CancellationToken cancellationToken)
     {
         var choice = await resolver.ChoiceAsync(PipelineSteps.Speech, profileId, cancellationToken).ConfigureAwait(false);
-        return StepModelResolver.IsOff(choice) ? null : await SetupAsync(choice!, cancellationToken).ConfigureAwait(false);
+        return StepModelResolver.IsOff(choice) ? null : await SetupAsync(choice!, language, cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>The narration of a choice (a page's own one: "Listen").</summary>
-    public async Task<SpeechSetup> SetupAsync(StepModelChoice choice, CancellationToken cancellationToken)
+    /// <summary>
+    /// The narration of a choice (a page's own one: "Listen") for text in <paramref name="language"/>. A voice that does not speak that
+    /// language is refused (<see cref="SpeechException"/>, code "language"): an English-only voice never reads Turkish text, even when an
+    /// older choice of the profile still names it.
+    /// </summary>
+    public async Task<SpeechSetup> SetupAsync(StepModelChoice choice, string language, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(choice);
         ResolvedModel model;
@@ -50,6 +54,12 @@ public sealed class SpeechService(IEnumerable<ISpeechEngine> engines, StepModelR
         }
 
         var engine = EngineOf(model.Model) ?? throw new SpeechException($"{model.Model.Provider}/{model.Model.Id} has no voice engine.") { Code = "model" };
+        if (!engine.Supports(language))
+        {
+            logger.LogWarning("Narration refused: {Engine} does not speak the content language {Language}", engine.Code, language);
+            throw new SpeechException($"{engine.Name} does not speak the content language ({language}); choose another voice on the video page.") { Code = "language" };
+        }
+
         if (engine.IsLocal && !engine.Ready)
         {
             throw new SpeechException($"{engine.Name} is not installed. It is installed when a process that uses it starts (after a confirmation).") { Code = "missing" };

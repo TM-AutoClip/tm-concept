@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using TMConcept.Core.Engines;
+using TMConcept.Core.Speech;
 using TMConcept.Core.Tools;
 using TMConcept.Desktop.Localization;
 using TMConcept.Desktop.Logging;
@@ -10,11 +11,11 @@ namespace TMConcept.Desktop.Reports;
 
 /// <summary>
 /// <c>system.txt</c> of a problem report (also what "Copy details" copies): the program, its version and commit, the operating system,
-/// architecture and .NET, the interface language, how the window is drawn, whether the data folder is portable, and which tools and engines
-/// are installed. No setting values, no keys, no paths, no names of profiles or accounts, nothing from the database.
+/// architecture and .NET, the interface language, how the window is drawn, whether the data folder is portable, and which tools, local voices
+/// and engines are installed. No setting values, no keys, no paths, no names of profiles or accounts, nothing from the database.
 /// </summary>
-public sealed class SystemReport(Localizer text, UiPreferencesFile preferences, IToolLocator tools, IEnumerable<IVideoEngine> engines, AppPaths paths,
-    TimeProvider clock)
+public sealed class SystemReport(Localizer text, UiPreferencesFile preferences, IToolLocator tools, IEnumerable<IVideoEngine> engines,
+    IEnumerable<ISpeechEngine> voices, AppPaths paths, TimeProvider clock)
 {
     /// <summary>The text.</summary>
     public string Build()
@@ -31,13 +32,21 @@ public sealed class SystemReport(Localizer text, UiPreferencesFile preferences, 
         report.AppendLine(c, $"Drawing: {(preferences.Read().UseGraphicsCard ? "graphics card" : "processor")} (as set; takes effect at start)");
         report.AppendLine(c, $"Data folder: {(paths.IsPortable ? "portable (--data-dir)" : "default")}");
         report.AppendLine("Tools:");
-        foreach (var tool in Enum.GetValues<ToolKind>().Where(t => t is not (ToolKind.ImageWeights or ToolKind.EmbeddingWeights)))
+        // Voice models are installed by their voice (listed below), not as tools: the tool locator never knows them.
+        foreach (var tool in Enum.GetValues<ToolKind>().Where(t => t is not (ToolKind.ImageWeights or ToolKind.EmbeddingWeights or ToolKind.SupertonicVoice
+            or ToolKind.KokoroVoice)))
         {
             var status = tools.Status(tool);
             var state = !status.Ready ? "not installed"
                 : status.Source == Engines.Tools.ToolInstaller.FallbackSource ? "the system's copy"
                 : "installed" + (status.Version.Length > 0 ? " (" + status.Version + ")" : string.Empty);
             report.AppendLine(c, $"  {tool}: {state}");
+        }
+
+        report.AppendLine("Local voices:");
+        foreach (var voice in voices.Where(v => v.IsLocal).OrderBy(v => v.Name, StringComparer.Ordinal))
+        {
+            report.AppendLine(c, $"  {voice.Name}: {(voice.Ready ? "installed" : "not installed")}");
         }
 
         report.AppendLine("Engines:");

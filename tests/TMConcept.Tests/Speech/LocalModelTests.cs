@@ -71,7 +71,10 @@ public sealed class LocalModelTests
     public void NumbersAreSpelledOutForAnEnglishVoice()
     {
         EnglishNumbers.Spell("In 672 about 1,500 ships, 3.5 % of them.").ShouldBe(
-            "In six hundred seventy-two about one thousand five hundred ships, three point five percent of them.");
+            "In six hundred seventy two about one thousand five hundred ships, three point five percent of them.");
+        EnglishNumbers.Spell("Mehmed II took it in 1453; by the 1990s, the 21st and 3rd were 80's tales.").ShouldBe(
+            "Mehmed II took it in fourteen fifty three; by the nineteen nineties, the twenty first and third were eighties tales.");
+        EnglishNumbers.Spell("1905, 1500 and 2026, 5km").ShouldBe("nineteen oh five, fifteen hundred and two thousand twenty six, fivekm");
         EnglishNumbers.Words(2_000_017).ShouldBe("two million seventeen");
         EnglishNumbers.Read("1234567890123").ShouldBe("one two three four five six seven eight nine zero one two three");
     }
@@ -81,8 +84,50 @@ public sealed class LocalModelTests
     {
         using var paths = new TempPaths();
         var request = new KokoroRequestProbe().Make(new TMConcept.Core.Speech.SpeechRequest("Year 1453.", "en", "999", 1.2, Path.Combine(paths.WorkDirectory, "a.wav"), null));
-        request.Text.ShouldBe("Year one thousand four hundred fifty-three.");
+        request.Text.ShouldBe("Year fourteen fifty three.");
         request.Speaker.ShouldBe(KokoroSpeechEngine.EnglishVoices[0].Id, "an unknown voice falls back to the first English one");
+    }
+
+    [Fact]
+    public void EverySpelledNumberUsesOnlyPlainWordsWithoutHyphens()
+    {
+        // The words Kokoro's dictionary must hold for numbers (each of them is in lexicon-us-en.txt of kokoro-int8-multi-lang-v1_0).
+        string[] vocabulary =
+        [
+            "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen",
+            "sixteen", "seventeen", "eighteen", "nineteen", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety", "hundred",
+            "thousand", "million", "billion", "oh", "point", "minus", "percent",
+        ];
+        for (var n = 0; n <= 2100; n++)
+        {
+            foreach (var word in EnglishNumbers.Spell(n.ToString(System.Globalization.CultureInfo.InvariantCulture)).Split(' '))
+            {
+                vocabulary.ShouldContain(word, $"{n} is spelled with \"{word}\"");
+            }
+        }
+    }
+
+    [Fact]
+    public void TheKokoroDictionarySplitsKnownPartsAndReportsUnknownWords()
+    {
+        var lexicon = KokoroLexicon.Of(["the", "hagia", "was", "built", "twenty", "two", "well", "made", "don't", "in"]);
+
+        var text = lexicon.Prepare("The Hagia Sophia was built in twenty-two, well-made; Mehmed's don’t Sophia.", out var unknown);
+
+        text.ShouldBe("The Hagia Sophia was built in twenty two, well made; Mehmed's don’t Sophia.");
+        unknown.ShouldBe(["sophia", "mehmed's"]);
+    }
+
+    [AvaloniaFact]
+    public async Task AVoiceThatDoesNotSpeakTheContentLanguageIsRefused()
+    {
+        using var h = new DesktopHarness();
+        await FirstRunTests.CreateAsync(h);
+        var choice = new StepModelChoice { Step = PipelineSteps.Speech, Provider = ModelProviders.Local, Model = SpeechEngines.Kokoro };
+
+        var refused = await Should.ThrowAsync<SpeechException>(() => h.Get<SpeechService>().SetupAsync(choice, ContentLanguages.Turkish, CancellationToken.None));
+
+        refused.Code.ShouldBe("language");
     }
 
     [Fact]

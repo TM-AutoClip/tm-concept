@@ -130,7 +130,8 @@ the model that describes a sample image. Each step says what it is for:
   your card looks too small; on Windows they need an NVIDIA card (CUDA), on Linux x64 a Vulkan driver; there is none for Linux ARM64.
 - **Images** can also use the profile's own sample images (free).
 - **Narration** — *Off* (silent video, yellow warning), **Supertonic 3** (local, free; Turkish and English), **Kokoro 82M** (local, free;
-  English only, American and British voices), or an online voice. Voice, speed and ▶ Listen are in the step.
+  English only, American and British voices; a dictionary voice: names and words it does not know are left out of the audio, with a
+  warning), or an online voice. Voice, speed and ▶ Listen are in the step.
 - **Duplicate check by meaning** — optional: the local **Multilingual MiniLM** (free, on this computer, 50+ languages including Turkish)
   or an online embedding model. **Describe a sample image** — optional, a cheap online helper.
 

@@ -76,7 +76,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         {
             try
             {
-                voice = await speech.ResolveAsync(profile.Id, cancellationToken).ConfigureAwait(false);
+                voice = await speech.ResolveAsync(profile.Id, profile.ContentLanguage, cancellationToken).ConfigureAwait(false);
             }
             catch (SpeechException ex)
             {
@@ -158,6 +158,13 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                     }
 
                     warnings.Add(VideoWarnings.AiVoice);
+                    var skipped = clips.OfType<SpeechClip>().SelectMany(c => c.SkippedWords).Distinct(StringComparer.Ordinal).Count();
+                    if (skipped > 0)
+                    {
+                        // Only the count is logged: the words come from the concept.
+                        warnings.Add(VideoWarnings.SpeechSkipped);
+                        logger.LogWarning("The voice left out {Count} words it does not know; the subtitles still show them", skipped);
+                    }
                 }
                 catch (Exception ex) when (ex is SpeechException or Providers.ProviderException or IOException or InvalidDataException)
                 {

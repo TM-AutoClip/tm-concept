@@ -78,6 +78,10 @@ public sealed partial class BackupSettingsViewModel(BackupService backup, IAppPa
     [ObservableProperty]
     public partial bool Busy { get; set; }
 
+    /// <summary>Whether a backup password is set (false: the page sets the first one, no current password is asked).</summary>
+    [ObservableProperty]
+    public partial bool HasPassword { get; set; } = true;
+
     /// <inheritdoc />
     public override async Task ActivateAsync()
     {
@@ -111,6 +115,9 @@ public sealed partial class BackupSettingsViewModel(BackupService backup, IAppPa
         {
             await backup.CreateInFolderAsync(contents, CancellationToken.None).ConfigureAwait(true);
             Status = text.Format("backup.done", Describe(contents));
+
+            // "Back up now" asks every time: the API keys tick starts unticked again.
+            NowKeys = false;
         }
         catch (Exception ex)
         {
@@ -166,6 +173,16 @@ public sealed partial class BackupSettingsViewModel(BackupService backup, IAppPa
         Busy = true;
         try
         {
+            if (!await backup.HasPasswordAsync(CancellationToken.None).ConfigureAwait(true))
+            {
+                // No password yet (the first start was left before one was set): the first one is set here, there is no current one to ask.
+                await backup.SetPasswordAsync(NewPassword, CancellationToken.None).ConfigureAwait(true);
+                NewPassword = NewPasswordRepeat = string.Empty;
+                HasPassword = true;
+                Status = text["backup.password_set"];
+                return;
+            }
+
             if (!await backup.ChangePasswordAsync(CurrentPassword, NewPassword, CancellationToken.None).ConfigureAwait(true))
             {
                 CurrentPassword = string.Empty;
@@ -216,7 +233,8 @@ public sealed partial class BackupSettingsViewModel(BackupService backup, IAppPa
         Count = backup.List().Count;
         try
         {
-            LastBackup = await backup.LastBackupAsync(CancellationToken.None).ConfigureAwait(true) is { } at
+            HasPassword = await backup.HasPasswordAsync(CancellationToken.None).ConfigureAwait(true);
+            LastBackup = await backup.LastAnyBackupAsync(CancellationToken.None).ConfigureAwait(true) is { } at
                 ? at.ToLocalTime().ToString("g", text.Culture)
                 : text["backup.never"];
         }

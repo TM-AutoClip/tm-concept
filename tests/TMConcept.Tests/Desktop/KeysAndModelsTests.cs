@@ -169,6 +169,73 @@ public sealed class KeysAndModelsTests
     }
 
     [AvaloniaFact]
+    public async Task SettingsSavesOnlyAKeyThatPassedItsTest()
+    {
+        var fake = new FakeHttp().Answer(HttpStatusCode.Unauthorized, """{"error":{"message":"invalid key"}}""");
+        using var h = new DesktopHarness(s => s.AddSingleton(fake.Transport));
+        await FirstRunTests.CreateAsync(h);
+        var keys = h.Get<KeysSettingsViewModel>();
+        await keys.ActivateAsync();
+        keys.Provider = keys.Providers.First(p => p.Provider.Code == "openai");
+        keys.Secret = "fake-wrong-key-0123456789";
+
+        await keys.AddAsync();
+
+        keys.Keys.ShouldBeEmpty();
+        keys.Status.ShouldStartWith("✗");
+        (await h.Get<IApiKeyStore>().ListAsync("openai", CancellationToken.None)).ShouldBeEmpty();
+    }
+
+    [AvaloniaFact]
+    public async Task ASavedKeyThatFailsItsTestDoesNotPassTheKeyGate()
+    {
+        var fake = new FakeHttp().Answer(HttpStatusCode.Unauthorized, """{"error":{"message":"invalid key"}}""");
+        var chat = new FakeChat().Concepts(FakeChat.Distinct(2));
+        FakeApiKeyDialog? dialog = null;
+        using var h = new DesktopHarness(s =>
+        {
+            s.AddSingleton(fake.Transport);
+            s.AddSingleton<IChatClientFactory>(chat);
+            s.AddSingleton<IApiKeyDialog>(p => dialog = new FakeApiKeyDialog(p.GetRequiredService<IApiKeyStore>()));
+        });
+        await FirstRunTests.CreateAsync(h);
+
+        // A key saved by 0.1.5 although its test failed (no "passed" time): the gate tests it now, and it fails.
+        await h.Get<IApiKeyStore>().SaveAsync(new ApiKey { Provider = "openai", Label = "old", Secret = "fake-expired-key-0123456789" }, CancellationToken.None);
+        var profile = new Profile { Name = "P", ContentLanguage = ContentLanguages.English, ConceptText = "x" };
+        await h.Get<IProfileStore>().SaveAsync(profile, CancellationToken.None);
+        await h.Get<AppSession>().SelectProfileAsync(profile, CancellationToken.None);
+        var page = h.Get<ConceptsViewModel>();
+        await page.ActivateAsync();
+        var row = page.Picker.Row(PipelineSteps.Concepts)!;
+        row.Selected = row.Options.First(o => o.Model?.Provider == "openai" && o.Model.Capabilities.HasFlag(ModelCapability.Chat));
+        page.Count = 2;
+
+        await page.GenerateAsync();
+
+        fake.Requests.Single().Uri.Host.ShouldBe("api.openai.com");
+        dialog!.Asked.ShouldBe(["openai"]);
+        chat.Requests.ShouldBeEmpty();
+        page.Status.ShouldContain("openai");
+    }
+
+    [AvaloniaFact]
+    public async Task ASavedKeyThatPassesItsTestNowIsMarkedAndUsed()
+    {
+        var fake = new FakeHttp().Answer(HttpStatusCode.OK, """{"data":[]}""");
+        using var h = new DesktopHarness(s => s.AddSingleton(fake.Transport));
+        await FirstRunTests.CreateAsync(h);
+        await h.Get<IApiKeyStore>().SaveAsync(new ApiKey { Provider = "openai", Label = "old", Secret = "fake-good-key-0123456789" }, CancellationToken.None);
+        var model = h.Get<IModelCatalog>().All.First(m => m.Provider == "openai" && m.Capabilities.HasFlag(ModelCapability.Chat));
+
+        (await h.Get<StepModelResolver>().ProvidersWithoutWorkingKeyAsync([model], CancellationToken.None)).ShouldBeEmpty();
+        (await h.Get<StepModelResolver>().ProvidersWithoutWorkingKeyAsync([model], CancellationToken.None)).ShouldBeEmpty();
+
+        fake.Requests.Count.ShouldBe(1, "a key that passed is not tested again");
+        (await h.Get<IApiKeyStore>().ListAsync("openai", CancellationToken.None)).Single().LastOkAtUtc.ShouldNotBeNull();
+    }
+
+    [AvaloniaFact]
     public async Task TheKeyDialogSavesOnlyAKeyThatPassedItsTest()
     {
         var fake = new FakeHttp().Answer(HttpStatusCode.Unauthorized, """{"error":{"message":"invalid key"}}""").Answer(HttpStatusCode.OK, """{"data":[]}""");

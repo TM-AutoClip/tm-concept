@@ -30,6 +30,7 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
 {
     private const string KeySetting = "backup-key";
     private const string LastSetting = "backup-last";
+    private const string ManualLastSetting = "backup-last-manual";
     private const string ContentsSetting = "backup-contents";
 
     private static readonly byte[] Magic = Encoding.ASCII.GetBytes("TMCBAK03");
@@ -100,13 +101,18 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
         return true;
     }
 
-    /// <summary>When the last backup (daily, manual or before a change) was written; <c>null</c> before the first.</summary>
-    public async Task<DateTimeOffset?> LastBackupAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// When the last automatic backup (the daily one, with what automatic backups hold) was written; <c>null</c> before the first. Only this
+    /// one decides whether the daily backup is due, so a partial "Back up now" never stands in for it.
+    /// </summary>
+    public async Task<DateTimeOffset?> LastBackupAsync(CancellationToken cancellationToken) => await TimeSettingAsync(LastSetting, cancellationToken).ConfigureAwait(false);
+
+    /// <summary>When the last backup of any kind (daily, Back up now, before a change) was written; <c>null</c> before the first (shown on the page).</summary>
+    public async Task<DateTimeOffset?> LastAnyBackupAsync(CancellationToken cancellationToken)
     {
-        var row = await SettingAsync(LastSetting, cancellationToken).ConfigureAwait(false);
-        return row is not null && long.TryParse(row.Value, NumberStyles.None, CultureInfo.InvariantCulture, out var ticks)
-            ? new DateTimeOffset(ticks, TimeSpan.Zero)
-            : null;
+        var daily = await TimeSettingAsync(LastSetting, cancellationToken).ConfigureAwait(false);
+        var other = await TimeSettingAsync(ManualLastSetting, cancellationToken).ConfigureAwait(false);
+        return daily is null ? other : other is null ? daily : daily > other ? daily : other;
     }
 
     /// <summary>What automatic backups hold (<see cref="BackupContents.Automatic"/> until the user saves a choice).</summary>
@@ -224,16 +230,17 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
     }
 
     /// <summary>
-    /// Writes a backup into the backup folder now and keeps the last <see cref="BackupRules.Keep"/>: with <paramref name="contents"/> (Back
-    /// up now), or what automatic backups hold when null.
+    /// Writes a backup into the backup folder now: with <paramref name="contents"/> (Back up now: its own files and its own last
+    /// <see cref="BackupRules.Keep"/>, never counted as the daily backup), or what automatic backups hold when null (the daily kind).
     /// </summary>
-    public async Task<string> CreateInFolderAsync(BackupContents? contents, CancellationToken cancellationToken) =>
-        await CreateNamedAsync(BackupRules.Prefix, contents ?? await AutomaticContentsAsync(cancellationToken).ConfigureAwait(false), cancellationToken)
-            .ConfigureAwait(false);
+    public async Task<string> CreateInFolderAsync(BackupContents? contents, CancellationToken cancellationToken) => contents is null
+        ? await CreateNamedAsync(BackupRules.Prefix, await AutomaticContentsAsync(cancellationToken).ConfigureAwait(false), cancellationToken).ConfigureAwait(false)
+        : await CreateNamedAsync(BackupRules.ManualPrefix, contents, cancellationToken).ConfigureAwait(false);
 
     /// <summary>
     /// The extra backup before a large change (a profile deleted, <see cref="BackupRules.BulkChange"/> or more concepts deleted for good):
-    /// taken before the change, so the data can come back, with what automatic backups hold. Kept apart from the daily ones (the last
+    /// taken before the change, so the data can come back: always the profiles and the concepts (what such a change removes), the API keys
+    /// and settings as automatic backups hold them. Kept apart from the daily ones (the last
     /// <see cref="BackupRules.Keep"/> of each), so a busy day does not push the older days out. <c>null</c> when no backup password is set (logged).
     /// </summary>
     public async Task<string?> CreateBeforeChangeAsync(string reason, CancellationToken cancellationToken)
@@ -244,8 +251,9 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
             return null;
         }
 
-        var file = await CreateNamedAsync(BackupRules.ChangePrefix, await AutomaticContentsAsync(cancellationToken).ConfigureAwait(false), cancellationToken)
-            .ConfigureAwait(false);
+        var automatic = await AutomaticContentsAsync(cancellationToken).ConfigureAwait(false);
+        var contents = new BackupContents { Keys = automatic.Keys, Settings = automatic.Settings, Profiles = true, Concepts = true };
+        var file = await CreateNamedAsync(BackupRules.ChangePrefix, contents, cancellationToken).ConfigureAwait(false);
         logger.LogInformation("Backup before a change written ({Reason})", reason);
         return file;
     }
@@ -358,7 +366,7 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
     private static string Scrub(BackupContents contents)
     {
         var sql = new StringBuilder("PRAGMA secure_delete = ON; ");
-        sql.Append("DELETE FROM \"settings\" WHERE \"Key\" IN ('" + KeySetting + "', '" + LastSetting + "'); ");
+        sql.Append("DELETE FROM \"settings\" WHERE \"Key\" IN ('" + KeySetting + "', '" + LastSetting + "', '" + ManualLastSetting + "'); ");
         if (!contents.Keys)
         {
             sql.Append("DELETE FROM \"api_keys\"; ");
@@ -515,8 +523,17 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
         var target = Path.Combine(paths.BackupDirectory, prefix + now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + BackupRules.Extension);
         await CreateAsync(target, contents, cancellationToken).ConfigureAwait(false);
         Prune(prefix);
-        await WriteSettingAsync(LastSetting, now.UtcTicks.ToString(CultureInfo.InvariantCulture), cancellationToken).ConfigureAwait(false);
+        await WriteSettingAsync(prefix == BackupRules.Prefix ? LastSetting : ManualLastSetting, now.UtcTicks.ToString(CultureInfo.InvariantCulture), cancellationToken)
+            .ConfigureAwait(false);
         return target;
+    }
+
+    private async Task<DateTimeOffset?> TimeSettingAsync(string name, CancellationToken cancellationToken)
+    {
+        var row = await SettingAsync(name, cancellationToken).ConfigureAwait(false);
+        return row is not null && long.TryParse(row.Value, NumberStyles.None, CultureInfo.InvariantCulture, out var ticks)
+            ? new DateTimeOffset(ticks, TimeSpan.Zero)
+            : null;
     }
 
     private async Task WriteSettingAsync(string name, string value, CancellationToken cancellationToken)
@@ -531,12 +548,11 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
         return await SettingTable.Instance.FirstAsync(db, "\"Key\" = $key", cancellationToken, null, ("$key", name)).ConfigureAwait(false);
     }
 
-    /// <summary>Keeps the newest <see cref="BackupRules.Keep"/> files of one kind (daily/manual, or before a change).</summary>
+    /// <summary>Keeps the newest <see cref="BackupRules.Keep"/> files of one kind (daily, Back up now, or before a change).</summary>
     private void Prune(string prefix)
     {
-        bool Kind(string name) => prefix == BackupRules.ChangePrefix
-            ? name.StartsWith(BackupRules.ChangePrefix, StringComparison.Ordinal)
-            : name.StartsWith(BackupRules.Prefix, StringComparison.Ordinal) && !name.StartsWith(BackupRules.ChangePrefix, StringComparison.Ordinal);
+        // Each kind is its prefix followed by the date (a digit), so "tm-concept-" never takes the manual or change files in.
+        bool Kind(string name) => name.Length > prefix.Length && name.StartsWith(prefix, StringComparison.Ordinal) && char.IsAsciiDigit(name[prefix.Length]);
         foreach (var old in List().Where(f => Kind(System.IO.Path.GetFileName(f.Path))).Skip(BackupRules.Keep))
         {
             try
@@ -550,13 +566,28 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
         }
     }
 
-    private static async Task VerifyAsync(string file, byte[] dek, CancellationToken cancellationToken)
+    /// <summary>
+    /// Opens the temporary copy and brings it to this version's schema before anything is installed: a backup of a newer version, or one
+    /// whose upgrade fails, is refused here and nothing in the data folder changes.
+    /// </summary>
+    private async Task VerifyAsync(string file, byte[] dek, CancellationToken cancellationToken)
     {
         try
         {
             await using var db = await ConceptDatabase.OpenAsync(ConceptDatabase.ConnectionString(file, Convert.ToHexString(dek)), cancellationToken)
                 .ConfigureAwait(false);
             await SettingTable.Instance.CountAsync(db, string.Empty, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await ConceptDatabase.EnsureSchemaAsync(db, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or SqliteException)
+            {
+                logger.LogError(ex, "Restore refused: the backup's database cannot be brought to this version's schema");
+                throw new BackupRefusedException(ex is InvalidOperationException
+                    ? ex.Message
+                    : "This backup's database could not be brought to this version's schema; nothing was restored.", ex);
+            }
         }
         catch (SqliteException ex)
         {

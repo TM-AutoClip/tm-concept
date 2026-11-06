@@ -45,6 +45,7 @@ public static class SpeechWorker
         using var reader = new StreamReader(input, utf8);
         using var writer = new StreamWriter(output, utf8) { AutoFlush = true, NewLine = "\n" };
         SherpaSynthesizer? synthesizer = null;
+        KokoroLexicon? lexicon = null;
         Embeddings.OnnxEmbedder? embedder = null;
         try
         {
@@ -85,13 +86,24 @@ public static class SpeechWorker
                         continue;
                     }
 
+                    if (synthesizer is { IsKokoro: true } && lexicon is null)
+                    {
+                        lexicon = KokoroLexicon.Load(SherpaSynthesizer.KokoroFiles[3]);
+                        logger.LogInformation("Kokoro dictionary read: {Words} words", lexicon.Count);
+                    }
+
                     reply = synthesizer is null
                         ? new SpeechWorkerReply(false, 0, "engine", "This worker holds the embedding model, not a voice.")
-                        : Speak(synthesizer, request);
+                        : Speak(synthesizer, lexicon, request);
                     if (reply.Ok)
                     {
                         logger.LogInformation("Scene spoken ({Language}, {Characters} characters): {AudioMs} ms of audio in {Ms} ms", request.Language,
                             request.Text.Length, reply.DurationMs, watch.ElapsedMilliseconds);
+                        if (reply.Skipped is { Count: > 0 } skipped)
+                        {
+                            // Only the count: the words come from the user's concept.
+                            logger.LogWarning("The dictionary voice does not know {Count} words of the scene; they are left out of the audio", skipped.Count);
+                        }
                     }
                     else
                     {
@@ -140,9 +152,11 @@ public static class SpeechWorker
         return new SherpaSynthesizer(Math.Clamp(threads, 1, 16));
     }
 
-    private static SpeechWorkerReply Speak(SherpaSynthesizer synthesizer, SpeechWorkerRequest request)
+    private static SpeechWorkerReply Speak(SherpaSynthesizer synthesizer, KokoroLexicon? lexicon, SpeechWorkerRequest request)
     {
-        var (samples, rate) = synthesizer.Speak(request.Text, request.Language, request.Speaker, request.Speed, request.Steps);
+        IReadOnlyList<string> skipped = [];
+        var text = lexicon is null ? request.Text : lexicon.Prepare(request.Text, out skipped);
+        var (samples, rate) = synthesizer.Speak(text, request.Language, request.Speaker, request.Speed, request.Steps);
 
         // An engine that could not turn the text into sounds returns no samples: that is a failure, never a silent clip.
         if (rate <= 0 || samples.Length == 0)
@@ -151,6 +165,6 @@ public static class SpeechWorker
         }
 
         WaveFile.WritePcm16(request.OutputWav, samples, rate);
-        return new SpeechWorkerReply(true, (long)Math.Round(samples.Length * 1000.0 / rate), string.Empty, string.Empty);
+        return new SpeechWorkerReply(true, (long)Math.Round(samples.Length * 1000.0 / rate), string.Empty, string.Empty, Skipped: skipped.Count > 0 ? skipped : null);
     }
 }

@@ -15,6 +15,9 @@ public static class VideoWarnings
     /// <summary>AI voice (Supertonic, online): say so when publishing.</summary>
     public const string AiVoice = "ai_voice";
 
+    /// <summary>The dictionary voice (Kokoro) left out words it does not know (names, rare words); the subtitles still show them.</summary>
+    public const string SpeechSkipped = "speech_skipped";
+
     /// <summary>The code needed its one repair.</summary>
     public const string Repaired = "repaired";
 }

@@ -5,9 +5,12 @@ using System.Text.RegularExpressions;
 namespace TMConcept.Core.Text;
 
 /// <summary>
-/// Spells out the numbers of an English text ("In 672 about 1,500 ships, 3.5 % of them" → "In six hundred seventy-two about one thousand five
+/// Spells out the numbers of an English text ("In 672 about 1,500 ships, 3.5 % of them" → "In six hundred seventy two about one thousand five
 /// hundred ships, three point five percent of them"). A voice that reads words from a dictionary (Kokoro through sherpa-onnx without
-/// espeak-ng) would skip digits otherwise. Whole numbers up to 999 999 999 999; longer digit runs are read digit by digit.
+/// espeak-ng) would skip digits otherwise, so every word written here is a plain dictionary word: tens and units are joined with a space
+/// (the dictionary lacks most "seventy-two" forms), ordinals ("21st" → "twenty first") and decades ("1990s" → "nineteen nineties") are whole
+/// words, and a year-like number 1100–1999 is read in pairs ("1453" → "fourteen fifty three"). Whole numbers up to 999 999 999 999; longer
+/// digit runs are read digit by digit.
 /// </summary>
 public static partial class EnglishNumbers
 {
@@ -25,9 +28,59 @@ public static partial class EnglishNumbers
     public static string Spell(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
-        var spelled = NumberPattern().Replace(text, m => Read(m.Value));
+        var spelled = NumberPattern().Replace(text, m => Suffixed(m.Groups["n"].Value, m.Groups["s"].Value));
         return PercentPattern().Replace(spelled, " percent");
     }
+
+    /// <summary>A number with its suffix: an ordinal ("21st"), a plural or decade ("1990s", "80's"), or none.</summary>
+    private static string Suffixed(string number, string suffix)
+    {
+        var plain = number.Length is 4 && !number.Contains('.', StringComparison.Ordinal) && int.TryParse(number, NumberStyles.None, CultureInfo.InvariantCulture, out var year)
+            && year is >= 1100 and <= 1999
+            ? Year(year)
+            : Read(number);
+        if (suffix.Length == 0 || number.Contains('.', StringComparison.Ordinal))
+        {
+            return plain + suffix;
+        }
+
+        var at = plain.LastIndexOf(' ') + 1;
+        var head = plain[..at];
+        var last = plain[at..];
+        return suffix.ToLowerInvariant() switch
+        {
+            "st" or "nd" or "rd" or "th" => head + Ordinal(last),
+            _ => head + Plural(last),
+        };
+    }
+
+    /// <summary>A year 1100–1999 in pairs: "fourteen fifty three", "nineteen oh five", "fifteen hundred".</summary>
+    private static string Year(int year)
+    {
+        var high = year / 100;
+        var low = year % 100;
+        return low == 0 ? Words(high) + " hundred" : low < 10 ? Words(high) + " oh " + Words(low) : Words(high) + " " + Words(low);
+    }
+
+    private static string Ordinal(string word) => word switch
+    {
+        "one" => "first",
+        "two" => "second",
+        "three" => "third",
+        "five" => "fifth",
+        "eight" => "eighth",
+        "nine" => "ninth",
+        "twelve" => "twelfth",
+        _ when word.EndsWith('y') => word[..^1] + "ieth",
+        _ => word + "th",
+    };
+
+    private static string Plural(string word) => word switch
+    {
+        _ when word.EndsWith('y') => word[..^1] + "ies",
+        _ when word.EndsWith('x') => word + "es",
+        _ => word + "s",
+    };
 
     /// <summary>One number ("1,500", "3.5", "007").</summary>
     public static string Read(string number)
@@ -82,7 +135,7 @@ public static partial class EnglishNumbers
             builder.Append(Tens[value / 10]);
             if (value % 10 > 0)
             {
-                builder.Append('-').Append(Small[value % 10]);
+                builder.Append(' ').Append(Small[value % 10]);
             }
         }
         else if (value > 0)
@@ -95,7 +148,7 @@ public static partial class EnglishNumbers
 
     private static string Digits(string digits) => string.Join(' ', digits.Where(char.IsAsciiDigit).Select(d => Small[d - '0']));
 
-    [GeneratedRegex(@"\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"(?<n>\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)(?:(?<s>st|nd|rd|th|'s|s)(?![A-Za-z]))?", RegexOptions.CultureInvariant)]
     private static partial Regex NumberPattern();
 
     [GeneratedRegex(@"\s*%", RegexOptions.CultureInvariant)]

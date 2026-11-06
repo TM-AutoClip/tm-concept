@@ -457,6 +457,11 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
             activity.Add(ActivityLevel.Error, text.Format("video.silent.failed", record.Title), text.Format("video.silent.failed", ActivityPlaceholders.Title));
         }
 
+        if (warnings.Contains(VideoWarnings.SpeechSkipped))
+        {
+            activity.Add(ActivityLevel.Warning, text.Format("video.speech.skipped", record.Title), text.Format("video.speech.skipped", ActivityPlaceholders.Title));
+        }
+
         if (warnings.Contains(VideoWarnings.ImagesFailed))
         {
             activity.Add(ActivityLevel.Warning, text.Format("video.images.failed", record.Title), text.Format("video.images.failed", ActivityPlaceholders.Title));

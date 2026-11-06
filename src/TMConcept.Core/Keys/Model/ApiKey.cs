@@ -1,7 +1,8 @@
 namespace TMConcept.Core.Keys;
 
 /// <summary>
-/// An API key of a provider. The value lives only in the encrypted database, never in logs, errors or backups; it is sent only to its own
+/// An API key of a provider. The value lives in the encrypted database (and in a password-encrypted backup only when the user ticks the
+/// keys), never in logs or errors; it is sent only to its own
 /// provider's fixed address. A provider can have several keys with different labels.
 /// </summary>
 public sealed class ApiKey

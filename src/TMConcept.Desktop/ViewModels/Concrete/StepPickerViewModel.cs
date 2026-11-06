@@ -34,6 +34,9 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
     SpeechService speech, ComponentInstallFlow installs, AppSession session, IConfirmDialog confirm, IApiKeyDialog keyDialog, IGpuInfo gpu, IAppPaths paths,
     ShellLauncher shell, Localizer text, ILogger<StepPickerViewModel> logger) : ObservableObject
 {
+    /// <summary>The "saved" mark of a row whose saved choice is not offered any more: never equal to a row's key, so it is saved again.</summary>
+    private const string StaleChoice = "\u0000stale";
+
     private readonly IReadOnlyList<IVideoEngine> _engines = engines.OrderBy(e => e.Kind).ToList();
     private Guid? _profile;
     private string _language = ContentLanguages.English;
@@ -89,12 +92,15 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
             var row = Row(step);
             var choice = saved.FirstOrDefault(s => s.Step == step.Code);
             var options = StepModelResolver.Options(choice);
-            row.Selected = Select(row, choice, options);
+            row.Selected = Select(row, choice, options, out var stale);
             row.Effort = row.Efforts.FirstOrDefault(e => e.Value == options.Effort) ?? row.Efforts.FirstOrDefault();
             row.Engine = row.Engines.FirstOrDefault(e => e.Kind == options.Engine) ?? row.Engines.FirstOrDefault();
             row.Speed = (decimal)Math.Clamp(options.Speed, ProfileLimits.SpeedMin, ProfileLimits.SpeedMax);
             FillVoices(row, options.Voice);
-            row.Saved = Key(row);
+
+            // A saved model that is not offered any more (catalog, or a voice that does not speak the profile's language now) shows "none":
+            // the row is not counted as saved, so the next prepare writes what the page shows and a process never uses the hidden choice.
+            row.Saved = stale ? StaleChoice : Key(row);
             row.PropertyChanged += OnRowChanged;
             Rows.Add(row);
             await NoteAsync(row).ConfigureAwait(true);
@@ -238,7 +244,7 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
             }
 
             var choice = Desired(row) ?? new StepModelChoice();
-            var setup = await speech.SetupAsync(choice, CancellationToken.None).ConfigureAwait(true);
+            var setup = await speech.SetupAsync(choice, _language, CancellationToken.None).ConfigureAwait(true);
             var wav = Path.Combine(paths.WorkDirectory, "listen", "sample.wav");
             await speech.SynthesizeAsync(setup, _language, text[_language == ContentLanguages.Turkish ? "speech.sample.tr" : "speech.sample.en"], wav,
                 CancellationToken.None).ConfigureAwait(true);
@@ -296,15 +302,15 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
     }
 
     /// <summary>
-    /// The key gate: every online provider of the rows needs an API key. A missing one is asked for in a dialog (tested there; only a key
-    /// that works is saved); declined = the process does not start.
+    /// The key gate: every online provider of the rows needs a working API key (a saved key that fails its free test does not count). A
+    /// missing one is asked for in a dialog (tested there; only a key that works is saved); declined = the process does not start.
     /// </summary>
     private async Task<bool> KeysAsync(IReadOnlyList<StepModelRowViewModel> rows, CancellationToken cancellationToken)
     {
         var models = rows.Select(r => r.Selected?.Model).OfType<CatalogModel>().ToList();
-        foreach (var provider in await resolver.ProvidersWithoutKeyAsync(models, cancellationToken).ConfigureAwait(true))
+        foreach (var provider in await resolver.ProvidersWithoutWorkingKeyAsync(models, cancellationToken).ConfigureAwait(true))
         {
-            logger.LogWarning("The provider {Provider} has no API key; one is asked for before the process starts", provider);
+            logger.LogWarning("The provider {Provider} has no working API key; one is asked for before the process starts", provider);
             if (!await keyDialog.AddKeyAsync(provider).ConfigureAwait(true))
             {
                 logger.LogWarning("Process not started: no API key was added for {Provider}", provider);
@@ -317,6 +323,16 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
 
                 return false;
             }
+
+            if (!resolver.CanTest(provider))
+            {
+                // No free test exists (fal): the key was saved untested; it is checked at its first use, and the page says so.
+                foreach (var row in rows.Where(r => r.Selected?.Model?.Provider == provider))
+                {
+                    row.Note = text["keys.test.untested"];
+                    row.NoteIsWarning = true;
+                }
+            }
         }
 
         return true;
@@ -326,7 +342,11 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
 
     private StepModelRowViewModel Row(PipelineStep step)
     {
-        var recommended = step.Recommended.Select(r => catalog.All.FirstOrDefault(m => m.Provider + "/" + m.Id == r)?.Name ?? r);
+        // Only what this page offers: a voice that does not speak the profile's language is not recommended either.
+        var recommended = step.Recommended
+            .Select(r => (Code: r, Model: catalog.All.FirstOrDefault(m => m.Provider + "/" + m.Id == r)))
+            .Where(r => r.Model is null || Usable(step, r.Model))
+            .Select(r => r.Model?.Name ?? r.Code);
         var row = new StepModelRowViewModel(step, text["step." + step.Code], text["step." + step.Code + ".purpose"],
             text.Format("models.recommended", string.Join(" · ", recommended)), text["models.effort.auto"]);
         row.Options.Add(new StepOption(StepOptionKind.None, null, step.Optional ? text["step." + step.Code + ".off"] : text["models.none"]));
@@ -350,8 +370,9 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
         return row;
     }
 
-    private StepOption Select(StepModelRowViewModel row, StepModelChoice? choice, StepOptions options)
+    private StepOption Select(StepModelRowViewModel row, StepModelChoice? choice, StepOptions options, out bool stale)
     {
+        stale = false;
         if (StepModelResolver.IsOff(choice))
         {
             return choice is not null && options.ImageSource == ImageSources.Samples && row.Options.FirstOrDefault(o => o.Kind == StepOptionKind.Samples) is { } samples
@@ -365,6 +386,7 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
         }
 
         logger.LogWarning("The saved model of the step {Step} is not offered any more (catalog or content language); the step shows no model", row.Step.Code);
+        stale = true;
         return row.Options[0];
     }
 

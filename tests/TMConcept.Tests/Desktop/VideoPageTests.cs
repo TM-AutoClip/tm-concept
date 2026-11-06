@@ -178,6 +178,32 @@ public sealed class VideoPageTests
     }
 
     [AvaloniaFact]
+    public async Task AVoiceHiddenAfterTheLanguageChangedIsTurnedOffAndNeverUsed()
+    {
+        var engine = new FakeEngine();
+        using var h = Harness(new FakeChat().Answer(_ => Code(engine.SampleCode)), engine);
+        var (page, concept) = await PrepareAsync(h);
+
+        // The profile spoke English with Kokoro; then its content language became Turkish, which Kokoro does not speak.
+        var store = h.Get<IStepModelStore>();
+        await store.SaveAsync(new StepModelChoice { Step = PipelineSteps.Speech, ProfileId = concept.ProfileId, Provider = ModelProviders.Local, Model = "kokoro" },
+            CancellationToken.None);
+        var profile = (await h.Get<IProfileStore>().GetAsync(concept.ProfileId, CancellationToken.None))!;
+        profile.ContentLanguage = ContentLanguages.Turkish;
+        await h.Get<IProfileStore>().SaveAsync(profile, CancellationToken.None);
+        await h.Get<AppSession>().SelectProfileAsync(profile, CancellationToken.None);
+        await page.ActivateAsync();
+        page.Picker.Model(PipelineSteps.Speech).ShouldBeNull("the page shows narration off");
+
+        await page.ProduceAllAsync();
+
+        StepModelResolver.IsOff(await store.GetAsync(PipelineSteps.Speech, concept.ProfileId, CancellationToken.None)).ShouldBeTrue("what the page showed is saved");
+        var video = (await h.Get<IVideoStore>().ListAsync(concept.ProfileId, CancellationToken.None)).Single();
+        video.Warnings.ShouldContain(VideoWarnings.SpeechOff);
+        video.Warnings.ShouldNotContain(VideoWarnings.SpeechFailed);
+    }
+
+    [AvaloniaFact]
     public async Task AnItemRemovedDuringTheRunIsNotMadeAndANewOneIs()
     {
         var engine = new FakeEngine();

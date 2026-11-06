@@ -128,7 +128,9 @@ public sealed class Vault(IAppPaths paths, DatabaseKey key, IEnumerable<IKeyProt
     }
 
     /// <summary>
-    /// Installs a database file with its key (used by restore): the file is copied in, the key is sealed with this computer's protector.
+    /// Installs a database file with its key (used by restore): the file is copied in and brought to the current schema, and only then is
+    /// the key file written (sealed with this computer's protector). When the schema step fails, the copied file is removed again and no key
+    /// file is written, so the folder stays "not created" and another restore can be tried.
     /// </summary>
     public async Task InstallAsync(string databaseFile, byte[] dek, IKeyProtector protector, CancellationToken cancellationToken)
     {
@@ -138,22 +140,51 @@ public sealed class Vault(IAppPaths paths, DatabaseKey key, IEnumerable<IKeyProt
             throw new InvalidOperationException("Close the database before replacing it.");
         }
 
+        if (File.Exists(paths.KeyFile))
+        {
+            throw new InvalidOperationException("A key file already exists; a backup is installed only into an empty data folder.");
+        }
+
         var envelope = await protector.ProtectAsync(dek, cancellationToken).ConfigureAwait(false);
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(paths.DatabaseFile))!);
         File.Copy(databaseFile, paths.DatabaseFile, overwrite: true);
-        KeyFile.Write(paths.KeyFile, envelope);
         key.Load(dek);
 
         // A backup of an older version has an older schema: it is upgraded now, before anything uses it (0.1.5 skipped this, so a profile
-        // saved right after restoring a 0.1.4 backup failed with "no such table: profile_step_models").
+        // saved right after restoring a 0.1.4 backup failed with "no such table: profile_step_models"). The key file comes after it.
         try
         {
-            await using var db = await new ConceptDatabase(paths, key).OpenAsync(cancellationToken).ConfigureAwait(false);
-            await ConceptDatabase.EnsureSchemaAsync(db, cancellationToken).ConfigureAwait(false);
+            await using (var db = await new ConceptDatabase(paths, key).OpenAsync(cancellationToken).ConfigureAwait(false))
+            {
+                await ConceptDatabase.EnsureSchemaAsync(db, cancellationToken).ConfigureAwait(false);
+            }
+
+            KeyFile.Write(paths.KeyFile, envelope);
         }
-        catch
+        catch (Exception ex)
         {
             key.Clear();
+            logger.LogError(ex, "The restored database could not be brought to this version's schema; it is removed again and nothing is installed");
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            try
+            {
+                // The removed file is this restore's own copy of the backup (the backup file itself stays where it was).
+                File.Delete(paths.DatabaseFile);
+            }
+            catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException)
+            {
+                logger.LogError(cleanup, "The copy of a failed restore could not be removed; it is a database without a key file and is moved aside at the next start");
+            }
+
+            try
+            {
+                await protector.ForgetAsync(envelope, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (InvalidOperationException forget)
+            {
+                logger.LogWarning(forget, "The key seal of a failed restore could not be removed ({Method})", protector.Method);
+            }
+
             throw;
         }
 

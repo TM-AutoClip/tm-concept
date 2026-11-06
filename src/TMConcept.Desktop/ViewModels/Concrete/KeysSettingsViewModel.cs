@@ -12,8 +12,8 @@ namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
 /// API keys: provider (from the registered list), label, masked key; a step-by-step guide per provider (open account → create key → paste →
-/// "Test connection"); the test is a free request and shows ✓ or ✗. A provider can have several keys. Keys stay in the encrypted database and
-/// never go into backups.
+/// "Test connection"); the test is a free request and shows ✓ or ✗; a new key is saved only when it passes (or when the provider has no free
+/// test). A provider can have several keys. Keys stay in the encrypted database and go into a password-encrypted backup only when ticked.
 /// </summary>
 public sealed partial class KeysSettingsViewModel(IEnumerable<IProvider> providers, IApiKeyStore keys, IConfirmDialog confirm, ShellLauncher shell,
     Localizer text, TimeProvider clock, ILogger<KeysSettingsViewModel> logger) : SettingsSectionBase
@@ -60,7 +60,7 @@ public sealed partial class KeysSettingsViewModel(IEnumerable<IProvider> provide
         await ReloadAsync().ConfigureAwait(true);
     }
 
-    /// <summary>Saves the new key and tests it.</summary>
+    /// <summary>Tests the new key with the provider's free request and saves it only when it works (or when no free test exists: fal).</summary>
     [RelayCommand]
     public async Task AddAsync()
     {
@@ -70,31 +70,54 @@ public sealed partial class KeysSettingsViewModel(IEnumerable<IProvider> provide
             return;
         }
 
+        if (Busy)
+        {
+            return;
+        }
+
+        var provider = Provider.Provider;
         var key = new ApiKey
         {
-            Provider = Provider.Provider.Code,
+            Provider = provider.Code,
             Label = Label.Trim().Length > 0 ? Label.Trim() : text["keys.default_label"],
             Secret = Secret.Trim(),
         };
+        Busy = true;
+        ConnectionTest result;
         try
         {
+            result = await provider.TestAsync(key.Secret, CancellationToken.None).ConfigureAwait(true);
+            logger.LogInformation("Key test of {Provider} before saving: {Code}", provider.Code, result.Code);
+            if (!result.Ok)
+            {
+                logger.LogWarning("The key of {Provider} did not pass its test and was not saved ({Code})", provider.Code, result.Code);
+                Status = "✗ " + text.Format("keys.test.failed", ProviderErrors.Text(text, result.Code)) + " " + text["keygate.not_saved"];
+                return;
+            }
+
+            key.LastOkAtUtc = result.Code == "ok" ? clock.GetUtcNow() : null;
             await keys.SaveAsync(key, CancellationToken.None).ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // The message never holds the key: it comes from the storage layer, which does not see the value.
-            logger.LogError(ex, "An API key could not be saved ({Provider})", key.Provider);
+            // The message never holds the key: it comes from the network or storage layer, which does not see the value.
+            logger.LogError(ex, "An API key could not be tested or saved ({Provider})", key.Provider);
             Status = text.Format("error.generic", ex.Message);
             return;
+        }
+        finally
+        {
+            Busy = false;
         }
 
         logger.LogInformation("An API key was saved for {Provider}", key.Provider);
         Secret = string.Empty;
         Label = string.Empty;
+        Status = result.Code == "ok" ? "✓ " + text["keys.test.ok"] : "• " + text["keys.test.untested"];
         await ReloadAsync().ConfigureAwait(true);
         if (Keys.FirstOrDefault(k => k.Key.Id == key.Id) is { } row)
         {
-            await TestAsync(row).ConfigureAwait(true);
+            row.Result = Status;
         }
     }
 

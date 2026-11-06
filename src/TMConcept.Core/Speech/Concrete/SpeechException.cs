@@ -1,6 +1,6 @@
 namespace TMConcept.Core.Speech;
 
-/// <summary>Narration failed (<see cref="Code"/>: "missing", "model", "engine").</summary>
+/// <summary>Narration failed (<see cref="Code"/>: "missing", "model", "language", "engine").</summary>
 public sealed class SpeechException : Exception
 {
     /// <summary>Creates.</summary>

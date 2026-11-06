@@ -10,7 +10,9 @@ namespace TMConcept.Speech.Speech;
 /// <summary>
 /// Kokoro 82M through sherpa-onnx: a free local voice of good quality for English (American and British voices; the model has other
 /// languages, but without espeak-ng sherpa-onnx 2.x reads only English and Chinese from its dictionaries, so it is offered for English
-/// profiles only). 24 kHz, on the processor. Apache-2.0. Numbers are spelled out first (the dictionary has no digits).
+/// profiles only). 24 kHz, on the processor. Apache-2.0. Numbers are spelled out first (the dictionary has no digits). It is a dictionary voice:
+/// a word its dictionary does not hold (names, coined words) is left out of the audio; the worker reports such words and the video gets a
+/// warning (<see cref="KokoroLexicon"/>). Every voice, British ones too, is read with the American English dictionary.
 /// </summary>
 public sealed class KokoroSpeechEngine(SpeechModelInstaller installer, IToolLocator tools, SpeechWorkerClient worker, ILogger<KokoroSpeechEngine> logger)
     : SherpaSpeechEngineBase(installer, tools, worker, SpeechModels.Kokoro, logger)

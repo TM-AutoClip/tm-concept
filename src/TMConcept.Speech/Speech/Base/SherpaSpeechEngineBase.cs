@@ -66,7 +66,7 @@ public abstract class SherpaSpeechEngineBase(SpeechModelInstaller installer, ITo
             throw new SpeechException($"{Name} failed: {reply.Error}") { Code = "engine" };
         }
 
-        return new SpeechClip(request.OutputWav, reply.DurationMs, request.Text.Length, 0, Code);
+        return new SpeechClip(request.OutputWav, reply.DurationMs, request.Text.Length, 0, Code) { SkippedWords = reply.Skipped ?? [] };
     }
 
     /// <summary>The worker request of a speech request (voice, speed, steps and language of this model).</summary>

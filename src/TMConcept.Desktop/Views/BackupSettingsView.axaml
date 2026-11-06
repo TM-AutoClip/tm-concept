@@ -41,12 +41,15 @@
         </StackPanel>
       </Border>
 
-      <TextBlock Text="{DynamicResource backup.change_password}" Classes="h2" Margin="0,12,0,0" />
-      <TextBlock Text="{DynamicResource backup.password.change_explain}" Classes="small" TextWrapping="Wrap" />
-      <TextBox Classes="secret" Text="{Binding CurrentPassword}" PlaceholderText="{DynamicResource backup.password.current}" Width="360" HorizontalAlignment="Left" />
+      <TextBlock Text="{DynamicResource backup.change_password}" Classes="h2" Margin="0,12,0,0" IsVisible="{Binding HasPassword}" />
+      <TextBlock Text="{DynamicResource backup.set_password}" Classes="h2" Margin="0,12,0,0" IsVisible="{Binding !HasPassword}" />
+      <TextBlock Text="{DynamicResource backup.password.change_explain}" Classes="small" TextWrapping="Wrap" IsVisible="{Binding HasPassword}" />
+      <TextBlock Text="{DynamicResource backup.password.set_explain}" Classes="small warning" TextWrapping="Wrap" IsVisible="{Binding !HasPassword}" />
+      <TextBox Classes="secret" Text="{Binding CurrentPassword}" PlaceholderText="{DynamicResource backup.password.current}" Width="360" HorizontalAlignment="Left" IsVisible="{Binding HasPassword}" />
       <TextBox Classes="secret" Text="{Binding NewPassword}" PlaceholderText="{DynamicResource backup.password.field}" Width="360" HorizontalAlignment="Left" />
       <TextBox Classes="secret" Text="{Binding NewPasswordRepeat}" PlaceholderText="{DynamicResource password.repeat}" Width="360" HorizontalAlignment="Left" />
-      <Button Content="{DynamicResource backup.change_password}" Command="{Binding ChangePasswordCommand}" IsEnabled="{Binding !Busy}" />
+      <Button Content="{DynamicResource backup.change_password}" Command="{Binding ChangePasswordCommand}" IsEnabled="{Binding !Busy}" IsVisible="{Binding HasPassword}" />
+      <Button Content="{DynamicResource backup.set_password}" Command="{Binding ChangePasswordCommand}" IsEnabled="{Binding !Busy}" IsVisible="{Binding !HasPassword}" />
       <ProgressBar IsIndeterminate="True" IsVisible="{Binding Busy}" />
       <TextBlock Text="{Binding Status}" Classes="muted" TextWrapping="Wrap" />
     </StackPanel>

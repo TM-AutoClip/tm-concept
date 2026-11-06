@@ -279,6 +279,11 @@ public sealed partial class FirstRunViewModel(Vault vault, BackupService backup,
             logger.LogWarning(ex, "Backup could not be opened");
             Message = text["restore.wrong_password"];
         }
+        catch (BackupRefusedException ex)
+        {
+            logger.LogWarning(ex, "Backup refused by this version");
+            Message = text.Format("restore.refused", ex.Message);
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "First run step failed");

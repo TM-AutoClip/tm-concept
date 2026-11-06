@@ -23,10 +23,14 @@ internal sealed class SherpaSynthesizer : IDisposable
 
     private IntPtr _tts;
 
+    /// <summary>Whether the loaded model is Kokoro (it reads English words only from its dictionary).</summary>
+    public bool IsKokoro { get; }
+
     /// <summary>Loads the model of the current folder with <paramref name="threads"/> processor threads.</summary>
     public SherpaSynthesizer(int threads)
     {
         var kokoro = File.Exists(KokoroFiles[1]) && !File.Exists(ModelFiles[4]);
+        IsKokoro = kokoro;
         var files = kokoro ? KokoroFiles : ModelFiles;
         var missing = files.FirstOrDefault(f => !File.Exists(f));
         if (missing is not null)

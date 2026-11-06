@@ -16,6 +16,9 @@ internal sealed class DesktopHarness : IDisposable
         Services = DesktopServices.Build(Paths, s =>
         {
             s.AddSingleton(KdfParameters.Fast);
+
+            // Nothing reaches a real provider: key tests pass, every other request fails (tests that look at requests replace it).
+            s.AddSingleton(new Providers.OfflineHttp().Transport);
             overrides?.Invoke(s);
         });
     }

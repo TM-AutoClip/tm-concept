@@ -288,6 +288,80 @@ public sealed class BackupTests
     }
 
     [Fact]
+    public async Task TheBackupBeforeAChangeAlwaysHoldsTheProfilesAndConcepts()
+    {
+        var (h, _) = await BackupAsync();
+        using var __ = h;
+        var service = Service(h);
+        await service.SaveAutomaticContentsAsync(new BackupContents { Settings = true }, None);
+
+        var file = await service.CreateBeforeChangeAsync("test", None);
+
+        var held = await service.InspectAsync(file!, Password, None);
+        (held.Contents.Profiles, held.Contents.Concepts, held.Contents.Settings, held.Contents.Keys).ShouldBe((true, true, true, false));
+        held.Profiles.ShouldBe(1, "the profile a delete would remove is in it");
+    }
+
+    [Fact]
+    public async Task BackUpNowHasItsOwnFilesAndNeverStandsInForTheDailyBackup()
+    {
+        using var h = await StorageHarness.CreatedAsync();
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 11, 1, 9, 0, 0, TimeSpan.Zero));
+        clock.SetLocalTimeZone(TimeZoneInfo.Utc);
+        var service = Service(h, clock);
+        await service.SetPasswordAsync(Password, None);
+        (await service.RunDailyAsync(None)).ShouldNotBeNull();
+        clock.Advance(TimeSpan.FromDays(1));
+
+        for (var i = 0; i < 12; i++)
+        {
+            clock.Advance(TimeSpan.FromMinutes(1));
+            Path.GetFileName(await service.CreateInFolderAsync(new BackupContents { Keys = true }, None)).ShouldStartWith(BackupRules.ManualPrefix);
+        }
+
+        (await service.LastBackupAsync(None)).ShouldBe(new DateTimeOffset(2026, 11, 1, 9, 0, 0, TimeSpan.Zero), "a keys-only backup is not the daily one");
+        (await service.LastAnyBackupAsync(None))!.Value.ShouldBeGreaterThan(new DateTimeOffset(2026, 11, 2, 9, 0, 0, TimeSpan.Zero));
+        (await service.RunDailyAsync(None)).ShouldNotBeNull("the complete daily backup is still written today");
+
+        SqliteConnection.ClearAllPools();
+        var files = service.List().Select(f => Path.GetFileName(f.Path)).ToList();
+        files.Count(f => f.StartsWith(BackupRules.ManualPrefix, StringComparison.Ordinal)).ShouldBe(BackupRules.Keep);
+        files.Count(f => !f.StartsWith(BackupRules.ManualPrefix, StringComparison.Ordinal)).ShouldBe(2, "the daily backups are not pushed out");
+    }
+
+    [Fact]
+    public async Task ABackupOfANewerVersionIsRefusedAndAnotherRestoreCanBeTried()
+    {
+        var (source, file) = await BackupAsync();
+        using var _ = source;
+        await using (var db = await source.Database.OpenAsync(None))
+        {
+            await using var command = db.CreateCommand();
+            command.CommandText = "PRAGMA user_version = " + (TMConcept.Storage.Database.ConceptSchema.Version + 1).ToString(System.Globalization.CultureInfo.InvariantCulture) + ";";
+            await command.ExecuteNonQueryAsync(None);
+        }
+
+        var newer = Path.Combine(source.Paths.DataDirectory, "newer" + BackupRules.Extension);
+        await Service(source).CreateAsync(newer, BackupContents.Automatic, None);
+
+        using var target = new StorageHarness();
+        await Should.ThrowAsync<BackupRefusedException>(() => Service(target).RestoreAsync(newer, Password, target.Protector, None));
+        target.Vault.State.ShouldBe(VaultState.NotCreated);
+        File.Exists(target.Paths.DatabaseFile).ShouldBeFalse();
+
+        await using (var db = await source.Database.OpenAsync(None))
+        {
+            await using var command = db.CreateCommand();
+            command.CommandText = "PRAGMA user_version = " + TMConcept.Storage.Database.ConceptSchema.Version.ToString(System.Globalization.CultureInfo.InvariantCulture) + ";";
+            await command.ExecuteNonQueryAsync(None);
+        }
+
+        var current = Path.Combine(source.Paths.DataDirectory, "current" + BackupRules.Extension);
+        await Service(source).CreateAsync(current, BackupContents.Automatic, None);
+        (await Service(target).RestoreAsync(current, Password, target.Protector, None)).Profiles.ShouldBe(1);
+    }
+
+    [Fact]
     public async Task ShortPasswordIsRejected()
     {
         using var h = await StorageHarness.CreatedAsync();
