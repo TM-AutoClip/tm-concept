@@ -1,9 +1,10 @@
 """Packs a published folder for a release and prints SHA-256 values.
 
-    python tools/package.py <publish folder> <rid> <version>
+    python tools/package.py <publish folder> <rid> <version> [release folder]
 
-win-x64: copies the single exe to artifacts/release/TMConcept-<version>-win-x64.exe.
-linux-*: writes artifacts/release/tm-concept-<version>-<rid>.tar.gz with a tm-concept/ folder: the program (executable), an icon,
+The release folder defaults to artifacts/release.
+win-x64: copies the single exe to <release folder>/TMConcept-<version>-win-x64.exe.
+linux-*: writes <release folder>/tm-concept-<version>-<rid>.tar.gz with a tm-concept/ folder: the program (executable), an icon,
 a .desktop file, install-desktop-entry.sh (adds the menu entry for the current user), README, LICENSE, third-party notices, licenses/.
 """
 import hashlib
@@ -25,7 +26,7 @@ def sha256(path):
 
 def main():
     folder, rid, version = sys.argv[1], sys.argv[2], sys.argv[3]
-    out = os.path.join(ROOT, "artifacts", "release")
+    out = sys.argv[4] if len(sys.argv) > 4 else os.path.join(ROOT, "artifacts", "release")
     os.makedirs(out, exist_ok=True)
     if rid.startswith("win"):
         target = os.path.join(out, f"TMConcept-{version}-{rid}.exe")
