@@ -14,7 +14,7 @@ namespace TMConcept.Desktop.Components;
 /// <summary>
 /// The one install flow of the app (saving models, the first video): plans what the given components need, shows ONE confirmation that
 /// lists every download (name, source host, size), installs with progress (the page and the activity log) and says why when something is
-/// not ready afterwards. Nothing is downloaded without the confirmation.
+/// not ready afterwards. Nothing is downloaded without the confirmation. A cancellation during the install is an outcome, not an error.
 /// </summary>
 public sealed class ComponentInstallFlow(ComponentPlanner planner, IConfirmDialog confirm, IActivityLog activity, Localizer text,
     ILogger<ComponentInstallFlow> logger)
@@ -31,16 +31,18 @@ public sealed class ComponentInstallFlow(ComponentPlanner planner, IConfirmDialo
     {
         ArgumentNullException.ThrowIfNull(codes);
         var plan = await planner.PlanAsync(codes, cancellationToken).ConfigureAwait(true);
+
+        // What has no download for this computer is reported, but does not hold back the others (an unrelated step is still installed).
+        var unsupported = string.Empty;
         if (plan.Unsupported.Count > 0)
         {
-            var names = string.Join(", ", plan.Unsupported.Select(c => c.Name));
             logger.LogWarning("Not available on this computer: {Components}", string.Join(", ", plan.Unsupported.Select(c => c.Code)));
-            return new InstallOutcome(false, text.Format("install.unsupported", names));
+            unsupported = text.Format("install.unsupported", string.Join(", ", plan.Unsupported.Select(c => c.Name)));
         }
 
         if (plan.Missing.Count == 0)
         {
-            return new InstallOutcome(true, string.Empty);
+            return new InstallOutcome(unsupported.Length == 0, unsupported);
         }
 
         var answer = await confirm.AskAsync(text["install.title"], Message(plan, purposeKey), text["install.confirm"], danger: false).ConfigureAwait(true);
@@ -50,11 +52,18 @@ public sealed class ComponentInstallFlow(ComponentPlanner planner, IConfirmDialo
             return new InstallOutcome(false, text["install.declined"]);
         }
 
-        var names2 = string.Join(", ", plan.Missing.Select(c => c.Name));
-        activity.Add(ActivityLevel.Info, text.Format("install.started", names2));
+        var names = string.Join(", ", plan.Missing.Select(c => c.Name));
+        activity.Add(ActivityLevel.Info, text.Format("install.started", names));
         try
         {
             await planner.InstallAsync(plan, progress, cancellationToken).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            // Cancel pressed during the install: what was installed before stays; the rest is downloaded the next time.
+            logger.LogInformation("The install of {Components} was cancelled", string.Join(", ", plan.Missing.Select(c => c.Code)));
+            activity.Add(ActivityLevel.Warning, text.Format("install.cancelled.log", names));
+            return new InstallOutcome(false, text["install.cancelled"]);
         }
         catch (ToolInstallException ex)
         {
@@ -71,8 +80,8 @@ public sealed class ComponentInstallFlow(ComponentPlanner planner, IConfirmDialo
             return new InstallOutcome(false, reason);
         }
 
-        activity.Add(ActivityLevel.Info, text.Format("install.done", names2));
-        return new InstallOutcome(true, string.Empty);
+        activity.Add(ActivityLevel.Info, text.Format("install.done", names));
+        return new InstallOutcome(unsupported.Length == 0, unsupported);
     }
 
     private string Message(InstallPlan plan, string purposeKey)

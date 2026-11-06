@@ -11,22 +11,33 @@ namespace TMConcept.Engines.Components;
 
 /// <summary>
 /// Node.js: the app's pinned copy, or a Node.js already on the PATH when it is at least <see cref="ToolManifest.NodeMinimumMajor"/> and has
-/// npm next to it (then nothing is downloaded). The PATH is looked at once per run (<c>node --version</c>, a short process).
+/// npm next to it (then nothing is downloaded). The PATH is looked at once per run (<c>node --version</c>, a short process): at start and
+/// before a page reads the status; callers at the same time share the one look.
 /// </summary>
 public sealed class NodeComponent(ToolInstaller installer, IProcessRunner runner, ILogger<NodeComponent> logger)
     : ToolComponentBase(installer, ComponentCodes.Node, "Node.js", [ToolKind.Node], [])
 {
-    private bool _looked;
+    private readonly Lock _gate = new();
+    private Task? _look;
 
     /// <inheritdoc />
-    public override async Task RefreshAsync(CancellationToken cancellationToken)
+    public override Task RefreshAsync(CancellationToken cancellationToken)
     {
-        if (_looked || Installer.Status(ToolKind.Node) is { Ready: true, Source: "app" })
+        if (Installer.Status(ToolKind.Node) is { Ready: true, Source: "app" })
         {
-            return;
+            return Task.CompletedTask;
         }
 
-        _looked = true;
+        // One look per run, shared: a second caller waits for the first one instead of reading "not installed" meanwhile. The look is
+        // a short process and is not cancelled with one caller's token.
+        lock (_gate)
+        {
+            return _look ??= LookAsync();
+        }
+    }
+
+    private async Task LookAsync()
+    {
         if (Installer.FindProgram("node") is not { } node)
         {
             return;
@@ -35,7 +46,7 @@ public sealed class NodeComponent(ToolInstaller installer, IProcessRunner runner
         var lines = new List<string>();
         try
         {
-            var result = await runner.RunAsync(new ProcessStart(node, ["--version"], Path.GetDirectoryName(node)!), lines.Add, cancellationToken)
+            var result = await runner.RunAsync(new ProcessStart(node, ["--version"], Path.GetDirectoryName(node)!), lines.Add, CancellationToken.None)
                 .ConfigureAwait(false);
             var text = lines.FirstOrDefault(l => l.StartsWith('v'))?.Trim() ?? string.Empty;
             var major = text.Length > 1 && int.TryParse(text[1..].Split('.')[0], NumberStyles.None, CultureInfo.InvariantCulture, out var m) ? m : 0;

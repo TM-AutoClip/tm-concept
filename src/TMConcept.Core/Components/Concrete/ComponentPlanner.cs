@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.ExceptionServices;
 using Microsoft.Extensions.Logging;
 using TMConcept.Core.Tools;
 
@@ -21,8 +22,15 @@ public sealed class ComponentPlanner(IEnumerable<IComponentSource> sources, ILog
     public IComponent? Find(string code) => All.FirstOrDefault(c => c.Code == code);
 
     /// <summary>
+    /// Looks at what is on the computer for every component (a suitable Node.js on the PATH counts as installed only after this); cheap after
+    /// the first call. Called at start and before a page reads <see cref="IComponent.Ready"/>.
+    /// </summary>
+    public Task RefreshAllAsync(CancellationToken cancellationToken) => Task.WhenAll(All.Select(c => c.RefreshAsync(cancellationToken)));
+
+    /// <summary>
     /// The plan for <paramref name="codes"/>: each one that is not ready, after its own dependencies that are not ready. A component that is
-    /// ready does not pull its dependencies in (an engine that is ready needs nothing). An unknown code is logged and skipped.
+    /// ready does not pull its dependencies in (an engine that is ready needs nothing). An unknown code is logged and skipped. A component
+    /// whose dependency has no download for this computer is unsupported too (its own weights would be downloaded for nothing).
     /// </summary>
     public async Task<InstallPlan> PlanAsync(IEnumerable<string> codes, CancellationToken cancellationToken)
     {
@@ -61,7 +69,8 @@ public sealed class ComponentPlanner(IEnumerable<IComponentSource> sources, ILog
                 return;
             }
 
-            (component.Supported ? missing : unsupported).Add(component);
+            var blocked = component.DependsOn.Any(d => unsupported.Any(u => u.Code == d));
+            (component.Supported && !blocked ? missing : unsupported).Add(component);
         }
 
         foreach (var code in codes.Distinct(StringComparer.Ordinal))
@@ -74,12 +83,15 @@ public sealed class ComponentPlanner(IEnumerable<IComponentSource> sources, ILog
 
     /// <summary>
     /// Installs the plan's missing components in order (only after the user confirmed it). <paramref name="progress"/> gets the share of the
-    /// whole plan and the component's name. The first failure stops the plan and goes up (the components before it stay installed).
+    /// whole plan and the component's name. A failure skips the components that depend on the failed one, the others are still installed
+    /// (one broken download does not hold back an unrelated step); the first failure goes up at the end. A cancellation stops at once.
     /// </summary>
     public async Task InstallAsync(InstallPlan plan, IProgress<ToolProgress>? progress, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(plan);
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        var failed = new HashSet<string>(StringComparer.Ordinal);
+        ExceptionDispatchInfo? first = null;
         try
         {
             for (var i = 0; i < plan.Missing.Count; i++)
@@ -87,6 +99,13 @@ public sealed class ComponentPlanner(IEnumerable<IComponentSource> sources, ILog
                 var component = plan.Missing[i];
                 if (component.Ready)
                 {
+                    continue;
+                }
+
+                if (component.DependsOn.FirstOrDefault(failed.Contains) is { } broken)
+                {
+                    failed.Add(component.Code);
+                    logger.LogWarning("{Component} is not installed: {Dependency} could not be installed", component.Code, broken);
                     continue;
                 }
 
@@ -103,13 +122,16 @@ public sealed class ComponentPlanner(IEnumerable<IComponentSource> sources, ILog
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     logger.LogError(ex, "{Component} could not be installed after {Seconds:0.0} s", component.Code, watch.Elapsed.TotalSeconds);
-                    throw;
+                    failed.Add(component.Code);
+                    first ??= ExceptionDispatchInfo.Capture(ex);
+                    continue;
                 }
 
                 logger.LogInformation("{Component} installed in {Seconds:0.0} s", component.Code, watch.Elapsed.TotalSeconds);
             }
 
             progress?.Report(new ToolProgress(1, string.Empty));
+            first?.Throw();
         }
         finally
         {

@@ -22,6 +22,9 @@ public sealed class LocalImageTests
             entry.MinVideoMemoryGb.ShouldBeGreaterThan(0);
             model.Files.Count.ShouldBe(3);
             model.Files.ShouldAllBe(f => f.Url.Host == "huggingface.co" && f.Sha256.Length == 64 && f.ApproximateBytes > 100_000_000);
+            // Pinned to a commit, never to a branch: a file uploaded again on main would fail its SHA-256 for good.
+            model.Files.ShouldAllBe(f => System.Text.RegularExpressions.Regex.IsMatch(f.Url.AbsolutePath, "/resolve/[0-9a-f]{40}/"));
+            entry.MinVideoMemoryGb.ShouldBeGreaterThanOrEqualTo(6, "the memory flags were measured on a 6 GB card");
         }
 
         ToolManifest.Archives.Where(a => a.Tool == TMConcept.Core.Tools.ToolKind.ImageRuntime).Select(a => a.Rid).ShouldBe(["win-x64", "linux-x64"], ignoreOrder: true);

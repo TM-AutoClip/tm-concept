@@ -48,12 +48,17 @@ public sealed class PriceUpdater(ProviderHttp http, IModelCatalog catalog, IAppP
 
             try
             {
-                var table = JsonSerializer.Deserialize(File.ReadAllText(path), ProvidersJsonContext.Default.PriceTable);
-                if (table is not null)
+                // The saved copy gets the checks of a download again: a copy older than this app's built-in table (the app was updated
+                // since) would bring old prices back, and a damaged file must not be applied.
+                var saved = JsonSerializer.Deserialize(File.ReadAllText(path), ProvidersJsonContext.Default.PriceTable);
+                var problem = "empty";
+                if (saved is null || PriceCheck.Check(saved, source, catalog, clock.GetUtcNow(), out problem, out _) is not { } table)
                 {
-                    table.Source = source;
-                    tables.Add(table);
+                    logger.LogInformation("The saved {Source} prices are not used ({Problem}); the built-in prices are used for them", source, problem);
+                    continue;
                 }
+
+                tables.Add(table);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
             {
@@ -82,7 +87,6 @@ public sealed class PriceUpdater(ProviderHttp http, IModelCatalog catalog, IAppP
         }
 
         Directory.CreateDirectory(Folder);
-        await File.WriteAllTextAsync(checkedFile, now.ToString("O", CultureInfo.InvariantCulture), cancellationToken).ConfigureAwait(false);
         var changed = await FetchAsync(RepositoryFile, "GitHub", RepositoryCopy, json =>
             PriceCheck.ReadFile(json, catalog, now, out var problem, out var dropped) is { } table ? (table, problem, dropped) : (null, problem, dropped),
             cancellationToken).ConfigureAwait(false);
@@ -94,6 +98,8 @@ public sealed class PriceUpdater(ProviderHttp http, IModelCatalog catalog, IAppP
             LoadSaved();
         }
 
+        // Written after both sources were read: a check that did not finish runs again at the next start.
+        await File.WriteAllTextAsync(checkedFile, now.ToString("O", CultureInfo.InvariantCulture), cancellationToken).ConfigureAwait(false);
         return true;
     }
 
@@ -112,10 +118,30 @@ public sealed class PriceUpdater(ProviderHttp http, IModelCatalog catalog, IAppP
             return false;
         }
 
-        var (table, problem, dropped) = read(json);
+        PriceTable? table;
+        string problem;
+        int dropped;
+        try
+        {
+            (table, problem, dropped) = read(json);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or FormatException or OverflowException)
+        {
+            // Untrusted input: whatever the checks missed refuses the file, it never stops the other source or the app.
+            logger.LogWarning(ex, "Prices from {Source} were refused: the file could not be checked; the last good copy stays", name);
+            return false;
+        }
+
         if (table is null)
         {
             logger.LogWarning("Prices from {Source} were refused: {Problem}; the last good copy stays", name, problem);
+            return false;
+        }
+
+        // Nothing usable (every entry dropped, or no known model in the list): the last good copy is better than a new date with no prices.
+        if (table.Models.Count == 0)
+        {
+            logger.LogWarning("Prices from {Source} were refused: no usable entry ({Dropped} dropped); the last good copy stays", name, dropped);
             return false;
         }
 

@@ -119,7 +119,7 @@ Ayarlar → **Modeller** her adımın genel ayarını tutar; bir profil istediğ
   göndermez (sağlayıcının varsayılanı). **Video kodu**'nda **video motoru** da var: HyperFrames (varsayılan), Remotion (lisansını kabul
   etmeni ister: bireyler ve en çok 3 kişilik şirketler için ücretsiz), Revideo (deneysel). Görsel istemlerini de video kodu modeli yazar.
 - **Görseller** — *Kapalı* (varsayılan: video yalnız koddan çizilir), bir online görsel modeli ya da ekran kartında çalışan bir yerel model:
-  **FLUX.2 klein 4B** (hızlı, en az 4 GB ekran kartı belleği) ya da **Z-Image Turbo** (daha iyi görsel, en az 6 GB). Kartın küçük görünürse
+  **FLUX.2 klein 4B** (hızlı) ya da **Z-Image Turbo** (daha iyi görsel); ikisi de en az 6 GB ekran kartı belleği ister (ölçüldükleri kart). Kartın küçük görünürse
   sayfa uyarır; Windows'ta NVIDIA kart (CUDA), Linux x64'te Vulkan sürücüsü ister; Linux ARM64 için yok.
 - **Seslendirme** — *Kapalı* (sessiz video, sarı uyarı), **Supertonic 3** (yerel, ücretsiz; Türkçe ve İngilizce) ya da bir online ses. Ses,
   hız ve ▶ Dinle adımın içinde.
@@ -127,7 +127,9 @@ Ayarlar → **Modeller** her adımın genel ayarını tutar; bir profil istediğ
 
 **Kaydet**'e bastığında bir seçim bu bilgisayarda henüz olmayan bir şey gerektiriyorsa **tek bir onay bütün indirmeleri listeler** (ad,
 kaynak, boyut). Onaysız hiçbir şey indirilmez. Sonra ilerlemeyle (sayfada ve günlükte) kurar ve kaydeder; vazgeçersen ya da kurulum
-başarısız olursa o adım kaydedilmez ve sebebi görünür. İlk videodan önce hâlâ eksik olan bir şey (ör. ffmpeg) aynı yolla sorulur.
+başarısız olursa o adım kaydedilmez ve sebebi görünür. Kayıtlı bir seçimin bileşeni sonradan kaldırıldıysa bir sonraki Kaydet onu yeniden
+kurar. İlk videodan önce kuyruktaki videoların hâlâ gerektirdiği bir şey (ör. ffmpeg; yerel ses ya da görsel modeli yalnız video
+seslendirme ya da model görselleri kullanıyorsa) aynı yolla sorulur.
 
 | Bileşen | Kaynak | Yaklaşık |
 |---|---|---|
@@ -139,8 +141,10 @@ başarısız olursa o adım kaydedilmez ve sebebi görünür. İlk videodan önc
 | FLUX.2 klein 4B ağırlıkları (model, Qwen3-4B metin kodlayıcı, VAE) | huggingface.co | 5,3 GB |
 | Z-Image Turbo ağırlıkları (model, Qwen3-4B-Instruct metin kodlayıcı, VAE) | huggingface.co | 9,4 GB |
 
-Sabitlenen her indirme SHA-256 ile denetlenir (npm paketleri: kilit dosyasının bütünlük değerleri) ve programın kendi veri klasörüne gider;
-sistem PATH'i değişmez. Ayarlar → **Genel** → *Kurulu bileşenler* kurulu olanları boyutlarıyla listeler, kaldırabilir ve bir motorun örnek
+Sabitlenen her indirme SHA-256 ile denetlenir (npm paketleri: kilit dosyasının bütünlük değerleri; görsel ağırlıkları sabit bir Hugging Face
+commit'inden gelir) ve programın kendi veri klasörüne gider; sistem PATH'i değişmez. Chrome Headless Shell HTTPS ile Google'dan gelir,
+Google onun için sağlama değeri yayımlamıyor. Ayarlar → **Genel** → *Kurulu bileşenler* diskte olanları boyutlarıyla listeler (yarım kalan
+ya da artık kullanılamayan *eksik* diye işaretlenir), kaldırabilir ve bir motorun örnek
 videosunu modelsiz, ağsız render edebilir.
 
 Fiyatlar kendiliğinden, günde en çok bir kez güncellenir: program bu deponun `pricing/prices.json` dosyasını ve OpenRouter'ın herkese açık

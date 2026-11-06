@@ -4,7 +4,8 @@
              x:Class="TMConcept.Desktop.Views.StepSettingsView"
              x:DataType="vm:StepSettingsViewModel">
   <StackPanel Spacing="6">
-    <ItemsControl ItemsSource="{Binding Rows}">
+    <!-- Locked while saving or installing: what is saved is what the rows showed when Save was pressed. -->
+    <ItemsControl ItemsSource="{Binding Rows}" IsEnabled="{Binding !Busy}">
       <ItemsControl.ItemTemplate>
         <DataTemplate x:DataType="vm:StepModelRowViewModel">
           <Border Classes="card" Margin="0,4">

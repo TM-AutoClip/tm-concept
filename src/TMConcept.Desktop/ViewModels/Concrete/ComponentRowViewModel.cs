@@ -3,8 +3,11 @@ using TMConcept.Core.Components;
 
 namespace TMConcept.Desktop.ViewModels;
 
-/// <summary>An installed component in Settings → General: name, size, and whether it can be removed or render a sample.</summary>
-public sealed partial class ComponentRowViewModel(IComponent component, string size, bool canSample) : ObservableObject
+/// <summary>
+/// An installed component in Settings → General: name, size, whether it is incomplete (on disk but not usable: a part or a program it needs
+/// is missing), and whether it can be removed or render a sample.
+/// </summary>
+public sealed partial class ComponentRowViewModel(IComponent component, string size, bool canSample, bool incomplete) : ObservableObject
 {
     /// <summary>The component.</summary>
     public IComponent Component { get; } = component;
@@ -17,6 +20,9 @@ public sealed partial class ComponentRowViewModel(IComponent component, string s
 
     /// <summary>Whether Remove is shown (the app's own copy).</summary>
     public bool CanRemove => Component.Folders().Count > 0;
+
+    /// <summary>On disk but not usable (a half-finished download, or a program it needs was removed).</summary>
+    public bool Incomplete { get; } = incomplete;
 
     /// <summary>Whether the sample render button is shown (an engine).</summary>
     public bool CanSample { get; } = canSample;

@@ -33,7 +33,12 @@ public abstract class ToolComponentBase(ToolInstaller installer, string code, st
                 a.ApproximateBytes)).ToList();
 
     /// <inheritdoc />
-    public IReadOnlyList<string> Folders() => tools.Where(t => Installer.Status(t) is { Ready: true, Source: "app" }).Select(Installer.InstallFolder).ToList();
+    /// <remarks>
+    /// The app's install folder of every tool that is not the system's copy, when it is on disk, ready or not: a half-finished install or
+    /// a pinned version that is not used any more still takes space and can be removed.
+    /// </remarks>
+    public IReadOnlyList<string> Folders() => tools.Where(t => Installer.Status(t) is not { Ready: true, Source: "system" })
+        .Select(Installer.InstallFolder).Where(Directory.Exists).Distinct(StringComparer.Ordinal).ToList();
 
     /// <inheritdoc />
     public virtual Task RefreshAsync(CancellationToken cancellationToken) => Task.CompletedTask;

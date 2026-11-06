@@ -56,6 +56,9 @@ public sealed class EmbeddedModelCatalog : IModelCatalog
     public CatalogModel? Find(string provider, string id) => _all.FirstOrDefault(m => m.Provider == provider && m.Id == id);
 
     /// <inheritdoc />
+    public CatalogModel? BuiltIn(string provider, string id) => _embedded.FirstOrDefault(m => m.Provider == provider && m.Id == id);
+
+    /// <inheritdoc />
     public IReadOnlyList<CatalogModel> With(ModelCapability capability) => _all.Where(m => (m.Capabilities & capability) == capability).ToList();
 
     /// <inheritdoc />

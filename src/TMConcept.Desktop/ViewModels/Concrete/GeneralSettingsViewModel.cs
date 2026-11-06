@@ -18,8 +18,8 @@ namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
 /// General settings: interface language (changes at once), drawing (after a restart), the bottom-right notifications, and the installed
-/// components (read-only list with sizes; Remove after a confirmation; an engine can render its sample; on Linux the apt command for
-/// Chrome's missing libraries). Components are installed from Settings → Models when a setting that needs them is saved.
+/// components (read-only list with sizes of what is on disk, an incomplete one marked; Remove after a confirmation; a ready engine can
+/// render its sample; on Linux the apt command for Chrome's missing libraries). Components are installed from Settings → Models when a setting that needs them is saved.
 /// </summary>
 public sealed partial class GeneralSettingsViewModel(AppSession session, Localizer text, UiPreferencesFile preferences, INotifier notifier,
     ComponentPlanner components, IToolPlatform platform, Engines.Engines.SampleRender sample, IConfirmDialog confirm, ShellLauncher shell,
@@ -79,8 +79,11 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
             return;
         }
 
-        var answer = await confirm.AskAsync(text["components.remove.title"], text.Format("components.remove.message", row.Name, row.Size),
-            text["components.remove.confirm"], danger: true).ConfigureAwait(true);
+        // What needs it stops working until it is downloaded again: said in the question (they can be removed on their own rows).
+        var dependents = Installed.Where(r => r.Component.DependsOn.Contains(row.Component.Code)).Select(r => r.Name).ToList();
+        var message = text.Format("components.remove.message", row.Name, row.Size)
+            + (dependents.Count > 0 ? "\n\n" + text.Format("components.remove.dependents", string.Join(", ", dependents)) : string.Empty);
+        var answer = await confirm.AskAsync(text["components.remove.title"], message, text["components.remove.confirm"], danger: true).ConfigureAwait(true);
         if (!answer.Confirmed)
         {
             return;
@@ -142,11 +145,24 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
 
     private async Task RefreshInstalledAsync()
     {
-        var rows = await Task.Run(() => components.All.Where(c => c.Ready)
-            .Select(c => c.Folders().Count == 0
-                ? new ComponentRowViewModel(c, text["components.system"], false)
-                : new ComponentRowViewModel(c, ComponentInstallFlow.Megabytes(components.Size(c)) + " MB", c is Engines.Components.EngineComponent))
-            .ToList()).ConfigureAwait(true);
+        // A Node.js on the PATH makes the engines ready only after it was looked at (once per run).
+        await components.RefreshAllAsync(CancellationToken.None).ConfigureAwait(true);
+
+        // Listed by what is on disk, not only what is ready: weights whose program was removed, packages without Node.js or ffmpeg and a
+        // half-finished download still take space and must be removable ("incomplete"). The system's copy of a program shows when ready.
+        var rows = await Task.Run(() => components.All.Select(c =>
+        {
+            var ready = c.Ready;
+            if (c.Folders().Count == 0)
+            {
+                return ready ? new ComponentRowViewModel(c, text["components.system"], false, false) : null;
+            }
+
+            var size = components.Size(c);
+            return ready || size > 0
+                ? new ComponentRowViewModel(c, ComponentInstallFlow.Megabytes(size) + " MB", ready && c is Engines.Components.EngineComponent, !ready)
+                : null;
+        }).OfType<ComponentRowViewModel>().ToList()).ConfigureAwait(true);
         Installed.Clear();
         foreach (var row in rows)
         {
@@ -155,7 +171,7 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
 
         NothingInstalled = Installed.Count == 0;
         // Chrome's libraries matter only once an engine is there (Linux; Windows has none to check).
-        IReadOnlyList<string> missing = Installed.Any(r => r.Component is Engines.Components.EngineComponent)
+        IReadOnlyList<string> missing = Installed.Any(r => r.Component is Engines.Components.EngineComponent && !r.Incomplete)
             ? await platform.MissingLibrariesAsync(CancellationToken.None).ConfigureAwait(true)
             : [];
         MissingLibraries = missing.Count == 0 ? string.Empty : "sudo apt install " + string.Join(' ', missing);

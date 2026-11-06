@@ -161,6 +161,20 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
                 logger.LogWarning(ex, "The daily price check failed; the last good prices stay");
             }
         });
+        // What is on the computer (a Node.js on the PATH counts as installed only once it was looked at): in the background, before the
+        // first page reads a status (the pages wait for the same look themselves).
+        var components = services.GetRequiredService<Core.Components.ComponentPlanner>();
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await components.RefreshAllAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "The installed components could not be looked at");
+            }
+        });
         var shell = services.GetRequiredService<ShellViewModel>();
         var window = new MainWindow { DataContext = shell, Icon = AppIcon() };
         window.Closing += (_, e) => OnClosing(window, shell, e);

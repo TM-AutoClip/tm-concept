@@ -212,7 +212,8 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
         var tried = new HashSet<Guid>();
         try
         {
-            if (!await EnsureComponentsAsync(profile, cancel.Token).ConfigureAwait(true))
+            var items = await queue.ListAsync(profile.Id, CancellationToken.None).ConfigureAwait(true);
+            if (!await EnsureComponentsAsync(items, cancel.Token).ConfigureAwait(true))
             {
                 return;
             }
@@ -237,6 +238,11 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
                 await ProduceAsync(row, cancel.Token).ConfigureAwait(true);
             }
         }
+        catch (OperationCanceledException)
+        {
+            // Cancel before the first item started (while the settings were read): nothing was made, nothing to report.
+            logger.LogInformation("Producing the queue was cancelled before an item started");
+        }
         finally
         {
             _cancel = null;
@@ -259,12 +265,16 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
         _cancel = cancel;
         try
         {
-            if (session.Profile is { } profile && !await EnsureComponentsAsync(profile, cancel.Token).ConfigureAwait(true))
+            if (!await EnsureComponentsAsync([row.Item], cancel.Token).ConfigureAwait(true))
             {
                 return;
             }
 
             await ProduceAsync(row, cancel.Token).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            logger.LogInformation("The retry was cancelled before the item started");
         }
         finally
         {
@@ -290,6 +300,8 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
             return;
         }
 
+        // A Node.js on the PATH counts only once it was looked at (once per run): before the note says the engine is missing.
+        await installs.Planner.RefreshAllAsync(CancellationToken.None).ConfigureAwait(true);
         var code = await resolver.ChoiceAsync(PipelineSteps.VideoCode, profile.Id, CancellationToken.None).ConfigureAwait(true);
         var images = await resolver.ChoiceAsync(PipelineSteps.Images, profile.Id, CancellationToken.None).ConfigureAwait(true);
         var voice = await resolver.ChoiceAsync(PipelineSteps.Speech, profile.Id, CancellationToken.None).ConfigureAwait(true);
@@ -306,35 +318,62 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
         _engines.FirstOrDefault(e => e.Kind == StepModelResolver.Options(code).Engine) ?? _engines.FirstOrDefault();
 
     /// <summary>
-    /// Installs what the profile's settings need before the first item (one confirmation): ffmpeg, the engine, the local voice and image
-    /// model. Declined or failed: every queued item gets the reason and nothing is made.
+    /// Installs what the given queue items need before the first one (one confirmation): ffmpeg and the engine always (when the item's
+    /// profile has a code model), the local voice only for an item with narration on, the local image model only for an item whose images
+    /// come from the model; each item with its own profile's choices. Declined, failed or cancelled: those items get the reason and
+    /// nothing is made.
     /// </summary>
-    private async Task<bool> EnsureComponentsAsync(Profile profile, CancellationToken cancellationToken)
+    private async Task<bool> EnsureComponentsAsync(IReadOnlyList<QueueItem> items, CancellationToken cancellationToken)
     {
-        var codes = new List<string>(media.RequiredComponents);
-        var code = await resolver.ChoiceAsync(PipelineSteps.VideoCode, profile.Id, cancellationToken).ConfigureAwait(true);
-        // Without a code model nothing can be made (each item says so): no engine is offered for download then.
-        if (!StepModelResolver.IsOff(code) && EngineOf(code) is { } engine)
+        if (items.Count == 0)
         {
-            codes.Add(Engines.Components.EngineComponent.CodeOf(engine.Kind));
+            return true;
         }
 
-        foreach (var step in new[] { PipelineSteps.Speech, PipelineSteps.Images })
+        InstallOutcome outcome;
+        try
         {
-            var choice = await resolver.ChoiceAsync(step, profile.Id, cancellationToken).ConfigureAwait(true);
-            if (!StepModelResolver.IsOff(choice) && catalog.Find(choice!.Provider, choice.Model) is { } model)
+            var codes = new List<string>(media.RequiredComponents);
+            foreach (var group in items.GroupBy(i => i.ProfileId))
             {
-                codes.AddRange(model.Requires);
+                var options = group.Select(OptionsOf).ToList();
+                var code = await resolver.ChoiceAsync(PipelineSteps.VideoCode, group.Key, cancellationToken).ConfigureAwait(true);
+                // Without a code model nothing can be made (each item says so): no engine is offered for download then.
+                if (!StepModelResolver.IsOff(code) && EngineOf(code) is { } engine)
+                {
+                    codes.Add(Engines.Components.EngineComponent.CodeOf(engine.Kind));
+                }
+
+                foreach (var (step, used) in new[] { (PipelineSteps.Speech, options.Any(o => o.Speech)),
+                             (PipelineSteps.Images, options.Any(o => o.Images == ImageSources.Model)) })
+                {
+                    if (!used)
+                    {
+                        continue;
+                    }
+
+                    var choice = await resolver.ChoiceAsync(step, group.Key, cancellationToken).ConfigureAwait(true);
+                    if (!StepModelResolver.IsOff(choice) && catalog.Find(choice!.Provider, choice.Model) is { } model)
+                    {
+                        codes.AddRange(model.Requires);
+                    }
+                }
             }
+
+            var progress = new Progress<Core.Tools.ToolProgress>(p =>
+            {
+                InstallPercent = Math.Round(p.Share * 100);
+                InstallText = p.Share >= 1 ? string.Empty : text.Format("video.installing", p.Text);
+            });
+            outcome = await installs.EnsureAsync(codes.Distinct(StringComparer.Ordinal).ToList(), "install.purpose.video", progress, cancellationToken)
+                .ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            logger.LogInformation("Videos not started: cancelled while preparing");
+            outcome = new InstallOutcome(false, text["install.cancelled"]);
         }
 
-        var progress = new Progress<Core.Tools.ToolProgress>(p =>
-        {
-            InstallPercent = Math.Round(p.Share * 100);
-            InstallText = p.Share >= 1 ? string.Empty : text.Format("video.installing", p.Text);
-        });
-        var outcome = await installs.EnsureAsync(codes.Distinct(StringComparer.Ordinal).ToList(), "install.purpose.video", progress, cancellationToken)
-            .ConfigureAwait(true);
         InstallText = string.Empty;
         await SummaryAsync().ConfigureAwait(true);
         if (outcome.Ready)
@@ -343,13 +382,27 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
         }
 
         logger.LogWarning("Videos not started: what the settings need is not installed");
-        foreach (var row in Queue)
+        foreach (var row in Queue.Where(r => items.Any(i => i.Id == r.Item.Id)))
         {
             row.Error = text["video.error.missing"] + " " + outcome.Reason;
         }
 
         activity.Add(ActivityLevel.Warning, text["video.error.missing"] + " " + outcome.Reason);
         return false;
+    }
+
+    /// <summary>The options stored with a queue item (the page's current options when they cannot be read).</summary>
+    private VideoOptions OptionsOf(QueueItem item)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize(item.SettingsJson, Core.Render.CoreJsonContext.Default.VideoOptions) ?? Options();
+        }
+        catch (JsonException ex)
+        {
+            logger.LogWarning(ex, "The settings of a queue item could not be read; the page's settings are used for its install check");
+            return Options();
+        }
     }
 
     private async Task ProduceAsync(QueueRowViewModel row, CancellationToken cancellationToken)

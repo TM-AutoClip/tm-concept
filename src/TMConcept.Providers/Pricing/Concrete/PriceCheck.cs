@@ -8,7 +8,8 @@ namespace TMConcept.Providers.Pricing;
 /// <summary>
 /// Reads and checks downloaded prices (untrusted input): the repository's prices file (<see cref="ReadFile"/>) and OpenRouter's models list
 /// (<see cref="ReadOpenRouter"/>). Only known models keep an entry; every value must be in <see cref="PriceLimits"/> and near the built-in
-/// price. A file that cannot be read, has another schema or a bad date is refused as a whole (the last good copy stays in use).
+/// price (the app's own table). A file that cannot be read, has another schema, a bad or too old date or no models list is refused as a
+/// whole (the last good copy stays in use).
 /// </summary>
 public static class PriceCheck
 {
@@ -34,6 +35,19 @@ public static class PriceCheck
             return null;
         }
 
+        return Check(table, PriceSources.Repository, builtIn, now, out problem, out dropped);
+    }
+
+    /// <summary>
+    /// The checks of a table (downloaded, or the last good copy read again at start): the schema, the date (not in the future, not older
+    /// than the app's built-in table: an app newer than the copy would get old prices back), a models list, and every entry
+    /// (<see cref="Sane"/>; a broken entry is dropped). Null (with <paramref name="problem"/>) when the table is refused as a whole.
+    /// </summary>
+    public static PriceTable? Check(PriceTable table, string source, IModelCatalog builtIn, DateTimeOffset now, out string problem, out int dropped)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+        ArgumentNullException.ThrowIfNull(builtIn);
+        dropped = 0;
         if (table.Schema != PriceTable.CurrentSchema)
         {
             problem = string.Create(CultureInfo.InvariantCulture, $"schema {table.Schema}, this app reads {PriceTable.CurrentSchema}");
@@ -47,17 +61,22 @@ public static class PriceCheck
             return null;
         }
 
-        // A file older than the app's own table (an app newer than the repository) would bring old prices back.
         if (string.CompareOrdinal(table.PricedOn, builtIn.Prices[0].PricedOn) < 0)
         {
             problem = "older than the built-in table (" + table.PricedOn + ")";
             return null;
         }
 
+        if (table.Models is null)
+        {
+            problem = "no models list";
+            return null;
+        }
+
         var kept = new List<ModelPrice>();
         foreach (var price in table.Models)
         {
-            if (Sane(price, builtIn))
+            if (price is not null && Sane(price, builtIn))
             {
                 kept.Add(price);
             }
@@ -68,7 +87,7 @@ public static class PriceCheck
         }
 
         problem = string.Empty;
-        return new PriceTable { Schema = table.Schema, Source = PriceSources.Repository, PricedOn = table.PricedOn, Models = kept };
+        return new PriceTable { Schema = table.Schema, Source = source, PricedOn = table.PricedOn, Models = kept };
     }
 
     /// <summary>
@@ -139,7 +158,8 @@ public static class PriceCheck
     {
         ArgumentNullException.ThrowIfNull(price);
         ArgumentNullException.ThrowIfNull(builtIn);
-        if (price.Provider == ModelProviders.Local || builtIn.Find(price.Provider, price.Id) is not { } model)
+        // Compared with the app's own price, not with the one in use: a downloaded price cannot move the limit day after day.
+        if (price.Provider is null || price.Id is null || price.Provider == ModelProviders.Local || builtIn.BuiltIn(price.Provider, price.Id) is not { } model)
         {
             return false;
         }
@@ -180,8 +200,9 @@ public static class PriceCheck
             return null;
         }
 
-        // A negative price marks variable pricing (a router model): no price is better than a wrong one.
-        return perToken < 0 ? null : Math.Round(perToken * 1_000_000m, 6);
+        // A negative price marks variable pricing (a router model): no price is better than a wrong one. An absurd one (it would overflow)
+        // becomes a value over the limit, so the entry is dropped.
+        return perToken < 0 ? null : perToken > PriceLimits.MaxTokenUsd ? PriceLimits.MaxTokenUsd + 1 : Math.Round(perToken * 1_000_000m, 6);
     }
 
     private static string Short(string? text)

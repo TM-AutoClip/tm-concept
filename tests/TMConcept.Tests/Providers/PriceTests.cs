@@ -147,4 +147,79 @@ public sealed class PriceTests
             (price.ImageUsd ?? 0).ShouldBe(model.ImageUsd, model.Provider + "/" + model.Id);
         }
     }
+
+    [Fact]
+    public void ASavedCopyOlderThanTheBuiltInTableIsNotApplied()
+    {
+        using var paths = new TempPaths();
+        var catalog = new EmbeddedModelCatalog();
+        var updater = new PriceUpdater(new ProviderHttp(new FakeHttp().Transport, NullLogger<ProviderHttp>.Instance), catalog, paths,
+            new FakeTimeProvider(Today), NullLogger<PriceUpdater>.Instance);
+        Directory.CreateDirectory(updater.Folder);
+        System.IO.File.WriteAllText(Path.Combine(updater.Folder, "repository.json"), File("2026-01-01", ("anthropic", "claude-sonnet-5-5", 2.5m)));
+
+        updater.LoadSaved();
+
+        catalog.Find("anthropic", "claude-sonnet-5-5")!.InputUsd.ShouldBe(2.00m);
+        catalog.Prices.Single().Source.ShouldBe(PriceSources.BuiltIn);
+    }
+
+    [Theory]
+    [InlineData("{\"schema\":1,\"pricedOn\":\"2026-11-07\",\"models\":null}", -1)]
+    [InlineData("{\"schema\":1,\"pricedOn\":\"2026-11-07\",\"models\":[null,{\"provider\":null,\"id\":null},{\"provider\":\"anthropic\",\"id\":\"claude-sonnet-5-5\",\"inputUsd\":2.5}]}", 2)]
+    public void AMissingListOrBrokenEntriesAreRefusedWithoutAnException(string json, int dropped)
+    {
+        var table = PriceCheck.ReadFile(json, new EmbeddedModelCatalog(), Today, out var problem, out var count);
+
+        if (dropped < 0)
+        {
+            table.ShouldBeNull();
+            problem.ShouldContain("models");
+        }
+        else
+        {
+            table!.Models.Single().InputUsd.ShouldBe(2.5m);
+            count.ShouldBe(dropped);
+        }
+    }
+
+    [Fact]
+    public void TheLimitIsTheBuiltInPriceNotTheOneInUse()
+    {
+        var catalog = new EmbeddedModelCatalog();
+        catalog.ApplyPrices([PriceCheck.ReadFile(File("2026-11-07", ("anthropic", "claude-sonnet-5-5", 30m)), catalog, Today, out _, out _)!]);
+        catalog.Find("anthropic", "claude-sonnet-5-5")!.InputUsd.ShouldBe(30m);
+
+        // 500 is under 20 times the price in use (30) but 250 times the built-in one (2): dropped.
+        PriceCheck.ReadFile(File("2026-11-08", ("anthropic", "claude-sonnet-5-5", 500m)), catalog, Today, out _, out var dropped)!.Models.ShouldBeEmpty();
+        dropped.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task ABrokenOrEmptyDownloadKeepsTheLastGoodCopyAndTheOtherSourceStillRuns()
+    {
+        using var paths = new TempPaths();
+        var clock = new FakeTimeProvider(Today);
+        var fake = new FakeHttp()
+            .Answer(HttpStatusCode.OK, File("2026-11-07", ("anthropic", "claude-sonnet-5-5", 2.5m)))
+            .Answer(HttpStatusCode.OK, OpenRouter);
+        var catalog = new EmbeddedModelCatalog();
+        var updater = new PriceUpdater(new ProviderHttp(fake.Transport, NullLogger<ProviderHttp>.Instance), catalog, paths, clock, NullLogger<PriceUpdater>.Instance);
+        (await updater.UpdateAsync(force: false, CancellationToken.None)).ShouldBeTrue();
+
+        // A list of nulls, then an OpenRouter answer with no model of the catalog: both are refused, nothing throws.
+        fake.Answer(HttpStatusCode.OK, "{\"schema\":1,\"pricedOn\":\"2026-11-08\",\"models\":null}")
+            .Answer(HttpStatusCode.OK, "{\"data\":[{\"id\":\"someone/unknown\",\"pricing\":{\"prompt\":\"79228162514264337593543950335\"}}]}");
+        (await updater.UpdateAsync(force: true, CancellationToken.None)).ShouldBeTrue();
+
+        fake.Requests.Count.ShouldBe(4);
+        catalog.Find("anthropic", "claude-sonnet-5-5")!.InputUsd.ShouldBe(2.5m);
+        catalog.Prices.Single(p => p.Source == PriceSources.Repository).PricedOn.ShouldBe("2026-11-07");
+        catalog.Find("openrouter", "anthropic/claude-sonnet-5.5")!.OutputUsd.ShouldBe(12m);
+
+        // An absurd OpenRouter price for a known model is dropped, not an overflow.
+        PriceCheck.ReadOpenRouter("{\"data\":[{\"id\":\"anthropic/claude-sonnet-5.5\",\"pricing\":{\"prompt\":\"79228162514264337593543950335\"}}]}",
+            catalog, Today, out _, out var dropped)!.Models.ShouldBeEmpty();
+        dropped.ShouldBe(1);
+    }
 }

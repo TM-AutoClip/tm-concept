@@ -280,7 +280,8 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
             details.Append(text.Format("produced.detail.engine", v.Engine, v.CodeModel)).Append('\n')
                 .Append(text.Format("produced.detail.size", v.Width, v.Height, v.Fps, (v.SizeBytes / 1_000_000.0).ToString("0.0", CultureInfo.InvariantCulture))).Append('\n')
                 .Append(text.Format("produced.detail.speech", v.SpeechModel.Length > 0 ? v.SpeechModel : text["produced.detail.none"])).Append('\n')
-                .Append(text.Format("produced.detail.images", v.ImageModel)).Append('\n')
+                .Append(text.Format("produced.detail.images", v.ImageModel.Length == 0 ? text["produced.detail.images_none"]
+                    : v.ImageModel == Core.Images.ImageSources.Samples ? text["video.images.samples"] : v.ImageModel)).Append('\n')
                 .Append(text.Format("produced.detail.elapsed", (v.ElapsedMs / 1000.0).ToString("0", CultureInfo.InvariantCulture))).Append('\n');
             foreach (var cost in costs)
             {

@@ -63,6 +63,8 @@ public sealed partial class StepSettingsViewModel(IModelCatalog catalog, IStepMo
     {
         _profile = profileId;
         _language = language;
+        // A Node.js on the PATH counts as installed only once it was looked at (once per run): before any note says "not installed".
+        await installs.Planner.RefreshAllAsync(CancellationToken.None).ConfigureAwait(true);
         var saved = await steps.ListAsync(profileId, CancellationToken.None).ConfigureAwait(true);
         var general = profileId is null ? saved : await steps.ListAsync(null, CancellationToken.None).ConfigureAwait(true);
         Rows.Clear();
@@ -84,7 +86,11 @@ public sealed partial class StepSettingsViewModel(IModelCatalog catalog, IStepMo
         }
     }
 
-    /// <summary>Saves the changed steps (after installing what they need); true when every changed step was saved.</summary>
+    /// <summary>
+    /// Saves the changed steps and installs what a step needs and this computer does not have: a changed step, and an unchanged one whose
+    /// component was removed meanwhile (or never finished). True when every such step was saved (or is ready now). What is saved is what
+    /// the rows showed when Save was pressed (the rows are locked while it runs).
+    /// </summary>
     public async Task<bool> SaveAsync()
     {
         if (Busy)
@@ -97,8 +103,10 @@ public sealed partial class StepSettingsViewModel(IModelCatalog catalog, IStepMo
         var skipped = new List<(StepModelRowViewModel Row, string Reason)>();
         try
         {
-            var changed = Rows.Where(r => Key(r) != r.Saved).ToList();
-            foreach (var row in changed)
+            await installs.Planner.RefreshAllAsync(CancellationToken.None).ConfigureAwait(true);
+            var todo = Rows.Where(r => Key(r) != r.Saved || NeedsInstall(r)).ToList();
+            var wanted = todo.ToDictionary(r => r, r => (Choice: Desired(r), Key: Key(r), Label: Describe(r), Requires: Requirements(r)));
+            foreach (var row in todo)
             {
                 if (!await LicensesAsync(row).ConfigureAwait(true))
                 {
@@ -106,18 +114,13 @@ public sealed partial class StepSettingsViewModel(IModelCatalog catalog, IStepMo
                 }
             }
 
-            var pending = changed.Where(r => skipped.All(s => s.Row != r)).ToList();
-            var codes = pending.SelectMany(Requirements).Distinct(StringComparer.Ordinal).ToList();
+            var pending = todo.Where(r => skipped.All(s => s.Row != r)).ToList();
+            var codes = pending.SelectMany(r => wanted[r].Requires).Distinct(StringComparer.Ordinal).ToList();
             var reason = text["install.not_ready"];
             if (codes.Count > 0)
             {
                 Percent = 0;
-                var progress = new Progress<ToolProgress>(p =>
-                {
-                    Percent = Math.Round(p.Share * 100);
-                    Progress = p.Text;
-                });
-                var outcome = await installs.EnsureAsync(codes, "install.purpose.save", progress, CancellationToken.None).ConfigureAwait(true);
+                var outcome = await installs.EnsureAsync(codes, "install.purpose.save", InstallProgress(), CancellationToken.None).ConfigureAwait(true);
                 Progress = string.Empty;
                 if (!outcome.Ready)
                 {
@@ -127,13 +130,19 @@ public sealed partial class StepSettingsViewModel(IModelCatalog catalog, IStepMo
 
             foreach (var row in pending)
             {
-                if (Requirements(row).All(c => installs.Planner.Find(c) is not { } component || component.Ready))
+                var want = wanted[row];
+                if (!want.Requires.All(c => installs.Planner.Find(c) is not { } component || component.Ready))
                 {
-                    await StoreAsync(row).ConfigureAwait(true);
+                    skipped.Add((row, reason));
+                }
+                else if (want.Key != row.Saved)
+                {
+                    await StoreAsync(row, want).ConfigureAwait(true);
                 }
                 else
                 {
-                    skipped.Add((row, reason));
+                    // Unchanged, only installed again: the note no longer says "installed when you save".
+                    await NoteAsync(row).ConfigureAwait(true);
                 }
             }
 
@@ -153,29 +162,57 @@ public sealed partial class StepSettingsViewModel(IModelCatalog catalog, IStepMo
         }
         finally
         {
+            Progress = string.Empty;
             Busy = false;
         }
     }
 
-    /// <summary>Speaks a sample sentence with the row's voice and opens it (an online voice is paid).</summary>
+    /// <summary>Speaks a sample sentence with the row's voice and opens it (an online voice is paid; a local one is installed first, after asking).</summary>
     [RelayCommand]
     public async Task ListenAsync(StepModelRowViewModel? row)
     {
-        if (row?.Selected?.Model is not { } model || Listening)
+        if (row?.Selected?.Model is not { } model || Listening || Busy)
         {
-            return;
-        }
-
-        if (speech.EngineOf(model) is { IsLocal: true, Ready: false })
-        {
-            row.Note = text["speech.listen.install_first"];
-            row.NoteIsWarning = true;
             return;
         }
 
         Listening = true;
         try
         {
+            if (speech.EngineOf(model) is { IsLocal: true, Ready: false })
+            {
+                // The same flow as Save: the voice's terms, then one confirmation listing the downloads.
+                if (!await LicensesAsync(row).ConfigureAwait(true))
+                {
+                    row.Note = text["models.license_declined"];
+                    row.NoteIsWarning = true;
+                    return;
+                }
+
+                Busy = true;
+                InstallOutcome outcome;
+                try
+                {
+                    Percent = 0;
+                    outcome = await installs.EnsureAsync(Requirements(row), "install.purpose.listen", InstallProgress(), CancellationToken.None).ConfigureAwait(true);
+                }
+                finally
+                {
+                    Progress = string.Empty;
+                    Busy = false;
+                }
+
+                if (!outcome.Ready)
+                {
+                    logger.LogInformation("Listen not started: the local voice is not installed");
+                    row.Note = outcome.Reason;
+                    row.NoteIsWarning = true;
+                    return;
+                }
+
+                await NoteAsync(row).ConfigureAwait(true);
+            }
+
             var setup = await speech.SetupAsync(Desired(row) ?? new StepModelChoice(), CancellationToken.None).ConfigureAwait(true);
             var wav = Path.Combine(paths.WorkDirectory, "listen", "sample.wav");
             await speech.SynthesizeAsync(setup, _language, text[_language == ContentLanguages.Turkish ? "speech.sample.tr" : "speech.sample.en"], wav,
@@ -263,7 +300,7 @@ public sealed partial class StepSettingsViewModel(IModelCatalog catalog, IStepMo
     {
         if (model.Provider == ModelProviders.Local)
         {
-            return model.Name + " · " + text["models.local_free"];
+            return model.Name + " · " + text["models.local_free"] + (model.MinVideoMemoryGb > 0 ? " · " + text.Format("models.min_memory", model.MinVideoMemoryGb) : string.Empty);
         }
 
         var price = model.Capabilities.HasFlag(ModelCapability.Image)
@@ -355,7 +392,7 @@ public sealed partial class StepSettingsViewModel(IModelCatalog catalog, IStepMo
             row.NoteIsWarning = memory is null || gigabytes + 0.25 < model.MinVideoMemoryGb;
         }
 
-        install |= Requirements(row).Any(c => installs.Planner.Find(c) is { Ready: false });
+        install |= NeedsInstall(row);
         if (install)
         {
             parts.Add(text["models.installs_on_save"]);
@@ -448,27 +485,42 @@ public sealed partial class StepSettingsViewModel(IModelCatalog catalog, IStepMo
         }
     }
 
-    private async Task StoreAsync(StepModelRowViewModel row)
+    private async Task StoreAsync(StepModelRowViewModel row, (StepModelChoice? Choice, string Key, string Label, IReadOnlyList<string> Requires) want)
     {
-        var choice = Desired(row);
-        if (choice is null)
+        if (want.Choice is null)
         {
             await steps.ClearAsync(row.Step.Code, _profile, CancellationToken.None).ConfigureAwait(true);
         }
         else
         {
-            await steps.SaveAsync(choice, CancellationToken.None).ConfigureAwait(true);
+            await steps.SaveAsync(want.Choice, CancellationToken.None).ConfigureAwait(true);
         }
 
-        row.Saved = Key(row);
-        logger.LogInformation("Setting changed: {Scope} step {Step} uses {Model} (effort {Effort}, engine {Engine})", _profile is null ? "general" : "profile",
-            row.Step.Code, row.Selected switch
-            {
-                { Kind: StepOptionKind.Inherit } => "the general setting",
-                { Model: { } m } => m.Provider + "/" + m.Id,
-                _ => row.Step.Optional ? "nothing (off)" : "no model",
-            }, row.Effort?.Value is { Length: > 0 } effort ? effort : "automatic", row.IsEngineStep ? row.Engine?.Kind.ToString() ?? "-" : "-");
+        row.Saved = want.Key;
+        logger.LogInformation("Setting changed: {Scope} step {Step} uses {Model}", _profile is null ? "general" : "profile", row.Step.Code, want.Label);
     }
+
+    /// <summary>What a row will be saved as, for the log (no personal data: model codes, effort, engine).</summary>
+    private static string Describe(StepModelRowViewModel row)
+    {
+        var model = row.Selected switch
+        {
+            { Kind: StepOptionKind.Inherit } => "the general setting",
+            { Model: { } m } => m.Provider + "/" + m.Id,
+            _ => row.Step.Optional ? "nothing (off)" : "no model",
+        };
+        return model + " (effort " + (row.Effort?.Value is { Length: > 0 } effort ? effort : "automatic") + ", engine "
+            + (row.IsEngineStep ? row.Engine?.Kind.ToString() ?? "-" : "-") + ")";
+    }
+
+    /// <summary>Whether something the row needs is not on this computer (a component removed meanwhile, or a half-finished install).</summary>
+    private bool NeedsInstall(StepModelRowViewModel row) => Requirements(row).Any(c => installs.Planner.Find(c) is { Ready: false });
+
+    private Progress<ToolProgress> InstallProgress() => new(p =>
+    {
+        Percent = Math.Round(p.Share * 100);
+        Progress = p.Text;
+    });
 
     private static string Key(StepModelRowViewModel row) => string.Join('|', row.Selected?.Kind.ToString() ?? string.Empty,
         row.Selected?.Model is { } m ? m.Provider + "/" + m.Id : string.Empty, row.Effort?.Value ?? string.Empty,

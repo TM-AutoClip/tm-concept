@@ -12,6 +12,12 @@ public interface IModelCatalog
     /// <summary>A model; <c>null</c> when unknown.</summary>
     CatalogModel? Find(string provider, string id);
 
+    /// <summary>
+    /// A model with its built-in prices (the app's own table, before any downloaded table); <c>null</c> when unknown. Downloaded prices are
+    /// checked against these, so a change cannot grow day after day.
+    /// </summary>
+    CatalogModel? BuiltIn(string provider, string id);
+
     /// <summary>Models with every flag of <paramref name="capability"/>.</summary>
     IReadOnlyList<CatalogModel> With(ModelCapability capability);
 

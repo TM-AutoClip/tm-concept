@@ -122,7 +122,7 @@ first entry *Use the general setting*). Each step says what it is for:
   accept its license: free for individuals and companies of up to 3 people), Revideo (experimental). The video code model also writes
   the image prompts.
 - **Images** — *Off* (default: the video is drawn by its code only), an online image model, or a local one that runs on your graphics card:
-  **FLUX.2 klein 4B** (fast, at least 4 GB of graphics memory) or **Z-Image Turbo** (better pictures, at least 6 GB). The page warns when
+  **FLUX.2 klein 4B** (fast) or **Z-Image Turbo** (better pictures), both with at least 6 GB of graphics memory (the card they were measured on). The page warns when
   your card looks too small; on Windows they need an NVIDIA card (CUDA), on Linux x64 a Vulkan driver; there is none for Linux ARM64.
 - **Narration** — *Off* (silent video, yellow warning), **Supertonic 3** (local, free; Turkish and English), or an online voice. Voice,
   speed and ▶ Listen are in the step.
@@ -130,8 +130,9 @@ first entry *Use the general setting*). Each step says what it is for:
 
 When you press **Save** and a choice needs something this computer does not have yet, **one confirmation lists every download** (name,
 source, size). Nothing is downloaded without it. Then it installs with progress (the page and the log) and saves; if you cancel or an
-install fails, that step is not saved and the reason is shown. Before the first video, anything still missing (ffmpeg, for example) is
-offered the same way.
+install fails, that step is not saved and the reason is shown. A saved choice whose component was removed later is installed again by the
+next Save. Before the first video, anything the queued videos still need (ffmpeg, for example; the local voice or image model only when
+the video uses narration or model images) is offered the same way.
 
 | Component | From | About |
 |---|---|---|
@@ -143,9 +144,10 @@ offered the same way.
 | FLUX.2 klein 4B weights (model, Qwen3-4B text encoder, VAE) | huggingface.co | 5.3 GB |
 | Z-Image Turbo weights (model, Qwen3-4B-Instruct text encoder, VAE) | huggingface.co | 9.4 GB |
 
-Every pinned download is checked against its SHA-256 (npm packages: the lock file's integrity values) and goes into the app's own data
-folder; the system PATH is never changed. Settings → **General** → *Installed components* lists what is installed with its size, can
-remove it, and can render an engine's sample without any model or network.
+Every pinned download is checked against its SHA-256 (npm packages: the lock file's integrity values; the image weights are fetched at a
+fixed Hugging Face commit) and goes into the app's own data folder; the system PATH is never changed. Chrome Headless Shell comes over
+HTTPS from Google, which publishes no checksum for it. Settings → **General** → *Installed components* lists what is on disk with its size
+(an unfinished or no longer usable one is marked *incomplete*), can remove it, and can render an engine's sample without any model or network.
 
 Prices update by themselves, at most once a day: the app reads `pricing/prices.json` of this repository and OpenRouter's public model
 list (no key is sent), checks them and keeps the last good copy; offline, the built-in table is used. Settings → Models shows the date

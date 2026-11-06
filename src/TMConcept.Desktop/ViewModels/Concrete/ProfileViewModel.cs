@@ -184,15 +184,19 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
 
             var wasNew = IsNew;
             IsNew = false;
+
+            // The models are saved after the profile (they belong to it) and BEFORE the profile is selected again: selecting reloads every
+            // page, this one too, and the reload would put the saved values back into the rows before they are stored. A step whose
+            // download was declined or failed keeps its old value; its reason is kept for the status line (the reload clears Steps.Status).
+            var allSteps = await Steps.SaveAsync().ConfigureAwait(true);
+            var stepStatus = Steps.Status;
             await session.SelectProfileAsync(_editing, CancellationToken.None).ConfigureAwait(true);
             if (_profilesChanged is not null)
             {
                 await _profilesChanged().ConfigureAwait(true);
             }
 
-            // The models are saved after the profile (they belong to it); a step whose download was declined or failed keeps its old value.
-            var allSteps = await Steps.SaveAsync().ConfigureAwait(true);
-            Status = allSteps ? text["common.saved"] : Steps.Status;
+            Status = allSteps ? text["common.saved"] : stepStatus;
             logger.LogInformation("Profile {Id} saved ({State})", _editing.Id, wasNew ? "new" : "changed");
             if (wasNew)
             {

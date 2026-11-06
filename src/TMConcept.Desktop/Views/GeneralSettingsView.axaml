@@ -31,7 +31,11 @@
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="vm:ComponentRowViewModel">
             <Grid ColumnDefinitions="*,110,Auto,Auto" ColumnSpacing="10" Margin="0,3">
-              <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+              <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                <TextBlock Text="{DynamicResource components.incomplete}" Classes="small warning" VerticalAlignment="Center" TextWrapping="Wrap"
+                           IsVisible="{Binding Incomplete}" />
+              </StackPanel>
               <TextBlock Grid.Column="1" Text="{Binding Size}" Classes="small" VerticalAlignment="Center" HorizontalAlignment="Right" />
               <Button Grid.Column="2" Content="{DynamicResource engines.sample}" IsVisible="{Binding CanSample}" IsEnabled="{Binding !Busy}"
                       Command="{Binding $parent[ItemsControl].((vm:GeneralSettingsViewModel)DataContext).SampleCommand}" CommandParameter="{Binding}" />

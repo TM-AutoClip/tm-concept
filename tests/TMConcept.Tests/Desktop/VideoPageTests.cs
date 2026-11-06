@@ -27,7 +27,7 @@ public sealed class VideoPageTests
 
     private static ChatResponse Code(string code) => new("```js\n" + code + "\n```", new ChatUsage(500, 0, 0, 800), null, "end_turn", "r");
 
-    private static async Task<(VideoViewModel Page, Concept Concept)> PrepareAsync(DesktopHarness h)
+    private static async Task<(VideoViewModel Page, Concept Concept)> PrepareAsync(DesktopHarness h, Action<VideoViewModel>? options = null)
     {
         await FirstRunTests.CreateAsync(h);
         var profile = new Profile { Name = "Byzantium", ContentLanguage = ContentLanguages.English, ConceptText = "x" };
@@ -40,6 +40,7 @@ public sealed class VideoPageTests
             CancellationToken.None);
         var page = h.Get<VideoViewModel>();
         await page.ActivateAsync();
+        options?.Invoke(page);
         await page.EnqueueAsync(page.Approved.Single());
         return (page, concept);
     }
@@ -132,6 +133,40 @@ public sealed class VideoPageTests
         chat.Requests.ShouldBeEmpty();
         page.Queue.Single().Error.ShouldContain(h.Get<TMConcept.Desktop.Localization.Localizer>()["video.error.missing"]);
         (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!.Status.ShouldBe(ConceptStatus.Queued);
+    }
+
+    [AvaloniaFact]
+    public async Task ItemsWithImagesAndNarrationOffAskForNoLocalImageOrVoiceModel()
+    {
+        var engine = new FakeEngine();
+        var confirm = new FakeConfirm { Answer = false };
+        var imageRuntime = new FakeComponent(ComponentCodes.ImageRuntime, ready: false);
+        var weights = new FakeComponent(ComponentCodes.ImagePrefix + "z-image-turbo", ready: false, ComponentCodes.ImageRuntime);
+        var speechRuntime = new FakeComponent(ComponentCodes.SpeechRuntime, ready: false);
+        var voice = new FakeComponent(ComponentCodes.VoicePrefix + "supertonic", ready: false, ComponentCodes.SpeechRuntime);
+        using var h = Harness(new FakeChat().Answer(_ => Code(engine.SampleCode)), engine, s =>
+        {
+            s.AddSingleton<TMConcept.Desktop.Dialogs.IConfirmDialog>(confirm);
+            s.RemoveAll<IComponentSource>();
+            s.AddSingleton<IComponentSource>(new FakeComponents(imageRuntime, weights, speechRuntime, voice,
+                new TMConcept.Engines.Components.EngineComponent(engine)));
+        });
+        // The profile's steps use local models that are not installed; the page turns images and narration off for the item.
+        var (page, concept) = await PrepareAsync(h, p =>
+        {
+            p.Images = p.ImageChoices.First(c => c.Value == ImageSources.None);
+            p.Speech = false;
+        });
+        var store = h.Get<IStepModelStore>();
+        await store.SaveAsync(new StepModelChoice { Step = PipelineSteps.Images, Provider = ModelProviders.Local, Model = "z-image-turbo" }, CancellationToken.None);
+        await store.SaveAsync(new StepModelChoice { Step = PipelineSteps.Speech, Provider = ModelProviders.Local, Model = "supertonic" }, CancellationToken.None);
+
+        await page.ProduceAllAsync();
+
+        confirm.Asked.ShouldBeEmpty();
+        (weights.Installs + imageRuntime.Installs + voice.Installs + speechRuntime.Installs).ShouldBe(0);
+        page.Queue.ShouldBeEmpty();
+        (await h.Get<IVideoStore>().ListAsync(concept.ProfileId, CancellationToken.None)).Single().ImageModel.ShouldBeEmpty();
     }
 
     [AvaloniaFact]
