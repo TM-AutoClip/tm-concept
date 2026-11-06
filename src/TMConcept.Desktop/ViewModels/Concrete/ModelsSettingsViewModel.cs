@@ -55,10 +55,14 @@ public sealed partial class ModelsSettingsViewModel(IModelCatalog catalog, IStep
     [ObservableProperty]
     public partial decimal? OverrideCacheRead { get; set; }
 
+    // Each step's choice as loaded or last saved ("provider/model|effort"): only a step that changed is written to the log.
+    private readonly Dictionary<string, string> _saved = new(StringComparer.Ordinal);
+
     /// <inheritdoc />
     public override async Task ActivateAsync()
     {
         Rows.Clear();
+        _saved.Clear();
         var saved = await steps.ListAsync(CancellationToken.None).ConfigureAwait(true);
         foreach (var step in PipelineSteps.All)
         {
@@ -74,6 +78,7 @@ public sealed partial class ModelsSettingsViewModel(IModelCatalog catalog, IStep
             var choice = saved.FirstOrDefault(s => s.Step == step.Code);
             row.Selected = row.Options.FirstOrDefault(o => o.Model is { } m && choice is not null && m.Provider == choice.Provider && m.Id == choice.Model) ?? row.Options[0];
             row.Effort = choice is null ? string.Empty : StepModelResolver.Options(choice).Effort;
+            _saved[step.Code] = Choice(row);
             Rows.Add(row);
         }
 
@@ -87,8 +92,6 @@ public sealed partial class ModelsSettingsViewModel(IModelCatalog catalog, IStep
     {
         foreach (var row in Rows)
         {
-            logger.LogInformation("Setting changed: step {Step} uses {Model} (effort {Effort})", row.Step.Code,
-                row.Selected?.Model is { } chosen ? chosen.Provider + "/" + chosen.Id : "no model", row.Effort is { Length: > 0 } effort ? effort : "default");
             if (row.Selected?.Model is { } model)
             {
                 await steps.SaveAsync(new StepModelChoice
@@ -103,10 +106,21 @@ public sealed partial class ModelsSettingsViewModel(IModelCatalog catalog, IStep
             {
                 await steps.ClearAsync(row.Step.Code, CancellationToken.None).ConfigureAwait(true);
             }
+
+            var now = Choice(row);
+            if (!_saved.TryGetValue(row.Step.Code, out var before) || before != now)
+            {
+                logger.LogInformation("Setting changed: step {Step} uses {Model} (effort {Effort})", row.Step.Code,
+                    row.Selected?.Model is { } chosen ? chosen.Provider + "/" + chosen.Id : "no model", row.Effort is { Length: > 0 } effort ? effort : "default");
+                _saved[row.Step.Code] = now;
+            }
         }
 
         Status = text["common.saved"];
     }
+
+    private static string Choice(StepModelRowViewModel row) =>
+        (row.Selected?.Model is { } model ? model.Provider + "/" + model.Id : string.Empty) + "|" + (row.Effort ?? string.Empty);
 
     /// <summary>Saves a price override and applies it at once.</summary>
     [RelayCommand]

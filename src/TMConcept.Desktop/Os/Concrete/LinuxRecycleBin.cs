@@ -1,10 +1,15 @@
 using System.Globalization;
+using Microsoft.Extensions.Logging;
+using TMConcept.Core.Processes;
 using TMConcept.Storage.Keys;
 
 namespace TMConcept.Desktop.Os;
 
-/// <summary>Linux trash: <c>gio trash</c> when it exists, otherwise the XDG trash folder (files + .trashinfo) in the home folder.</summary>
-public sealed class LinuxRecycleBin(ICommandRunner runner) : IRecycleBin
+/// <summary>
+/// Linux trash: <c>gio trash</c> when it exists, otherwise the XDG trash folder (files + .trashinfo) in the home folder. A failed
+/// <c>gio trash</c> is a warning with its exit code and error before the XDG trash folder is used.
+/// </summary>
+public sealed class LinuxRecycleBin(ICommandRunner runner, ILogger<LinuxRecycleBin> logger) : IRecycleBin
 {
     /// <inheritdoc />
     public async Task MoveAsync(string folder, CancellationToken cancellationToken)
@@ -19,8 +24,14 @@ public sealed class LinuxRecycleBin(ICommandRunner runner) : IRecycleBin
 
             if (!Directory.Exists(folder))
             {
-                throw new IOException("gio trash failed: " + error);
+                throw new IOException("gio trash failed: " + ChildOutput.Summary(error));
             }
+
+            logger.LogWarning("gio trash exited {Code}: {Error}; using the XDG trash folder", code, ChildOutput.Summary(error));
+        }
+        else
+        {
+            logger.LogInformation("gio is not installed; using the XDG trash folder");
         }
 
         var xdg = Environment.GetEnvironmentVariable("XDG_DATA_HOME");

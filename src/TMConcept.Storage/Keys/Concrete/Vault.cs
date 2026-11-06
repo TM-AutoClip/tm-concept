@@ -113,7 +113,15 @@ public sealed class Vault(IAppPaths paths, DatabaseKey key, IEnumerable<IKeyProt
 
         if (old is not null && _protectors.FirstOrDefault(p => p.Method == old.Method) is { } previous)
         {
-            await previous.ForgetAsync(old, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await previous.ForgetAsync(old, cancellationToken).ConfigureAwait(false);
+            }
+            catch (InvalidOperationException ex)
+            {
+                // The new seal is written and works; only the old copy stays behind (for example in the keyring).
+                logger.LogWarning(ex, "The old key seal ({Method}) could not be removed; the key may still be in the keyring", old.Method);
+            }
         }
 
         logger.LogInformation("Key protection changed to {Method}", protector.Method);

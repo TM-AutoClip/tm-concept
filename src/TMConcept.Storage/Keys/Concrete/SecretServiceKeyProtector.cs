@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using TMConcept.Core.Processes;
 
 namespace TMConcept.Storage.Keys;
 
@@ -53,6 +54,11 @@ public sealed class SecretServiceKeyProtector(ICommandRunner runner) : IKeyProte
     public async Task ForgetAsync(KeyEnvelope envelope, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(envelope);
-        await runner.RunAsync(Tool, ["clear", "application", Application, "key", envelope.Payload], null, cancellationToken).ConfigureAwait(false);
+        var (code, _, error) = await runner.RunAsync(Tool, ["clear", "application", Application, "key", envelope.Payload], null, cancellationToken)
+            .ConfigureAwait(false);
+        if (code != 0)
+        {
+            throw new InvalidOperationException($"secret-tool could not remove the old key from the keyring (exit {code}): {ChildOutput.Summary(error)}");
+        }
     }
 }

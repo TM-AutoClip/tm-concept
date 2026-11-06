@@ -68,6 +68,19 @@ public sealed class EncryptionTests
     }
 
     [Fact]
+    public async Task SecretServiceReportsAKeyThatCouldNotBeRemovedFromTheKeyring()
+    {
+        var runner = new FakeCommandRunner { ClearExitCode = 1 };
+        var protector = new SecretServiceKeyProtector(runner);
+
+        var failure = await Should.ThrowAsync<InvalidOperationException>(() =>
+            protector.ForgetAsync(new KeyEnvelope(KeyMethods.SecretService, "0123456789abcdef"), CancellationToken.None));
+
+        failure.Message.ShouldContain("exit 1");
+        failure.Message.ShouldContain("No such secret collection");
+    }
+
+    [Fact]
     public void SealedBoxRejectsWrongPasswordAndChangedHeader()
     {
         var magic = "TMCTEST1"u8.ToArray();

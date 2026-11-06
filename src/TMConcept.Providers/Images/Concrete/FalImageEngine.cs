@@ -34,14 +34,16 @@ public sealed class FalImageEngine(FalProvider provider, ProviderHttp http, Prov
             ["num_images"] = 1,
             ["enable_safety_checker"] = true,
         }.ToJsonString();
-        var submitted = JsonNode.Parse((await SendAsync(HttpMethod.Post, new Uri(provider.Address, request.Model.Model.Id), body, key, cancellationToken)
+        var submitted = JsonNode.Parse((await SendAsync(HttpMethod.Post, new Uri(provider.Address, request.Model.Model.Id), body, key, poll: false, cancellationToken)
             .ConfigureAwait(false)).Text);
         var status = Own(submitted?["status_url"]?.ToString());
         var result = Own(submitted?["response_url"]?.ToString());
         var started = DateTimeOffset.UtcNow;
+        var polls = 0;
         while (true)
         {
-            var state = JsonNode.Parse((await SendAsync(HttpMethod.Get, status, null, key, cancellationToken).ConfigureAwait(false)).Text)?["status"]?.ToString();
+            polls++;
+            var state = JsonNode.Parse((await SendAsync(HttpMethod.Get, status, null, key, poll: true, cancellationToken).ConfigureAwait(false)).Text)?["status"]?.ToString();
             if (state == "COMPLETED")
             {
                 break;
@@ -49,13 +51,15 @@ public sealed class FalImageEngine(FalProvider provider, ProviderHttp http, Prov
 
             if (state is not ("IN_QUEUE" or "IN_PROGRESS") || DateTimeOffset.UtcNow - started > MaxWait)
             {
+                logger.LogWarning("fal image {Model} did not finish ({State}) after {Polls} status checks in {Seconds:0} s", request.Model.Model.Id,
+                    state ?? "unknown", polls, (DateTimeOffset.UtcNow - started).TotalSeconds);
                 throw new ProviderException($"fal: the image did not finish ({state ?? "unknown"}).") { Code = state is null ? "incomplete" : "timeout" };
             }
 
             await transport.Delay(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
         }
 
-        var answer = JsonNode.Parse((await SendAsync(HttpMethod.Get, result, null, key, cancellationToken).ConfigureAwait(false)).Text);
+        var answer = JsonNode.Parse((await SendAsync(HttpMethod.Get, result, null, key, poll: false, cancellationToken).ConfigureAwait(false)).Text);
         var url = answer?["images"]?[0]?["url"]?.ToString() ?? throw new ProviderException("fal: the answer has no image.") { Code = "incomplete" };
         if (!Uri.TryCreate(url, UriKind.Absolute, out var address) || address.Scheme != Uri.UriSchemeHttps
             || !ImageHosts.Any(h => address.Host == h || address.Host.EndsWith("." + h, StringComparison.OrdinalIgnoreCase)))
@@ -66,7 +70,8 @@ public sealed class FalImageEngine(FalProvider provider, ProviderHttp http, Prov
         var image = await http.SendAsync(() => new HttpRequestMessage(HttpMethod.Get, address), provider.Name, key, cancellationToken).ConfigureAwait(false);
         Directory.CreateDirectory(Path.GetDirectoryName(request.Output)!);
         await File.WriteAllBytesAsync(request.Output, image.Body, cancellationToken).ConfigureAwait(false);
-        logger.LogInformation("fal image {Model} done", request.Model.Model.Id);
+        logger.LogInformation("fal image {Model} done in {Seconds:0} s ({Polls} status checks)", request.Model.Model.Id,
+            (DateTimeOffset.UtcNow - started).TotalSeconds, polls);
         return new ImageResult(request.Output, request.Model.Model.ImageUsd);
     }
 
@@ -80,8 +85,9 @@ public sealed class FalImageEngine(FalProvider provider, ProviderHttp http, Prov
         return uri;
     }
 
-    private Task<ProviderReply> SendAsync(HttpMethod method, Uri address, string? body, string key, CancellationToken cancellationToken) =>
-        http.SendAsync(() =>
+    private Task<ProviderReply> SendAsync(HttpMethod method, Uri address, string? body, string key, bool poll, CancellationToken cancellationToken)
+    {
+        Func<HttpRequestMessage> create = () =>
         {
             var message = new HttpRequestMessage(method, address);
             if (body is not null)
@@ -91,5 +97,7 @@ public sealed class FalImageEngine(FalProvider provider, ProviderHttp http, Prov
 
             provider.Authorize(message, key);
             return message;
-        }, provider.Name, key, cancellationToken);
+        };
+        return poll ? http.PollAsync(create, provider.Name, key, cancellationToken) : http.SendAsync(create, provider.Name, key, cancellationToken);
+    }
 }

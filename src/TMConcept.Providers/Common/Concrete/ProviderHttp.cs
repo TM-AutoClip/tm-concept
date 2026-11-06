@@ -18,7 +18,18 @@ public sealed class ProviderHttp(ProviderTransport transport, ILogger<ProviderHt
     private readonly HttpClient _http = new(transport.CreateHandler(), disposeHandler: true) { Timeout = transport.Timeout };
 
     /// <summary>Sends; <paramref name="create"/> builds a new request for every try.</summary>
-    public async Task<ProviderReply> SendAsync(Func<HttpRequestMessage> create, string providerName, string apiKey, CancellationToken cancellationToken)
+    public Task<ProviderReply> SendAsync(Func<HttpRequestMessage> create, string providerName, string apiKey, CancellationToken cancellationToken) =>
+        SendAsync(create, providerName, apiKey, logSuccess: true, cancellationToken);
+
+    /// <summary>
+    /// Sends a status poll (one a second while a job waits): a successful answer is not logged, the caller writes one line for the whole
+    /// wait; a failure is logged as for <see cref="SendAsync(Func{HttpRequestMessage}, string, string, CancellationToken)"/>.
+    /// </summary>
+    public Task<ProviderReply> PollAsync(Func<HttpRequestMessage> create, string providerName, string apiKey, CancellationToken cancellationToken) =>
+        SendAsync(create, providerName, apiKey, logSuccess: false, cancellationToken);
+
+    private async Task<ProviderReply> SendAsync(Func<HttpRequestMessage> create, string providerName, string apiKey, bool logSuccess,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(create);
         for (var attempt = 1; ; attempt++)
@@ -48,8 +59,12 @@ public sealed class ProviderHttp(ProviderTransport transport, ILogger<ProviderHt
                 var requestId = RequestId(response);
                 if (response.IsSuccessStatusCode)
                 {
-                    logger.LogInformation("{Provider} {Operation}: HTTP {Status} in {Ms} ms ({Kilobytes} KB, request {RequestId})", providerName, operation,
-                        (int)response.StatusCode, watch.ElapsedMilliseconds, body.Length / 1024, requestId.Length > 0 ? requestId : "-");
+                    if (logSuccess)
+                    {
+                        logger.LogInformation("{Provider} {Operation}: HTTP {Status} in {Ms} ms ({Kilobytes} KB, request {RequestId})", providerName, operation,
+                            (int)response.StatusCode, watch.ElapsedMilliseconds, body.Length / 1024, requestId.Length > 0 ? requestId : "-");
+                    }
+
                     return new ProviderReply(body, response.Content.Headers.ContentType?.MediaType ?? string.Empty, requestId);
                 }
 
