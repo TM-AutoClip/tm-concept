@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.Logging;
 using TMConcept.Core.Chat;
 using TMConcept.Core.Models;
 using TMConcept.Core.Providers;
@@ -13,7 +14,7 @@ namespace TMConcept.Providers.Anthropic;
 /// thinking settings are sent (the model's defaults apply). The stop reason is checked before the text: <c>refusal</c>, <c>max_tokens</c>,
 /// a context overflow and a stream that never finished are errors (with the tokens already billed and, for a cut, the text that arrived).
 /// </summary>
-public sealed class AnthropicChatClient(AnthropicProvider provider, ProviderHttp http, CatalogModel model, string apiKey) : IChatClient
+public sealed class AnthropicChatClient(AnthropicProvider provider, ProviderHttp http, CatalogModel model, string apiKey, ILogger logger) : IChatClient
 {
     private static readonly HashSet<string> ImageTypes = new(StringComparer.OrdinalIgnoreCase) { "image/jpeg", "image/png", "image/gif", "image/webp" };
 
@@ -83,6 +84,12 @@ public sealed class AnthropicChatClient(AnthropicProvider provider, ProviderHttp
         }, provider.Name, apiKey, cancellationToken).ConfigureAwait(false);
 
         var answer = AnthropicStream.Parse(reply.Text);
+        if (answer.SkippedEvents > 0)
+        {
+            logger.LogWarning("{Provider} {Model}: {Count} stream event(s) could not be read and were skipped (request {RequestId})", provider.Name, Model.Id,
+                answer.SkippedEvents, reply.RequestId.Length > 0 ? reply.RequestId : "-");
+        }
+
         if (answer.Error is { } error)
         {
             throw http.Failure(provider.Name, StatusOf(error.Type), error.Raw, reply.RequestId, apiKey);

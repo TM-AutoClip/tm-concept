@@ -185,7 +185,7 @@ public sealed class RemotionEngine(IAppPaths paths, ToolInstaller tools, ChromeL
             line => Logger.LogDebug("remotion: {Line}", EnginePackage.Short(line)), cancellationToken).ConfigureAwait(false);
         if (result.ExitCode != 0 || Chrome.FindRemotion() is null)
         {
-            throw new ToolInstallException($"Chrome Headless Shell could not be installed ({result.ExitCode}): {EnginePackage.Short(result.LastLines)}")
+            throw new ToolInstallException($"Chrome Headless Shell could not be installed ({result.ExitCode}): {Core.Processes.ChildOutput.Summary(result.LastLines)}")
             {
                 Code = "download",
             };

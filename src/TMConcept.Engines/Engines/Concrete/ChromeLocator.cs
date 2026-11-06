@@ -98,7 +98,7 @@ public sealed partial class ChromeLocator(IAppPaths paths, IToolPlatform platfor
             line => logger.LogDebug("chrome: {Line}", EnginePackage.Short(line)), cancellationToken).ConfigureAwait(false);
         if (result.ExitCode != 0 || Find() is null)
         {
-            throw new ToolInstallException($"Chrome Headless Shell could not be installed ({result.ExitCode}): {EnginePackage.Short(result.LastLines)}")
+            throw new ToolInstallException($"Chrome Headless Shell could not be installed ({result.ExitCode}): {Core.Processes.ChildOutput.Summary(result.LastLines)}")
             {
                 Code = "download",
             };

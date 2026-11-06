@@ -65,6 +65,9 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         }
 
         var id = Guid.NewGuid();
+        logger.LogInformation("Video {Id} started: concept {Concept}, {Engine}, code model {Provider}/{Model}, voice {Voice}, images {Images}", id, job.Concept.Id,
+            engine.Name, job.CodeModel.Model.Provider, job.CodeModel.Model.Id, options.Speech && profile.SpeechEngine != SpeechEngines.Off ? profile.SpeechEngine : "off",
+            options.Images);
         var work = Path.Combine(paths.WorkDirectory, "videos", id.ToString("N"));
         var warnings = new List<string>();
         var spent = new List<VideoCost>();

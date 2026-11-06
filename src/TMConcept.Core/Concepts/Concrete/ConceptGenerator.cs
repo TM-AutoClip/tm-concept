@@ -187,6 +187,8 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
             }
 
             run.Status = RunStatus.Succeeded;
+            logger.LogInformation("Concept run {Run} finished: {Accepted} kept, {Rejected} duplicates thrown away, {Problems} unreadable, {Usd} USD, {Seconds:0} s",
+                run.Id, accepted.Count, rejected, problems, run.ActualUsd, (clock.GetUtcNow() - run.StartedAtUtc).TotalSeconds);
         }
         catch (OperationCanceledException)
         {

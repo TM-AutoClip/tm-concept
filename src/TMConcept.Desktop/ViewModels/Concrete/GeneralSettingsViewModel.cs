@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
 using TMConcept.Core.Notifications;
 using TMConcept.Desktop.Localization;
 using TMConcept.Desktop.Paths;
@@ -8,7 +9,8 @@ using TMConcept.Desktop.Startup;
 namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>General settings: interface language (changes at once), drawing (after a restart) and the bottom-right notifications.</summary>
-public sealed partial class GeneralSettingsViewModel(AppSession session, Localizer text, UiPreferencesFile preferences, INotifier notifier)
+public sealed partial class GeneralSettingsViewModel(AppSession session, Localizer text, UiPreferencesFile preferences, INotifier notifier,
+    ILogger<GeneralSettingsViewModel> logger)
     : SettingsSectionBase
 {
     /// <inheritdoc />
@@ -50,6 +52,7 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
         }
 
         preferences.Change(p => p.UseGraphicsCard = value);
+        logger.LogInformation("Setting changed: draw with the {Renderer} after the next start", value ? "graphics card" : "processor");
         Status = text["settings.drawing.restart"];
     }
 
@@ -66,6 +69,8 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
         settings.NotificationsEnabled = NotificationsEnabled;
         settings.NotificationSeconds = (int)Math.Clamp(NotificationSeconds ?? 60, 3, 3600);
         await session.SaveAsync(settings, CancellationToken.None).ConfigureAwait(true);
+        logger.LogInformation("Setting changed: notifications {State}, shown for {Seconds} s", settings.NotificationsEnabled ? "on" : "off",
+            settings.NotificationSeconds);
         Status = text["common.saved"];
     }
 
@@ -80,6 +85,7 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
         var settings = session.Settings;
         settings.Language = code;
         await session.SaveAsync(settings, CancellationToken.None).ConfigureAwait(true);
+        logger.LogInformation("Setting changed: interface language {Language}", code);
         Status = string.Empty;
     }
 }

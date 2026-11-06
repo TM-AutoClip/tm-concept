@@ -35,7 +35,7 @@ public sealed class LinuxToolPlatform(IProcessRunner runner) : IToolPlatform
             .ConfigureAwait(false);
         if (result.ExitCode != 0)
         {
-            throw new InvalidOperationException("tar failed: " + result.LastLines);
+            throw new InvalidOperationException("tar failed: " + Core.Processes.ChildOutput.Summary(result.LastLines));
         }
     }
 

@@ -130,7 +130,7 @@ public sealed class FfmpegPlayback(IAudioOutputFactory audio, ChildProcessGuardB
 
             _ = Task.Factory.StartNew(() => PictureLoop(session, picture, source, fromMs), CancellationToken.None, TaskCreationOptions.LongRunning,
                 TaskScheduler.Default);
-            logger.LogDebug("Playing from {Position} ms", fromMs);
+            logger.LogInformation("Playing from {Position} ms (sound: {Sound})", fromMs, device is not null);
         }
     }
 

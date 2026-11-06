@@ -33,5 +33,5 @@ public sealed class AnthropicProvider(ProviderHttp http, ILogger<AnthropicProvid
     }
 
     /// <inheritdoc />
-    public IChatClient CreateChat(CatalogModel model, string apiKey) => new AnthropicChatClient(this, Http, model, apiKey);
+    public IChatClient CreateChat(CatalogModel model, string apiKey) => new AnthropicChatClient(this, Http, model, apiKey, Logger);
 }

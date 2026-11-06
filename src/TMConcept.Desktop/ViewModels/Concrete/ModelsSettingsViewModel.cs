@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
 using TMConcept.Core.Models;
 using TMConcept.Core.Pipeline;
 using TMConcept.Core.Runs;
@@ -15,7 +16,7 @@ namespace TMConcept.Desktop.ViewModels;
 /// provider (from the runs; no limits or balances are shown).
 /// </summary>
 public sealed partial class ModelsSettingsViewModel(IModelCatalog catalog, IStepModelStore steps, IPriceOverrideStore prices, IRunStore runs,
-    Localizer text, TimeProvider clock) : SettingsSectionBase
+    Localizer text, TimeProvider clock, ILogger<ModelsSettingsViewModel> logger) : SettingsSectionBase
 {
     /// <inheritdoc />
     public override string TitleKey => "settings.models";
@@ -86,6 +87,8 @@ public sealed partial class ModelsSettingsViewModel(IModelCatalog catalog, IStep
     {
         foreach (var row in Rows)
         {
+            logger.LogInformation("Setting changed: step {Step} uses {Model} (effort {Effort})", row.Step.Code,
+                row.Selected?.Model is { } chosen ? chosen.Provider + "/" + chosen.Id : "no model", row.Effort is { Length: > 0 } effort ? effort : "default");
             if (row.Selected?.Model is { } model)
             {
                 await steps.SaveAsync(new StepModelChoice
@@ -123,6 +126,7 @@ public sealed partial class ModelsSettingsViewModel(IModelCatalog catalog, IStep
             OutputUsd = OverrideOutput.Value,
             CacheReadUsd = OverrideCacheRead ?? 0,
         }, CancellationToken.None).ConfigureAwait(true);
+        logger.LogInformation("Setting changed: price override for {Provider}/{Model}", OverrideProvider.Trim(), OverrideModel.Trim());
         catalog.UseOverrides(await prices.ListAsync(CancellationToken.None).ConfigureAwait(true));
         await ActivateAsync().ConfigureAwait(true);
         Status = text["common.saved"];

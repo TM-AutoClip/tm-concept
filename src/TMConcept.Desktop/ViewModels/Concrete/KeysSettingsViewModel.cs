@@ -88,6 +88,7 @@ public sealed partial class KeysSettingsViewModel(IEnumerable<IProvider> provide
             return;
         }
 
+        logger.LogInformation("An API key was saved for {Provider}", key.Provider);
         Secret = string.Empty;
         Label = string.Empty;
         await ReloadAsync().ConfigureAwait(true);
@@ -111,6 +112,7 @@ public sealed partial class KeysSettingsViewModel(IEnumerable<IProvider> provide
         {
             var result = await provider.Provider.TestAsync(row.Key.Secret, CancellationToken.None).ConfigureAwait(true);
             row.Failed = !result.Ok;
+            logger.LogInformation("Key test of {Provider}: {Code}", row.Key.Provider, result.Code);
             row.Result = result.Code switch
             {
                 "ok" => "✓ " + text["keys.test.ok"],
@@ -148,6 +150,7 @@ public sealed partial class KeysSettingsViewModel(IEnumerable<IProvider> provide
         if (answer.Confirmed)
         {
             await keys.DeleteAsync(row.Key.Id, CancellationToken.None).ConfigureAwait(true);
+            logger.LogInformation("An API key of {Provider} was deleted", row.Key.Provider);
             Keys.Remove(row);
         }
     }

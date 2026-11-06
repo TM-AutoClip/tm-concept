@@ -327,6 +327,7 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
             }
             catch (ModelNotReadyException ex)
             {
+                logger.LogWarning("Video not started: the {Step} step has no {Missing}", ex.Step, ex.Missing);
                 row.Error = ex.Missing == "key" ? text.Format("concepts.no_key", options.CodeProvider) : text["video.no_model"];
                 return;
             }
@@ -342,6 +343,7 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
         }
         catch (VideoException ex)
         {
+            // The pipeline wrote the cause (with its step and code); the activity line below goes to the log too.
             row.Error = Reason(ex);
             activity.Add(ActivityLevel.Error, text.Format("video.failed", row.Title, row.Error, text.Usd(ex.SpentUsd)));
             notifier.Notify(new AppNotification(NotificationKind.Failed, text["video.failed.title"], row.Title));

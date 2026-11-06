@@ -17,7 +17,7 @@ public sealed class FfmpegMedia(FfmpegMuxer muxer, ToolInstaller tools, IProcess
         CancellationToken cancellationToken) => muxer.MuxAsync(folder, silentVideo, clips, assFile, output, cancellationToken);
 
     /// <summary>ffmpeg's error lines without the user's folders (they name the files it read and wrote).</summary>
-    private static string Paths(string text, string video, string jpeg, string folder) => text
+    private static string Paths(string text, string video, string jpeg, string folder) => Core.Processes.ChildOutput.Summary(text)
         .Replace(video, Path.GetFileName(video), StringComparison.Ordinal)
         .Replace(jpeg, Path.GetFileName(jpeg), StringComparison.Ordinal)
         .Replace(folder, "<video folder>", StringComparison.Ordinal)

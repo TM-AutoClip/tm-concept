@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
@@ -23,6 +24,8 @@ public sealed class ProviderHttp(ProviderTransport transport, ILogger<ProviderHt
         for (var attempt = 1; ; attempt++)
         {
             using var request = create();
+            var operation = request.Method + " " + (request.RequestUri?.AbsolutePath ?? string.Empty);
+            var watch = Stopwatch.StartNew();
             HttpResponseMessage response;
             try
             {
@@ -30,12 +33,12 @@ public sealed class ProviderHttp(ProviderTransport transport, ILogger<ProviderHt
             }
             catch (HttpRequestException ex)
             {
-                logger.LogWarning(ex, "{Provider}: network error", providerName);
+                logger.LogWarning(ex, "{Provider} {Operation}: network error after {Ms} ms", providerName, operation, watch.ElapsedMilliseconds);
                 throw new ProviderException($"{providerName} could not be reached.", ex) { Code = "network" };
             }
             catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
             {
-                logger.LogWarning("{Provider}: the request timed out", providerName);
+                logger.LogWarning("{Provider} {Operation}: the request timed out after {Ms} ms", providerName, operation, watch.ElapsedMilliseconds);
                 throw new ProviderException($"{providerName} did not answer in time.", ex) { Code = "timeout" };
             }
 
@@ -45,17 +48,22 @@ public sealed class ProviderHttp(ProviderTransport transport, ILogger<ProviderHt
                 var requestId = RequestId(response);
                 if (response.IsSuccessStatusCode)
                 {
+                    logger.LogInformation("{Provider} {Operation}: HTTP {Status} in {Ms} ms ({Kilobytes} KB, request {RequestId})", providerName, operation,
+                        (int)response.StatusCode, watch.ElapsedMilliseconds, body.Length / 1024, requestId.Length > 0 ? requestId : "-");
                     return new ProviderReply(body, response.Content.Headers.ContentType?.MediaType ?? string.Empty, requestId);
                 }
 
                 var wait = response.Headers.RetryAfter?.Delta ?? TimeSpan.FromSeconds(5);
                 if (response.StatusCode == HttpStatusCode.TooManyRequests && attempt == 1 && wait <= MaxRetryAfter)
                 {
-                    logger.LogWarning("{Provider}: 429, retrying once after {Seconds} s", providerName, wait.TotalSeconds);
+                    logger.LogWarning("{Provider} {Operation}: HTTP 429 after {Ms} ms, retrying once in {Seconds} s", providerName, operation,
+                        watch.ElapsedMilliseconds, wait.TotalSeconds);
                     await transport.Delay(wait, cancellationToken).ConfigureAwait(false);
                     continue;
                 }
 
+                logger.LogInformation("{Provider} {Operation}: HTTP {Status} in {Ms} ms", providerName, operation, (int)response.StatusCode,
+                    watch.ElapsedMilliseconds);
                 throw Failure(providerName, (int)response.StatusCode, System.Text.Encoding.UTF8.GetString(body), requestId, apiKey);
             }
         }

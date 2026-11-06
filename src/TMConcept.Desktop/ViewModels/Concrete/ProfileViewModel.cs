@@ -189,6 +189,7 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
             }
 
             Status = text["common.saved"];
+            logger.LogInformation("Profile {Id} saved ({State})", _editing.Id, wasNew ? "new" : "changed");
             if (wasNew)
             {
                 activity.Add(ActivityLevel.Info, text.Format("profile.created", _editing.Name));
@@ -294,8 +295,9 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
             image.Caption = caption;
             activity.Add(ActivityLevel.Info, text.Format("profile.describe.done", text.Usd(cost)));
         }
-        catch (Core.Models.ModelNotReadyException)
+        catch (Core.Models.ModelNotReadyException ex)
         {
+            logger.LogWarning("Describe not started: the {Step} step has no {Missing}", ex.Step, ex.Missing);
             Status = text["profile.describe.no_model"];
         }
         catch (Core.Providers.ProviderException ex)

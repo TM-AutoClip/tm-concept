@@ -124,7 +124,10 @@ public sealed partial class ToolsSettingsViewModel(ToolInstaller installer, IToo
         try
         {
             var progress = new Progress<EngineEvent>(e => row.Percent = (e.Ratio ?? 0) * 100);
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            logger.LogInformation("Sample render of {Engine} started", engine.Name);
             var video = await sample.RenderAsync(engine, progress, CancellationToken.None).ConfigureAwait(true);
+            logger.LogInformation("Sample render of {Engine} finished after {Seconds:0.0} s", engine.Name, watch.Elapsed.TotalSeconds);
             activity.Add(ActivityLevel.Info, text.Format("engines.sample_done", engine.Name));
             shell.OpenPath(Path.GetDirectoryName(video)!);
         }
@@ -243,9 +246,12 @@ public sealed partial class ToolsSettingsViewModel(ToolInstaller installer, IToo
     {
         row.Busy = true;
         row.Percent = 0;
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        logger.LogInformation("Installing {Tool}", row.Name);
         try
         {
             var done = await work(new Progress<ToolProgress>(p => row.Percent = p.Share * 100)).ConfigureAwait(true);
+            logger.LogInformation("{Tool} install finished after {Seconds:0.0} s", row.Name, watch.Elapsed.TotalSeconds);
             activity.Add(Enum.TryParse<ToolKind>(row.Code, ignoreCase: true, out var kind) && installer.Status(kind).Source == ToolInstaller.FallbackSource
                 ? ActivityLevel.Warning
                 : ActivityLevel.Info, done.Trim());

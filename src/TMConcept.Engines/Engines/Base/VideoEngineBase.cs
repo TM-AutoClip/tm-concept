@@ -178,7 +178,7 @@ public abstract class VideoEngineBase(EnginePackage package, ChromeLocator chrom
 
         if (result.ExitCode != 0 || (requireDone && !done))
         {
-            throw new EngineException($"{Name} ended with code {result.ExitCode}: {EnginePackage.Short(result.LastLines)}") { Code = "render" };
+            throw new EngineException($"{Name} ended with code {result.ExitCode}: {ChildOutput.Summary(result.LastLines)}") { Code = "render" };
         }
     }
 

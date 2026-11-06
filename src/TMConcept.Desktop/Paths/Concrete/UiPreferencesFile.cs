@@ -35,6 +35,11 @@ public sealed class UiPreferencesFile(AppPaths paths, ILogger<UiPreferencesFile>
     }
 
     /// <summary>Writes the preferences.</summary>
-    public void Write(UiPreferences preferences) =>
+    public void Write(UiPreferences preferences)
+    {
+        ArgumentNullException.ThrowIfNull(preferences);
         File.WriteAllText(paths.PreferencesFile, JsonSerializer.Serialize(preferences, DesktopJsonContext.Default.UiPreferences));
+        logger.LogInformation("Preferences saved (language {Language}, graphics card {GraphicsCard})", preferences.Language.Length > 0 ? preferences.Language : "not chosen",
+            preferences.UseGraphicsCard);
+    }
 }

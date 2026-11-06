@@ -82,5 +82,5 @@ public sealed class FfmpegMuxer(ToolInstaller tools, IProcessRunner runner, ILog
         return arguments;
     }
 
-    private static string EngineText(string text) => Engines.EnginePackage.Short(text);
+    private static string EngineText(string text) => Core.Processes.ChildOutput.Summary(text);
 }

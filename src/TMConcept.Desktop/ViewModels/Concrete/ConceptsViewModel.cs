@@ -264,6 +264,7 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         }
         catch (ModelNotReadyException ex)
         {
+            logger.LogWarning("Concept generation not started: the {Step} step has no {Missing} ({Provider}/{Model})", ex.Step, ex.Missing, model.Provider, model.Id);
             Status = ex.Missing == "key" ? text.Format("concepts.no_key", model.Provider) : text["concepts.no_model"];
             return;
         }

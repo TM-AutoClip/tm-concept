@@ -43,6 +43,7 @@ public static class AnthropicStream
         var stop = string.Empty;
         var usage = ChatUsage.Zero;
         (string, string)? error = null;
+        var skipped = 0;
         foreach (var line in body.Split('\n'))
         {
             var data = line.TrimEnd('\r');
@@ -59,6 +60,8 @@ public static class AnthropicStream
             }
             catch (JsonException)
             {
+                // Counted: the client writes a warning (a lost text event would cut the answer).
+                skipped++;
                 continue;
             }
 
@@ -93,7 +96,7 @@ public static class AnthropicStream
             }
         }
 
-        return new AnthropicAnswer(text.ToString(), stop, usage, error, true);
+        return new AnthropicAnswer(text.ToString(), stop, usage, error, true, skipped);
     }
 
     private static ChatUsage Usage(JsonNode? node, ChatUsage? previous)

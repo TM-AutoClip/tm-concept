@@ -33,9 +33,9 @@ public sealed class ProcessRunner(ChildProcessGuardBase children, ILogger<Proces
         }
 
         Clean(info.Environment);
-        foreach (var (name, value) in start.Environment)
+        foreach (var (variable, value) in start.Environment)
         {
-            info.Environment[name] = value;
+            info.Environment[variable] = value;
         }
 
         var last = new Queue<string>();
@@ -59,6 +59,8 @@ public sealed class ProcessRunner(ChildProcessGuardBase children, ILogger<Proces
             onLine?.Invoke(line);
         }
 
+        var name = Path.GetFileName(start.Program);
+        var watch = Stopwatch.StartNew();
         using var process = new Process { StartInfo = info };
         process.OutputDataReceived += (_, e) => Line(e.Data);
         process.ErrorDataReceived += (_, e) => Line(e.Data);
@@ -68,6 +70,7 @@ public sealed class ProcessRunner(ChildProcessGuardBase children, ILogger<Proces
         }
 
         using var adoption = children.Adopt(process);
+        logger.LogInformation("{Program} started (pid {Pid})", name, process.Id);
 
         try
         {
@@ -75,7 +78,7 @@ public sealed class ProcessRunner(ChildProcessGuardBase children, ILogger<Proces
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or PlatformNotSupportedException)
         {
-            logger.LogWarning(ex, "The priority of {Program} could not be lowered; it runs at normal priority", Path.GetFileName(start.Program));
+            logger.LogWarning(ex, "The priority of {Program} could not be lowered; it runs at normal priority", name);
         }
 
         process.BeginOutputReadLine();
@@ -95,10 +98,20 @@ public sealed class ProcessRunner(ChildProcessGuardBase children, ILogger<Proces
                 // Already gone.
             }
 
+            logger.LogInformation("{Program} was cancelled after {Ms} ms; its process tree was ended", name, watch.ElapsedMilliseconds);
             throw;
         }
 
         process.WaitForExit();
+        if (process.ExitCode == 0)
+        {
+            logger.LogInformation("{Program} ended (exit code 0) after {Ms} ms", name, watch.ElapsedMilliseconds);
+        }
+        else
+        {
+            logger.LogWarning("{Program} ended with exit code {Exit} after {Ms} ms", name, process.ExitCode, watch.ElapsedMilliseconds);
+        }
+
         lock (gate)
         {
             return new ProcessResult(process.ExitCode, string.Join('\n', last));

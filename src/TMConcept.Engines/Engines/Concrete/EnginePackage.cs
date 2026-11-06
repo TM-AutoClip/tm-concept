@@ -67,7 +67,7 @@ public sealed class EnginePackage(string name, IAppPaths paths, ToolInstaller to
         }, line => logger.LogDebug("npm {Engine}: {Line}", name, Short(line)), cancellationToken).ConfigureAwait(false);
         if (result.ExitCode != 0)
         {
-            throw new ToolInstallException($"npm ci failed ({result.ExitCode}): {Short(result.LastLines)}") { Code = "npm" };
+            throw new ToolInstallException($"npm ci failed ({result.ExitCode}): {Core.Processes.ChildOutput.Summary(result.LastLines)}") { Code = "npm" };
         }
 
         await File.WriteAllTextAsync(Path.Combine(Root, Marker), LockSha, cancellationToken).ConfigureAwait(false);
