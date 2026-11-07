@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:TMConcept.Desktop.ViewModels"
              xmlns:views="using:TMConcept.Desktop.Views"
+             xmlns:sys="using:System"
              x:Class="TMConcept.Desktop.Views.ConceptsView"
              x:DataType="vm:ConceptsViewModel">
   <Grid ColumnDefinitions="380,*,300" Margin="16" ColumnSpacing="16">
@@ -14,8 +15,52 @@
         <TextBox Name="ExtraBox" Text="{Binding ExtraPrompt}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="90" MaxLength="1000"
                  PlaceholderText="{DynamicResource concepts.extra.placeholder}" />
         <views:MarkerPicker Target="{Binding #ExtraBox}" Markers="{Binding PromptMarkers}" ToolTip.Tip="{DynamicResource markers.prompt.hint}" />
-        <TextBlock Text="{DynamicResource concepts.check}" FontWeight="SemiBold" />
+        <WrapPanel>
+          <Button Content="{DynamicResource topics.button}" Command="{Binding SuggestTopicsCommand}" IsEnabled="{Binding CanSuggest}"
+                  ToolTip.Tip="{DynamicResource topics.hint}" Margin="0,0,8,4" />
+          <TextBlock Text="{Binding TopicEstimate}" Classes="small" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="240" />
+        </WrapPanel>
+        <TextBlock Text="{Binding TopicStatus}" Classes="small" TextWrapping="Wrap"
+                   IsVisible="{Binding TopicStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+        <ItemsControl ItemsSource="{Binding Topics}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="sys:String">
+              <Button Classes="link" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Content="{Binding}"
+                      Command="{Binding $parent[ItemsControl].((vm:ConceptsViewModel)DataContext).AddTopicCommand}" CommandParameter="{Binding}" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <TextBlock Text="{DynamicResource focus.title}" FontWeight="SemiBold" Margin="0,8,0,0" />
+        <Grid ColumnDefinitions="120,*" ColumnSpacing="8">
+          <TextBlock Text="{DynamicResource focus.category}" VerticalAlignment="Center" />
+          <ComboBox Grid.Column="1" ItemsSource="{Binding FocusCategories}" SelectedItem="{Binding FocusCategory}" HorizontalAlignment="Stretch">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:ChoiceOption">
+                <TextBlock Text="{Binding Label}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+        </Grid>
+        <ItemsControl ItemsSource="{Binding FocusRows}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:FocusRowViewModel">
+              <Grid ColumnDefinitions="120,*" ColumnSpacing="8" Margin="0,2">
+                <TextBlock Text="{Binding Title}" VerticalAlignment="Center" />
+                <ComboBox Grid.Column="1" ItemsSource="{Binding Options}" SelectedItem="{Binding Selected}" HorizontalAlignment="Stretch">
+                  <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ChoiceOption">
+                      <TextBlock Text="{Binding Label}" />
+                    </DataTemplate>
+                  </ComboBox.ItemTemplate>
+                </ComboBox>
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <TextBlock Text="{DynamicResource focus.hint}" Classes="small" TextWrapping="Wrap" />
+        <TextBlock Text="{DynamicResource concepts.check}" FontWeight="SemiBold" Margin="0,8,0,0" />
         <CheckBox IsChecked="{Binding LocalCheck}" Content="{DynamicResource concepts.check.local}" />
+        <TextBlock Text="{DynamicResource concepts.check.hint}" Classes="small" TextWrapping="Wrap" />
         <TextBlock Text="{DynamicResource concepts.models}" FontWeight="SemiBold" Margin="0,8,0,0" />
         <views:StepPickerView DataContext="{Binding Picker}" />
         <TextBlock Text="{Binding Status}" Classes="error" TextWrapping="Wrap" />

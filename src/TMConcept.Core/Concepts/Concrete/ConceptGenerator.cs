@@ -29,8 +29,9 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
     /// <summary>Band around a measured per-concept output (it already contains the thinking tokens).</summary>
     public static readonly (double Low, double High) MeasuredBand = (0.85, 1.15);
 
-    /// <summary>The estimate of a press.</summary>
-    public async Task<CostEstimate> EstimateAsync(Profile profile, int count, string extraPrompt, Models.CatalogModel model, CancellationToken cancellationToken)
+    /// <summary>The estimate of a press (<paramref name="focus"/>: the chosen focus line, empty = none).</summary>
+    public async Task<CostEstimate> EstimateAsync(Profile profile, int count, string extraPrompt, string focus, Models.CatalogModel model,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(model);
@@ -45,7 +46,7 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
         var first = true;
         foreach (var size in Batches(count))
         {
-            var prompt = ConceptPromptBuilder.Build(new ConceptPromptInput(profile, images, history, extraPrompt, size));
+            var prompt = ConceptPromptBuilder.Build(new ConceptPromptInput(profile, images, history, extraPrompt, size, focus));
             var system = costs.Tokens(prompt.System, profile.ContentLanguage);
             var user = costs.Tokens(prompt.User, profile.ContentLanguage);
             var output = size * perConcept;
@@ -91,7 +92,7 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
         ArgumentNullException.ThrowIfNull(request);
         var profile = request.Profile;
         var count = Math.Clamp(request.Count, ConceptLimits.CountMin, ConceptLimits.CountMax);
-        var estimate = await EstimateAsync(profile, count, request.ExtraPrompt, request.Model.Model, cancellationToken).ConfigureAwait(false);
+        var estimate = await EstimateAsync(profile, count, request.ExtraPrompt, request.Focus, request.Model.Model, cancellationToken).ConfigureAwait(false);
         var run = new Run
         {
             ProfileId = profile.Id,
@@ -124,7 +125,7 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var subjects = await concepts.HistoryAsync(profile.Id, cancellationToken).ConfigureAwait(false);
-                var prompt = ConceptPromptBuilder.Build(new ConceptPromptInput(profile, images, Titles(subjects), request.ExtraPrompt, sizes[index]));
+                var prompt = ConceptPromptBuilder.Build(new ConceptPromptInput(profile, images, Titles(subjects), request.ExtraPrompt, sizes[index], request.Focus));
                 string answer;
                 ProviderException? cut = null;
                 try

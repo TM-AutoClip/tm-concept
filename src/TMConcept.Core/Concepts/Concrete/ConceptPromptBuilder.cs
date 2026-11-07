@@ -38,6 +38,9 @@ public static class ConceptPromptBuilder
             ["history_count"] = history is null ? null : input.HistoryTitles.Count.ToString(CultureInfo.InvariantCulture),
             ["history"] = history,
             ["extra"] = string.IsNullOrWhiteSpace(input.ExtraPrompt) ? null : Data(input.ExtraPrompt, ConceptLimits.ExtraPromptMax),
+
+            // Names from the app's own focus lists (not free text), in the prompt's language.
+            ["focus"] = string.IsNullOrWhiteSpace(input.Focus) ? null : Data(input.Focus, ConceptLimits.ExtraPromptMax),
             ["count"] = input.Count.ToString(CultureInfo.InvariantCulture),
 
             // The markers ([hard cut], [emphasis]…) the channel concept or the extra request use, with their meaning; in the changing part

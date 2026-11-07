@@ -24,6 +24,9 @@ public static class PipelineSteps
     /// <summary>Semantic duplicate check (optional).</summary>
     public const string Embedding = "embedding";
 
+    /// <summary>"Suggest topics" on the concept page: a cheap chat model writes about ten topics for the extra request (optional).</summary>
+    public const string Topics = "topics";
+
     /// <summary>Sample image description (optional).</summary>
     public const string DescribeImage = "describe-image";
 
@@ -42,10 +45,11 @@ public static class PipelineSteps
         new(Speech, ModelCapability.Speech, ["local/supertonic", "local/kokoro"], Optional: true),
         new(Embedding, ModelCapability.Embedding, ["local/paraphrase-multilingual-minilm", "openai/text-embedding-3-small"], Optional: true),
         new(DescribeImage, ModelCapability.Vision, ["anthropic/claude-haiku-5-5"], Optional: true),
+        new(Topics, ModelCapability.Chat, ["anthropic/claude-haiku-5-5", "zai/glm-5.3-flash", "deepseek/deepseek-flash"], Optional: true),
     ];
 
     /// <summary>The steps chosen on the Generate concepts page.</summary>
-    public static readonly IReadOnlyList<string> ConceptPage = [Concepts, Embedding];
+    public static readonly IReadOnlyList<string> ConceptPage = [Concepts, Embedding, Topics];
 
     /// <summary>The steps chosen on the Concept → video page.</summary>
     public static readonly IReadOnlyList<string> VideoPage = [VideoCode, Images, Speech];

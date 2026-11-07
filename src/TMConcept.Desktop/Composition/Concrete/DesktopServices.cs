@@ -144,6 +144,8 @@ public static class DesktopServices
         services.AddSingleton<AppSession>();
         services.AddSingleton<ConceptEvents>();
         services.AddSingleton<Core.Concepts.ConceptGenerator>();
+        services.AddSingleton<Core.Concepts.IFocusSource, Core.Concepts.EmbeddedFocusSource>();
+        services.AddSingleton<Core.Concepts.TopicSuggester>();
         services.AddSingleton<ShellLauncher>();
         services.AddSingleton<IShellLauncher>(s => s.GetRequiredService<ShellLauncher>());
         services.AddSingleton<WindowHost>();

@@ -29,4 +29,7 @@ public enum RunKind
     /// record instead), so the month's spending counts it.
     /// </summary>
     FailedVideo = 7,
+
+    /// <summary>"Suggest topics" on the concept page (one cheap chat call).</summary>
+    Topics = 8,
 }

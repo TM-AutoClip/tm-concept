@@ -178,7 +178,8 @@ Then choose the models on the pages that use them (see above). Nothing paid is c
 
 ## Make your first video
 
-1. **Generate concepts:** choose the model, the count and an optional extra request; check the estimate; press **Generate**.
+1. **Generate concepts:** choose the model, the count and an optional extra request (markers, focus drop-downs such as period or tone,
+   and **Suggest topics** help with it); check the estimate; press **Generate**.
 2. Open cards, approve the good ones (A), delete the rest (D).
 3. **Concept to video:** click approved concepts to queue them, check the settings, press **Produce the queue in order**.
 4. **Produced videos:** watch in the app (sound on Linux through PulseAudio or PipeWire), open the folder. Each video is a version folder (`v1/` inside the concept's folder) with `video.mp4`, `subtitles.srt`, `narration.txt` (always written) and `thumbnail.jpg`, plus `source/` (the engine project as it rendered: the model's code, `input.json`, the scene images) and `audio/` (the narration clip of each scene), kept for a later re-render.

@@ -10,4 +10,5 @@ namespace TMConcept.Core.Render;
 [JsonSerializable(typeof(Models.StepOptions))]
 [JsonSerializable(typeof(Models.ModelCatalogFile))]
 [JsonSerializable(typeof(Videos.VideoOptions))]
+[JsonSerializable(typeof(Concepts.FocusCatalogFile))]
 public sealed partial class CoreJsonContext : JsonSerializerContext;

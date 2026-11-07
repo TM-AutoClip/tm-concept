@@ -48,6 +48,92 @@ public sealed class ConceptPageTests
     }
 
     [AvaloniaFact]
+    public async Task TheFocusDropDownsOfTheProfilesCategoryGoIntoThePromptInTheVideosLanguage()
+    {
+        var fake = new FakeChat().Concepts(FakeChat.Distinct(3));
+        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
+        var profile = await PrepareAsync(h);
+        profile.TemplateId = "history.byzantine";
+        await h.Get<IProfileStore>().SaveAsync(profile, CancellationToken.None);
+        await h.Get<AppSession>().SelectProfileAsync(profile, CancellationToken.None);
+        h.Get<TMConcept.Desktop.Localization.Localizer>().Use("tr");
+        var page = await PageAsync(h);
+        await page.ProfileChangedAsync();
+        var row = page.Picker.Row(TMConcept.Core.Pipeline.PipelineSteps.Concepts)!;
+        row.Selected = row.Options.First(o => o.Model?.Id == "claude-sonnet-5-5");
+
+        page.FocusCategory!.Value.ShouldBe("history", "a profile made from a template starts with its category");
+        page.FocusRows.Select(r => r.Dimension.Id).ShouldBe(["period", "region", "subject", "tone", "audience", "structure"]);
+        page.FocusRows[0].Title.ShouldBe("Dönem", "the drop-downs speak the interface language");
+        page.FocusRows[0].Selected = page.FocusRows[0].Options.First(o => o.Value == "late-middle-ages");
+        page.FocusRows[3].Selected = page.FocusRows[3].Options.First(o => o.Value == "mysterious");
+        page.Count = 3;
+
+        await page.GenerateAsync();
+
+        fake.Requests.Single().User.ShouldContain("FOCUS (chosen by the user from fixed lists; follow it): Period: Late Middle Ages (1300–1500); Tone: mysterious",
+            Case.Sensitive, "the profile writes English videos: the focus line is English");
+
+        // Another category shows its own drop-downs and the general ones; "General" alone shows only those.
+        page.FocusCategory = page.FocusCategories.First(c => c.Value == "technology");
+        page.FocusRows.Select(r => r.Dimension.Id).ShouldBe(["era", "field", "angle", "tone", "audience", "structure"]);
+        page.FocusCategory = page.FocusCategories.First(c => c.Value == "general");
+        page.FocusRows.Select(r => r.Dimension.Id).ShouldBe(["tone", "audience", "structure"]);
+    }
+
+    [AvaloniaFact]
+    public async Task SuggestTopicsBringsTopicsThatGoIntoTheExtraRequestAndCountsTheCost()
+    {
+        var fake = new FakeChat().Answer(_ => new ChatResponse("{\"topics\": [\"The fall of Trebizond\", \"Greek fire\", \"greek  fire\", \"\"]}",
+            new ChatUsage(600, 0, 0, 120), null, "end_turn", "r"));
+        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
+        var profile = await PrepareAsync(h);
+        await h.Get<IConceptStore>().AddAsync([new Concept { ProfileId = profile.Id, Title = "Hagia Sophia", Summary = "s", Content = "c", Language = "en" }],
+            CancellationToken.None);
+        var page = await PageAsync(h);
+        var topicsRow = page.Picker.Row(TMConcept.Core.Pipeline.PipelineSteps.Topics)!;
+        page.TopicEstimate.ShouldNotBeEmpty();
+        await page.SuggestTopicsAsync();
+        page.TopicStatus.ShouldBe(h.Get<TMConcept.Desktop.Localization.Localizer>()["topics.no_model"], "nothing is asked without a model");
+        fake.Requests.ShouldBeEmpty();
+
+        topicsRow.Selected = topicsRow.Options.First(o => o.Model?.Id == "claude-haiku-5-5");
+        await Until(() => page.TopicEstimate.Contains("Claude Haiku", StringComparison.Ordinal));
+        page.FocusRows.First(r => r.Dimension.Id == "tone").Selected = page.FocusRows.First(r => r.Dimension.Id == "tone").Options[1];
+        page.ExtraPrompt = "only sieges";
+
+        await page.SuggestTopicsAsync();
+
+        page.Topics.ShouldBe(["The fall of Trebizond", "Greek fire"], "cleaned, no repeats, no empty ones");
+        var request = fake.Requests.Single();
+        request.User.ShouldContain("- Hagia Sophia", Case.Sensitive, "earlier titles are not suggested again");
+        request.User.ShouldContain("EXTRA REQUEST SO FAR: «only sieges»");
+        request.User.ShouldContain("FOCUS: ");
+        request.MaxOutputTokens.ShouldBe(TopicSuggester.OutputMax);
+        var run = (await h.Get<IRunStore>().ListAsync(DateTimeOffset.UtcNow.AddHours(-1), CancellationToken.None)).Single(r => r.Kind == RunKind.Topics);
+        run.ActualUsd.ShouldBeGreaterThan(0);
+        page.TopicStatus.ShouldContain(h.Get<TMConcept.Desktop.Localization.Localizer>().Usd(run.ActualUsd));
+
+        page.AddTopic("Greek fire");
+        page.ExtraPrompt.ShouldBe("only sieges\nGreek fire");
+        page.Topics.ShouldBe(["The fall of Trebizond"]);
+    }
+
+    [Fact]
+    public void TheWordCheckAndTheMeaningCheckAreTwoDifferentChecksAndSayIt()
+    {
+        using var h = new DesktopHarness();
+        var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
+        foreach (var language in new[] { "tr", "en" })
+        {
+            text.Use(language);
+            text["concepts.check"].ShouldNotBe(text["step.embedding"]);
+            text["concepts.check.hint"].ShouldContain(text["step.embedding"].Split('(')[0].Trim());
+            text["step.embedding.off.note"].ShouldNotContain(language == "tr" ? "kelime kelime karşılaştırılır" : "still compared word by word");
+        }
+    }
+
+    [AvaloniaFact]
     public async Task GenerateInBatchesThrowsAwayDuplicatesAndOffersToFillTheMissing()
     {
         var first = FakeChat.Distinct(20);
@@ -161,7 +247,7 @@ public sealed class ConceptPageTests
         var generator = h.Get<ConceptGenerator>();
         var model = h.Get<TMConcept.Core.Models.IModelCatalog>().Find("anthropic", "claude-sonnet-5-5")!;
 
-        var first = await generator.EstimateAsync(profile, 20, string.Empty, model, CancellationToken.None);
+        var first = await generator.EstimateAsync(profile, 20, string.Empty, string.Empty, model, CancellationToken.None);
         var guess = ConceptOutputBudget.TokensPerConcept(profile.ContentLanguage, profile.TargetSeconds) * 20;
         first.OutputTokensMax.ShouldBeInRange((long)(guess * ConceptGenerator.ThinkingShare.High) - 1, (long)(guess * ConceptGenerator.ThinkingShare.High) + 1);
 
@@ -174,7 +260,7 @@ public sealed class ConceptPageTests
             OutputTokens = 20 * 2_000,
             StartedAtUtc = DateTimeOffset.UtcNow,
         }, CancellationToken.None);
-        var measured = await generator.EstimateAsync(profile, 20, string.Empty, model, CancellationToken.None);
+        var measured = await generator.EstimateAsync(profile, 20, string.Empty, string.Empty, model, CancellationToken.None);
         measured.OutputTokensMin.ShouldBeInRange((long)(20 * 2_000 * ConceptGenerator.MeasuredBand.Low) - 1, (long)(20 * 2_000 * ConceptGenerator.MeasuredBand.Low) + 1);
         measured.OutputTokensMax.ShouldBeInRange((long)(20 * 2_000 * ConceptGenerator.MeasuredBand.High) - 1, (long)(20 * 2_000 * ConceptGenerator.MeasuredBand.High) + 1);
     }

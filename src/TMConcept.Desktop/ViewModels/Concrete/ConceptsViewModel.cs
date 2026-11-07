@@ -14,9 +14,11 @@ using TMConcept.Desktop.Startup;
 namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
-/// 💡 Generate concepts: count (1–100), extra request, the concept model (with its effort) and the optional semantic duplicate check
-/// (local or online embedding) chosen right here — the selected profile's last choices are shown, a new profile starts with none; local
-/// duplicate check. The estimate is recalculated when an input or a model changes; after "Generate" the same box shows the exact cost.
+/// 💡 Generate concepts: count (1–100), extra request (with a marker drop-down), the focus drop-downs of the channel's category (period,
+/// region, tone… as data; they go into the prompt as its FOCUS line), "Suggest topics" (a cheap chat model of the topics step brings about
+/// ten topics; a click adds one to the extra request), the concept model (with its effort) and the optional meaning check (local or
+/// online embedding) chosen right here — the selected profile's last choices are shown, a new profile starts with none; the free
+/// word-similarity check (a different check: it compares the words of title and summary, no model). The estimate is recalculated when an input or a model changes; after "Generate" the same box shows the exact cost.
 /// Generate first makes the choices ready (license, an API key asked for in a dialog when the provider has none, installs of a local model)
 /// and saves them for the profile; anything missing stops it before anything is paid for. Concepts arrive batch by batch; a card shows
 /// title and summary, opening it shows the full text; ✓ (A) approves, ✗ (D) moves to the trash. Thrown-away duplicates are not replaced
@@ -24,7 +26,7 @@ namespace TMConcept.Desktop.ViewModels;
 /// </summary>
 public sealed partial class ConceptsViewModel(AppSession session, IConceptStore concepts, ConceptGenerator generator, StepModelResolver resolver,
     IModelCatalog catalog, ConceptEvents events, INotifier notifier, IActivityLog activity, Localizer text, StepPickerViewModel picker,
-    ILogger<ConceptsViewModel> logger) : PageViewModelBase
+    IFocusSource focus, TopicSuggester topics, ILogger<ConceptsViewModel> logger) : PageViewModelBase
 {
     private readonly List<ConceptCardViewModel> _approved = [];
     private CancellationTokenSource? _cancel;
@@ -52,6 +54,35 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
     /// <summary>The markers of the extra request's drop-down (sent to the concept model with their meaning).</summary>
     public IReadOnlyList<MarkerOption> PromptMarkers => MarkerOptions.For(Core.Markers.MarkerKind.Prompt, text);
 
+    /// <summary>The categories of the focus drop-downs ("General" first; a profile made from a template starts with its category).</summary>
+    public ObservableCollection<ChoiceOption> FocusCategories { get; } = [];
+
+    /// <summary>The chosen category.</summary>
+    [ObservableProperty]
+    public partial ChoiceOption? FocusCategory { get; set; }
+
+    /// <summary>The focus drop-downs: the chosen category's, then the general ones (tone, audience, structure).</summary>
+    public ObservableCollection<FocusRowViewModel> FocusRows { get; } = [];
+
+    /// <summary>The topics "Suggest topics" brought (a click adds one to the extra request).</summary>
+    public ObservableCollection<string> Topics { get; } = [];
+
+    /// <summary>The estimate of one "Suggest topics" press with the topics step's model (or why there is none).</summary>
+    [ObservableProperty]
+    public partial string TopicEstimate { get; set; } = string.Empty;
+
+    /// <summary>What the last "Suggest topics" did (cost, or why it failed).</summary>
+    [ObservableProperty]
+    public partial string TopicStatus { get; set; } = string.Empty;
+
+    /// <summary>Topics are being asked for.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanSuggest))]
+    public partial bool Suggesting { get; set; }
+
+    /// <summary>Whether "Suggest topics" can be pressed.</summary>
+    public bool CanSuggest => !Suggesting && !Busy;
+
     /// <summary>The models of this page: the concept model and the semantic duplicate check (the profile's last choices).</summary>
     public StepPickerViewModel Picker { get; } = picker;
 
@@ -73,7 +104,7 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
 
     /// <summary>Running.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Idle))]
+    [NotifyPropertyChangedFor(nameof(Idle), nameof(CanSuggest))]
     public partial bool Busy { get; set; }
 
     /// <summary>Not running.</summary>
@@ -144,6 +175,11 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         }
 
         await LoadModelsAsync().ConfigureAwait(true);
+        if (FocusCategories.Count == 0)
+        {
+            LoadFocus();
+        }
+
         await ReloadAsync().ConfigureAwait(true);
     }
 
@@ -152,6 +188,9 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
     {
         Missing = 0;
         LastCost = string.Empty;
+        Topics.Clear();
+        TopicStatus = string.Empty;
+        LoadFocus();
 
         // Each profile keeps its own last choices: the new profile's are shown.
         await LoadModelsAsync().ConfigureAwait(true);
@@ -282,8 +321,8 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         try
         {
             var progress = new Progress<ConceptBatch>(OnBatch);
-            var result = await generator.GenerateAsync(new ConceptRequest(profile, count, ExtraPrompt.Trim(), resolved, LocalCheck, embedding), progress, cancel.Token)
-                .ConfigureAwait(true);
+            var result = await generator.GenerateAsync(new ConceptRequest(profile, count, ExtraPrompt.Trim(), resolved, LocalCheck, embedding,
+                Focus(profile.ContentLanguage)), progress, cancel.Token).ConfigureAwait(true);
             Report(result);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -408,6 +447,7 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
             return;
         }
 
+        await TopicEstimateAsync(profile).ConfigureAwait(true);
         if (Picker.Model(PipelineSteps.Concepts) is not { } model)
         {
             Estimate = text["concepts.estimate.none"];
@@ -415,7 +455,7 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         }
 
         var count = (int)Math.Clamp(Count ?? 0, ConceptLimits.CountMin, ConceptLimits.CountMax);
-        var estimate = await generator.EstimateAsync(profile, count, ExtraPrompt, model, CancellationToken.None).ConfigureAwait(true);
+        var estimate = await generator.EstimateAsync(profile, count, ExtraPrompt, Focus(profile.ContentLanguage), model, CancellationToken.None).ConfigureAwait(true);
         var backfill = 0;
         if (Picker.Model(PipelineSteps.Embedding) is { } embedding)
         {
@@ -427,6 +467,138 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         Estimate = text.Format("concepts.estimate", model.Name, count, text.Usd(estimate.MinUsd), text.Usd(estimate.MaxUsd),
             Thousands(estimate.InputTokens), Thousands(estimate.OutputTokensMax))
             + (backfill > 0 ? "\n" + text.Format("concepts.estimate.backfill", backfill) : string.Empty);
+    }
+
+    /// <summary>
+    /// "Suggest topics": the topics step's model is made ready like any process (key, saved for the profile), then ONE call brings about ten
+    /// topics in the interface language. The cost is shown here and counted in the month's spending.
+    /// </summary>
+    [RelayCommand]
+    public async Task SuggestTopicsAsync()
+    {
+        if (!CanSuggest || session.Profile is not { } profile)
+        {
+            return;
+        }
+
+        if (Picker.Model(PipelineSteps.Topics) is null)
+        {
+            TopicStatus = text["topics.no_model"];
+            return;
+        }
+
+        Suggesting = true;
+        try
+        {
+            if (!await Picker.PrepareAsync([PipelineSteps.Topics], "install.purpose.topics", CancellationToken.None).ConfigureAwait(true))
+            {
+                TopicStatus = Picker.Status;
+                return;
+            }
+
+            var model = await resolver.ResolveAsync(PipelineSteps.Topics, Picker.Choice(PipelineSteps.Topics), CancellationToken.None).ConfigureAwait(true);
+            var result = await topics.SuggestAsync(profile, model, CategoryName(), Focus(text.Language), ExtraPrompt, text.Language, CancellationToken.None)
+                .ConfigureAwait(true);
+            Topics.Clear();
+            foreach (var topic in result.Topics)
+            {
+                Topics.Add(topic);
+            }
+
+            TopicStatus = result.Topics.Count == 0
+                ? text.Format("topics.none", text.Usd(result.CostUsd))
+                : text.Format("topics.done", result.Topics.Count, text.Usd(result.CostUsd));
+            activity.Add(ActivityLevel.Info, TopicStatus);
+        }
+        catch (ModelNotReadyException ex)
+        {
+            logger.LogWarning("Topic suggestions not started: the {Step} step has no {Missing}", ex.Step, ex.Missing);
+            TopicStatus = text["topics.no_model"];
+        }
+        catch (Core.Providers.ProviderException ex)
+        {
+            TopicStatus = text.Format("topics.failed", ProviderErrors.Text(text, ex.Code));
+            activity.Add(ActivityLevel.Error, TopicStatus);
+        }
+        finally
+        {
+            Suggesting = false;
+        }
+    }
+
+    /// <summary>Adds a suggested topic to the extra request (on a line of its own) and takes it off the list.</summary>
+    [RelayCommand]
+    public void AddTopic(string? topic)
+    {
+        if (string.IsNullOrWhiteSpace(topic))
+        {
+            return;
+        }
+
+        var current = ExtraPrompt.TrimEnd();
+        ExtraPrompt = current.Length == 0 ? topic : current + "\n" + topic;
+        Topics.Remove(topic);
+    }
+
+    /// <summary>The focus drop-downs: the categories, the profile's category chosen, its rows and the general ones.</summary>
+    private void LoadFocus()
+    {
+        FocusCategories.Clear();
+        foreach (var category in focus.Categories)
+        {
+            FocusCategories.Add(new ChoiceOption(category.Id, Name(category.Name)));
+        }
+
+        var start = focus.ForTemplate(session.Profile?.TemplateId)?.Id ?? FocusCatalogFile.GeneralId;
+        FocusCategory = FocusCategories.FirstOrDefault(c => c.Value == start) ?? FocusCategories.FirstOrDefault();
+        BuildFocusRows();
+    }
+
+    partial void OnFocusCategoryChanged(ChoiceOption? value) => BuildFocusRows();
+
+    private void BuildFocusRows()
+    {
+        foreach (var row in FocusRows)
+        {
+            row.PropertyChanged -= OnFocusRowChanged;
+        }
+
+        FocusRows.Clear();
+        var chosen = focus.Categories.FirstOrDefault(c => c.Id == FocusCategory?.Value);
+        var general = focus.Categories.FirstOrDefault(c => c.Id == FocusCatalogFile.GeneralId);
+        foreach (var dimension in new[] { chosen, chosen == general ? null : general }.OfType<FocusCategory>().SelectMany(c => c.Dimensions))
+        {
+            var options = new List<ChoiceOption> { new(string.Empty, text["focus.none"]) };
+            options.AddRange(dimension.Options.Select(o => new ChoiceOption(o.Id, Name(o.Name))));
+            var row = new FocusRowViewModel(dimension, Name(dimension.Name), options);
+            row.PropertyChanged += OnFocusRowChanged;
+            FocusRows.Add(row);
+        }
+
+        _ = SafeAsync(EstimateAsync);
+    }
+
+    private void OnFocusRowChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => _ = SafeAsync(EstimateAsync);
+
+    /// <summary>The chosen focus as the prompt's line in <paramref name="language"/> (empty when nothing is chosen).</summary>
+    private string Focus(string language) =>
+        FocusText.Build(language, FocusRows.Where(r => r.Chosen is not null).Select(r => (r.Dimension, r.Chosen!)));
+
+    private string CategoryName() => FocusCategory is { Value: not FocusCatalogFile.GeneralId } category ? category.Label : string.Empty;
+
+    private string Name(Core.Templates.LocalizedText name) => text.Language == Core.Profiles.ContentLanguages.Turkish ? name.Tr : name.En;
+
+    private async Task TopicEstimateAsync(Core.Profiles.Profile profile)
+    {
+        if (Picker.Model(PipelineSteps.Topics) is not { } model)
+        {
+            TopicEstimate = text["topics.estimate.none"];
+            return;
+        }
+
+        var estimate = await topics.EstimateAsync(profile, model, CategoryName(), Focus(text.Language), ExtraPrompt, text.Language, CancellationToken.None)
+            .ConfigureAwait(true);
+        TopicEstimate = text.Format("topics.estimate", model.Name, text.Usd(estimate.MinUsd), text.Usd(estimate.MaxUsd));
     }
 
     private async Task LoadContentAsync(ConceptCardViewModel card)
