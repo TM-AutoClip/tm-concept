@@ -20,4 +20,7 @@ public static class VideoWarnings
 
     /// <summary>The code needed its one repair.</summary>
     public const string Repaired = "repaired";
+
+    /// <summary>The sample images were chosen but the profile has none: the video was made without images.</summary>
+    public const string SamplesNone = "samples_none";
 }

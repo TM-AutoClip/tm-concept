@@ -410,13 +410,17 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
 
         var count = (int)Math.Clamp(Count ?? 0, ConceptLimits.CountMin, ConceptLimits.CountMax);
         var estimate = await generator.EstimateAsync(profile, count, ExtraPrompt, model, CancellationToken.None).ConfigureAwait(true);
+        var backfill = 0;
         if (Picker.Model(PipelineSteps.Embedding) is { } embedding)
         {
-            estimate = estimate.Plus(generator.EstimateEmbedding(embedding, count, profile.ContentLanguage));
+            var meaning = await generator.EstimateEmbeddingAsync(profile, embedding, count, CancellationToken.None).ConfigureAwait(true);
+            estimate = estimate.Plus(meaning.Estimate);
+            backfill = meaning.Backfill;
         }
 
         Estimate = text.Format("concepts.estimate", model.Name, count, text.Usd(estimate.MinUsd), text.Usd(estimate.MaxUsd),
-            Thousands(estimate.InputTokens), Thousands(estimate.OutputTokensMax));
+            Thousands(estimate.InputTokens), Thousands(estimate.OutputTokensMax))
+            + (backfill > 0 ? "\n" + text.Format("concepts.estimate.backfill", backfill) : string.Empty);
     }
 
     private async Task LoadContentAsync(ConceptCardViewModel card)

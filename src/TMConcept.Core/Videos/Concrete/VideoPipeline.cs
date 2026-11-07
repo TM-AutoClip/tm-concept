@@ -137,10 +137,15 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
 
             // B. narration
             var clips = new List<SpeechClip?>();
-            if (!speechOn && !warnings.Contains(VideoWarnings.SpeechFailed))
+            if (!speechOn)
             {
-                warnings.Add(VideoWarnings.SpeechOff);
-                logger.LogWarning("Narration is off; the video will be silent");
+                // No voice: off by choice, or its model could not be resolved (that warning is already there). Either way nothing is
+                // spoken; 0.1.6 went on to the narration loop with a null voice when the model failed and threw ArgumentNullException.
+                if (!warnings.Contains(VideoWarnings.SpeechFailed))
+                {
+                    warnings.Add(VideoWarnings.SpeechOff);
+                    logger.LogWarning("Narration is off; the video will be silent");
+                }
             }
             else
             {
@@ -447,8 +452,16 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
             if (job.Options.Images == ImageSources.Samples)
             {
                 var samples = await profiles.ImagesAsync(job.Profile.Id, cancellationToken).ConfigureAwait(false);
+                if (samples.Count == 0)
+                {
+                    // 0.1.6 made the video without images and said nothing: the sample images were chosen, so say why there are none.
+                    logger.LogWarning("The sample images were chosen but the profile has none; the video is made without images");
+                    warnings.Add(VideoWarnings.SamplesNone);
+                    return names;
+                }
+
                 var missing = 0;
-                for (var i = 0; i < scenes.Count && samples.Count > 0; i++)
+                for (var i = 0; i < scenes.Count; i++)
                 {
                     var sample = samples[i % samples.Count];
                     var name = "sample-" + (i % samples.Count + 1).ToString(CultureInfo.InvariantCulture) + Path.GetExtension(sample.FileName);

@@ -467,6 +467,11 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
             activity.Add(ActivityLevel.Warning, text.Format("video.images.failed", record.Title), text.Format("video.images.failed", ActivityPlaceholders.Title));
         }
 
+        if (warnings.Contains(VideoWarnings.SamplesNone))
+        {
+            activity.Add(ActivityLevel.Warning, text.Format("video.samples.none", record.Title), text.Format("video.samples.none", ActivityPlaceholders.Title));
+        }
+
         var seconds = (record.ElapsedMs / 1000.0).ToString("0", CultureInfo.InvariantCulture);
         LastCost = text.Format(record.CostExact ? "video.last_cost" : "video.last_cost.approx", text.Usd(record.TotalUsd));
         activity.Add(ActivityLevel.Info, text.Format("video.done", record.Title, text.Usd(record.TotalUsd), seconds),

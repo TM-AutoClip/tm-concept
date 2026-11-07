@@ -142,6 +142,48 @@ public sealed class VideoPageTests
     }
 
     [AvaloniaFact]
+    public async Task ANarrationModelThatCannotBeResolvedGivesASilentVideoNotACrash()
+    {
+        var engine = new FakeEngine();
+        using var h = Harness(new FakeChat().Answer(_ => Code(engine.SampleCode)), engine);
+        var (_, concept) = await PrepareAsync(h);
+
+        // Kokoro speaks English but is not installed in the test folder: resolving the voice fails before anything is spoken.
+        await h.Get<IStepModelStore>().SaveAsync(new StepModelChoice { Step = PipelineSteps.Speech, ProfileId = concept.ProfileId, Provider = ModelProviders.Local,
+            Model = "kokoro" }, CancellationToken.None);
+
+        var record = await RunAsync(h, concept, new VideoOptions { Engine = engine.Kind, Speech = true });
+
+        record.Warnings.ShouldContain(VideoWarnings.SpeechFailed);
+        record.Warnings.ShouldNotContain(VideoWarnings.SpeechOff);
+        record.SpeechModel.ShouldBeEmpty();
+    }
+
+    [AvaloniaFact]
+    public async Task SampleImagesChosenWithoutAnySampleSayWhyTheVideoHasNoImages()
+    {
+        var engine = new FakeEngine();
+        using var h = Harness(new FakeChat().Answer(_ => Code(engine.SampleCode)), engine);
+        var (_, concept) = await PrepareAsync(h);
+
+        var record = await RunAsync(h, concept, new VideoOptions { Engine = engine.Kind, Speech = false, Images = ImageSources.Samples });
+
+        record.Warnings.ShouldContain(VideoWarnings.SamplesNone);
+        engine.Input!.Scenes.ShouldAllBe(s => s.Image.Length == 0);
+        var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
+        text["produced.note." + VideoWarnings.SamplesNone].ShouldNotStartWith("produced.note.");
+    }
+
+    private static async Task<VideoRecord> RunAsync(DesktopHarness h, Concept concept, VideoOptions options)
+    {
+        var profile = (await h.Get<IProfileStore>().GetAsync(concept.ProfileId, CancellationToken.None))!;
+        var model = new ResolvedModel(h.Get<IModelCatalog>().Find("anthropic", "claude-sonnet-5-5")!,
+            new ApiKey { Provider = "anthropic", Label = "k", Secret = "fake-test-key-video-0123" }, string.Empty);
+        var stored = (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!;
+        return await h.Get<VideoPipeline>().RunAsync(new VideoJob(stored, profile, options, model), null, CancellationToken.None);
+    }
+
+    [AvaloniaFact]
     public async Task AnEngineThatIsNotInstalledIsOfferedAndDecliningStopsTheItemBeforeAnythingIsPaid()
     {
         var engine = new FakeEngine { Missing = ["packages", "browser"] };

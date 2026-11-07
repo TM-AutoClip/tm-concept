@@ -254,4 +254,33 @@ public sealed class ConceptPageTests
         (await h.Get<IConceptStore>().GetAsync(greek.Id, CancellationToken.None)).ShouldBeNull();
         trash.Badge.ShouldBeEmpty();
     }
+
+    [AvaloniaFact]
+    public async Task TheMeaningCheckEstimateCountsTheEarlierConceptsItEmbedsFirst()
+    {
+        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(new FakeChat()));
+        var profile = await PrepareAsync(h);
+        await h.Get<IConceptStore>().AddAsync(FakeChat.Distinct(30).Select(t => new Concept { ProfileId = profile.Id, Title = t, Summary = "s", Language = "en" }).ToList(),
+            CancellationToken.None);
+        var generator = h.Get<ConceptGenerator>();
+        var catalog = h.Get<TMConcept.Core.Models.IModelCatalog>();
+        var online = catalog.Find("openai", "text-embedding-3-small")!;
+        var local = catalog.Find(TMConcept.Core.Models.ModelProviders.Local, "paraphrase-multilingual-minilm")!;
+
+        var paid = await generator.EstimateEmbeddingAsync(profile, online, 10, CancellationToken.None);
+        var free = await generator.EstimateEmbeddingAsync(profile, local, 10, CancellationToken.None);
+
+        // 10 new + 30 earlier concepts without a vector, 80 tokens each (English).
+        paid.Backfill.ShouldBe(30);
+        paid.Estimate.InputTokens.ShouldBe(40 * ConceptGenerator.EmbeddingTokensPerConcept);
+        paid.Estimate.MaxUsd.ShouldBe(40 * ConceptGenerator.EmbeddingTokensPerConcept * online.InputUsd / 1_000_000m);
+        free.Backfill.ShouldBe(30);
+        free.Estimate.MaxUsd.ShouldBe(0);
+
+        // The page says so next to the estimate.
+        var page = await PageAsync(h);
+        var row = page.Picker.Row(TMConcept.Core.Pipeline.PipelineSteps.Embedding)!;
+        row.Selected = row.Options.First(o => o.Model?.Id == local.Id);
+        await Until(() => page.Estimate.Contains(h.Get<TMConcept.Desktop.Localization.Localizer>().Format("concepts.estimate.backfill", 30), StringComparison.Ordinal));
+    }
 }

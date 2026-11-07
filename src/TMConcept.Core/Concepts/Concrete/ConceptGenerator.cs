@@ -58,20 +58,28 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
 
     /// <summary>
     /// The estimate of the semantic duplicate check: title and summary of every new concept are embedded once (about
-    /// <see cref="EmbeddingTokensPerConcept"/> tokens each); a local model costs nothing.
+    /// <see cref="EmbeddingTokensPerConcept"/> tokens each), and so are the profile's earlier concepts that have no vector of this model yet
+    /// (the backfill: up to <see cref="BackfillLimit"/> per batch of 20; 0.1.6 left them out of the estimate). A local model costs nothing,
+    /// but the backfill count is still returned: embedding hundreds of earlier concepts takes a while on this computer.
     /// </summary>
-    public CostEstimate EstimateEmbedding(Models.CatalogModel model, int count, string language)
+    public async Task<(CostEstimate Estimate, int Backfill)> EstimateEmbeddingAsync(Profile profile, Models.CatalogModel model, int count,
+        CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(model);
+        count = Math.Clamp(count, ConceptLimits.CountMin, ConceptLimits.CountMax);
+        var history = await concepts.HistoryAsync(profile.Id, cancellationToken).ConfigureAwait(false);
+        var embedded = (await embeddings.ListAsync(profile.Id, model.Id, cancellationToken).ConfigureAwait(false)).Select(e => e.ConceptId).ToHashSet();
+        var missing = history.Count(h => !embedded.Contains(h.Id));
+        var backfill = Math.Min(missing, BackfillLimit * Batches(count).Count());
         if (model.Provider == Models.ModelProviders.Local)
         {
-            return CostEstimate.Zero;
+            return (CostEstimate.Zero, backfill);
         }
 
-        var tokens = Math.Clamp(count, ConceptLimits.CountMin, ConceptLimits.CountMax) * (long)EmbeddingTokensPerConcept
-            * (language == Profiles.ContentLanguages.Turkish ? 2 : 1);
+        var tokens = (count + backfill) * (long)EmbeddingTokensPerConcept * (profile.ContentLanguage == Profiles.ContentLanguages.Turkish ? 2 : 1);
         var usd = tokens * model.InputUsd / 1_000_000m;
-        return new CostEstimate(usd, usd, tokens, 0, 0);
+        return (new CostEstimate(usd, usd, tokens, 0, 0), backfill);
     }
 
     /// <summary>Tokens of one concept's title and summary in English (Turkish counts about twice).</summary>
@@ -312,7 +320,8 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
 
     /// <summary>
     /// The earlier concepts of the profile that have no vector of this model yet (made before the meaning check was turned on, or with
-    /// another model) are embedded now, the newest <see cref="BackfillLimit"/> per run, and stored; so the check compares with them too.
+    /// another model) are embedded now, the newest <see cref="BackfillLimit"/> per batch (each batch reads the stored vectors again, so the
+    /// next batch goes on with the older ones), and stored; so the check compares with them too.
     /// </summary>
     private async Task BackfillAsync(ConceptRequest request, Run run, Models.ResolvedModel model, IReadOnlyList<DuplicateSubject> history,
         List<(DuplicateSubject Subject, float[] Vector)> pool, CancellationToken cancellationToken)
@@ -345,7 +354,7 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
             model.Model.Id, result.Tokens);
     }
 
-    /// <summary>Earlier concepts embedded per run at most when the meaning check is turned on or its model changes.</summary>
+    /// <summary>Earlier concepts embedded per batch at most when the meaning check is turned on or its model changes.</summary>
     public const int BackfillLimit = 300;
 
     private static IReadOnlyList<string> Titles(IReadOnlyList<DuplicateSubject> subjects) =>
