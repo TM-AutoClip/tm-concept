@@ -1,5 +1,3 @@
-using System.Collections.ObjectModel;
-using Avalonia.Threading;
 using Microsoft.Extensions.Logging;
 using TMConcept.Core.Activity;
 using TMConcept.Core.Security;
@@ -7,24 +5,20 @@ using TMConcept.Core.Security;
 namespace TMConcept.Desktop.Logging;
 
 /// <summary>
-/// <see cref="IActivityLog"/> for the bottom panel: the last 500 lines (oldest dropped), each also written to the log file (a line that
-/// names a profile or a title is written with placeholders instead of the names). Lines are added on the interface thread.
+/// <see cref="IActivityLog"/>: every line goes to the log file, complete, for finding a problem later (a line that names a profile or a
+/// title is written with placeholders instead of the names). Since 0.1.7 there is no activity panel in the window (the developer's
+/// choice): what the user must see — money spent, a failure — is shown where it belongs (the page's own line, a queue row, the video's
+/// details) or as a corner notification by the caller.
 /// </summary>
-public sealed class ActivityLog(TimeProvider clock, ILogger<ActivityLog> logger) : IActivityLog
+public sealed class ActivityLog(ILogger<ActivityLog> logger) : IActivityLog
 {
-    private const int Keep = 500;
-
-    /// <summary>Lines, oldest first.</summary>
-    public ObservableCollection<ActivityEntry> Entries { get; } = [];
-
     /// <inheritdoc />
     public void Add(ActivityLevel level, string text) => Add(level, text, text);
 
     /// <inheritdoc />
     public void Add(ActivityLevel level, string text, string fileText)
     {
-        var entry = new ActivityEntry(clock.GetLocalNow(), level, Redactor.Redact(text));
-        var line = ReferenceEquals(text, fileText) ? entry.Text : Redactor.Redact(fileText);
+        var line = Redactor.Redact(fileText);
         switch (level)
         {
             case ActivityLevel.Error:
@@ -36,27 +30,6 @@ public sealed class ActivityLog(TimeProvider clock, ILogger<ActivityLog> logger)
             default:
                 logger.LogInformation("Activity: {Text}", line);
                 break;
-        }
-
-        if (Dispatcher.UIThread.CheckAccess())
-        {
-            Append(entry);
-        }
-        else
-        {
-            Dispatcher.UIThread.Post(() => Append(entry));
-        }
-    }
-
-    /// <summary>Removes every line.</summary>
-    public void Clear() => Entries.Clear();
-
-    private void Append(ActivityEntry entry)
-    {
-        Entries.Add(entry);
-        while (Entries.Count > Keep)
-        {
-            Entries.RemoveAt(0);
         }
     }
 }

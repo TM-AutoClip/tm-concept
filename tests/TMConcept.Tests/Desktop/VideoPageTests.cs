@@ -86,7 +86,13 @@ public sealed class VideoPageTests
         File.ReadAllText(Path.Combine(folder, "narration.txt")).ShouldContain("Scene 2");
         (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!.Status.ShouldBe(ConceptStatus.Produced);
         engine.Input!.Scenes.Count.ShouldBe(2);
-        h.Get<TMConcept.Desktop.Logging.ActivityLog>().Entries.ShouldContain(e => e.IsWarning);
+
+        // No activity panel: the notification says the video is ready, what it cost and that it is silent.
+        var toast = h.Get<TMConcept.Desktop.Notifications.ToastNotifier>().Open.Last().DataContext as TMConcept.Desktop.Notifications.ToastViewModel;
+        var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
+        toast!.IsWarning.ShouldBeTrue();
+        toast.Message.ShouldContain(text.Format("video.silent.off", "Greek fire"));
+        toast.Message.ShouldContain(text.Usd(video.TotalUsd));
     }
 
     [AvaloniaFact]

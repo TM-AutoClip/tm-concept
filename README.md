@@ -41,7 +41,7 @@ needed) and narrates it with a **free local voice**. It runs on Windows and Linu
   (engine, models, cost per step, voice notes, the concept text), open in the system player, open the folder, produce again, delete the
   record and, if you want, move the files to the recycle bin.
 - **Notifications** in the bottom-right corner (concepts ready, video ready, error). One minute by default; change or turn them off in
-  Settings. A log panel at the bottom keeps everything (yellow warnings, red errors).
+  Settings. A notification also says what failed and what was spent; everything the app does is written to the log file.
 - **Encrypted.** The database (with your API keys) is encrypted with SQLite3 Multiple Ciphers. Its key is protected by Windows (DPAPI), the
   Linux keyring or a master password. Daily backups (last 10) are password-protected files (Argon2id + AES-256-GCM); you choose what goes
   in (API keys only when you tick them).

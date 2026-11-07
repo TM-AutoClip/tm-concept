@@ -287,6 +287,8 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         {
             logger.LogError(ex, "Concept generation failed");
             activity.Add(ActivityLevel.Error, text.Format("concepts.failed", ex.Message));
+            Status = text.Format("concepts.failed", ex.Message);
+            notifier.Notify(new AppNotification(NotificationKind.Failed, text["concepts.error.title"], Status));
         }
         finally
         {
@@ -320,6 +322,7 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         if (result.SemanticSkipped > 0)
         {
             activity.Add(ActivityLevel.Warning, text.Format("concepts.semantic.failed", result.SemanticSkipped));
+            Status = text.Format("concepts.semantic.failed", result.SemanticSkipped);
         }
 
         switch (result.ErrorCode)

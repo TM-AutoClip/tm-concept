@@ -197,6 +197,7 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
             {
                 logger.LogError(ex, "The video folder could not be moved to the recycle bin");
                 activity.Add(ActivityLevel.Error, text.Format("produced.recycle_failed", ex.Message));
+                Status = text.Format("produced.recycle_failed", ex.Message);
                 return;
             }
         }

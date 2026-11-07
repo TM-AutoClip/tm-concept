@@ -417,7 +417,8 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
             LastCost = text.Format("video.last_cost.failed", text.Usd(ex.SpentUsd));
             activity.Add(ActivityLevel.Error, text.Format("video.failed", row.Title, reason, text.Usd(ex.SpentUsd)),
                 text.Format("video.failed", ActivityPlaceholders.Title, reason, text.Usd(ex.SpentUsd)));
-            notifier.Notify(new AppNotification(NotificationKind.Failed, text["video.failed.title"], row.Title));
+            // The notification carries the reason and what was paid (the activity panel that said it is gone since 0.1.7).
+            notifier.Notify(new AppNotification(NotificationKind.Failed, text["video.failed.title"], text.Format("video.failed", row.Title, reason, text.Usd(ex.SpentUsd))));
         }
         catch (OperationCanceledException)
         {
@@ -429,6 +430,7 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
             logger.LogError(ex, "Video failed");
             row.Error = ex.Message;
             activity.Add(ActivityLevel.Error, text.Format("video.failed", row.Title, ex.Message, text.Usd(0)), text.Format("video.failed", ActivityPlaceholders.Title, ex.Message, text.Usd(0)));
+            notifier.Notify(new AppNotification(NotificationKind.Failed, text["video.failed.title"], text.Format("video.failed", row.Title, ex.Message, text.Usd(0))));
         }
         finally
         {
@@ -446,41 +448,41 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
         : choice is not null && StepModelResolver.Options(choice).ImageSource == ImageSources.Samples ? ImageSources.Samples
         : ImageSources.None;
 
+    /// <summary>
+    /// A made video: the cost on the page, one notification with the cost and the problems of the video (silent, no images…; they are also
+    /// badges and notes on the Produced videos page), every line in the log file.
+    /// </summary>
     private void Report(VideoRecord record)
     {
         var warnings = record.Warnings.Split(',', StringSplitOptions.RemoveEmptyEntries);
-        if (warnings.Contains(VideoWarnings.SpeechOff))
+        var problems = new List<string>();
+        foreach (var (code, key, level) in Problems)
         {
-            activity.Add(ActivityLevel.Warning, text.Format("video.silent.off", record.Title), text.Format("video.silent.off", ActivityPlaceholders.Title));
-        }
-
-        if (warnings.Contains(VideoWarnings.SpeechFailed))
-        {
-            activity.Add(ActivityLevel.Error, text.Format("video.silent.failed", record.Title), text.Format("video.silent.failed", ActivityPlaceholders.Title));
-        }
-
-        if (warnings.Contains(VideoWarnings.SpeechSkipped))
-        {
-            activity.Add(ActivityLevel.Warning, text.Format("video.speech.skipped", record.Title), text.Format("video.speech.skipped", ActivityPlaceholders.Title));
-        }
-
-        if (warnings.Contains(VideoWarnings.ImagesFailed))
-        {
-            activity.Add(ActivityLevel.Warning, text.Format("video.images.failed", record.Title), text.Format("video.images.failed", ActivityPlaceholders.Title));
-        }
-
-        if (warnings.Contains(VideoWarnings.SamplesNone))
-        {
-            activity.Add(ActivityLevel.Warning, text.Format("video.samples.none", record.Title), text.Format("video.samples.none", ActivityPlaceholders.Title));
+            if (warnings.Contains(code))
+            {
+                activity.Add(level, text.Format(key, record.Title), text.Format(key, ActivityPlaceholders.Title));
+                problems.Add(text.Format(key, record.Title));
+            }
         }
 
         var seconds = (record.ElapsedMs / 1000.0).ToString("0", CultureInfo.InvariantCulture);
         LastCost = text.Format(record.CostExact ? "video.last_cost" : "video.last_cost.approx", text.Usd(record.TotalUsd));
-        activity.Add(ActivityLevel.Info, text.Format("video.done", record.Title, text.Usd(record.TotalUsd), seconds),
-            text.Format("video.done", ActivityPlaceholders.Title, text.Usd(record.TotalUsd), seconds));
-        notifier.Notify(new AppNotification(NotificationKind.Done, text["video.done.title"], record.Title));
+        var done = text.Format("video.done", record.Title, text.Usd(record.TotalUsd), seconds);
+        activity.Add(ActivityLevel.Info, done, text.Format("video.done", ActivityPlaceholders.Title, text.Usd(record.TotalUsd), seconds));
+        notifier.Notify(new AppNotification(problems.Count == 0 ? NotificationKind.Done : NotificationKind.Warning, text["video.done.title"],
+            string.Join("\n", problems.Prepend(done))));
         events.Raise(this);
     }
+
+    /// <summary>The warnings of a made video that the notification names (warning code, text key, log level).</summary>
+    private static readonly (string Code, string Key, ActivityLevel Level)[] Problems =
+    [
+        (VideoWarnings.SpeechOff, "video.silent.off", ActivityLevel.Warning),
+        (VideoWarnings.SpeechFailed, "video.silent.failed", ActivityLevel.Error),
+        (VideoWarnings.SpeechSkipped, "video.speech.skipped", ActivityLevel.Warning),
+        (VideoWarnings.ImagesFailed, "video.images.failed", ActivityLevel.Warning),
+        (VideoWarnings.SamplesNone, "video.samples.none", ActivityLevel.Warning),
+    ];
 
     // The provider's code of an answer cut at its output limit.
     private const string Truncated = "truncated";

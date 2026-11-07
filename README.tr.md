@@ -40,7 +40,7 @@ veritabanını şifreli tutar.
   başlamaz), ayrıntılar (motor, modeller, adım adım ücret, ses notları, konsept metni), sistem oynatıcısında aç, yeniden üret, klasörü aç, kaydı sil ve
   istersen dosyaları geri dönüşüm kutusuna taşı.
 - **Bildirimler** sağ altta (konseptler hazır, video hazır, hata). Varsayılan 1 dakika; Ayarlar'dan süresi değişir ya da kapatılır.
-  Alttaki işlem günlüğü her şeyi tutar (sarı uyarı, kırmızı hata).
+  Bildirim hatayı ve harcananı da söyler; yapılan her şey eksiksiz olarak günlük dosyasına yazılır.
 - **Şifreli.** Veritabanı (API anahtarların dahil) SQLite3 Multiple Ciphers ile şifrelidir. Anahtarı Windows (DPAPI), Linux anahtarlığı ya
   da bir ana parola korur. Günlük yedekler (son 10) parolalı dosyalardır (Argon2id + AES-256-GCM); içine neyin gireceğini sen seçersin
   (API anahtarları yalnız işaretlersen).

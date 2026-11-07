@@ -1,42 +1,38 @@
 using System.Collections.ObjectModel;
-using Avalonia.Input.Platform;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
-using TMConcept.Core.Activity;
+using TMConcept.Core.Notifications;
 using TMConcept.Core.Profiles;
 using TMConcept.Desktop.Dialogs;
 using TMConcept.Desktop.Localization;
-using TMConcept.Desktop.Logging;
 using TMConcept.Desktop.Startup;
 
 namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
-/// The main window: profile selector (every page is filtered by it), the sidebar of pages with "Report a problem" at its bottom, the current
-/// page and the activity log panel at the bottom.
+/// The main window: profile selector (every page is filtered by it), the sidebar of pages with "Report a problem" at its bottom and the
+/// current page. The activity panel at the bottom is gone since 0.1.7: activity lines go to the log file, a failure is a notification.
 /// </summary>
 public sealed partial class ShellViewModel : ObservableObject
 {
     private readonly Localizer _text;
     private readonly AppSession _session;
     private readonly IProfileStore _profiles;
-    private readonly ActivityLog _log;
-    private readonly WindowHost _host;
+    private readonly INotifier _notifier;
     private readonly ILogger<ShellViewModel> _logger;
     private readonly IReportDialog _report;
     private bool _loadingProfiles;
 
     /// <summary>Builds the sidebar from every registered page.</summary>
-    public ShellViewModel(IEnumerable<PageViewModelBase> pages, Localizer text, AppSession session, IProfileStore profiles, ActivityLog log,
-        WindowHost host, IReportDialog report, ILogger<ShellViewModel> logger)
+    public ShellViewModel(IEnumerable<PageViewModelBase> pages, Localizer text, AppSession session, IProfileStore profiles, INotifier notifier,
+        IReportDialog report, ILogger<ShellViewModel> logger)
     {
         ArgumentNullException.ThrowIfNull(text);
         _text = text;
         _session = session;
         _profiles = profiles;
-        _log = log;
-        _host = host;
+        _notifier = notifier;
         _logger = logger;
         _report = report;
         Items = new ObservableCollection<NavItemViewModel>(pages.OrderBy(p => p.Order).Select(p => new NavItemViewModel(this, p)));
@@ -62,9 +58,6 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>Profiles (channels).</summary>
     public ObservableCollection<Profile> Profiles { get; } = [];
 
-    /// <summary>Activity log lines.</summary>
-    public ObservableCollection<ActivityEntry> Log => _log.Entries;
-
     /// <summary>Shown page.</summary>
     [ObservableProperty]
     public partial PageViewModelBase? Current { get; set; }
@@ -72,10 +65,6 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>The selected profile.</summary>
     [ObservableProperty]
     public partial Profile? SelectedProfile { get; set; }
-
-    /// <summary>Whether the activity log panel is open.</summary>
-    [ObservableProperty]
-    public partial bool LogOpen { get; set; } = true;
 
     /// <summary>Whether a page runs work (a generation, a video queue).</summary>
     public bool AnyWorking => Items.Any(i => i.Page.Working);
@@ -92,13 +81,9 @@ public sealed partial class ShellViewModel : ObservableObject
         }
     }
 
-    /// <summary>The newest log line (shown when the panel is closed).</summary>
-    public string LastLine => _log.Entries.Count > 0 ? _log.Entries[^1].Text : string.Empty;
-
     /// <summary>Loads the profiles and opens the first page.</summary>
     public async Task StartAsync()
     {
-        _log.Entries.CollectionChanged += (_, _) => OnPropertyChanged(nameof(LastLine));
         foreach (var page in Items.Select(i => i.Page).OfType<ProfileViewModel>())
         {
             page.OnProfilesChanged(RefreshProfilesAsync);
@@ -210,7 +195,7 @@ public sealed partial class ShellViewModel : ObservableObject
         catch (Exception ex)
         {
             _logger.LogError(ex, "Profile could not be selected");
-            _log.Add(ActivityLevel.Error, _text.Format("error.generic", ex.Message));
+            _notifier.Notify(new AppNotification(NotificationKind.Failed, "TM Concept", _text.Format("error.generic", ex.Message)));
         }
     }
 
@@ -235,22 +220,6 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>Opens "Report a problem" (nothing is sent from there by itself).</summary>
     [RelayCommand]
     private Task ReportProblemAsync() => _report.ShowAsync();
-
-    [RelayCommand]
-    private void ToggleLog() => LogOpen = !LogOpen;
-
-    [RelayCommand]
-    private void ClearLog() => _log.Clear();
-
-    [RelayCommand]
-    private async Task CopyLogAsync()
-    {
-        var text = string.Join(Environment.NewLine, _log.Entries.Select(e => e.At.ToString("HH:mm:ss", _text.Culture) + " " + e.Level + " " + e.Text));
-        if (_host.Active?.Clipboard is { } clipboard)
-        {
-            await clipboard.SetTextAsync(text).ConfigureAwait(true);
-        }
-    }
 
     private void RefreshTitles()
     {

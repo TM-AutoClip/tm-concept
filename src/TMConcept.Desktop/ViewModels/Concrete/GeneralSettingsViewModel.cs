@@ -99,6 +99,7 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
         {
             logger.LogError(ex, "{Component} could not be removed", row.Component.Code);
             activity.Add(ActivityLevel.Error, text.Format("components.remove_failed", row.Name, ex.Message));
+            Status = text.Format("components.remove_failed", row.Name, ex.Message);
         }
         finally
         {
@@ -125,17 +126,20 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
             var video = await sample.RenderAsync(engine, null, CancellationToken.None).ConfigureAwait(true);
             logger.LogInformation("Sample render of {Engine} finished after {Seconds:0.0} s", engine.Name, watch.Elapsed.TotalSeconds);
             activity.Add(ActivityLevel.Info, text.Format("engines.sample_done", engine.Name));
+            Status = text.Format("engines.sample_done", engine.Name);
             shell.OpenPath(Path.GetDirectoryName(video)!);
         }
         catch (EngineException ex)
         {
             logger.LogError(ex, "Sample render of {Engine} failed ({Code})", engine.Name, ex.Code);
             activity.Add(ActivityLevel.Error, text.Format("engines.sample_failed", engine.Name, ex.Message));
+            Status = text.Format("engines.sample_failed", engine.Name, ex.Message);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ToolInstallException or InvalidOperationException)
         {
             logger.LogError(ex, "Sample render of {Engine} failed", engine.Name);
             activity.Add(ActivityLevel.Error, text.Format("engines.sample_failed", engine.Name, ex.Message));
+            Status = text.Format("engines.sample_failed", engine.Name, ex.Message);
         }
         finally
         {

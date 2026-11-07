@@ -309,6 +309,7 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
                 .ConfigureAwait(true);
             image.Caption = caption;
             activity.Add(ActivityLevel.Info, text.Format("profile.describe.done", text.Usd(cost)));
+            Status = text.Format("profile.describe.done", text.Usd(cost));
         }
         catch (Core.Models.ModelNotReadyException ex)
         {

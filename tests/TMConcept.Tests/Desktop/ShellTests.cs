@@ -1,4 +1,6 @@
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.VisualTree;
 using Shouldly;
 using TMConcept.Core.Activity;
 using TMConcept.Core.Notifications;
@@ -13,7 +15,7 @@ namespace TMConcept.Tests.Desktop;
 public sealed class ShellTests
 {
     [AvaloniaFact]
-    public async Task MainWindowOpensWithSidebarAndLog()
+    public async Task MainWindowOpensWithSidebarAndNoActivityPanel()
     {
         using var h = new DesktopHarness();
         await FirstRunTests.CreateAsync(h);
@@ -24,9 +26,10 @@ public sealed class ShellTests
         await shell.StartAsync();
         shell.Items.ShouldNotBeEmpty();
         shell.Current.ShouldNotBeNull();
+        window.GetVisualDescendants().OfType<ScrollViewer>().ShouldNotContain(s => s.Name == "LogScroll", "the activity panel is gone");
+
+        // An activity line still goes to the log file (and nowhere on the screen).
         h.Get<ActivityLog>().Add(ActivityLevel.Warning, "narration off");
-        shell.Log.Last().IsWarning.ShouldBeTrue();
-        shell.LastLine.ShouldBe("narration off");
         window.Close();
     }
 

@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TMConcept.Core.Activity;
 using TMConcept.Core.Models;
+using TMConcept.Core.Notifications;
 using TMConcept.Desktop.Composition;
 using TMConcept.Desktop.Localization;
 using TMConcept.Desktop.Logging;
@@ -25,7 +26,7 @@ namespace TMConcept.Desktop.Startup;
 /// are ended with it) before the app closes. An exception that reaches the interface thread is logged and shown instead of ending the app.
 /// </summary>
 public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer text, LanguageResources languageResources, UiPreferencesFile preferences,
-    AppSession session, WindowHost windows, BackupService backup, IActivityLog activity, CrashLog crash, ILogger<AppStartup> logger)
+    AppSession session, WindowHost windows, BackupService backup, IActivityLog activity, INotifier notifier, CrashLog crash, ILogger<AppStartup> logger)
 {
     private IClassicDesktopStyleApplicationLifetime? _desktop;
     private Window? _main;
@@ -41,6 +42,7 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
             // A command that throws (a storage error, a full disk) must not take the whole app down: logged with its cause and shown.
             crash.Interface(e.Exception);
             activity.Add(ActivityLevel.Error, text.Format("error.generic", e.Exception.Message));
+            notifier.Notify(new AppNotification(NotificationKind.Failed, "TM Concept", text.Format("error.generic", e.Exception.Message)));
             e.Handled = true;
         };
         Converters.FileBitmapConverter.Logger = services.GetRequiredService<ILogger<Converters.FileBitmapConverter>>();
@@ -204,6 +206,7 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
         if (session.PendingMessage is { } message)
         {
             activity.Add(ActivityLevel.Info, message);
+            notifier.Notify(new AppNotification(NotificationKind.Info, "TM Concept", message));
             session.PendingMessage = null;
         }
 
@@ -231,6 +234,7 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
         {
             logger.LogError(ex, "Daily backup failed");
             activity.Add(ActivityLevel.Error, text.Format("backup.failed", ex.Message));
+            notifier.Notify(new AppNotification(NotificationKind.Failed, "TM Concept", text.Format("backup.failed", ex.Message)));
         }
     }
 
