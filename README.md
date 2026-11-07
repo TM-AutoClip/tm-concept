@@ -137,8 +137,9 @@ the model that describes a sample image. Each step says what it is for:
 
 When you press **Generate** or **Produce**, the choices are made ready first: a provider with no API key yet is named and you can paste a
 key right there (it is tested with a free request and kept only when it works); then, when a choice needs something this computer does
-not have, **one confirmation lists every download** (name, source, size). Nothing is downloaded without it. It installs with progress
-(the page and the log), the choices are saved for the profile, and the process starts. If you decline, cancel or an install fails, nothing
+not have, **one confirmation lists every download** (name, source, size). Nothing is downloaded without it. It installs in a window over
+the app (one line per download with its progress; the app waits meanwhile, Cancel stops it), the choices are saved for the profile, and
+the process goes on by itself. If you decline, cancel or an install fails, nothing
 starts and nothing is paid for; the reason is shown. A kept choice whose component was removed later is installed again the next time.
 
 | Component | From | About |

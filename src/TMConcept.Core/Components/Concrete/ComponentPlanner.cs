@@ -83,10 +83,13 @@ public sealed class ComponentPlanner(IEnumerable<IComponentSource> sources, ILog
 
     /// <summary>
     /// Installs the plan's missing components in order (only after the user confirmed it). <paramref name="progress"/> gets the share of the
-    /// whole plan and the component's name. A failure skips the components that depend on the failed one, the others are still installed
-    /// (one broken download does not hold back an unrelated step); the first failure goes up at the end. A cancellation stops at once.
+    /// whole plan and the component's name; <paramref name="steps"/> gets each component's own state (running with its progress text, done,
+    /// failed with the reason, skipped) for the install window. A failure skips the components that depend on the failed one, the others
+    /// are still installed (one broken download does not hold back an unrelated step); the first failure goes up at the end. A cancellation
+    /// stops at once.
     /// </summary>
-    public async Task InstallAsync(InstallPlan plan, IProgress<ToolProgress>? progress, CancellationToken cancellationToken)
+    public async Task InstallAsync(InstallPlan plan, IProgress<ToolProgress>? progress, CancellationToken cancellationToken,
+        IProgress<ComponentStep>? steps = null)
     {
         ArgumentNullException.ThrowIfNull(plan);
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -99,6 +102,7 @@ public sealed class ComponentPlanner(IEnumerable<IComponentSource> sources, ILog
                 var component = plan.Missing[i];
                 if (component.Ready)
                 {
+                    steps?.Report(new ComponentStep(i, component.Code, ComponentStepState.Done, 1, string.Empty));
                     continue;
                 }
 
@@ -106,13 +110,19 @@ public sealed class ComponentPlanner(IEnumerable<IComponentSource> sources, ILog
                 {
                     failed.Add(component.Code);
                     logger.LogWarning("{Component} is not installed: {Dependency} could not be installed", component.Code, broken);
+                    steps?.Report(new ComponentStep(i, component.Code, ComponentStepState.Skipped, 0, broken));
                     continue;
                 }
 
                 var index = i;
                 var count = plan.Missing.Count;
-                var inner = new Progress<ToolProgress>(p => progress?.Report(new ToolProgress((index + Math.Clamp(p.Share, 0, 1)) / count, component.Name)));
+                var inner = new Progress<ToolProgress>(p =>
+                {
+                    progress?.Report(new ToolProgress((index + Math.Clamp(p.Share, 0, 1)) / count, component.Name));
+                    steps?.Report(new ComponentStep(index, component.Code, ComponentStepState.Running, Math.Clamp(p.Share, 0, 1), p.Text));
+                });
                 progress?.Report(new ToolProgress((double)i / count, component.Name));
+                steps?.Report(new ComponentStep(i, component.Code, ComponentStepState.Running, 0, string.Empty));
                 var watch = Stopwatch.StartNew();
                 logger.LogInformation("Installing {Component}", component.Code);
                 try
@@ -124,10 +134,12 @@ public sealed class ComponentPlanner(IEnumerable<IComponentSource> sources, ILog
                     logger.LogError(ex, "{Component} could not be installed after {Seconds:0.0} s", component.Code, watch.Elapsed.TotalSeconds);
                     failed.Add(component.Code);
                     first ??= ExceptionDispatchInfo.Capture(ex);
+                    steps?.Report(new ComponentStep(i, component.Code, ComponentStepState.Failed, 0, ex.Message));
                     continue;
                 }
 
                 logger.LogInformation("{Component} installed in {Seconds:0.0} s", component.Code, watch.Elapsed.TotalSeconds);
+                steps?.Report(new ComponentStep(i, component.Code, ComponentStepState.Done, 1, string.Empty));
             }
 
             progress?.Report(new ToolProgress(1, string.Empty));

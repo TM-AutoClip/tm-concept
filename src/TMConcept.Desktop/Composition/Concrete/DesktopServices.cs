@@ -162,6 +162,7 @@ public static class DesktopServices
         services.AddSingleton<Dialogs.IApiKeyDialog, Dialogs.ApiKeyDialog>();
 
         services.AddSingleton<Dialogs.IConfirmDialog, Dialogs.ConfirmDialog>();
+        services.AddSingleton<Dialogs.IInstallDialog, Dialogs.InstallDialog>();
         services.AddSingleton<Reports.SystemReport>();
         services.AddSingleton<Reports.ReportNames>();
         services.AddSingleton<Reports.ProblemReport>();

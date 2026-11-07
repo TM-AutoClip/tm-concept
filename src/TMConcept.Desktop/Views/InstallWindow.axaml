@@ -1,0 +1,33 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="using:TMConcept.Desktop.Dialogs"
+        x:Class="TMConcept.Desktop.Views.InstallWindow"
+        x:DataType="d:InstallViewModel"
+        Title="{Binding Title}"
+        Width="600" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+  <StackPanel Margin="24" Spacing="12">
+    <TextBlock Text="{Binding Title}" Classes="h2" />
+    <TextBlock Text="{DynamicResource install.window.hint}" Classes="small" TextWrapping="Wrap" />
+    <ItemsControl ItemsSource="{Binding Steps}">
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="d:InstallStepViewModel">
+          <Grid ColumnDefinitions="24,*" Margin="0,4">
+            <TextBlock Text="{Binding Glyph}" FontWeight="SemiBold" />
+            <StackPanel Grid.Column="1" Spacing="2">
+              <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
+              <ProgressBar Value="{Binding Percent}" Maximum="100" IsVisible="{Binding Running}" />
+              <TextBlock Text="{Binding Detail}" Classes="small" Classes.error="{Binding Failed}" TextWrapping="Wrap" />
+            </StackPanel>
+          </Grid>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+    <ProgressBar Value="{Binding Percent}" Maximum="100" IsVisible="{Binding Running}" />
+    <TextBlock Text="{Binding Error}" Classes="error" TextWrapping="Wrap" IsVisible="{Binding HasError}" />
+    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+      <Button Content="{DynamicResource common.cancel}" Command="{Binding CancelCommand}" IsVisible="{Binding Running}" />
+      <Button Classes="accent" Content="{DynamicResource install.window.close}" Command="{Binding CloseCommand}" IsVisible="{Binding CanClose}" />
+    </StackPanel>
+  </StackPanel>
+</Window>
