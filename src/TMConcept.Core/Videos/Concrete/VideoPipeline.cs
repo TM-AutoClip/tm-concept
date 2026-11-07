@@ -28,7 +28,8 @@ namespace TMConcept.Core.Videos;
 /// · D images (samples, or the profile's images step: off = no image call at all; the prompts are written by the video code model; generated
 /// images and their prompts are kept per concept until the video is made, so a retry does not pay for them again) · E
 /// video code from the model, safety check, one repair · F render (processor only), one repair with the error text · H mux into the work
-/// folder, then the finished file is moved into the library folder; subtitles (.srt always, burned ASS when chosen), narration text file ·
+/// folder, then the finished file is moved into the library's version folder (<see cref="VideoFolders"/>); subtitles (.srt always, burned
+/// ASS when chosen), the narration text (always), the engine project as it rendered and the scene clips (for a later re-render) ·
 /// I thumbnail, video and cost rows (with the concept's share of its generation run as a line of its own, outside the video's total),
 /// concept marked produced. Every paid call is counted in the cost, also when it fails (a cut-off code answer is billed). A failed or
 /// canceled run leaves nothing half-written in the library and removes its work files (a rejected code is kept there as text for
@@ -298,17 +299,17 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                 throw new VideoException("Joining video and narration failed: " + ex.Message, ex) { Code = "mux" };
             }
 
-            folder = LibraryFolder(profile, job.Concept);
+            folder = Path.Combine(LibraryFolder(profile, job.Concept), VideoFolders.FirstVersion);
             folderCreated = !Directory.Exists(folder);
             Directory.CreateDirectory(folder);
-            await File.WriteAllTextAsync(Path.Combine(folder, "subtitles.srt"), SubtitleBuilder.Srt(cues), cancellationToken).ConfigureAwait(false);
-            if (options.NarrationFile)
-            {
-                await File.WriteAllTextAsync(Path.Combine(folder, "narration.txt"), NarrationScript.Text(job.Concept.Title, profile.ContentLanguage, cueSources),
-                    cancellationToken).ConfigureAwait(false);
-            }
+            await File.WriteAllTextAsync(Path.Combine(folder, VideoFolders.SubtitlesFile), SubtitleBuilder.Srt(cues), cancellationToken).ConfigureAwait(false);
 
-            var output = Path.Combine(folder, "video.mp4");
+            // The narration text is always kept (it was a choice until 0.1.6): a later version reads it again, edited or with another voice.
+            await File.WriteAllTextAsync(Path.Combine(folder, VideoFolders.NarrationFile), NarrationScript.Text(job.Concept.Title, profile.ContentLanguage,
+                cueSources), cancellationToken).ConfigureAwait(false);
+            KeepSources(request.Folder, folder, clips);
+
+            var output = Path.Combine(folder, VideoFolders.VideoFile);
             File.Move(muxed, output, overwrite: true);
             Finish("mux");
 
@@ -321,7 +322,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                 ProfileId = profile.Id,
                 Title = job.Concept.Title,
                 Folder = LibraryPaths.Relative(paths.LibraryDirectory, folder),
-                FileName = "video.mp4",
+                FileName = VideoFolders.VideoFile,
                 ThumbnailName = thumbnail ? ThumbnailFile : string.Empty,
                 DurationMs = (long)Math.Round(input.DurationSeconds * 1000),
                 Width = width,
@@ -647,11 +648,43 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         return (long)Math.Round(words / rate * 1000);
     }
 
+    /// <summary>
+    /// Keeps what a later version needs to render the same code again without a model call: the engine project as it rendered (skeleton,
+    /// the model's code, input.json, scene images; not its temporary files) and the scene clips (WAV, as the voice made them; their size was
+    /// not measured yet).
+    /// </summary>
+    private static void KeepSources(string project, string version, IReadOnlyList<SpeechClip?> clips)
+    {
+        Copy(project, Path.Combine(version, VideoFolders.Source));
+        foreach (var clip in clips.OfType<SpeechClip>())
+        {
+            var audio = Path.Combine(version, VideoFolders.Audio);
+            Directory.CreateDirectory(audio);
+            File.Copy(clip.File, Path.Combine(audio, Path.GetFileName(clip.File)), overwrite: true);
+        }
+
+        static void Copy(string from, string to)
+        {
+            Directory.CreateDirectory(to);
+            foreach (var file in Directory.EnumerateFiles(from))
+            {
+                File.Copy(file, Path.Combine(to, Path.GetFileName(file)), overwrite: true);
+            }
+
+            // tmp/ holds the engine's frame cache and Node's temporary files; node_modules is never in a project (packages resolve from
+            // the engine folder) but is skipped all the same.
+            foreach (var folder in Directory.EnumerateDirectories(from).Where(d => Path.GetFileName(d) is not ("tmp" or "node_modules")))
+            {
+                Copy(folder, Path.Combine(to, Path.GetFileName(folder)));
+            }
+        }
+    }
+
     private string LibraryFolder(Profile profile, Concept concept)
     {
         var name = string.Create(CultureInfo.InvariantCulture, $"{clock.GetLocalNow():yyyy-MM-dd}-{concept.Number}-{LibraryPaths.SafeName(concept.Title)}");
         var folder = Path.Combine(paths.LibraryDirectory, LibraryPaths.SafeName(profile.Name), name);
-        for (var i = 2; Directory.Exists(folder) && File.Exists(Path.Combine(folder, "video.mp4")); i++)
+        for (var i = 2; Directory.Exists(Path.Combine(folder, VideoFolders.FirstVersion)); i++)
         {
             folder = Path.Combine(paths.LibraryDirectory, LibraryPaths.SafeName(profile.Name), name + "-" + i.ToString(CultureInfo.InvariantCulture));
         }
@@ -660,8 +693,9 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
     }
 
     /// <summary>
-    /// After a failure or a cancel: the library keeps nothing of this run (a folder it created is removed; in an existing folder only the
-    /// files it wrote), and the work folder is emptied except a rejected code, which stays for reading until <see cref="CleanWork"/>.
+    /// After a failure or a cancel: the library keeps nothing of this run (the version folder it created is removed, and the concept's folder
+    /// when nothing else is in it; in an existing folder only what it wrote), and the work folder is emptied except a rejected code, which
+    /// stays for reading until <see cref="CleanWork"/>.
     /// </summary>
     private void CleanFailed(string work, string? folder, bool folderCreated)
     {
@@ -670,13 +704,21 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
             if (folderCreated)
             {
                 TryDelete(folder);
+                var parent = Path.GetDirectoryName(folder);
+                if (parent is not null && Directory.Exists(parent) && !Directory.EnumerateFileSystemEntries(parent).Any())
+                {
+                    TryDelete(parent);
+                }
             }
             else
             {
-                foreach (var name in new[] { "subtitles.srt", "narration.txt", "video.mp4", ThumbnailFile })
+                foreach (var name in new[] { VideoFolders.SubtitlesFile, VideoFolders.NarrationFile, VideoFolders.VideoFile, ThumbnailFile })
                 {
                     TryDeleteFile(Path.Combine(folder, name));
                 }
+
+                TryDelete(Path.Combine(folder, VideoFolders.Source));
+                TryDelete(Path.Combine(folder, VideoFolders.Audio));
             }
         }
 

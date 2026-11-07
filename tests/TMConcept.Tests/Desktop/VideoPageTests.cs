@@ -76,12 +76,57 @@ public sealed class VideoPageTests
         video.Warnings.ShouldContain(VideoWarnings.SpeechOff);
         video.TotalUsd.ShouldBeGreaterThan(0);
         var folder = LibraryPaths.Resolve(h.Get<IAppPaths>().LibraryDirectory, video.Folder);
+        Path.GetFileName(folder).ShouldBe(VideoFolders.FirstVersion, "a video is a version folder inside its concept's folder");
         File.Exists(Path.Combine(folder, "video.mp4")).ShouldBeTrue();
+        File.ReadAllText(Path.Combine(folder, VideoFolders.Source, engine.CodeFile)).Trim().ShouldBe(engine.SampleCode, "the model's code as it rendered");
+        File.Exists(Path.Combine(folder, VideoFolders.Source, "input.json")).ShouldBeTrue();
+        Directory.Exists(Path.Combine(folder, VideoFolders.Source, "tmp")).ShouldBeFalse("the engine's temporary files are not kept");
+        Directory.Exists(Path.Combine(folder, VideoFolders.Audio)).ShouldBeFalse("a silent video has no clips");
         File.ReadAllText(Path.Combine(folder, "subtitles.srt")).ShouldContain("siege");
         File.ReadAllText(Path.Combine(folder, "narration.txt")).ShouldContain("Scene 2");
         (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!.Status.ShouldBe(ConceptStatus.Produced);
         engine.Input!.Scenes.Count.ShouldBe(2);
         h.Get<TMConcept.Desktop.Logging.ActivityLog>().Entries.ShouldContain(e => e.IsWarning);
+    }
+
+    [AvaloniaFact]
+    public async Task AVoicedVideoKeepsItsSceneClipsAndTheNarrationText()
+    {
+        var engine = new FakeEngine();
+        var voice = new FakeVoice();
+        using var h = Harness(new FakeChat().Answer(_ => Code(engine.SampleCode)), engine, s =>
+        {
+            s.RemoveAll<TMConcept.Core.Speech.ISpeechEngine>();
+            s.AddSingleton<TMConcept.Core.Speech.ISpeechEngine>(voice);
+        });
+        var (_, concept) = await PrepareAsync(h);
+        await h.Get<IStepModelStore>().SaveAsync(new StepModelChoice { Step = PipelineSteps.Speech, ProfileId = concept.ProfileId, Provider = ModelProviders.Local,
+            Model = voice.Code }, CancellationToken.None);
+
+        var record = await RunAsync(h, concept, new VideoOptions { Engine = engine.Kind, Speech = true });
+
+        var folder = LibraryPaths.Resolve(h.Get<IAppPaths>().LibraryDirectory, record.Folder);
+        Directory.GetFiles(Path.Combine(folder, VideoFolders.Audio)).Select(Path.GetFileName).ShouldBe(["1.wav", "2.wav"], ignoreOrder: true);
+        File.ReadAllText(Path.Combine(folder, VideoFolders.NarrationFile)).ShouldContain("strange fire");
+        File.ReadAllText(Path.Combine(folder, VideoFolders.Source, "input.json")).ShouldContain("siege");
+        record.Warnings.ShouldNotContain(VideoWarnings.SpeechFailed);
+    }
+
+    [AvaloniaFact]
+    public async Task AFailedVideoLeavesNoVersionFolderBehind()
+    {
+        var engine = new FakeEngine();
+        using var h = Harness(new FakeChat().Answer(_ => Code(engine.SampleCode)), engine, s =>
+        {
+            s.RemoveAll<IMediaTools>();
+            s.AddSingleton<IMediaTools>(new FakeMedia { FailThumbnail = true });
+        });
+        var (_, concept) = await PrepareAsync(h);
+
+        (await Should.ThrowAsync<VideoException>(() => RunAsync(h, concept, new VideoOptions { Engine = engine.Kind, Speech = false }))).Code.ShouldBe("files");
+
+        var profileFolder = Path.Combine(h.Get<IAppPaths>().LibraryDirectory, "Byzantium");
+        (Directory.Exists(profileFolder) ? Directory.GetDirectories(profileFolder) : []).ShouldBeEmpty();
     }
 
     [AvaloniaFact]
@@ -460,7 +505,10 @@ public sealed class VideoPageTests
             }
 
             Input = request.Input;
-            Directory.CreateDirectory(request.Folder);
+            Directory.CreateDirectory(Path.Combine(request.Folder, "tmp"));
+            File.WriteAllText(Path.Combine(request.Folder, CodeFile), request.Code);
+            File.WriteAllText(Path.Combine(request.Folder, "input.json"), TMConcept.Core.Render.RenderInputBuilder.ToJson(request.Input));
+            File.WriteAllText(Path.Combine(request.Folder, "tmp", "frame-cache.bin"), "x");
         }
 
         public Task RenderAsync(EngineRenderRequest request, IProgress<EngineEvent>? progress, CancellationToken cancellationToken)
@@ -487,6 +535,32 @@ public sealed class VideoPageTests
             return Task.CompletedTask;
         }
 
-        public Task<bool> ThumbnailAsync(string video, string jpeg, CancellationToken cancellationToken) => Task.FromResult(false);
+        public bool FailThumbnail { get; init; }
+
+        public Task<bool> ThumbnailAsync(string video, string jpeg, CancellationToken cancellationToken) =>
+            FailThumbnail ? throw new IOException("disk full") : Task.FromResult(false);
+    }
+
+    internal sealed class FakeVoice : TMConcept.Core.Speech.ISpeechEngine
+    {
+        public string Code => "kokoro";
+
+        public string Name => "Fake voice";
+
+        public bool IsLocal => true;
+
+        public bool Ready => true;
+
+        public bool Supports(string language) => language == ContentLanguages.English;
+
+        public IReadOnlyList<TMConcept.Core.Speech.SpeechVoice> Voices(string language) => [new("v", "Voice")];
+
+        public Task InstallAsync(bool agreed, IProgress<ToolProgress>? progress, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task<TMConcept.Core.Speech.SpeechClip> SynthesizeAsync(TMConcept.Core.Speech.SpeechRequest request, CancellationToken cancellationToken)
+        {
+            TMConcept.Core.Speech.WaveFile.WritePcm16(request.OutputWav, new float[2400], 24_000);
+            return Task.FromResult(new TMConcept.Core.Speech.SpeechClip(request.OutputWav, 100, request.Text.Length, 0, Code));
+        }
     }
 }

@@ -187,7 +187,11 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
         {
             try
             {
-                await recycleBin.MoveAsync(row.Folder, CancellationToken.None).ConfigureAwait(true);
+                // A version folder (v1/) that is alone in its concept's folder goes with that folder, so the recycle bin shows the title.
+                var parent = Path.GetDirectoryName(row.Folder);
+                var alone = parent is not null && Path.GetFileName(row.Folder) == Core.Videos.VideoFolders.FirstVersion
+                    && Directory.EnumerateFileSystemEntries(parent).Count() == 1;
+                await recycleBin.MoveAsync(alone ? parent! : row.Folder, CancellationToken.None).ConfigureAwait(true);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or OperationCanceledException)
             {

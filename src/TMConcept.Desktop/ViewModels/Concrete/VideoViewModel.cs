@@ -68,10 +68,6 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
     [ObservableProperty]
     public partial bool Subtitles { get; set; } = true;
 
-    /// <summary>Narration text file.</summary>
-    [ObservableProperty]
-    public partial bool NarrationFile { get; set; } = true;
-
     /// <summary>Approved concepts.</summary>
     public ObservableCollection<ConceptCardViewModel> Approved { get; } = [];
 
@@ -536,7 +532,6 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
         },
         Speech = Picker.Model(PipelineSteps.Speech) is not null,
         Subtitles = Subtitles,
-        NarrationFile = NarrationFile,
     };
 
     private async Task MoveAsync(QueueRowViewModel? row, int step)

@@ -23,7 +23,4 @@ public sealed class VideoOptions
 
     /// <summary>Subtitles burned into the picture.</summary>
     public bool Subtitles { get; set; } = true;
-
-    /// <summary>The narration text file is written.</summary>
-    public bool NarrationFile { get; set; } = true;
 }

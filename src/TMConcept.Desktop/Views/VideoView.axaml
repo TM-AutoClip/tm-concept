@@ -21,7 +21,6 @@
           </Border>
           <TextBlock Text="{DynamicResource video.item_settings}" FontWeight="SemiBold" />
           <CheckBox IsChecked="{Binding Subtitles}" Content="{DynamicResource video.subtitles}" />
-          <CheckBox IsChecked="{Binding NarrationFile}" Content="{DynamicResource video.narration_file}" />
           <TextBlock Text="{Binding Status}" Classes="error" TextWrapping="Wrap" />
         </StackPanel>
       </Grid>

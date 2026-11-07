@@ -179,7 +179,7 @@ Sonra modelleri onları kullanan sayfalarda seç (yukarıya bak). Ücretli hiçb
 1. **Konsept Üret:** modeli, adedi ve isteğe bağlı ek istemi seç; tahmini gör; **Üret**'e bas.
 2. Kartları aç, iyileri onayla (A), kalanı sil (D).
 3. **Konseptten Video:** onaylı konseptlere tıklayıp sıraya al, ayarlara bak, **Sıradakileri sırayla üret**'e bas.
-4. **Üretilen Videolar:** program içinde izle (Linux'ta ses PulseAudio ya da PipeWire ile), klasörü aç. Video klasöründe `video.mp4`, `subtitles.srt`, `narration.txt` ve `thumbnail.jpg` bulunur.
+4. **Üretilen Videolar:** program içinde izle (Linux'ta ses PulseAudio ya da PipeWire ile), klasörü aç. Her video, konseptin klasöründe bir sürüm klasörüdür (`v1/`): `video.mp4`, `subtitles.srt`, `narration.txt` (her zaman yazılır) ve `thumbnail.jpg`; ayrıca sonraki bir yeniden render için `source/` (render edildiği hâliyle motor projesi: modelin kodu, `input.json`, sahne görselleri) ve `audio/` (her sahnenin seslendirme klibi).
 
 ## Güncelleme
 

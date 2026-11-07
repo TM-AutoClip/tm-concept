@@ -245,7 +245,6 @@
   "nav.video": "Concept to video",
   "video.settings": "Models and settings (the models are kept for this profile)",
   "video.subtitles": "Subtitles in the picture",
-  "video.narration_file": "Narration text as a file",
   "video.approved": "Approved",
   "video.approved.hint": "Click a concept to add it to the queue.",
   "video.queue": "To produce",
