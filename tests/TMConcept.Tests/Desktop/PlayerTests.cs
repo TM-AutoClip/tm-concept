@@ -114,7 +114,7 @@ public sealed class PlayerTests
             page.Selected = row;
             await page.ThumbnailWork;
 
-            var expected = Path.Combine(row.Folder, record.ThumbnailName.Length > 0 ? record.ThumbnailName : VideoPipeline.ThumbnailFile);
+            var expected = Path.Combine(row.Folder, record.ThumbnailName.Length > 0 ? record.ThumbnailName : VideoFolders.ThumbnailFile);
             row.Thumbnail.ShouldBe(expected);
             page.Player.Poster.ShouldBe(expected);
             (await h.Get<IVideoStore>().GetAsync(record.Id, CancellationToken.None))!.ThumbnailName.ShouldBe(Path.GetFileName(expected));

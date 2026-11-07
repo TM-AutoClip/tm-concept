@@ -35,6 +35,22 @@
       <ScrollViewer>
         <StackPanel Spacing="10">
           <TextBlock Text="{Binding Selected.Title}" Classes="h2" TextWrapping="Wrap" />
+          <!-- The versions of the video (v1, v2…): the chosen one plays, its texts and details show, a new version starts from it. -->
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <TextBlock Text="{DynamicResource produced.versions}" VerticalAlignment="Center" FontWeight="SemiBold" />
+            <ListBox ItemsSource="{Binding Versions}" SelectedItem="{Binding SelectedVersion}" Background="Transparent">
+              <ListBox.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel />
+                </ItemsPanelTemplate>
+              </ListBox.ItemsPanel>
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:VideoRowViewModel">
+                  <TextBlock Text="{Binding VersionLabel}" Classes="small" />
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </StackPanel>
           <v:VideoPlayerView DataContext="{Binding Player}" Height="400" />
           <WrapPanel>
             <Button Content="{DynamicResource produced.play}" Command="{Binding PlayCommand}" Margin="0,0,8,8" />
@@ -65,6 +81,55 @@
             </TabItem>
             <TabItem Header="{DynamicResource produced.tab.details}">
               <SelectableTextBlock Text="{Binding Details}" TextWrapping="Wrap" Margin="0,8,0,0" />
+            </TabItem>
+            <TabItem Header="{DynamicResource produced.tab.version}">
+              <Panel DataContext="{Binding Editor}">
+              <StackPanel Spacing="10" Margin="0,8,0,0" x:DataType="vm:VersionEditorViewModel">
+                <TextBlock Text="{DynamicResource version.hint}" Classes="small" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding Status}" Classes="warning" TextWrapping="Wrap"
+                           IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                <StackPanel Spacing="10" IsVisible="{Binding CanEdit}">
+                  <v:StepPickerView DataContext="{Binding Picker}" />
+                  <TextBlock Text="{DynamicResource version.narration}" FontWeight="SemiBold" />
+                  <TextBlock Text="{DynamicResource version.markers.hint}" Classes="small" TextWrapping="Wrap" />
+                  <ItemsControl ItemsSource="{Binding Scenes}" IsEnabled="{Binding !Busy}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:SceneEditViewModel">
+                        <StackPanel Spacing="4" Margin="0,0,0,12">
+                          <TextBlock Text="{Binding Header}" FontWeight="SemiBold" />
+                          <TextBlock Text="{Binding Visual}" Classes="scene" TextWrapping="Wrap" IsVisible="{Binding HasVisual}" />
+                          <TextBox Name="SceneBox" Text="{Binding Text}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="60" />
+                          <StackPanel Orientation="Horizontal" Spacing="8">
+                            <v:MarkerPicker Target="{Binding #SceneBox}"
+                                            Markers="{Binding $parent[ItemsControl].((vm:VersionEditorViewModel)DataContext).NarrationMarkers}" />
+                            <Button Content="{DynamicResource version.reset}" Command="{Binding ResetCommand}" IsVisible="{Binding Changed}" />
+                          </StackPanel>
+                        </StackPanel>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <Border Classes="card">
+                    <StackPanel Spacing="6">
+                      <TextBlock Text="{DynamicResource version.revoice.hint}" Classes="small" TextWrapping="Wrap" />
+                      <TextBlock Text="{Binding VoiceCost}" TextWrapping="Wrap" />
+                      <Button Classes="accent" Content="{DynamicResource version.revoice}" Command="{Binding RevoiceCommand}" IsEnabled="{Binding CanStart}" />
+                    </StackPanel>
+                  </Border>
+                  <Border Classes="card">
+                    <StackPanel Spacing="6">
+                      <TextBlock Text="{DynamicResource version.recode.hint}" Classes="small" TextWrapping="Wrap" />
+                      <TextBlock Text="{Binding RecodeEstimate}" TextWrapping="Wrap" />
+                      <Button Content="{DynamicResource version.recode}" Command="{Binding RecodeCommand}" IsEnabled="{Binding CanStart}" />
+                    </StackPanel>
+                  </Border>
+                  <StackPanel Spacing="4" IsVisible="{Binding Busy}">
+                    <ProgressBar Value="{Binding Percent}" Maximum="100" />
+                    <TextBlock Text="{Binding Step}" Classes="small" />
+                    <Button Content="{DynamicResource common.cancel}" Command="{Binding CancelCommand}" />
+                  </StackPanel>
+                </StackPanel>
+              </StackPanel>
+              </Panel>
             </TabItem>
           </TabControl>
         </StackPanel>

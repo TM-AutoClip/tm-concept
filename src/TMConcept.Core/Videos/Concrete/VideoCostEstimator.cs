@@ -43,15 +43,7 @@ public sealed class VideoCostEstimator(ICostCalculator costs)
             {
                 var input = RenderInputBuilder.Build(concept.Title, profile.ContentLanguage, scenes.Select(s => new RenderSceneSource(s.Visual, s.Narration,
                     string.Empty, Milliseconds(s.Narration, profile.ContentLanguage))).ToList(), width, height, 30);
-                var system = engine is null ? 0 : costs.Tokens(VideoCodePrompt.System(engine, subtitles), ContentLanguages.English);
-                var user = costs.Tokens(VideoCodePrompt.User(input), profile.ContentLanguage);
-                // The high end is the call's whole budget: 14 000 tokens used to be counted, but real answers with thinking were cut at 32 000.
-                long most = VideoCodeBudget.For(code);
-                var first = costs.EstimateChat(code, system + user, 0, CodeOutputMin, most);
-
-                // One repair may follow a rejected check: its cost is the high end only.
-                var repair = costs.EstimateChat(code, system + user + most, system, 0, most);
-                total = total.Plus(first with { MaxUsd = first.MaxUsd + repair.MaxUsd });
+                total = total.Plus(Code(input, profile.ContentLanguage, engine, code, subtitles));
                 if (image is not null)
                 {
                     var visuals = scenes.Select(s => s.Visual.Length > 0 ? s.Visual : s.Narration).ToList();
@@ -68,8 +60,7 @@ public sealed class VideoCostEstimator(ICostCalculator costs)
 
             if (speech is { Provider: not ModelProviders.Local })
             {
-                var characters = scenes.Sum(s => (long)s.Narration.Length);
-                var spoken = characters * speech.SpeechUsdPerMillionCharacters / 1_000_000m;
+                var spoken = Speech(speech, scenes.Sum(s => (long)s.Narration.Length));
                 total = total.Plus(new CostEstimate(spoken, spoken, 0, 0, 0));
             }
         }
@@ -77,8 +68,34 @@ public sealed class VideoCostEstimator(ICostCalculator costs)
         return total;
     }
 
-    private static long Milliseconds(string narration, string language)
+    /// <summary>
+    /// The video code call for <paramref name="input"/> (its real prompt): from <see cref="CodeOutputMin"/> output tokens to the call's whole
+    /// budget, plus one repair at the high end. Also the estimate of a new version with another engine (same input, new code).
+    /// </summary>
+    public CostEstimate Code(RenderInput input, string language, IVideoEngine? engine, CatalogModel code, bool subtitles)
     {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(code);
+        var system = engine is null ? 0 : costs.Tokens(VideoCodePrompt.System(engine, subtitles), ContentLanguages.English);
+        var user = costs.Tokens(VideoCodePrompt.User(input), language);
+
+        // The high end is the call's whole budget: 14 000 tokens used to be counted, but real answers with thinking were cut at 32 000.
+        long most = VideoCodeBudget.For(code);
+        var first = costs.EstimateChat(code, system + user, 0, CodeOutputMin, most);
+
+        // One repair may follow a rejected check: its cost is the high end only.
+        var repair = costs.EstimateChat(code, system + user + most, system, 0, most);
+        return first with { MaxUsd = first.MaxUsd + repair.MaxUsd };
+    }
+
+    /// <summary>What an online voice costs for <paramref name="characters"/> characters (a local voice nothing).</summary>
+    public static decimal Speech(CatalogModel? speech, long characters) =>
+        speech is { Provider: not ModelProviders.Local } ? characters * speech.SpeechUsdPerMillionCharacters / 1_000_000m : 0;
+
+    /// <summary>How long a narration takes to say at the estimated speaking rate (a silent scene's length; the estimate's timing).</summary>
+    public static long Milliseconds(string narration, string language)
+    {
+        ArgumentNullException.ThrowIfNull(narration);
         var words = narration.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
         var rate = language == ContentLanguages.Turkish ? NarrationRate.TurkishWordsPerSecond : NarrationRate.EnglishWordsPerSecond;
         return (long)Math.Round(words / rate * 1000);

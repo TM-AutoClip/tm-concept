@@ -69,7 +69,9 @@ public static class DesktopServices
         services.AddSingleton<Core.Tools.IArchiveDownloader>(s => s.GetRequiredService<Engines.Tools.ToolDownloader>());
         services.AddSingleton<Engines.Media.FfmpegMuxer>();
         services.AddSingleton<Core.Media.IMediaTools, Engines.Media.FfmpegMedia>();
+        services.AddSingleton<Core.Videos.VideoAssembler>();
         services.AddSingleton<Core.Videos.VideoPipeline>();
+        services.AddSingleton<Core.Videos.VideoRemaker>();
         services.AddSingleton<Core.Videos.VideoCostEstimator>();
         services.AddSingleton<Speech.Speech.SpeechModelInstaller>();
         services.AddSingleton(s => new Speech.Speech.SpeechWorkerClient(s.GetRequiredService<Core.Processes.IChildProcessGuard>(),
@@ -161,6 +163,7 @@ public static class DesktopServices
 
         // One set of model pickers per page that uses models (Generate concepts, Concept → video, Profile).
         services.AddTransient<StepPickerViewModel>();
+        services.AddTransient<VersionEditorViewModel>();
         services.AddSingleton<Dialogs.IApiKeyDialog, Dialogs.ApiKeyDialog>();
 
         services.AddSingleton<Dialogs.IConfirmDialog, Dialogs.ConfirmDialog>();

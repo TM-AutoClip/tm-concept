@@ -37,9 +37,13 @@ needed) and narrates it with a **free local voice**. It runs on Windows and Linu
   Revideo), the code model, the image model and the voice come from the profile (or the general setting).
   The model writes one code file; a safety check runs before anything is executed; a failed check or render gets one repair request.
   Videos are at most 3 minutes.
-- **Produced videos.** Thumbnail, a built-in player (play/pause, seek bar, time, volume, full screen; nothing starts by itself), details
-  (engine, models, cost per step, voice notes, the concept text), open in the system player, open the folder, produce again, delete the
-  record and, if you want, move the files to the recycle bin.
+- **Produced videos.** Thumbnail, a built-in player (play/pause, seek bar, time, volume, full screen; nothing starts by itself), the whole
+  narration scene by scene and the whole concept text, details (engine, models, cost per step, voice notes), open in the system player,
+  open the folder, produce again, delete a version and, if you want, move its files to the recycle bin.
+- **Versions.** Edit the narration of each scene (more sentences, pause and speed markers) and choose a voice: the voice is made again on
+  your computer and the same video code is rendered again — no AI cost (an online voice is paid). Or have new code written for another
+  engine (the estimate is shown and confirmed first); images, voice clips and texts are used again. Every new version is a folder of its
+  own (v2, v3…); the older ones stay.
 - **Notifications** in the bottom-right corner (concepts ready, video ready, error). One minute by default; change or turn them off in
   Settings. A notification also says what failed and what was spent; everything the app does is written to the log file.
 - **Encrypted.** The database (with your API keys) is encrypted with SQLite3 Multiple Ciphers. Its key is protected by Windows (DPAPI), the

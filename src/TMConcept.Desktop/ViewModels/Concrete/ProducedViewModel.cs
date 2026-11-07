@@ -18,22 +18,26 @@ using TMConcept.Desktop.Startup;
 namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
-/// 🎞 Produced videos: thumbnail (the first frame that is not black), title, date, length, cost and warning badges (a file deleted from
-/// outside shows "file missing"); the in-app player (a chosen video does not start by itself) with "open in the system player" beside it;
-/// details (the concept the video was made from, settings, cost per step, the AI voice note, files); open the folder; produce again (the
-/// concept goes back to the approved list of the video page; the new video is a new row); delete the record (the files can be moved to the
-/// recycle bin in the same step). A chosen video whose thumbnail file is missing gets it made again in the background (the same rule: the
-/// first frame that is not black), so the player and the list do not show a black area.
+/// 🎞 Produced videos: one row per video (its newest version): thumbnail (the first frame that is not black), title, date, length, cost and
+/// warning badges (a file deleted from outside shows "file missing"). The details show the versions of the video (v1, v2…; choose one to
+/// watch it, delete one); the in-app player (a chosen video does not start by itself) with "open in the system player" beside it; the
+/// whole narration scene by scene, the whole concept text, settings and cost per step; "New version" (a new voice for an edited narration
+/// rendered here with the same code, or new code for another engine: <see cref="VersionEditorViewModel"/>); open the folder; produce
+/// again (the concept goes back to the approved list of the video page; the new video is a new row); delete the version (the files can be
+/// moved to the recycle bin in the same step). A chosen version whose thumbnail file is missing gets it made again in the background (the
+/// same rule: the first frame that is not black), so the player and the list do not show a black area.
 /// </summary>
 public sealed partial class ProducedViewModel(AppSession session, IVideoStore videos, IConceptStore concepts, IAppPaths paths, ShellLauncher shell,
     IRecycleBin recycleBin, IConfirmDialog confirm, ConceptEvents events, IActivityLog activity, PlayerViewModel player, IMediaTools media, Localizer text,
-    Core.Runs.IRunStore runs, Core.Profiles.IProfileStore profiles, TimeProvider clock, ILogger<ProducedViewModel> logger) : PageViewModelBase
+    Core.Runs.IRunStore runs, Core.Profiles.IProfileStore profiles, TimeProvider clock, VersionEditorViewModel editor, ILogger<ProducedViewModel> logger)
+    : PageViewModelBase
 {
     /// <summary>This month's spending (concept runs and videos of every profile).</summary>
     [ObservableProperty]
     public partial string Spending { get; set; } = string.Empty;
 
     private readonly List<VideoRowViewModel> _all = [];
+    private Guid? _select;
     private readonly HashSet<Guid> _thumbnailing = [];
     private bool _attached;
 
@@ -46,8 +50,18 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
     /// <inheritdoc />
     public override int Order => 30;
 
-    /// <summary>Videos (filtered).</summary>
+    /// <summary>Videos (filtered): the newest version of each.</summary>
     public ObservableCollection<VideoRowViewModel> Items { get; } = [];
+
+    /// <summary>The versions of the selected video, oldest first.</summary>
+    public ObservableCollection<VideoRowViewModel> Versions { get; } = [];
+
+    /// <summary>The version shown (the player, the texts, the details, the start of a new version).</summary>
+    [ObservableProperty]
+    public partial VideoRowViewModel? SelectedVersion { get; set; }
+
+    /// <summary>"New version": a new voice or another engine for the shown version.</summary>
+    public VersionEditorViewModel Editor { get; } = editor;
 
     /// <summary>Search.</summary>
     [ObservableProperty]
@@ -94,6 +108,25 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
         if (!_attached)
         {
             _attached = true;
+            Editor.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(VersionEditorViewModel.Busy))
+                {
+                    Working = Editor.Busy;
+                }
+            };
+            Editor.Made += async (_, record) =>
+            {
+                try
+                {
+                    _select = record.Id;
+                    await ReloadAsync().ConfigureAwait(true);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogError(ex, "The video list could not be reloaded");
+                }
+            };
             events.Changed += async (_, _) =>
             {
                 try
@@ -113,11 +146,14 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
     /// <inheritdoc />
     public override Task ProfileChangedAsync() => ReloadAsync();
 
+    /// <inheritdoc />
+    public override void CancelWork() => Editor.Cancel();
+
     /// <summary>Opens the selected video in the system's player.</summary>
     [RelayCommand]
     public void Play()
     {
-        if (Selected is not { } row)
+        if ((SelectedVersion ?? Selected) is not { } row)
         {
             return;
         }
@@ -171,17 +207,17 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
     [RelayCommand]
     public void OpenFolder()
     {
-        if (Selected is { } row && Directory.Exists(row.Folder))
+        if ((SelectedVersion ?? Selected) is { } row && Directory.Exists(row.Folder))
         {
             Open(row.Folder);
         }
     }
 
-    /// <summary>Deletes the record (and, if ticked, moves the files to the recycle bin).</summary>
+    /// <summary>Deletes the shown version's record (and, if ticked, moves its files to the recycle bin); the other versions stay.</summary>
     [RelayCommand]
     public async Task DeleteAsync()
     {
-        if (Selected is not { } row)
+        if ((SelectedVersion ?? Selected) is not { } row)
         {
             return;
         }
@@ -197,10 +233,9 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
         {
             try
             {
-                // A version folder (v1/) that is alone in its concept's folder goes with that folder, so the recycle bin shows the title.
+                // A version folder (v1/, v2/…) that is alone in its concept's folder goes with that folder, so the recycle bin shows the title.
                 var parent = Path.GetDirectoryName(row.Folder);
-                var alone = parent is not null && Path.GetFileName(row.Folder) == Core.Videos.VideoFolders.FirstVersion
-                    && Directory.EnumerateFileSystemEntries(parent).Count() == 1;
+                var alone = parent is not null && row.Version is not null && Directory.EnumerateFileSystemEntries(parent).Count() == 1;
                 await recycleBin.MoveAsync(alone ? parent! : row.Folder, CancellationToken.None).ConfigureAwait(true);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or OperationCanceledException)
@@ -212,13 +247,16 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
             }
         }
 
-        if (ReferenceEquals(Selected, row))
+        if (ReferenceEquals(SelectedVersion, row) || ReferenceEquals(Selected, row))
         {
             // The player holds the file open on Windows: it is released before the folder moves.
             Player.Unload();
         }
 
         await videos.DeleteAsync(row.Video.Id, CancellationToken.None).ConfigureAwait(true);
+
+        // Another version of the same video stays shown (the newest that is left).
+        _select = Versions.LastOrDefault(v => !ReferenceEquals(v, row))?.Video.Id;
         var deleted = answer.Checked ? "produced.deleted_files" : "produced.deleted";
         activity.Add(ActivityLevel.Info, text.Format(deleted, row.Title), text.Format(deleted, ActivityPlaceholders.Title));
         await ReloadAsync().ConfigureAwait(true);
@@ -227,6 +265,20 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
     partial void OnSearchChanged(string value) => Filter();
 
     partial void OnSelectedChanged(VideoRowViewModel? value)
+    {
+        Versions.Clear();
+        if (value is not null)
+        {
+            foreach (var version in _all.Where(r => r.GroupKey == value.GroupKey).OrderBy(r => r.Version ?? 0))
+            {
+                Versions.Add(version);
+            }
+        }
+
+        SelectedVersion = value;
+    }
+
+    partial void OnSelectedVersionChanged(VideoRowViewModel? value)
     {
         Details = string.Empty;
         ConceptText = string.Empty;
@@ -242,6 +294,25 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
         Player.Load(value.File, value.Thumbnail, value.Video.Width, value.Video.Height, value.Video.Fps, value.Video.DurationMs);
         ThumbnailWork = ThumbnailAgainAsync(value);
         _ = DetailsAsync(value);
+        _ = EditorAsync(value);
+    }
+
+    /// <summary>The new-version editor starts from the shown version (not while it makes one).</summary>
+    private async Task EditorAsync(VideoRowViewModel? version)
+    {
+        if (Editor.Busy)
+        {
+            return;
+        }
+
+        try
+        {
+            await Editor.LoadAsync(version?.Video, session.Profile).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "The new-version editor could not be loaded");
+        }
     }
 
     /// <summary>
@@ -257,7 +328,7 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
 
         try
         {
-            var name = row.Video.ThumbnailName.Length > 0 ? row.Video.ThumbnailName : VideoPipeline.ThumbnailFile;
+            var name = row.Video.ThumbnailName.Length > 0 ? row.Video.ThumbnailName : VideoFolders.ThumbnailFile;
             var jpeg = Path.Combine(row.Folder, name);
             logger.LogInformation("A video's thumbnail is missing; making it again");
             var made = await Task.Run(() => media.ThumbnailAsync(row.File, jpeg, CancellationToken.None)).ConfigureAwait(true);
@@ -275,7 +346,7 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
             }
 
             row.RefreshThumbnail();
-            if (ReferenceEquals(Selected, row))
+            if (ReferenceEquals(SelectedVersion, row))
             {
                 Player.Poster = row.Thumbnail;
             }
@@ -329,7 +400,7 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
                 ? text["produced.prompt.gone"]
                 : text.Format("produced.prompt", concept.Title, concept.Summary, v.PromptVersion.Length > 0 ? v.PromptVersion : "1", concept.Content);
             var scenes = ScenesOf(row);
-            if (ReferenceEquals(Selected, row))
+            if (ReferenceEquals(SelectedVersion, row))
             {
                 Details = details.ToString();
                 ConceptText = prompt;
@@ -394,11 +465,15 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
         }
     }
 
-    /// <summary>Reloads the list; the selected video stays selected (a video finishing in the background reloads this page).</summary>
+    /// <summary>
+    /// Reloads the list; the selected video and version stay selected (a video finishing in the background reloads this page), a new
+    /// version just made is selected.
+    /// </summary>
     private async Task ReloadAsync()
     {
         Spending = await PriceInfo.SpendingAsync(runs, profiles, videos, clock, text, CancellationToken.None).ConfigureAwait(true);
-        var selected = Selected?.Video.Id;
+        var selected = _select ?? SelectedVersion?.Video.Id ?? Selected?.Video.Id;
+        _select = null;
         var profile = session.Profile;
         var list = profile is null ? [] : await videos.ListAsync(profile.Id, CancellationToken.None).ConfigureAwait(true);
         if (session.Profile?.Id != profile?.Id)
@@ -430,18 +505,32 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
             _all.Add(new VideoRowViewModel(video, folder, text));
         }
 
-        Badge = _all.Count == 0 ? string.Empty : _all.Count.ToString(CultureInfo.InvariantCulture);
+        var count = _all.Select(r => r.GroupKey).Distinct(StringComparer.Ordinal).Count();
+        Badge = count == 0 ? string.Empty : count.ToString(CultureInfo.InvariantCulture);
         Filter();
-        var again = Items.FirstOrDefault(r => r.Video.Id == selected);
+        var version = _all.FirstOrDefault(r => r.Video.Id == selected);
+        var again = version is null ? null : Items.FirstOrDefault(r => r.GroupKey == version.GroupKey);
         if (!ReferenceEquals(again, Selected))
         {
             Selected = again;
         }
+        else if (again is not null)
+        {
+            // The same video: its versions may have changed (one added or deleted).
+            OnSelectedChanged(again);
+        }
+
+        if (version is not null && Versions.Contains(version) && !ReferenceEquals(SelectedVersion, version))
+        {
+            SelectedVersion = version;
+        }
     }
 
+    /// <summary>The newest version of each video (the store lists newest first), filtered by the search.</summary>
     private void Filter()
     {
         var search = TurkishFold.Fold(Search);
-        CollectionSync.Apply(Items, _all.Where(r => search.Length == 0 || TurkishFold.Fold(r.Title).Contains(search, StringComparison.Ordinal)).ToList());
+        CollectionSync.Apply(Items, _all.GroupBy(r => r.GroupKey, StringComparer.Ordinal).Select(g => g.First())
+            .Where(r => search.Length == 0 || TurkishFold.Fold(r.Title).Contains(search, StringComparison.Ordinal)).ToList());
     }
 }

@@ -503,9 +503,11 @@ public sealed class VideoPageTests
 
         public TMConcept.Core.Render.RenderInput? Input { get; private set; }
 
-        public EngineKind Kind => EngineKind.HyperFrames;
+        public EngineKind Kind { get; init; } = EngineKind.HyperFrames;
 
-        public string Name => "Fake";
+        public string Name { get; init; } = "Fake";
+
+        public int Renders { get; private set; }
 
         public bool Experimental => false;
 
@@ -545,6 +547,7 @@ public sealed class VideoPageTests
                 throw new EngineException("TypeError: x is undefined") { Code = "render" };
             }
 
+            Renders++;
             File.WriteAllBytes(request.Output, new byte[2048]);
             progress?.Report(new EngineEvent(1, "done", Done: true));
             return Task.CompletedTask;
@@ -584,8 +587,11 @@ public sealed class VideoPageTests
 
         public Task InstallAsync(bool agreed, IProgress<ToolProgress>? progress, CancellationToken cancellationToken) => Task.CompletedTask;
 
+        public List<TMConcept.Core.Speech.SpeechRequest> Requests { get; } = [];
+
         public Task<TMConcept.Core.Speech.SpeechClip> SynthesizeAsync(TMConcept.Core.Speech.SpeechRequest request, CancellationToken cancellationToken)
         {
+            Requests.Add(request);
             TMConcept.Core.Speech.WaveFile.WritePcm16(request.OutputWav, new float[2400], 24_000);
             return Task.FromResult(new TMConcept.Core.Speech.SpeechClip(request.OutputWav, 100, request.Text.Length, 0, Code));
         }

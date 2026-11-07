@@ -494,29 +494,14 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
         (VideoWarnings.SamplesNone, "video.samples.none", ActivityLevel.Warning),
     ];
 
-    // The provider's code of an answer cut at its output limit.
-    private const string Truncated = "truncated";
-
-    /// <summary>
-    /// Why a video failed. A cut-off answer here is the video code (the image prompts fall back to the scene texts): the shared provider text
-    /// speaks of concepts kept before the cut, which means nothing for a video, so it has its own text with what was paid.
-    /// </summary>
-    private string Reason(string code, string detail, decimal spentUsd)
-    {
-        if (!code.StartsWith(VideoException.ProviderPrefix, StringComparison.Ordinal))
-        {
-            return text["video.error." + code] + " " + detail;
-        }
-
-        var provider = code[VideoException.ProviderPrefix.Length..];
-        return provider == Truncated ? text.Format("video.error.truncated", text.Usd(spentUsd)) : ProviderErrors.Text(text, provider);
-    }
+    /// <summary>Why a video failed (<see cref="VideoFailures"/>).</summary>
+    private string Reason(string code, string detail, decimal spentUsd) => VideoFailures.Reason(text, code, detail, spentUsd);
 
     /// <summary>The row's error: the last failure and what the failed tries of this item paid together ("spent because of the failure").</summary>
     private string FailureText(QueueItem item)
     {
         var reason = Reason(item.LastErrorCode, item.LastErrorDetail, item.FailedUsd);
-        return item.FailedUsd <= 0 || item.LastErrorCode == VideoException.ProviderPrefix + Truncated
+        return item.FailedUsd <= 0 || VideoFailures.IsTruncated(item.LastErrorCode)
             ? reason
             : reason + " " + text.Format("video.failed.spent", text.Usd(item.FailedUsd));
     }
