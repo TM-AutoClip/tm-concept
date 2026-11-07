@@ -70,6 +70,30 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
     [ObservableProperty]
     public partial bool Listening { get; set; }
 
+    /// <summary>
+    /// How many step cards stand side by side (1 = a column). The video page shows its three steps side by side so the whole area fits
+    /// without scrolling (two columns left the lists below too little room at 820 px).
+    /// </summary>
+    [ObservableProperty]
+    public partial int Columns { get; set; } = 1;
+
+    /// <summary>
+    /// Compact cards: the purpose of a step is the title's tooltip instead of a line under it, and a note shows at most
+    /// <see cref="CompactNoteLines"/> lines (the whole note is its tooltip).
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowPurpose), nameof(NoteLines))]
+    public partial bool Compact { get; set; }
+
+    /// <summary>Lines of a note on a compact card.</summary>
+    public const int CompactNoteLines = 3;
+
+    /// <summary>Whether the purpose line is shown under each title.</summary>
+    public bool ShowPurpose => !Compact;
+
+    /// <summary>Most lines of a note (0 = all).</summary>
+    public int NoteLines => Compact ? CompactNoteLines : 0;
+
     /// <summary>Shows the steps <paramref name="stepCodes"/> with the saved choices of <paramref name="profileId"/>, voices of <paramref name="language"/>.</summary>
     public async Task LoadAsync(Guid? profileId, string language, IReadOnlyList<string> stepCodes)
     {

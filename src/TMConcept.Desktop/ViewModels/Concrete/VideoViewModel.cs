@@ -49,8 +49,11 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
     /// <inheritdoc />
     public override int Order => 20;
 
-    /// <summary>The models of this page: video code + engine, images, narration (the profile's last choices).</summary>
-    public StepPickerViewModel Picker { get; } = picker;
+    /// <summary>
+    /// The models of this page: video code + engine, images, narration (the profile's last choices), as three compact cards side by side so
+    /// the settings area fits without scrolling.
+    /// </summary>
+    public StepPickerViewModel Picker { get; } = Layout(picker);
 
     /// <summary>Estimate of the queued videos with the chosen models.</summary>
     [ObservableProperty]
@@ -440,6 +443,13 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
             // The job's buffers (scene images, audio, model answers) are garbage now: give the memory back (small machines).
             Memory.MemoryRelease.Now(logger, "a video job");
         }
+    }
+
+    private static StepPickerViewModel Layout(StepPickerViewModel picker)
+    {
+        picker.Columns = 3;
+        picker.Compact = true;
+        return picker;
     }
 
     /// <summary>Where the scene images come from for a saved images choice: a model, the sample images, or none.</summary>

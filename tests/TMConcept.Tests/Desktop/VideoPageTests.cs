@@ -96,6 +96,27 @@ public sealed class VideoPageTests
     }
 
     [AvaloniaFact]
+    public async Task TheModelsAndSettingsFitWithoutScrolling()
+    {
+        var engine = new FakeEngine();
+        using var h = Harness(new FakeChat(), engine);
+        var (page, _) = await PrepareAsync(h);
+        var view = new TMConcept.Desktop.Views.VideoView { DataContext = page };
+        var window = new Avalonia.Controls.Window { Content = view, Width = 1040, Height = 820 };
+        window.Show();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        // The three steps stand side by side as compact cards (purpose as a tooltip, notes cut to three lines), inside the folding area
+        // with no scroll bar of its own (0.1.6 scrolled a 420 px box).
+        page.Picker.Columns.ShouldBe(3);
+        page.Picker.Compact.ShouldBeTrue();
+        var expander = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(view).OfType<Avalonia.Controls.Expander>().Single();
+        expander.IsExpanded.ShouldBeTrue("it still folds");
+        Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(expander).OfType<Avalonia.Controls.ScrollViewer>().ShouldBeEmpty();
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public async Task AVoicedVideoKeepsItsSceneClipsAndTheNarrationText()
     {
         var engine = new FakeEngine();

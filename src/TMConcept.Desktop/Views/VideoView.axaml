@@ -5,25 +5,10 @@
              x:Class="TMConcept.Desktop.Views.VideoView"
              x:DataType="vm:VideoViewModel">
   <DockPanel Margin="16">
+    <!-- The models fit without scrolling: three compact step cards in two columns (two rows); the estimate and the per-item setting
+         stand above the queue they are about. -->
     <Expander DockPanel.Dock="Top" Header="{DynamicResource video.settings}" IsExpanded="True" HorizontalAlignment="Stretch" Margin="0,0,0,12">
-      <Grid ColumnDefinitions="*,16,320">
-        <ScrollViewer MaxHeight="420">
-          <views:StepPickerView DataContext="{Binding Picker}" />
-        </ScrollViewer>
-        <StackPanel Grid.Column="2" Spacing="8">
-          <Border Classes="card">
-            <StackPanel Spacing="4">
-              <TextBlock Text="{DynamicResource concepts.estimate.title}" FontWeight="SemiBold" />
-              <TextBlock Text="{Binding Estimate}" TextWrapping="Wrap" />
-              <TextBlock Text="{Binding LastCost}" Classes="ok" TextWrapping="Wrap" />
-              <TextBlock Text="{Binding PricedOn}" Classes="small" TextWrapping="Wrap" />
-            </StackPanel>
-          </Border>
-          <TextBlock Text="{DynamicResource video.item_settings}" FontWeight="SemiBold" />
-          <CheckBox IsChecked="{Binding Subtitles}" Content="{DynamicResource video.subtitles}" />
-          <TextBlock Text="{Binding Status}" Classes="error" TextWrapping="Wrap" />
-        </StackPanel>
-      </Grid>
+      <views:StepPickerView DataContext="{Binding Picker}" />
     </Expander>
     <Grid ColumnDefinitions="*,16,*,16,*">
       <DockPanel>
@@ -43,12 +28,22 @@
       <DockPanel Grid.Column="2">
         <StackPanel DockPanel.Dock="Top" Spacing="6">
           <TextBlock Text="{DynamicResource video.queue}" Classes="h2" />
+          <Border Classes="card">
+            <StackPanel Spacing="2">
+              <TextBlock Text="{Binding Estimate}" TextWrapping="Wrap" ToolTip.Tip="{DynamicResource concepts.estimate.title}" />
+              <TextBlock Text="{Binding LastCost}" Classes="ok" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding PricedOn}" Classes="small" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+          <CheckBox IsChecked="{Binding Subtitles}" Content="{DynamicResource video.subtitles}" ToolTip.Tip="{DynamicResource video.item_settings}" />
           <StackPanel Orientation="Horizontal" Spacing="8">
             <Button Classes="accent" Content="{DynamicResource video.produce}" Command="{Binding ProduceAllCommand}" IsEnabled="{Binding Idle}" />
             <Button Content="{DynamicResource common.cancel}" Command="{Binding CancelCommand}" IsVisible="{Binding Busy}" />
           </StackPanel>
+          <TextBlock Text="{Binding Status}" Classes="error" TextWrapping="Wrap" />
         </StackPanel>
-        <ItemsControl ItemsSource="{Binding Queue}" Margin="0,8,0,0">
+        <ScrollViewer Margin="0,8,0,0">
+        <ItemsControl ItemsSource="{Binding Queue}">
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:QueueRowViewModel">
               <Border Classes="card" Margin="0,4" Padding="10">
@@ -71,6 +66,7 @@
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
+        </ScrollViewer>
       </DockPanel>
       <DockPanel Grid.Column="4">
         <TextBlock DockPanel.Dock="Top" Text="{DynamicResource video.produced}" Classes="h2" />
