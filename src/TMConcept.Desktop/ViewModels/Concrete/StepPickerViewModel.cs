@@ -121,6 +121,13 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
             row.Engine = row.Engines.FirstOrDefault(e => e.Kind == options.Engine) ?? row.Engines.FirstOrDefault();
             row.Speed = (decimal)Math.Clamp(options.Speed, ProfileLimits.SpeedMin, ProfileLimits.SpeedMax);
             FillVoices(row, options.Voice);
+            if (!stale && row.IsVoiceStep && options.Voice.Length > 0 && row.Selected?.Model is not null && row.Voice is { } shown && shown.Value != options.Voice)
+            {
+                // The saved voice is not offered any more (a removed own voice): the first voice is shown, said and saved at the next prepare.
+                logger.LogWarning("The saved voice of the narration is not offered any more; the first voice of the model is shown");
+                row.Fallback = text.Format("speech.fallback.voice", shown.Label);
+                stale = true;
+            }
 
             // A saved model that is not offered any more (catalog, or a voice that does not speak the profile's language now) shows "none":
             // the row is not counted as saved, so the next prepare writes what the page shows and a process never uses the hidden choice.
@@ -367,7 +374,11 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
     private StepModelRowViewModel Row(PipelineStep step)
     {
         // Only what this page offers: a voice that does not speak the profile's language is not recommended either.
-        var recommended = step.Recommended
+        // The default voice of the profile's language is suggested first.
+        var suggested = step.Code == PipelineSteps.Speech
+            ? step.Recommended.OrderBy(r => r == SpeechDefaults.ModelFor(_language) ? 0 : 1).ToList()
+            : step.Recommended;
+        var recommended = suggested
             .Select(r => (Code: r, Model: catalog.All.FirstOrDefault(m => m.Provider + "/" + m.Id == r)))
             .Where(r => r.Model is null || Usable(step, r.Model))
             .Select(r => r.Model?.Name ?? r.Code);
@@ -409,8 +420,19 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
             return found;
         }
 
-        logger.LogWarning("The saved model of the step {Step} is not offered any more (catalog or content language); the step shows no model", row.Step.Code);
         stale = true;
+        if (row.IsVoiceStep && row.Options.FirstOrDefault(o => o.Model is { } m && m.Provider + "/" + m.Id == SpeechDefaults.ModelFor(_language)) is { } fallback)
+        {
+            // A voice that does not speak the profile's language (the language was changed): the language's default voice instead, said on
+            // the step and saved at the next prepare, so a process never uses the old choice.
+            var old = catalog.All.FirstOrDefault(m => m.Provider == choice!.Provider && m.Id == choice.Model)?.Name ?? choice!.Model;
+            logger.LogWarning("The saved voice {Provider}/{Model} does not speak {Language}; the default voice {Default} is shown", choice!.Provider, choice.Model,
+                _language, fallback.Model!.Id);
+            row.Fallback = text.Format("speech.fallback.language", old, OutputLanguages.NameIn(_language, text.Language), fallback.Model.Name);
+            return fallback;
+        }
+
+        logger.LogWarning("The saved model of the step {Step} is not offered any more (catalog or content language); the step shows no model", row.Step.Code);
         return row.Options[0];
     }
 
@@ -452,13 +474,19 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
     private async void OnRowChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (sender is not StepModelRowViewModel row || e.PropertyName is not (nameof(StepModelRowViewModel.Selected) or nameof(StepModelRowViewModel.Engine)
-            or nameof(StepModelRowViewModel.Effort)))
+            or nameof(StepModelRowViewModel.Effort) or nameof(StepModelRowViewModel.Voice)))
         {
             return;
         }
 
         try
         {
+            if (e.PropertyName is nameof(StepModelRowViewModel.Selected) or nameof(StepModelRowViewModel.Voice) && row.Fallback.Length > 0)
+            {
+                // The user chose: the note about the replaced choice is not true any more.
+                row.Fallback = string.Empty;
+            }
+
             if (e.PropertyName == nameof(StepModelRowViewModel.Selected))
             {
                 FillVoices(row, row.Voice?.Value ?? string.Empty);
@@ -533,6 +561,12 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
         if (install)
         {
             parts.Add(text["models.installs_on_start"]);
+        }
+
+        if (row.Fallback.Length > 0)
+        {
+            parts.Insert(0, row.Fallback);
+            row.NoteIsWarning = true;
         }
 
         row.Note = string.Join(" ", parts);

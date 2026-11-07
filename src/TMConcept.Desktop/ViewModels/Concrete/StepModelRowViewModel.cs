@@ -81,6 +81,12 @@ public sealed partial class StepModelRowViewModel(PipelineStep step, string titl
     [ObservableProperty]
     public partial bool NoteIsWarning { get; set; }
 
+    /// <summary>
+    /// Why the saved choice was replaced when the page was shown (a voice that does not speak the profile's language, a voice that is gone);
+    /// shown first in the note until the user picks something.
+    /// </summary>
+    public string Fallback { get; set; } = string.Empty;
+
     /// <summary>The value last loaded or saved (only a changed step is saved and logged).</summary>
     public string Saved { get; set; } = string.Empty;
 

@@ -547,5 +547,7 @@
   "voices.words.long": "Kelime ve okunuşu en çok 60 karakter olabilir.",
   "voices.words.added": "Kaydedildi: {0}",
   "voices.words.removed": "Silindi: {0}",
-  "voices.words.none": "Bu dilde hazır kelime yok; kendi kelimelerini ekleyebilirsin."
+  "voices.words.none": "Bu dilde hazır kelime yok; kendi kelimelerini ekleyebilirsin.",
+  "speech.fallback.language": "Kayıtlı ses ({0}) {1} konuşmuyor; bu dilin varsayılan sesi seçildi: {2}.",
+  "speech.fallback.voice": "Kayıtlı ses artık yok; {0} seçildi."
 }

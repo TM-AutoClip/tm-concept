@@ -547,5 +547,7 @@
   "voices.words.long": "The word and its reading can have at most 60 characters.",
   "voices.words.added": "Saved: {0}",
   "voices.words.removed": "Removed: {0}",
-  "voices.words.none": "This language has no built-in words; you can add your own."
+  "voices.words.none": "This language has no built-in words; you can add your own.",
+  "speech.fallback.language": "The saved voice ({0}) does not speak {1}; the language's default voice is chosen: {2}.",
+  "speech.fallback.voice": "The saved voice is gone; {0} is chosen."
 }

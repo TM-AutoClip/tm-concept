@@ -132,9 +132,10 @@ adım ne işe yaradığını yazar:
   **FLUX.2 klein 4B** (hızlı) ya da **Z-Image Turbo** (daha iyi görsel); ikisi de en az 6 GB ekran kartı belleği ister (ölçüldükleri kart). Kartın küçük görünürse
   sayfa uyarır; Windows'ta NVIDIA kart (CUDA), Linux x64'te Vulkan sürücüsü ister; Linux ARM64 için yok.
 - **Görseller** profilin kendi örnek görsellerini de kullanabilir (ücretsiz).
-- **Seslendirme** — *Kapalı* (sessiz video, sarı uyarı), **Supertonic 3** (yerel, ücretsiz; Türkçe ve İngilizce), **Kokoro 82M** (yerel,
-  ücretsiz; yalnız İngilizce, Amerikan ve İngiliz sesleri; sözlüklü bir ses: bilmediği adları ve kelimeleri seste atlar, uyarı verir) ya da
-  bir online ses. Ses, hız ve ▶ Dinle adımın içinde.
+- **Seslendirme** — *Kapalı* (sessiz video, sarı uyarı), **Supertonic 3** (yerel, ücretsiz; bütün video dilleri; İngilizce
+  dışındaki her dilin varsayılan sesi), **Kokoro 82M** (yerel, ücretsiz; İngilizcenin varsayılanı; yalnız İngilizce, Amerikan ve İngiliz sesleri; sözlüklü bir ses: bilmediği adları ve kelimeleri seste atlar, uyarı verir) ya da
+  bir online ses. Yalnız profilin video dilini konuşan sesler listelenir; dil değişince yeni dili konuşmayan ses, adımda bir uyarıyla o
+  dilin varsayılan sesine döner. Ses, hız ve ▶ Dinle (video dilinde kısa bir cümle) adımın içinde.
 - **Telaffuz** — Ayarlar → Ses ve telaffuz: her video dili için sesin farklı okuması gereken kelimeler (Türkçede "Viking" → "Vikink";
   Türkçe küçük bir hazır listeyle gelir, kendi kelimelerini eklersin). Yalnız ses değişir; altyazı yazıldığı gibi kalır.
 - **Anlamca tekrar denetimi** — isteğe bağlı: yerel **Multilingual MiniLM** (ücretsiz, bu bilgisayarda, Türkçe dahil 50'den fazla dil) ya

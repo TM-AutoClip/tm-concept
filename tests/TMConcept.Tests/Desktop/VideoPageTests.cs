@@ -371,7 +371,7 @@ public sealed class VideoPageTests
     }
 
     [AvaloniaFact]
-    public async Task AVoiceHiddenAfterTheLanguageChangedIsTurnedOffAndNeverUsed()
+    public async Task AVoiceHiddenAfterTheLanguageChangedFallsBackToTheLanguagesDefaultVoice()
     {
         var engine = new FakeEngine();
         using var h = Harness(new FakeChat().Answer(_ => Code(engine.SampleCode)), engine);
@@ -386,14 +386,13 @@ public sealed class VideoPageTests
         await h.Get<IProfileStore>().SaveAsync(profile, CancellationToken.None);
         await h.Get<AppSession>().SelectProfileAsync(profile, CancellationToken.None);
         await page.ActivateAsync();
-        page.Picker.Model(PipelineSteps.Speech).ShouldBeNull("the page shows narration off");
 
-        await page.ProduceAllAsync();
-
-        StepModelResolver.IsOff(await store.GetAsync(PipelineSteps.Speech, concept.ProfileId, CancellationToken.None)).ShouldBeTrue("what the page showed is saved");
-        var video = (await h.Get<IVideoStore>().ListAsync(concept.ProfileId, CancellationToken.None)).Single();
-        video.Warnings.ShouldContain(VideoWarnings.SpeechOff);
-        video.Warnings.ShouldNotContain(VideoWarnings.SpeechFailed);
+        // The page shows the Turkish default voice with a warning (0.1.6 turned narration off); the old voice is never what a video uses.
+        page.Picker.Model(PipelineSteps.Speech)!.Id.ShouldBe("supertonic");
+        page.Picker.Choice(PipelineSteps.Speech)!.Model.ShouldBe("supertonic");
+        var row = page.Picker.Row(PipelineSteps.Speech)!;
+        row.NoteIsWarning.ShouldBeTrue();
+        row.Note.ShouldContain("Kokoro");
     }
 
     [AvaloniaFact]

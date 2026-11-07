@@ -134,9 +134,12 @@ the model that describes a sample image. Each step says what it is for:
   **FLUX.2 klein 4B** (fast) or **Z-Image Turbo** (better pictures), both with at least 6 GB of graphics memory (the card they were measured on). The page warns when
   your card looks too small; on Windows they need an NVIDIA card (CUDA), on Linux x64 a Vulkan driver; there is none for Linux ARM64.
 - **Images** can also use the profile's own sample images (free).
-- **Narration** — *Off* (silent video, yellow warning), **Supertonic 3** (local, free; Turkish and English), **Kokoro 82M** (local, free;
+- **Narration** — *Off* (silent video, yellow warning), **Supertonic 3** (local, free; every video language; the default
+  voice of every language but English), **Kokoro 82M** (local, free; the default for English;
   English only, American and British voices; a dictionary voice: names and words it does not know are left out of the audio, with a
-  warning), or an online voice. Voice, speed and ▶ Listen are in the step.
+  warning), or an online voice. Only voices that speak the profile's video language are listed; when the language changes, a voice that
+  does not speak the new one is replaced by the language's default voice, with a warning on the step. Voice, speed and ▶ Listen (a
+  short sentence in the video language) are in the step.
 - **Pronunciation** — Settings → Voice and pronunciation: per video language, words the voice should read differently ("Viking" →
   "Vikink" in Turkish; Turkish comes with a small list, you add your own). Only the voice changes; subtitles keep the written word.
 - **Duplicate check by meaning** — optional: the local **Multilingual MiniLM** (free, on this computer, 50+ languages including Turkish)
