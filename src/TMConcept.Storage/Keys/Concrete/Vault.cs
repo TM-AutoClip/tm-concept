@@ -84,8 +84,8 @@ public sealed class Vault(IAppPaths paths, DatabaseKey key, IEnumerable<IKeyProt
         try
         {
             await using var db = await new ConceptDatabase(paths, key).OpenAsync(cancellationToken).ConfigureAwait(false);
+            // Reading the schema state (tables, settings row, pragmas) is the check that the key opens the file.
             await ConceptDatabase.EnsureSchemaAsync(db, cancellationToken).ConfigureAwait(false);
-            await SettingTable.Instance.CountAsync(db, string.Empty, cancellationToken).ConfigureAwait(false);
         }
         catch
         {

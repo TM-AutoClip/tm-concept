@@ -17,6 +17,10 @@
     <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
   </ItemGroup>
   <ItemGroup>
+    <!-- Database files written by the released versions (Storage/OldFiles.cs). -->
+    <None Update="Storage\Files\*.db" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\..\src\TMConcept.Core\TMConcept.Core.csproj" />
     <ProjectReference Include="..\..\src\TMConcept.Providers\TMConcept.Providers.csproj" />
     <ProjectReference Include="..\..\src\TMConcept.Engines\TMConcept.Engines.csproj" />

@@ -1,4 +1,5 @@
 using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
@@ -117,8 +118,9 @@ public sealed class BackupTests
 
         // Opened like an attacker with the password would: the sealed copy has no stored key and no API key.
         var inspect = await OpenCopyAsync(file, source.Paths.DataDirectory);
-        (await StorageHarness.CountAsync(inspect, "settings", "\"Key\" IN ('backup-key', 'backup-last')")).ShouldBe(0);
-        (await StorageHarness.CountAsync(inspect, "api_keys")).ShouldBe(0);
+        string[] stored = ["backup-key", "backup-last"];
+        (await StorageHarness.QueryAsync(inspect, db => db.Settings.CountAsync(s => stored.Contains(s.Key)))).ShouldBe(0);
+        (await StorageHarness.QueryAsync(inspect, db => db.ApiKeys.CountAsync())).ShouldBe(0);
 
         SqliteConnection.ClearAllPools();
         using var target = new StorageHarness();
@@ -334,12 +336,7 @@ public sealed class BackupTests
     {
         var (source, file) = await BackupAsync();
         using var _ = source;
-        await using (var db = await source.Database.OpenAsync(None))
-        {
-            await using var command = db.CreateCommand();
-            command.CommandText = "PRAGMA user_version = " + (TMConcept.Storage.Database.ConceptSchema.Version + 1).ToString(System.Globalization.CultureInfo.InvariantCulture) + ";";
-            await command.ExecuteNonQueryAsync(None);
-        }
+        await SchemaVersionAsync(source, TMConcept.Storage.Database.ConceptSchema.Version + 1);
 
         var newer = Path.Combine(source.Paths.DataDirectory, "newer" + BackupRules.Extension);
         await Service(source).CreateAsync(newer, BackupContents.Automatic, None);
@@ -349,17 +346,17 @@ public sealed class BackupTests
         target.Vault.State.ShouldBe(VaultState.NotCreated);
         File.Exists(target.Paths.DatabaseFile).ShouldBeFalse();
 
-        await using (var db = await source.Database.OpenAsync(None))
-        {
-            await using var command = db.CreateCommand();
-            command.CommandText = "PRAGMA user_version = " + TMConcept.Storage.Database.ConceptSchema.Version.ToString(System.Globalization.CultureInfo.InvariantCulture) + ";";
-            await command.ExecuteNonQueryAsync(None);
-        }
+        await SchemaVersionAsync(source, TMConcept.Storage.Database.ConceptSchema.Version);
 
         var current = Path.Combine(source.Paths.DataDirectory, "current" + BackupRules.Extension);
         await Service(source).CreateAsync(current, BackupContents.Automatic, None);
         (await Service(target).RestoreAsync(current, Password, target.Protector, None)).Profiles.ShouldBe(1);
     }
+
+    /// <summary>Sets the schema version row of a harness's database (what a newer version would write).</summary>
+    private static Task<int> SchemaVersionAsync(StorageHarness h, int version) => h.QueryAsync(db =>
+        db.Settings.Where(s => s.Key == TMConcept.Storage.Database.ConceptSchema.VersionSetting)
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.Value, version.ToString(System.Globalization.CultureInfo.InvariantCulture))));
 
     [Fact]
     public async Task ShortPasswordIsRejected()

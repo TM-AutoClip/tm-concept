@@ -28,17 +28,19 @@ internal sealed class StorageHarness : IDisposable
 
     public ConceptDatabase Database { get; }
 
-    /// <summary>Rows in a table of a database file (plain SQL, as a reader of the file would see them).</summary>
-    public static async Task<long> CountAsync(string connectionString, string table, string where = "")
+    /// <summary>This harness's database file.</summary>
+    public string ConnectionString => ConceptDatabase.ConnectionString(Paths.DatabaseFile, Key.Passphrase());
+
+    /// <summary>Runs <paramref name="query"/> on a database file (through EF Core, as the app reads it).</summary>
+    public static async Task<T> QueryAsync<T>(string connectionString, Func<ConceptDbContext, Task<T>> query)
     {
+        ArgumentNullException.ThrowIfNull(query);
         await using var db = await ConceptDatabase.OpenAsync(connectionString, CancellationToken.None);
-        await using var command = db.CreateCommand();
-        command.CommandText = $"SELECT COUNT(*) FROM \"{table}\"" + (where.Length > 0 ? " WHERE " + where : string.Empty);
-        return (long)(await command.ExecuteScalarAsync(CancellationToken.None))!;
+        return await query(db);
     }
 
-    /// <summary>Rows in a table of this harness's database.</summary>
-    public Task<long> CountAsync(string table, string where = "") => CountAsync(ConceptDatabase.ConnectionString(Paths.DatabaseFile, Key.Passphrase()), table, where);
+    /// <summary>Runs <paramref name="query"/> on this harness's database.</summary>
+    public Task<T> QueryAsync<T>(Func<ConceptDbContext, Task<T>> query) => QueryAsync(ConnectionString, query);
 
     public static async Task<StorageHarness> CreatedAsync()
     {

@@ -1,4 +1,4 @@
-using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using TMConcept.Core.Concepts;
 using TMConcept.Core.Duplicates;
 using TMConcept.Storage.Database;
@@ -14,35 +14,43 @@ public sealed class ConceptStore(ConceptDatabase database) : IConceptStore
     {
         ArgumentNullException.ThrowIfNull(statuses);
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        var (clause, parameters) = Sql.In("Status", statuses.Select(s => (object?)(int)s));
+        var query = db.Concepts.Where(c => c.ProfileId == profileId && statuses.Contains(c.Status)).OrderByDescending(c => c.Number);
 
         // Without content the long text is not even read (lists show title and summary).
-        var select = withContent ? ConceptTable.Instance.Select : ConceptTable.Instance.SelectWithoutContent;
-        return await ConceptTable.Instance.QueryAsync(db, select + $" WHERE \"ProfileId\" = $profile AND {clause} ORDER BY \"Number\" DESC",
-            cancellationToken, null, [("$profile", Sql.Id(profileId)), .. parameters]).ConfigureAwait(false);
+        return withContent
+            ? await query.ToListAsync(cancellationToken).ConfigureAwait(false)
+            : await query.Select(c => new Concept
+            {
+                Id = c.Id,
+                ProfileId = c.ProfileId,
+                Number = c.Number,
+                Status = c.Status,
+                Title = c.Title,
+                Summary = c.Summary,
+                Content = string.Empty,
+                Language = c.Language,
+                RunId = c.RunId,
+                SimilarToId = c.SimilarToId,
+                Similarity = c.Similarity,
+                DuplicateNote = c.DuplicateNote,
+                CreatedAtUtc = c.CreatedAtUtc,
+                DecidedAtUtc = c.DecidedAtUtc,
+            }).ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task<Concept?> GetAsync(Guid id, CancellationToken cancellationToken)
     {
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        return await ConceptTable.Instance.FirstAsync(db, "\"Id\" = $id", cancellationToken, null, ("$id", Sql.Id(id))).ConfigureAwait(false);
+        return await db.Concepts.FirstOrDefaultAsync(c => c.Id == id, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<DuplicateSubject>> HistoryAsync(Guid profileId, CancellationToken cancellationToken)
     {
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        await using var command = Sql.Command(db, "SELECT \"Id\", \"Number\", \"Title\", \"Summary\" FROM \"concepts\" WHERE \"ProfileId\" = $profile ORDER BY \"Number\"",
-            null, ("$profile", Sql.Id(profileId)));
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-        var list = new List<DuplicateSubject>();
-        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            list.Add(new DuplicateSubject(Sql.ReadId(reader, 0), reader.GetInt32(1), reader.GetString(2), reader.GetString(3)));
-        }
-
-        return list;
+        return await db.Concepts.Where(c => c.ProfileId == profileId).OrderBy(c => c.Number)
+            .Select(c => new DuplicateSubject(c.Id, c.Number, c.Title, c.Summary)).ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -55,22 +63,23 @@ public sealed class ConceptStore(ConceptDatabase database) : IConceptStore
         }
 
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        await using var transaction = (SqliteTransaction)await db.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         foreach (var group in concepts.GroupBy(c => c.ProfileId))
         {
-            var profile = ("$profile", (object?)Sql.Id(group.Key));
-            var counter = await Sql.ScalarAsync(db, "SELECT \"ConceptCounter\" FROM \"profiles\" WHERE \"Id\" = $profile", cancellationToken, transaction, profile)
+            var profileId = group.Key;
+            var counter = await db.Profiles.Where(p => p.Id == profileId).Select(p => (int?)p.ConceptCounter).FirstOrDefaultAsync(cancellationToken)
                 .ConfigureAwait(false) ?? throw new InvalidOperationException("The profile of the concepts does not exist.");
             foreach (var concept in group)
             {
                 counter++;
-                concept.Number = (int)counter;
+                concept.Number = counter;
                 concept.Content = concept.Content.Replace("\0", string.Empty, StringComparison.Ordinal);
-                await ConceptTable.Instance.InsertAsync(db, concept, cancellationToken, transaction).ConfigureAwait(false);
+                db.Concepts.Add(concept);
             }
 
-            await Sql.ExecuteAsync(db, "UPDATE \"profiles\" SET \"ConceptCounter\" = $counter WHERE \"Id\" = $profile", cancellationToken, transaction,
-                ("$counter", counter), profile).ConfigureAwait(false);
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await db.Profiles.Where(p => p.Id == profileId).ExecuteUpdateAsync(s => s.SetProperty(p => p.ConceptCounter, counter), cancellationToken)
+                .ConfigureAwait(false);
         }
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -81,14 +90,21 @@ public sealed class ConceptStore(ConceptDatabase database) : IConceptStore
     {
         ArgumentNullException.ThrowIfNull(ids);
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        var (clause, parameters) = Sql.In("Id", ids.Select(i => (object?)Sql.Id(i)));
+        DateTimeOffset? now = DateTimeOffset.UtcNow;
 
         // Approved or trashed: decided now; back to new: undecided; any other status keeps its decision time.
-        var decided = status is ConceptStatus.Approved or ConceptStatus.Trashed ? ", \"DecidedAtUtc\" = $now"
-            : status == ConceptStatus.New ? ", \"DecidedAtUtc\" = NULL"
-            : string.Empty;
-        await Sql.ExecuteAsync(db, $"UPDATE \"concepts\" SET \"Status\" = $status{decided} WHERE {clause}", cancellationToken, null,
-            [("$status", (int)status), ("$now", Sql.Ticks(DateTimeOffset.UtcNow)), .. parameters]).ConfigureAwait(false);
+        await db.Concepts.Where(c => ids.Contains(c.Id)).ExecuteUpdateAsync(s =>
+        {
+            s.SetProperty(c => c.Status, status);
+            if (status is ConceptStatus.Approved or ConceptStatus.Trashed)
+            {
+                s.SetProperty(c => c.DecidedAtUtc, now);
+            }
+            else if (status == ConceptStatus.New)
+            {
+                s.SetProperty(c => c.DecidedAtUtc, (DateTimeOffset?)null);
+            }
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -96,23 +112,17 @@ public sealed class ConceptStore(ConceptDatabase database) : IConceptStore
     {
         ArgumentNullException.ThrowIfNull(ids);
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        var (clause, parameters) = Sql.In("Id", ids.Select(i => (object?)Sql.Id(i)));
-        var deleted = await ConceptTable.Instance.DeleteAsync(db, $"{clause} AND \"Status\" = $trashed", cancellationToken, null,
-            [("$trashed", (int)ConceptStatus.Trashed), .. parameters]).ConfigureAwait(false);
-        if (deleted > 0)
-        {
-            // Compact the file so freed pages do not linger (secure_delete already zeroed them).
-            await Sql.ExecuteAsync(db, "VACUUM;", cancellationToken).ConfigureAwait(false);
-        }
 
-        return deleted;
+        // Secure delete (SQLite3 Multiple Ciphers is built with it; checked whenever a file comes in) overwrites the deleted rows and the
+        // pages they free with zeros (DeletedDataTests). The file is not compacted: VACUUM is SQL with no EF Core counterpart (open decision,
+        // release notes 0.1.7).
+        return await db.Concepts.Where(c => ids.Contains(c.Id) && c.Status == ConceptStatus.Trashed).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task<int> CountAsync(Guid profileId, ConceptStatus status, CancellationToken cancellationToken)
     {
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        return await ConceptTable.Instance.CountAsync(db, "\"ProfileId\" = $profile AND \"Status\" = $status", cancellationToken,
-            ("$profile", Sql.Id(profileId)), ("$status", (int)status)).ConfigureAwait(false);
+        return await db.Concepts.CountAsync(c => c.ProfileId == profileId && c.Status == status, cancellationToken).ConfigureAwait(false);
     }
 }

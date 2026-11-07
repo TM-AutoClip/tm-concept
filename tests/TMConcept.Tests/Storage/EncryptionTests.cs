@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Shouldly;
 using TMConcept.Core.Profiles;
 using TMConcept.Storage.Crypto;
@@ -23,8 +24,8 @@ public sealed class EncryptionTests
         Encoding.UTF8.GetString(bytes).ShouldNotContain("secret-name-123");
         Encoding.UTF8.GetString(bytes).ShouldNotContain("profiles");
 
-        await Should.ThrowAsync<SqliteException>(() => StorageHarness.CountAsync(
-            ConceptDatabase.ConnectionString(h.Paths.DatabaseFile, Convert.ToHexString(new byte[32])), "profiles"));
+        await Should.ThrowAsync<SqliteException>(() => StorageHarness.QueryAsync(
+            ConceptDatabase.ConnectionString(h.Paths.DatabaseFile, Convert.ToHexString(new byte[32])), db => db.Profiles.CountAsync()));
     }
 
     [Fact]

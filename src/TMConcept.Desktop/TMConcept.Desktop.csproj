@@ -23,6 +23,34 @@
     <!-- Native AOT is ready to try (dotnet publish -r win-x64 -p:NativeAotTrial=true); not the release yet, see docs/release-notes/v0.1.3.md. -->
     <PublishAot Condition="'$(NativeAotTrial)' == 'true'">true</PublishAot>
   </PropertyGroup>
+  <!--
+    EF Core (0.1.7: the storage is EF Core again; hand-written SQL is not allowed) is not trimming safe: it builds the model, its queries and
+    their materializers by reflection over the entity types. Its assemblies and TMConcept.Storage (whose model building and LINQ queries are
+    the reflection EF Core reads) are therefore published whole ("copy": nothing in them is trimmed, so nothing EF Core reaches is missing);
+    every other assembly is still trimmed. Core, whose entity classes EF Core reflects on, is kept whole too.
+  -->
+  <PropertyGroup>
+    <WholeAssembliesWhenTrimmed>;Microsoft.EntityFrameworkCore;Microsoft.EntityFrameworkCore.Abstractions;Microsoft.EntityFrameworkCore.Relational;Microsoft.EntityFrameworkCore.Sqlite;TMConcept.Storage;TMConcept.Core;</WholeAssembliesWhenTrimmed>
+  </PropertyGroup>
+  <ItemGroup>
+    <!--
+      The trim analysis warnings of exactly those assemblies (EF Core's own reflection, about 1,350 of them), suppressed with the reason in the
+      file; a warning in any other assembly is still an error. _ILLinkSuppressions is the trimmer targets' item for link-attribute files.
+    -->
+    <_ILLinkSuppressions Include="$(MSBuildThisFileDirectory)ILLink.EntityFrameworkCore.xml" />
+  </ItemGroup>
+  <Target Name="KeepEntityFrameworkWhole" BeforeTargets="PrepareForILLink">
+    <ItemGroup>
+      <ManagedAssemblyToLink Condition="$(WholeAssembliesWhenTrimmed.Contains(';%(Filename);'))">
+        <TrimMode>copy</TrimMode>
+      </ManagedAssemblyToLink>
+      <_WholeAssembly Include="@(ManagedAssemblyToLink)" Condition="'%(ManagedAssemblyToLink.TrimMode)' == 'copy'" />
+      <_WholeAssemblyName Include="$(WholeAssembliesWhenTrimmed)" />
+    </ItemGroup>
+    <!-- A renamed or dropped assembly must not silently fall back to being trimmed. -->
+    <Error Condition="'@(_WholeAssembly->Count())' != '@(_WholeAssemblyName->Count())'"
+           Text="Not every assembly to keep whole was found among the trimmed assemblies (found: @(_WholeAssembly->'%(Filename)'))." />
+  </Target>
   <ItemGroup>
     <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="5" />
   </ItemGroup>

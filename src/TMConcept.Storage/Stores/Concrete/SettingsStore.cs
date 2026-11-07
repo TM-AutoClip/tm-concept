@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using TMConcept.Core.Settings;
 using TMConcept.Storage.Database;
 
@@ -13,7 +14,7 @@ public sealed class SettingsStore(ConceptDatabase database) : ISettingsStore
     public async Task<AppSettings> GetAsync(CancellationToken cancellationToken)
     {
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        var row = await SettingTable.Instance.FirstAsync(db, "\"Key\" = $key", cancellationToken, null, ("$key", Key)).ConfigureAwait(false);
+        var row = await db.Settings.FirstOrDefaultAsync(s => s.Key == Key, cancellationToken).ConfigureAwait(false);
         return row is null ? new AppSettings() : JsonSerializer.Deserialize(row.Value, StorageJsonContext.Default.AppSettings) ?? new AppSettings();
     }
 
@@ -23,6 +24,6 @@ public sealed class SettingsStore(ConceptDatabase database) : ISettingsStore
         ArgumentNullException.ThrowIfNull(settings);
         var value = JsonSerializer.Serialize(settings, StorageJsonContext.Default.AppSettings);
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        await SettingTable.Instance.UpsertAsync(db, new SettingRow { Key = Key, Value = value }, cancellationToken).ConfigureAwait(false);
+        await db.UpsertAsync(new SettingRow { Key = Key, Value = value }, s => s.Key == Key, cancellationToken).ConfigureAwait(false);
     }
 }

@@ -1,4 +1,4 @@
-using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using TMConcept.Core.Profiles;
 using TMConcept.Storage.Database;
 
@@ -11,7 +11,7 @@ public sealed class ProfileStore(ConceptDatabase database) : IProfileStore
     public async Task<IReadOnlyList<Profile>> ListAsync(CancellationToken cancellationToken)
     {
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        var all = await ProfileTable.Instance.ListAsync(db, string.Empty, cancellationToken).ConfigureAwait(false);
+        var all = await db.Profiles.ToListAsync(cancellationToken).ConfigureAwait(false);
         return all.OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
     }
 
@@ -19,7 +19,7 @@ public sealed class ProfileStore(ConceptDatabase database) : IProfileStore
     public async Task<Profile?> GetAsync(Guid id, CancellationToken cancellationToken)
     {
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        return await ProfileTable.Instance.FirstAsync(db, "\"Id\" = $id", cancellationToken, null, ("$id", Sql.Id(id))).ConfigureAwait(false);
+        return await db.Profiles.FirstOrDefaultAsync(p => p.Id == id, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -27,18 +27,23 @@ public sealed class ProfileStore(ConceptDatabase database) : IProfileStore
     {
         ArgumentNullException.ThrowIfNull(profile);
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        await using var transaction = (SqliteTransaction)await db.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
 
         // The concept counter is owned by the concept store; a stale copy from the editor must not move it back.
-        var counter = await Sql.ScalarAsync(db, "SELECT \"ConceptCounter\" FROM \"profiles\" WHERE \"Id\" = $id", cancellationToken, transaction,
-            ("$id", Sql.Id(profile.Id))).ConfigureAwait(false);
+        var id = profile.Id;
+        var counter = await db.Profiles.Where(p => p.Id == id).Select(p => (int?)p.ConceptCounter).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
         profile.UpdatedAtUtc = DateTimeOffset.UtcNow;
         if (counter is { } stored)
         {
-            profile.ConceptCounter = Math.Max(profile.ConceptCounter, (int)stored);
+            profile.ConceptCounter = Math.Max(profile.ConceptCounter, stored);
+            db.Profiles.Update(profile);
+        }
+        else
+        {
+            db.Profiles.Add(profile);
         }
 
-        await ProfileTable.Instance.UpsertAsync(db, profile, cancellationToken, transaction).ConfigureAwait(false);
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -46,15 +51,14 @@ public sealed class ProfileStore(ConceptDatabase database) : IProfileStore
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        await ProfileTable.Instance.DeleteAsync(db, "\"Id\" = $id", cancellationToken, null, ("$id", Sql.Id(id))).ConfigureAwait(false);
+        await db.Profiles.Where(p => p.Id == id).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<ProfileImage>> ImagesAsync(Guid profileId, CancellationToken cancellationToken)
     {
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        return await ProfileImageTable.Instance.ListAsync(db, "\"ProfileId\" = $profile", cancellationToken, null, "\"AddedAtUtc\"",
-            ("$profile", Sql.Id(profileId))).ConfigureAwait(false);
+        return await db.ProfileImages.Where(i => i.ProfileId == profileId).OrderBy(i => i.AddedAtUtc).ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -62,13 +66,13 @@ public sealed class ProfileStore(ConceptDatabase database) : IProfileStore
     {
         ArgumentNullException.ThrowIfNull(image);
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        await ProfileImageTable.Instance.UpsertAsync(db, image, cancellationToken).ConfigureAwait(false);
+        await db.UpsertAsync(image, i => i.Id == image.Id, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task DeleteImageAsync(Guid id, CancellationToken cancellationToken)
     {
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        await ProfileImageTable.Instance.DeleteAsync(db, "\"Id\" = $id", cancellationToken, null, ("$id", Sql.Id(id))).ConfigureAwait(false);
+        await db.ProfileImages.Where(i => i.Id == id).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
     }
 }

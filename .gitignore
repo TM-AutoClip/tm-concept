@@ -31,6 +31,8 @@ secrets/
 *.db
 *.db-wal
 *.db-shm
+# Test assets: database files written by released versions with made-up values only (see the generator next to them).
+!tests/TMConcept.Tests/Storage/Files/*.db
 .env
 .claude/
 

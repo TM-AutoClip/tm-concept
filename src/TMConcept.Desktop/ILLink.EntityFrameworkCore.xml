@@ -1,0 +1,418 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Trim analysis suppressions for the assemblies the release keeps whole (TMConcept.Desktop.csproj, KeepEntityFrameworkWhole): only these
+  assemblies and only these codes, so a trim warning anywhere else is still a build error. Module scope: the warnings are EF Core's own
+  reflection (about 1,350 of them), not single places to fix. Passed to the trimmer as link attributes.
+-->
+<linker>
+  <assembly fullname="Microsoft.EntityFrameworkCore">
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2026</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2046</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2055</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2060</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2062</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2067</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2069</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2070</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2071</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2072</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2073</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2074</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2075</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2076</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2077</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2081</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2087</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2090</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2091</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2092</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2093</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2111</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+  </assembly>
+  <assembly fullname="Microsoft.EntityFrameworkCore.Relational">
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2026</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2046</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2055</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2060</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2062</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2067</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2069</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2070</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2071</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2072</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2073</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2074</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2075</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2076</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2077</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2081</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2087</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2090</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2091</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2092</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2093</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2111</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+  </assembly>
+  <assembly fullname="Microsoft.EntityFrameworkCore.Sqlite">
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2026</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2046</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2055</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2060</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2062</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2067</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2069</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2070</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2071</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2072</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2073</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2074</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2075</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2076</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2077</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2081</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2087</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2090</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2091</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2092</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2093</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2111</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">EF Core is not trimming safe and says so; this assembly is published whole (TrimMode=copy, KeepEntityFrameworkWhole), and so are TMConcept.Storage and TMConcept.Core, whose types EF Core reflects on. The trimmed storage run (all stores, the upgrades from 0.1.2 / 0.1.5 / 0.1.6 files, backup and restore) passed with these settings.</property>
+    </attribute>
+  </assembly>
+  <assembly fullname="TMConcept.Storage">
+    <attribute fullname="System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessageAttribute">
+      <argument>ILLink</argument>
+      <argument>IL2026</argument>
+      <property name="Scope">module</property>
+      <property name="Justification">The EF Core model and LINQ queries of the storage (expression trees over the entity types, the DbContext constructor). This assembly, TMConcept.Core and EF Core are published whole (TrimMode=copy), so every member those expressions name is kept.</property>
+    </attribute>
+  </assembly>
+</linker>

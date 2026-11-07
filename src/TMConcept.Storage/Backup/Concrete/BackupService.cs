@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TMConcept.Core.Paths;
 using TMConcept.Storage.Crypto;
@@ -173,20 +174,18 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
                 source.Open();
                 destination.Open();
                 source.BackupDatabase(destination);
-                using var command = destination.CreateCommand();
-                command.CommandText = Scrub(contents);
-                command.ExecuteNonQuery();
             }
 
             var header = new BackupHeader { CreatedAtUtc = clock.GetUtcNow(), Contents = contents };
             var images = new List<byte[]>();
             await using (var db = await ConceptDatabase.OpenAsync(ConceptDatabase.ConnectionString(copy, passphrase), cancellationToken).ConfigureAwait(false))
             {
-                header.KeyCount = await ApiKeyTable.Instance.CountAsync(db, string.Empty, cancellationToken).ConfigureAwait(false);
-                header.ProfileCount = await ProfileTable.Instance.CountAsync(db, string.Empty, cancellationToken).ConfigureAwait(false);
-                header.ConceptCount = await ConceptTable.Instance.CountAsync(db, string.Empty, cancellationToken).ConfigureAwait(false);
-                header.VideoCount = await VideoTable.Instance.CountAsync(db, string.Empty, cancellationToken).ConfigureAwait(false);
-                foreach (var image in await ProfileImageTable.Instance.ListAsync(db, string.Empty, cancellationToken).ConfigureAwait(false))
+                await ScrubAsync(db, contents, cancellationToken).ConfigureAwait(false);
+                header.KeyCount = await db.ApiKeys.CountAsync(cancellationToken).ConfigureAwait(false);
+                header.ProfileCount = await db.Profiles.CountAsync(cancellationToken).ConfigureAwait(false);
+                header.ConceptCount = await db.Concepts.CountAsync(cancellationToken).ConfigureAwait(false);
+                header.VideoCount = await db.Videos.CountAsync(cancellationToken).ConfigureAwait(false);
+                foreach (var image in await db.ProfileImages.ToListAsync(cancellationToken).ConfigureAwait(false))
                 {
                     if (await ReadImageAsync(image.FileName, cancellationToken).ConfigureAwait(false) is { } bytes)
                     {
@@ -362,33 +361,46 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
         }
     }
 
-    /// <summary>The SQL that removes from the copy what was not chosen, and always the stored backup key and the backup bookkeeping.</summary>
-    private static string Scrub(BackupContents contents)
+    /// <summary>
+    /// Removes from the copy what was not chosen, and always the stored backup key and the backup bookkeeping, in one transaction. Secure
+    /// delete (SQLite3 Multiple Ciphers is built with it; checked whenever a file comes in) overwrites the removed rows and the pages they
+    /// free with zeros, so the sealed copy holds nothing of them (DeletedDataTests). The copy is not compacted: VACUUM is SQL with no EF Core
+    /// counterpart, so the zeroed pages stay in it (open decision, release notes 0.1.7). The schema version row stays (a restore reads it).
+    /// </summary>
+    private static async Task ScrubAsync(ConceptDbContext db, BackupContents contents, CancellationToken cancellationToken)
     {
-        var sql = new StringBuilder("PRAGMA secure_delete = ON; ");
-        sql.Append("DELETE FROM \"settings\" WHERE \"Key\" IN ('" + KeySetting + "', '" + LastSetting + "', '" + ManualLastSetting + "'); ");
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        string[] bookkeeping = [KeySetting, LastSetting, ManualLastSetting];
+        await db.Settings.Where(s => bookkeeping.Contains(s.Key)).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
         if (!contents.Keys)
         {
-            sql.Append("DELETE FROM \"api_keys\"; ");
+            await db.ApiKeys.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
         }
 
         if (!contents.Concepts || !contents.Profiles)
         {
-            sql.Append("DELETE FROM \"queue_items\"; DELETE FROM \"video_costs\"; DELETE FROM \"videos\"; DELETE FROM \"concept_embeddings\"; ");
-            sql.Append("DELETE FROM \"concepts\"; DELETE FROM \"history_digests\"; DELETE FROM \"runs\"; ");
+            await db.QueueItems.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+            await db.VideoCosts.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+            await db.Videos.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+            await db.Embeddings.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+            await db.Concepts.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+            await db.HistoryDigests.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+            await db.Runs.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
         }
 
         if (!contents.Profiles)
         {
-            sql.Append("DELETE FROM \"profile_images\"; DELETE FROM \"profile_step_models\"; DELETE FROM \"profiles\"; ");
+            await db.ProfileImages.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+            await db.ProfileStepModels.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+            await db.Profiles.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
         }
 
         if (!contents.Settings)
         {
-            sql.Append("DELETE FROM \"settings\"; ");
+            await db.Settings.Where(s => s.Key != ConceptSchema.VersionSetting).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        return sql.Append("VACUUM;").ToString();
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<byte[]?> ReadImageAsync(string stored, CancellationToken cancellationToken)
@@ -539,13 +551,13 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
     private async Task WriteSettingAsync(string name, string value, CancellationToken cancellationToken)
     {
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        await SettingTable.Instance.UpsertAsync(db, new SettingRow { Key = name, Value = value }, cancellationToken).ConfigureAwait(false);
+        await db.UpsertAsync(new SettingRow { Key = name, Value = value }, s => s.Key == name, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<SettingRow?> SettingAsync(string name, CancellationToken cancellationToken)
     {
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        return await SettingTable.Instance.FirstAsync(db, "\"Key\" = $key", cancellationToken, null, ("$key", name)).ConfigureAwait(false);
+        return await db.Settings.FirstOrDefaultAsync(s => s.Key == name, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Keeps the newest <see cref="BackupRules.Keep"/> files of one kind (daily, Back up now, or before a change).</summary>
@@ -576,12 +588,12 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
         {
             await using var db = await ConceptDatabase.OpenAsync(ConceptDatabase.ConnectionString(file, Convert.ToHexString(dek)), cancellationToken)
                 .ConfigureAwait(false);
-            await SettingTable.Instance.CountAsync(db, string.Empty, cancellationToken).ConfigureAwait(false);
+            await db.Settings.CountAsync(cancellationToken).ConfigureAwait(false);
             try
             {
                 await ConceptDatabase.EnsureSchemaAsync(db, cancellationToken).ConfigureAwait(false);
             }
-            catch (Exception ex) when (ex is InvalidOperationException or SqliteException)
+            catch (Exception ex) when (ex is InvalidOperationException or SqliteException or DbUpdateException)
             {
                 logger.LogError(ex, "Restore refused: the backup's database cannot be brought to this version's schema");
                 throw new BackupRefusedException(ex is InvalidOperationException
@@ -606,9 +618,9 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
         {
             await using var db = await ConceptDatabase.OpenAsync(ConceptDatabase.ConnectionString(file, Convert.ToHexString(dek)), cancellationToken)
                 .ConfigureAwait(false);
-            header.ProfileCount = await ProfileTable.Instance.CountAsync(db, string.Empty, cancellationToken).ConfigureAwait(false);
-            header.ConceptCount = await ConceptTable.Instance.CountAsync(db, string.Empty, cancellationToken).ConfigureAwait(false);
-            header.VideoCount = await VideoTable.Instance.CountAsync(db, string.Empty, cancellationToken).ConfigureAwait(false);
+            header.ProfileCount = await db.Profiles.CountAsync(cancellationToken).ConfigureAwait(false);
+            header.ConceptCount = await db.Concepts.CountAsync(cancellationToken).ConfigureAwait(false);
+            header.VideoCount = await db.Videos.CountAsync(cancellationToken).ConfigureAwait(false);
             return Report(header);
         }
         catch (SqliteException ex)
@@ -628,11 +640,11 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
     {
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
         return new RestoreReport(header.Format >= 3 ? header.CreatedAtUtc : null, header.Contents,
-            await ApiKeyTable.Instance.CountAsync(db, string.Empty, cancellationToken).ConfigureAwait(false),
-            await ProfileTable.Instance.CountAsync(db, string.Empty, cancellationToken).ConfigureAwait(false),
+            await db.ApiKeys.CountAsync(cancellationToken).ConfigureAwait(false),
+            await db.Profiles.CountAsync(cancellationToken).ConfigureAwait(false),
             images,
-            await ConceptTable.Instance.CountAsync(db, string.Empty, cancellationToken).ConfigureAwait(false),
-            await VideoTable.Instance.CountAsync(db, string.Empty, cancellationToken).ConfigureAwait(false));
+            await db.Concepts.CountAsync(cancellationToken).ConfigureAwait(false),
+            await db.Videos.CountAsync(cancellationToken).ConfigureAwait(false));
     }
 
     private string TemporaryFile()

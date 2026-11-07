@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using TMConcept.Core.Models;
 using TMConcept.Storage.Database;
 
@@ -10,36 +11,34 @@ public sealed class StepModelStore(ConceptDatabase database) : IStepModelStore
     public async Task<IReadOnlyList<StepModelChoice>> ListAsync(Guid profileId, CancellationToken cancellationToken)
     {
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        return await ProfileStepModelTable.Instance.ListAsync(db, "\"ProfileId\" = $profile", cancellationToken, null, string.Empty, ("$profile", Sql.Id(profileId)))
-            .ConfigureAwait(false);
+        return await db.ProfileStepModels.Where(s => s.ProfileId == profileId).ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task<StepModelChoice?> GetAsync(string step, Guid profileId, CancellationToken cancellationToken)
     {
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        return await ProfileStepModelTable.Instance.FirstAsync(db, "\"ProfileId\" = $profile AND \"Step\" = $step", cancellationToken, null,
-            ("$profile", Sql.Id(profileId)), ("$step", step)).ConfigureAwait(false);
+        return await db.ProfileStepModels.FirstOrDefaultAsync(s => s.ProfileId == profileId && s.Step == step, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task SaveAsync(StepModelChoice choice, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(choice);
-        if (choice.ProfileId is null)
+        if (choice.ProfileId is not { } profileId)
         {
             throw new ArgumentException("A step choice belongs to a profile.", nameof(choice));
         }
 
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        await ProfileStepModelTable.Instance.UpsertAsync(db, choice, cancellationToken).ConfigureAwait(false);
+        var step = choice.Step;
+        await db.UpsertAsync(choice, s => s.ProfileId == profileId && s.Step == step, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task ClearAsync(string step, Guid profileId, CancellationToken cancellationToken)
     {
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        await ProfileStepModelTable.Instance.DeleteAsync(db, "\"ProfileId\" = $profile AND \"Step\" = $step", cancellationToken, null,
-            ("$profile", Sql.Id(profileId)), ("$step", step)).ConfigureAwait(false);
+        await db.ProfileStepModels.Where(s => s.ProfileId == profileId && s.Step == step).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
     }
 }

@@ -1,4 +1,4 @@
-using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using TMConcept.Core.Videos;
 using TMConcept.Storage.Database;
 
@@ -11,15 +11,14 @@ public sealed class VideoStore(ConceptDatabase database) : IVideoStore
     public async Task<IReadOnlyList<VideoRecord>> ListAsync(Guid profileId, CancellationToken cancellationToken)
     {
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        return await VideoTable.Instance.ListAsync(db, "\"ProfileId\" = $profile", cancellationToken, null, "\"CreatedAtUtc\" DESC",
-            ("$profile", Sql.Id(profileId))).ConfigureAwait(false);
+        return await db.Videos.Where(v => v.ProfileId == profileId).OrderByDescending(v => v.CreatedAtUtc).ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task<VideoRecord?> GetAsync(Guid id, CancellationToken cancellationToken)
     {
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        return await VideoTable.Instance.FirstAsync(db, "\"Id\" = $id", cancellationToken, null, ("$id", Sql.Id(id))).ConfigureAwait(false);
+        return await db.Videos.FirstOrDefaultAsync(v => v.Id == id, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -28,23 +27,22 @@ public sealed class VideoStore(ConceptDatabase database) : IVideoStore
         ArgumentNullException.ThrowIfNull(video);
         ArgumentNullException.ThrowIfNull(costs);
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        await using var transaction = (SqliteTransaction)await db.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-        await VideoTable.Instance.InsertAsync(db, video, cancellationToken, transaction).ConfigureAwait(false);
+        db.Videos.Add(video);
         foreach (var cost in costs)
         {
             cost.VideoId = video.Id;
-            await VideoCostTable.Instance.InsertAsync(db, cost, cancellationToken, transaction).ConfigureAwait(false);
+            db.VideoCosts.Add(cost);
         }
 
-        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        // One save: the video and its cost lines in one transaction.
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<VideoCost>> CostsAsync(Guid videoId, CancellationToken cancellationToken)
     {
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        return await VideoCostTable.Instance.ListAsync(db, "\"VideoId\" = $video", cancellationToken, null, string.Empty, ("$video", Sql.Id(videoId)))
-            .ConfigureAwait(false);
+        return await db.VideoCosts.Where(c => c.VideoId == videoId).ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -52,14 +50,13 @@ public sealed class VideoStore(ConceptDatabase database) : IVideoStore
     {
         ArgumentNullException.ThrowIfNull(thumbnailName);
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        await Sql.ExecuteAsync(db, "UPDATE \"videos\" SET \"ThumbnailName\" = $name WHERE \"Id\" = $id", cancellationToken, null,
-            ("$name", thumbnailName), ("$id", Sql.Id(id))).ConfigureAwait(false);
+        await db.Videos.Where(v => v.Id == id).ExecuteUpdateAsync(s => s.SetProperty(v => v.ThumbnailName, thumbnailName), cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        await VideoTable.Instance.DeleteAsync(db, "\"Id\" = $id", cancellationToken, null, ("$id", Sql.Id(id))).ConfigureAwait(false);
+        await db.Videos.Where(v => v.Id == id).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
     }
 }

@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Shouldly;
 using TMConcept.Core.Concepts;
 using TMConcept.Core.Duplicates;
@@ -59,7 +60,7 @@ public sealed class StoreTests
         (await concepts.GetAsync(kept.Id, None)).ShouldNotBeNull();
         (await concepts.HistoryAsync(p.Id, None)).Select(s => s.Title).ShouldBe(["Kept"]);
         (await new EmbeddingStore(h.Database).ListAsync(p.Id, "m", None)).ShouldBeEmpty();
-        (await h.CountAsync("concepts")).ShouldBe(1);
+        (await h.QueryAsync(db => db.Concepts.CountAsync())).ShouldBe(1);
     }
 
     [Fact]
@@ -110,10 +111,10 @@ public sealed class StoreTests
 
         await new ProfileStore(h.Database).DeleteAsync(p.Id, None);
 
-        (await h.CountAsync("concepts")).ShouldBe(0);
-        (await h.CountAsync("queue_items")).ShouldBe(0);
-        (await h.CountAsync("videos")).ShouldBe(0);
-        (await h.CountAsync("profile_images")).ShouldBe(0);
+        (await h.QueryAsync(db => db.Concepts.CountAsync())).ShouldBe(0);
+        (await h.QueryAsync(db => db.QueueItems.CountAsync())).ShouldBe(0);
+        (await h.QueryAsync(db => db.Videos.CountAsync())).ShouldBe(0);
+        (await h.QueryAsync(db => db.ProfileImages.CountAsync())).ShouldBe(0);
     }
 
     [Fact]
