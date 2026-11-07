@@ -5,46 +5,68 @@
              xmlns:v="using:TMConcept.Desktop.Views"
              x:Class="TMConcept.Desktop.Views.ProducedView"
              x:DataType="vm:ProducedViewModel">
-  <Grid ColumnDefinitions="*,16,420" Margin="16">
+  <!-- The list is narrow, the details take the rest of the width (0.1.6: the list had it all and the details 420 px). -->
+  <Grid ColumnDefinitions="300,16,*" Margin="16">
     <DockPanel>
       <StackPanel DockPanel.Dock="Top" Spacing="8">
         <TextBlock Text="{DynamicResource nav.produced}" Classes="h1" />
-        <TextBox Text="{Binding Search}" PlaceholderText="{DynamicResource common.search}" MaxWidth="400" HorizontalAlignment="Left" MinWidth="260" />
-        <TextBlock Text="{Binding Spending}" Classes="small" />
-        <TextBlock Text="{Binding Status}" Classes="error" />
+        <TextBox Text="{Binding Search}" PlaceholderText="{DynamicResource common.search}" />
+        <TextBlock Text="{Binding Spending}" Classes="small" TextWrapping="Wrap" />
+        <TextBlock Text="{Binding Status}" Classes="error" TextWrapping="Wrap" />
       </StackPanel>
       <ListBox ItemsSource="{Binding Items}" SelectedItem="{Binding Selected}" Background="Transparent" Margin="0,8,0,0">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:VideoRowViewModel">
-            <Grid ColumnDefinitions="72,*" ColumnSpacing="10" Margin="0,2">
-              <Border Width="72" Height="72" Background="#22000000" CornerRadius="6" ClipToBounds="True">
-                <Image Source="{Binding Thumbnail, Converter={x:Static c:FileBitmapConverter.Instance}, ConverterParameter=160}" Stretch="UniformToFill" />
+            <Grid ColumnDefinitions="56,*" ColumnSpacing="10" Margin="0,2">
+              <Border Width="56" Height="56" Background="#22000000" CornerRadius="6" ClipToBounds="True">
+                <Image Source="{Binding Thumbnail, Converter={x:Static c:FileBitmapConverter.Instance}, ConverterParameter=120}" Stretch="UniformToFill" />
               </Border>
               <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                <TextBlock Text="{Binding Line}" Classes="small" />
-                <TextBlock Text="{Binding Badges}" Classes="small warning" />
+                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
+                <TextBlock Text="{Binding Line}" Classes="small" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{Binding Badges}" Classes="small warning" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Badges}" />
               </StackPanel>
             </Grid>
           </DataTemplate>
         </ListBox.ItemTemplate>
       </ListBox>
     </DockPanel>
-    <Border Grid.Column="2" Classes="card" IsVisible="{Binding HasSelection}" VerticalAlignment="Top">
+    <Border Grid.Column="2" Classes="card" IsVisible="{Binding HasSelection}" VerticalAlignment="Stretch">
       <ScrollViewer>
         <StackPanel Spacing="10">
           <TextBlock Text="{Binding Selected.Title}" Classes="h2" TextWrapping="Wrap" />
-          <v:VideoPlayerView DataContext="{Binding Player}" Height="420" />
+          <v:VideoPlayerView DataContext="{Binding Player}" Height="400" />
           <WrapPanel>
             <Button Content="{DynamicResource produced.play}" Command="{Binding PlayCommand}" Margin="0,0,8,8" />
             <Button Content="{DynamicResource produced.folder}" Command="{Binding OpenFolderCommand}" Margin="0,0,8,8" />
             <Button Content="{DynamicResource produced.again}" Command="{Binding ProduceAgainCommand}" Margin="0,0,8,8" />
             <Button Classes="danger" Content="{DynamicResource common.delete}" Command="{Binding DeleteCommand}" Margin="0,0,8,8" />
           </WrapPanel>
-          <SelectableTextBlock Text="{Binding Details}" TextWrapping="Wrap" />
-          <Expander Header="{DynamicResource produced.prompt.title}" HorizontalAlignment="Stretch">
-            <SelectableTextBlock Text="{Binding ConceptText}" TextWrapping="Wrap" />
-          </Expander>
+          <TabControl Classes="inner">
+            <TabItem Header="{DynamicResource produced.tab.narration}">
+              <StackPanel Spacing="10" Margin="0,8,0,0">
+                <TextBlock Text="{Binding ScenesNote}" Classes="muted" TextWrapping="Wrap"
+                           IsVisible="{Binding ScenesNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                <ItemsControl ItemsSource="{Binding Scenes}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SceneText">
+                      <StackPanel Spacing="2" Margin="0,0,0,10">
+                        <TextBlock Text="{Binding Header}" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding Visual}" Classes="scene" TextWrapping="Wrap" IsVisible="{Binding HasVisual}" />
+                        <SelectableTextBlock Text="{Binding Narration}" TextWrapping="Wrap" />
+                      </StackPanel>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </TabItem>
+            <TabItem Header="{DynamicResource produced.tab.concept}">
+              <SelectableTextBlock Text="{Binding ConceptText}" TextWrapping="Wrap" Margin="0,8,0,0" />
+            </TabItem>
+            <TabItem Header="{DynamicResource produced.tab.details}">
+              <SelectableTextBlock Text="{Binding Details}" TextWrapping="Wrap" Margin="0,8,0,0" />
+            </TabItem>
+          </TabControl>
         </StackPanel>
       </ScrollViewer>
     </Border>

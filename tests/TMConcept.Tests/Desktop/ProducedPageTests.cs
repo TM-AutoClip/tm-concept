@@ -131,6 +131,44 @@ public sealed class ProducedPageTests
         videoPage.Approved.ShouldContain(c => c.Id == concept.Id);
     }
 
+    [AvaloniaFact]
+    public async Task TheDetailsShowTheWholeNarrationSceneBySceneAndTheWholeConceptText()
+    {
+        using var h = new DesktopHarness();
+        await FirstRunTests.CreateAsync(h);
+        var profile = new Profile { Name = "Byzantium", ContentLanguage = ContentLanguages.English, ConceptText = "x" };
+        await h.Get<IProfileStore>().SaveAsync(profile, CancellationToken.None);
+        await h.Get<AppSession>().SelectProfileAsync(profile, CancellationToken.None);
+        var long1 = string.Join(" ", Enumerable.Repeat("In 672 the city was under siege and the walls held.", 12));
+        var concept = new Concept { ProfileId = profile.Id, Title = "Greek fire", Summary = "A weapon.", Content = "[on screen: map]\n" + long1 + "\n[on screen: ships]\nFire on water.",
+            Language = "en", Status = ConceptStatus.Produced };
+        await h.Get<IConceptStore>().AddAsync([concept], CancellationToken.None);
+        var folder = Path.Combine(h.Get<IAppPaths>().LibraryDirectory, "Byzantium", "2026-11-08-1-greek-fire", VideoFolders.FirstVersion);
+        Directory.CreateDirectory(Path.Combine(folder, VideoFolders.Source));
+        var input = TMConcept.Core.Render.RenderInputBuilder.Build("Greek fire", "en",
+            [new("map", long1, string.Empty, 21_000), new("ships", "Fire on water.", string.Empty, 1_500)], 1080, 1920, 30);
+        File.WriteAllText(Path.Combine(folder, VideoFolders.Source, VideoFolders.InputFile), TMConcept.Core.Render.RenderInputBuilder.ToJson(input));
+        var video = new VideoRecord { ConceptId = concept.Id, ProfileId = profile.Id, Title = "Greek fire", FileName = "video.mp4",
+            Folder = LibraryPaths.Relative(h.Get<IAppPaths>().LibraryDirectory, folder) };
+        await h.Get<IVideoStore>().AddAsync(video, [], CancellationToken.None);
+        var page = h.Get<ProducedViewModel>();
+        await page.ActivateAsync();
+
+        page.Selected = page.Items.Single();
+        for (var i = 0; i < 100 && page.Scenes.Count == 0; i++)
+        {
+            await Task.Delay(20);
+        }
+
+        page.Scenes.Count.ShouldBe(2);
+        page.Scenes[0].Narration.ShouldBe(long1, "the whole narration of the scene, not a summary");
+        page.Scenes[0].Visual.ShouldBe("map");
+        page.Scenes[1].Header.ShouldBe(h.Get<Localizer>().Format("produced.scene", 2, (input.Scenes[1].DurationSeconds).ToString("0.0", h.Get<Localizer>().Culture)));
+        page.ConceptText.ShouldContain(long1);
+        page.ConceptText.ShouldContain("Fire on water.");
+        page.ScenesNote.ShouldBeEmpty();
+    }
+
     private sealed class FakeBin : IRecycleBin
     {
         public List<string> Moved { get; } = [];

@@ -27,4 +27,7 @@ public static class VideoFolders
 
     /// <summary>The narration text (always written, also for a silent video).</summary>
     public const string NarrationFile = "narration.txt";
+
+    /// <summary>The render input inside <see cref="Source"/> (timing and texts of every scene; the engines read it under this name).</summary>
+    public const string InputFile = Render.RenderInputBuilder.FileName;
 }

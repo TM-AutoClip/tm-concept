@@ -7,6 +7,9 @@ namespace TMConcept.Core.Render;
 /// <summary>Builds and serializes the render input.</summary>
 public static class RenderInputBuilder
 {
+    /// <summary>The input's file name in an engine project (the engines' skeletons read it under this name).</summary>
+    public const string FileName = "input.json";
+
     /// <summary>Indented JSON for the work folder (Turkish letters unescaped).</summary>
     public static JsonSerializerOptions FileJson { get; } = new()
     {

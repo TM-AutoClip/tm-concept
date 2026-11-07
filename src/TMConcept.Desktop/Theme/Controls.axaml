@@ -97,4 +97,10 @@
   <Style Selector="TextBox.secret">
     <Setter Property="PasswordChar" Value="●" />
   </Style>
+  <!-- Tabs inside a page (the produced video's details): the theme's 24 px headers were larger than the page title. -->
+  <Style Selector="TabControl.inner TabItem">
+    <Setter Property="FontSize" Value="15" />
+    <Setter Property="MinHeight" Value="34" />
+    <Setter Property="Padding" Value="10,4" />
+  </Style>
 </Styles>

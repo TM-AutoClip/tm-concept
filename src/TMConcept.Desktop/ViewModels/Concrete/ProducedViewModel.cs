@@ -65,9 +65,19 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
     [ObservableProperty]
     public partial string Details { get; set; } = string.Empty;
 
-    /// <summary>The concept the selected video was made from (title, summary, script) and the code prompt version.</summary>
+    /// <summary>The concept the selected video was made from (title, summary, the whole script) and the code prompt version.</summary>
     [ObservableProperty]
     public partial string ConceptText { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The narration of the selected video, scene by scene and complete (from its version folder: <c>source/input.json</c>, the timing and
+    /// texts it was rendered with).
+    /// </summary>
+    public ObservableCollection<SceneText> Scenes { get; } = [];
+
+    /// <summary>Why there are no scenes to show (empty when there are).</summary>
+    [ObservableProperty]
+    public partial string ScenesNote { get; set; } = string.Empty;
 
     /// <summary>The player.</summary>
     public PlayerViewModel Player { get; } = player;
@@ -221,6 +231,8 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
         Details = string.Empty;
         ConceptText = string.Empty;
         Status = string.Empty;
+        Scenes.Clear();
+        ScenesNote = string.Empty;
         if (value is null)
         {
             Player.Unload();
@@ -316,16 +328,56 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
             var prompt = concept is null
                 ? text["produced.prompt.gone"]
                 : text.Format("produced.prompt", concept.Title, concept.Summary, v.PromptVersion.Length > 0 ? v.PromptVersion : "1", concept.Content);
+            var scenes = ScenesOf(row);
             if (ReferenceEquals(Selected, row))
             {
                 Details = details.ToString();
                 ConceptText = prompt;
+                Scenes.Clear();
+                foreach (var scene in scenes)
+                {
+                    Scenes.Add(scene);
+                }
+
+                ScenesNote = scenes.Count > 0 ? string.Empty : text["produced.scenes.none"];
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "Video details could not be read");
             Status = text.Format("error.generic", ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// The scenes of a video as it was rendered (<c>source/input.json</c> of its version folder: what is on screen, the whole narration and the
+    /// length of each scene). Nothing when the file is missing or unreadable (the reason is logged).
+    /// </summary>
+    private List<SceneText> ScenesOf(VideoRowViewModel row)
+    {
+        var file = Path.Combine(row.Folder, VideoFolders.Source, VideoFolders.InputFile);
+        if (!File.Exists(file))
+        {
+            logger.LogInformation("A video has no kept render input; its narration is not shown scene by scene");
+            return [];
+        }
+
+        try
+        {
+            var input = Core.Render.RenderInputBuilder.FromJson(File.ReadAllText(file));
+            if (input is null)
+            {
+                logger.LogWarning("The kept render input of a video could not be read");
+                return [];
+            }
+
+            return input.Scenes.Select(s => new SceneText(s.Number, text.Format("produced.scene", s.Number,
+                s.DurationSeconds.ToString("0.0", text.Culture)), s.Visual, s.Caption)).ToList();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarning(ex, "The kept render input of a video could not be read");
+            return [];
         }
     }
 

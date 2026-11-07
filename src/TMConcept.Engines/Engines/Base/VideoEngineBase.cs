@@ -15,7 +15,7 @@ namespace TMConcept.Engines.Engines;
 public abstract class VideoEngineBase(EnginePackage package, ChromeLocator chrome, ToolInstaller tools, IProcessRunner runner, ILogger logger) : IVideoEngine
 {
     /// <summary>The input file name in the work folder.</summary>
-    public const string InputFile = "input.json";
+    public const string InputFile = RenderInputBuilder.FileName;
 
     /// <inheritdoc />
     public abstract EngineKind Kind { get; }
