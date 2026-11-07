@@ -73,17 +73,30 @@ public sealed class AnthropicChatClient(AnthropicProvider provider, ProviderHttp
     public async Task<ChatResponse> SendAsync(ChatRequest request, CancellationToken cancellationToken)
     {
         var json = Body(request).ToJsonString();
-        var reply = await http.SendAsync(() =>
-        {
-            var message = new HttpRequestMessage(HttpMethod.Post, new Uri(provider.Address, "messages"))
-            {
-                Content = new StringContent(json, Encoding.UTF8, "application/json"),
-            };
-            provider.Authorize(message, apiKey);
-            return message;
-        }, provider.Name, apiKey, cancellationToken).ConfigureAwait(false);
 
-        var answer = AnthropicStream.Parse(reply.Text);
+        // Read while it streams: a long answer (a video code of 64 000 tokens takes about 11 minutes) has no single time limit then.
+        var reader = new AnthropicStreamReader();
+        StreamReply reply;
+        try
+        {
+            reply = await http.StreamAsync(() =>
+            {
+                var message = new HttpRequestMessage(HttpMethod.Post, new Uri(provider.Address, "messages"))
+                {
+                    Content = new StringContent(json, Encoding.UTF8, "application/json"),
+                };
+                provider.Authorize(message, apiKey);
+                return message;
+            }, provider.Name, apiKey, reader.Add, cancellationToken).ConfigureAwait(false);
+        }
+        catch (ProviderException ex) when (ex.Code is "timeout" or "network" && reader.Answer() is { Streamed: true } partial
+            && (partial.Usage.Prompt > 0 || partial.Usage.Output > 0))
+        {
+            // The stream broke after it started: what arrived until then was billed, so the failure carries it.
+            throw new ProviderException(ex.Message, ex) { Code = ex.Code, RequestId = ex.RequestId, ChargedUsage = partial.Usage, PartialText = partial.Text };
+        }
+
+        var answer = reader.Answer();
         if (answer.SkippedEvents > 0)
         {
             logger.LogWarning("{Provider} {Model}: {Count} stream event(s) could not be read and were skipped (request {RequestId})", provider.Name, Model.Id,

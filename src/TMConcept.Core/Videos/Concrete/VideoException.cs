@@ -1,8 +1,14 @@
 namespace TMConcept.Core.Videos;
 
-/// <summary>A video could not be made (<see cref="Code"/>: "scenes", "code", "render", "mux").</summary>
+/// <summary>
+/// A video could not be made (<see cref="Code"/>: "scenes", "code", "render", "mux", "files", "missing", or <see cref="ProviderPrefix"/> +
+/// the provider's failure code).
+/// </summary>
 public sealed class VideoException : Exception
 {
+    /// <summary>Start of <see cref="Code"/> when a provider call failed ("provider:truncated").</summary>
+    public const string ProviderPrefix = "provider:";
+
     /// <summary>Creates.</summary>
     public VideoException()
     {

@@ -349,9 +349,10 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         }
         catch (Providers.ProviderException ex)
         {
-            logger.LogError("Video failed: provider error ({Code}, request {RequestId})", ex.Code, ex.RequestId.Length > 0 ? ex.RequestId : "-");
+            logger.LogError("Video failed: provider error ({Code}, request {RequestId}) after {Usd} USD", ex.Code, ex.RequestId.Length > 0 ? ex.RequestId : "-",
+                spent.Sum(c => c.Usd));
             CleanFailed(work, folder, folderCreated);
-            throw new VideoException(ex.Message, ex) { Code = "provider:" + ex.Code, SpentUsd = spent.Sum(c => c.Usd) };
+            throw new VideoException(ex.Message, ex) { Code = VideoException.ProviderPrefix + ex.Code, SpentUsd = spent.Sum(c => c.Usd) };
         }
         catch (OperationCanceledException)
         {
@@ -409,8 +410,8 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         ChatResponse answer;
         try
         {
-            answer = await chat.SendAsync(new ChatRequest(system, user, CacheSystem: true, MaxOutputTokens: 32_000, Effort: job.CodeModel.Effort), cancellationToken)
-                .ConfigureAwait(false);
+            answer = await chat.SendAsync(new ChatRequest(system, user, CacheSystem: true, MaxOutputTokens: VideoCodeBudget.For(job.CodeModel.Model),
+                Effort: job.CodeModel.Effort, Stream: true), cancellationToken).ConfigureAwait(false);
         }
         catch (Providers.ProviderException ex) when (ex.ChargedUsage is { } charged)
         {

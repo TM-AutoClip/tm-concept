@@ -475,9 +475,20 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
         events.Raise(this);
     }
 
-    private string Reason(VideoException ex) => ex.Code.StartsWith("provider:", StringComparison.Ordinal)
-        ? ProviderErrors.Text(text, ex.Code["provider:".Length..])
-        : text["video.error." + ex.Code] + " " + ex.Message;
+    /// <summary>
+    /// Why a video failed. A cut-off answer here is the video code (the image prompts fall back to the scene texts): the shared provider text
+    /// speaks of concepts kept before the cut, which means nothing for a video, so it has its own text with what was paid.
+    /// </summary>
+    private string Reason(VideoException ex)
+    {
+        if (!ex.Code.StartsWith(VideoException.ProviderPrefix, StringComparison.Ordinal))
+        {
+            return text["video.error." + ex.Code] + " " + ex.Message;
+        }
+
+        var code = ex.Code[VideoException.ProviderPrefix.Length..];
+        return code == "truncated" ? text.Format("video.error.truncated", text.Usd(ex.SpentUsd)) : ProviderErrors.Text(text, code);
+    }
 
     private VideoOptions Options() => new()
     {

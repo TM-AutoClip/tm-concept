@@ -304,6 +304,7 @@
   "concepts.semantic.failed": "The semantic duplicate check could not run for {0} batch(es) and was skipped; only the local check ran (the reason is in the log file).",
   "video.error.missing": "Not made: what the settings need is not installed; nothing was paid for.",
   "video.error.files": "A file could not be written (disk full or no permission?).",
+  "video.error.truncated": "The video code was cut off because it was too long; spent {0}. Try a lower effort or a shorter concept.",
   "profile.delete.busy": "A generation or a video queue is running for this profile. Stop it or wait until it ends, then delete.",
   "backup.before_change": "A backup was written before the change.",
   "backup.before_change_failed": "The backup before this change could not be written, so nothing was deleted: {0}",

@@ -9,8 +9,8 @@ namespace TMConcept.Providers.Common;
 
 /// <summary>
 /// Sends provider requests with the shared rules: one retry after a 429 when the provider asks to wait at most a minute; network and
-/// timeout errors become <see cref="ProviderException"/>; a failed answer becomes one with a code by status and a short detail where the key
-/// and anything key-like are masked. The key is never logged.
+/// timeout errors become <see cref="ProviderException"/>; a long answer is read line by line as it streams (<see cref="StreamAsync"/>); a
+/// failed answer becomes one with a code by status and a short detail where the key and anything key-like are masked. The key is never logged.
 /// </summary>
 public sealed class ProviderHttp(ProviderTransport transport, ILogger<ProviderHttp> logger) : IDisposable
 {
@@ -28,46 +28,133 @@ public sealed class ProviderHttp(ProviderTransport transport, ILogger<ProviderHt
     public Task<ProviderReply> PollAsync(Func<HttpRequestMessage> create, string providerName, string apiKey, CancellationToken cancellationToken) =>
         SendAsync(create, providerName, apiKey, logSuccess: false, cancellationToken);
 
+    /// <summary>
+    /// Sends a streamed request (server-sent events) and hands every line of the answer to <paramref name="line"/> as it arrives, so a long
+    /// answer is never cut by one fixed time limit: the answer must start within <see cref="ProviderTransport.Timeout"/>, then a silence
+    /// longer than <see cref="ProviderTransport.StreamIdle"/> or a whole answer longer than <see cref="ProviderTransport.StreamLimit"/> ends it
+    /// with <c>timeout</c>, a broken connection with <c>network</c> (both carry the request id; the caller adds the usage it has read). A
+    /// failed status is read whole and handled as in <see cref="SendAsync(Func{HttpRequestMessage}, string, string, CancellationToken)"/>.
+    /// </summary>
+    public async Task<StreamReply> StreamAsync(Func<HttpRequestMessage> create, string providerName, string apiKey, Action<string> line,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(line);
+        var (request, response, requestId, operation, watch) = await OpenAsync(create, providerName, apiKey, HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken).ConfigureAwait(false);
+        using (request)
+        using (response)
+        {
+            long characters = 0;
+            long first = -1;
+            using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            try
+            {
+                await using var body = await response.Content.ReadAsStreamAsync(limit.Token).ConfigureAwait(false);
+                using var reader = new StreamReader(body, System.Text.Encoding.UTF8);
+                while (true)
+                {
+                    // One timer for both limits: the silence allowed now, but never past the end of the whole answer's time.
+                    var left = transport.StreamLimit - watch.Elapsed;
+                    limit.CancelAfter(left >= transport.StreamIdle ? transport.StreamIdle : left > TimeSpan.Zero ? left : TimeSpan.FromMilliseconds(1));
+                    var text = await reader.ReadLineAsync(limit.Token).ConfigureAwait(false);
+                    if (text is null)
+                    {
+                        break;
+                    }
+
+                    if (first < 0)
+                    {
+                        first = watch.ElapsedMilliseconds;
+                    }
+
+                    characters += text.Length + 1;
+                    line(text);
+                }
+            }
+            catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                logger.LogWarning("{Provider} {Operation}: the stream stopped after {Ms} ms ({Kilobytes} KB read, request {RequestId})", providerName, operation,
+                    watch.ElapsedMilliseconds, characters / 1024, requestId.Length > 0 ? requestId : "-");
+                throw new ProviderException($"{providerName} stopped sending the answer.", ex) { Code = "timeout", RequestId = requestId };
+            }
+            catch (Exception ex) when (ex is IOException or HttpRequestException)
+            {
+                logger.LogWarning(ex, "{Provider} {Operation}: the stream broke after {Ms} ms ({Kilobytes} KB read, request {RequestId})", providerName, operation,
+                    watch.ElapsedMilliseconds, characters / 1024, requestId.Length > 0 ? requestId : "-");
+                throw new ProviderException($"{providerName}: the connection broke during the answer.", ex) { Code = "network", RequestId = requestId };
+            }
+
+            logger.LogInformation("{Provider} {Operation}: HTTP {Status} streamed in {Ms} ms (first line after {First} ms, {Kilobytes} KB, request {RequestId})",
+                providerName, operation, (int)response.StatusCode, watch.ElapsedMilliseconds, first, characters / 1024, requestId.Length > 0 ? requestId : "-");
+            return new StreamReply(requestId, characters, first, response.Content.Headers.ContentType?.MediaType ?? string.Empty);
+        }
+    }
+
     private async Task<ProviderReply> SendAsync(Func<HttpRequestMessage> create, string providerName, string apiKey, bool logSuccess,
         CancellationToken cancellationToken)
+    {
+        var (request, response, requestId, operation, watch) = await OpenAsync(create, providerName, apiKey, HttpCompletionOption.ResponseContentRead,
+            cancellationToken).ConfigureAwait(false);
+        using (request)
+        using (response)
+        {
+            var body = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+            if (logSuccess)
+            {
+                logger.LogInformation("{Provider} {Operation}: HTTP {Status} in {Ms} ms ({Kilobytes} KB, request {RequestId})", providerName, operation,
+                    (int)response.StatusCode, watch.ElapsedMilliseconds, body.Length / 1024, requestId.Length > 0 ? requestId : "-");
+            }
+
+            return new ProviderReply(body, response.Content.Headers.ContentType?.MediaType ?? string.Empty, requestId);
+        }
+    }
+
+    /// <summary>
+    /// Sends until a successful status (one retry after a 429 when the provider asks to wait at most a minute) and returns the open response
+    /// with its request (the caller disposes both); a failed status, a network error and a timeout become a <see cref="ProviderException"/>.
+    /// </summary>
+    private async Task<(HttpRequestMessage Request, HttpResponseMessage Response, string RequestId, string Operation, Stopwatch Watch)> OpenAsync(
+        Func<HttpRequestMessage> create, string providerName, string apiKey, HttpCompletionOption completion, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(create);
         for (var attempt = 1; ; attempt++)
         {
-            using var request = create();
+            var request = create();
             var operation = request.Method + " " + (request.RequestUri?.AbsolutePath ?? string.Empty);
             var watch = Stopwatch.StartNew();
             HttpResponseMessage response;
             try
             {
-                response = await _http.SendAsync(request, HttpCompletionOption.ResponseContentRead, cancellationToken).ConfigureAwait(false);
+                response = await _http.SendAsync(request, completion, cancellationToken).ConfigureAwait(false);
             }
             catch (HttpRequestException ex)
             {
+                request.Dispose();
                 logger.LogWarning(ex, "{Provider} {Operation}: network error after {Ms} ms", providerName, operation, watch.ElapsedMilliseconds);
                 throw new ProviderException($"{providerName} could not be reached.", ex) { Code = "network" };
             }
             catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
             {
+                request.Dispose();
                 logger.LogWarning("{Provider} {Operation}: the request timed out after {Ms} ms", providerName, operation, watch.ElapsedMilliseconds);
                 throw new ProviderException($"{providerName} did not answer in time.", ex) { Code = "timeout" };
             }
+            catch
+            {
+                request.Dispose();
+                throw;
+            }
 
+            var requestId = RequestId(response);
+            if (response.IsSuccessStatusCode)
+            {
+                return (request, response, requestId, operation, watch);
+            }
+
+            using (request)
             using (response)
             {
                 var body = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
-                var requestId = RequestId(response);
-                if (response.IsSuccessStatusCode)
-                {
-                    if (logSuccess)
-                    {
-                        logger.LogInformation("{Provider} {Operation}: HTTP {Status} in {Ms} ms ({Kilobytes} KB, request {RequestId})", providerName, operation,
-                            (int)response.StatusCode, watch.ElapsedMilliseconds, body.Length / 1024, requestId.Length > 0 ? requestId : "-");
-                    }
-
-                    return new ProviderReply(body, response.Content.Headers.ContentType?.MediaType ?? string.Empty, requestId);
-                }
-
                 var wait = response.Headers.RetryAfter?.Delta ?? TimeSpan.FromSeconds(5);
                 if (response.StatusCode == HttpStatusCode.TooManyRequests && attempt == 1 && wait <= MaxRetryAfter)
                 {

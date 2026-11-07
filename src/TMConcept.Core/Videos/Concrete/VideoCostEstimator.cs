@@ -11,17 +11,14 @@ namespace TMConcept.Core.Videos;
 
 /// <summary>
 /// The estimate of making videos before anything is paid for, with the models chosen on the page: the video code call (its real prompt is
-/// built from the concept's scenes; the answer is a range of <see cref="CodeOutputMin"/>–<see cref="CodeOutputMax"/> tokens, and one repair
-/// may double it: the high end counts it), the image prompts and one image per scene when an image model is chosen, and the narration's
+/// built from the concept's scenes; the answer is a range from <see cref="CodeOutputMin"/> tokens to the whole output budget of the call,
+/// <see cref="VideoCodeBudget.For"/>, and one repair may double it: the high end counts it), the image prompts and one image per scene when an image model is chosen, and the narration's
 /// characters for an online voice. Local models and the sample images cost nothing. The exact cost of a made video is its own record.
 /// </summary>
 public sealed class VideoCostEstimator(ICostCalculator costs)
 {
     /// <summary>Fewest output tokens of a video code answer (a short HyperFrames scene file).</summary>
     public const long CodeOutputMin = 3_000;
-
-    /// <summary>Most output tokens of a video code answer counted in the estimate (thinking included).</summary>
-    public const long CodeOutputMax = 14_000;
 
     /// <summary>Output tokens of the image prompt answer per scene.</summary>
     public const long PromptTokensPerScene = 120;
@@ -48,10 +45,12 @@ public sealed class VideoCostEstimator(ICostCalculator costs)
                     string.Empty, Milliseconds(s.Narration, profile.ContentLanguage))).ToList(), width, height, 30);
                 var system = engine is null ? 0 : costs.Tokens(VideoCodePrompt.System(engine, subtitles), ContentLanguages.English);
                 var user = costs.Tokens(VideoCodePrompt.User(input), profile.ContentLanguage);
-                var first = costs.EstimateChat(code, system + user, 0, CodeOutputMin, CodeOutputMax);
+                // The high end is the call's whole budget: 14 000 tokens used to be counted, but real answers with thinking were cut at 32 000.
+                long most = VideoCodeBudget.For(code);
+                var first = costs.EstimateChat(code, system + user, 0, CodeOutputMin, most);
 
                 // One repair may follow a rejected check: its cost is the high end only.
-                var repair = costs.EstimateChat(code, system + user + CodeOutputMax, system, 0, CodeOutputMax);
+                var repair = costs.EstimateChat(code, system + user + most, system, 0, most);
                 total = total.Plus(first with { MaxUsd = first.MaxUsd + repair.MaxUsd });
                 if (image is not null)
                 {

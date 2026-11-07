@@ -304,6 +304,7 @@
   "concepts.semantic.failed": "Anlamsal tekrar denetimi {0} turda çalışamadı ve atlandı; yalnız yerel denetim çalıştı (nedeni günlük dosyasında).",
   "video.error.missing": "Üretilmedi: ayarların gerektirdiği şeyler kurulu değil; hiçbir şey için ödeme yapılmadı.",
   "video.error.files": "Bir dosya yazılamadı (disk dolu ya da izin yok mu?).",
+  "video.error.truncated": "Video kodu çok uzun olduğu için yarıda kesildi; harcanan {0}. Daha düşük bir çaba düzeyi ya da daha kısa bir konsept deneyin.",
   "profile.delete.busy": "Bu profil için bir üretim ya da video kuyruğu çalışıyor. Durdur ya da bitmesini bekle, sonra sil.",
   "backup.before_change": "Değişiklikten önce yedek alındı.",
   "backup.before_change_failed": "Bu değişiklikten önceki yedek yazılamadı, bu yüzden hiçbir şey silinmedi: {0}",

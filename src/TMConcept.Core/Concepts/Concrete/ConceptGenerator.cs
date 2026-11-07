@@ -123,7 +123,7 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
                 {
                     var response = await client.SendAsync(new ChatRequest(prompt.System, prompt.User, CacheSystem: true, Schema: prompt.Schema,
                         MaxOutputTokens: ConceptOutputBudget.MaxOutputTokens(profile.ContentLanguage, profile.TargetSeconds, sizes[index]),
-                        Effort: request.Model.Effort), cancellationToken).ConfigureAwait(false);
+                        Effort: request.Model.Effort, Stream: true), cancellationToken).ConfigureAwait(false);
                     Charge(run, request, response.Usage, response.ReportedCostUsd);
                     answer = response.Text;
                 }

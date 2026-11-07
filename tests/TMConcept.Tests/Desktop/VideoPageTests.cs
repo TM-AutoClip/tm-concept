@@ -114,6 +114,34 @@ public sealed class VideoPageTests
     }
 
     [AvaloniaFact]
+    public async Task ACutOffVideoCodeSaysSoWithWhatWasPaidAndTheCallUsesTheWholeBudgetAndStreams()
+    {
+        var engine = new FakeEngine();
+        var charged = new ChatUsage(900, 0, 4000, 64_000);
+        var chat = new FakeChat().Answer(_ => throw new TMConcept.Core.Providers.ProviderException("cut")
+        {
+            Code = "truncated",
+            ChargedUsage = charged,
+            PartialText = "window.__timelines = ",
+        });
+        using var h = Harness(chat, engine);
+        var (page, concept) = await PrepareAsync(h);
+        var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
+        var model = h.Get<IModelCatalog>().Find("anthropic", "claude-sonnet-5-5")!;
+        var paid = h.Get<TMConcept.Core.Costs.ICostCalculator>().Exact(model, charged);
+
+        await page.ProduceAllAsync();
+
+        chat.Requests.Single().MaxOutputTokens.ShouldBe(VideoCodeBudget.MaxOutputTokens);
+        chat.Requests.Single().Stream.ShouldBeTrue();
+        var error = page.Queue.Single().Error;
+        error.ShouldBe(text.Format("video.error.truncated", text.Usd(paid)));
+        error.ShouldNotContain(text["provider.fail.truncated"]);
+        page.LastCost.ShouldContain(text.Usd(paid));
+        (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!.Status.ShouldBe(ConceptStatus.Queued);
+    }
+
+    [AvaloniaFact]
     public async Task AnEngineThatIsNotInstalledIsOfferedAndDecliningStopsTheItemBeforeAnythingIsPaid()
     {
         var engine = new FakeEngine { Missing = ["packages", "browser"] };

@@ -33,6 +33,13 @@ internal sealed class FakeHttp : HttpMessageHandler
         return this;
     }
 
+    /// <summary>Answers 200 with a body of its own (a stream that stops, for example).</summary>
+    public FakeHttp Answer(Func<HttpContent> content)
+    {
+        _answers.Enqueue(() => new HttpResponseMessage(HttpStatusCode.OK) { Content = content() });
+        return this;
+    }
+
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var body = request.Content is null ? string.Empty : await request.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
