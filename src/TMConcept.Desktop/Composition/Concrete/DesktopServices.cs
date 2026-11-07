@@ -81,6 +81,7 @@ public static class DesktopServices
         services.AddSingleton<Speech.Embeddings.LocalEmbedder>();
         services.AddSingleton<Core.Duplicates.ILocalEmbedder>(s => s.GetRequiredService<Speech.Embeddings.LocalEmbedder>());
         services.AddSingleton<Core.Speech.ISpeechEngine, Providers.Speech.OpenAISpeechEngine>();
+        services.AddSingleton<Core.Pronunciation.PronunciationService>();
         services.AddSingleton<Core.Speech.SpeechService>();
         services.AddSingleton<Core.Images.IImageEngine, Providers.Images.FalImageEngine>();
         services.AddSingleton<Core.Images.IImageEngine, Providers.Images.OpenAIImageEngine>();
@@ -138,6 +139,7 @@ public static class DesktopServices
         services.AddSingleton<IVideoStore, VideoStore>();
         services.AddSingleton<IApiKeyStore, ApiKeyStore>();
         services.AddSingleton<IStepModelStore, StepModelStore>();
+        services.AddSingleton<Core.Pronunciation.IPronunciationStore, PronunciationStore>();
         services.AddSingleton<IEmbeddingStore, EmbeddingStore>();
     }
 
@@ -186,6 +188,7 @@ public static class DesktopServices
         services.AddSingleton<Func<IEnumerable<SettingsSectionBase>>>(s => () => s.GetServices<SettingsSectionBase>());
         AddSection<GeneralSettingsViewModel, GeneralSettingsView>(services);
         AddSection<KeysSettingsViewModel, KeysSettingsView>(services);
+        AddSection<VoiceSettingsViewModel, VoiceSettingsView>(services);
         AddSection<BackupSettingsViewModel, BackupSettingsView>(services);
         AddSection<AboutSettingsViewModel, AboutSettingsView>(services);
     }

@@ -137,6 +137,8 @@ the model that describes a sample image. Each step says what it is for:
 - **Narration** — *Off* (silent video, yellow warning), **Supertonic 3** (local, free; Turkish and English), **Kokoro 82M** (local, free;
   English only, American and British voices; a dictionary voice: names and words it does not know are left out of the audio, with a
   warning), or an online voice. Voice, speed and ▶ Listen are in the step.
+- **Pronunciation** — Settings → Voice and pronunciation: per video language, words the voice should read differently ("Viking" →
+  "Vikink" in Turkish; Turkish comes with a small list, you add your own). Only the voice changes; subtitles keep the written word.
 - **Duplicate check by meaning** — optional: the local **Multilingual MiniLM** (free, on this computer, 50+ languages including Turkish)
   or an online embedding model. **Describe a sample image** — optional, a cheap online helper.
 

@@ -11,7 +11,7 @@ namespace TMConcept.Storage.Database
     public partial class ConceptDbContextModel
     {
         private ConceptDbContextModel()
-            : base(skipDetectChanges: false, modelId: new Guid("c50d17ab-5533-45be-af2b-6883e47fe7a0"), entityTypeCount: 14)
+            : base(skipDetectChanges: false, modelId: new Guid("d44122b3-7fce-4951-8a52-5274a1ba153c"), entityTypeCount: 15)
         {
         }
 
@@ -24,6 +24,7 @@ namespace TMConcept.Storage.Database
             var stepModelChoice = StepModelChoiceEntityType.Create(this);
             var profile = ProfileEntityType.Create(this);
             var profileImage = ProfileImageEntityType.Create(this);
+            var pronunciationEntry = PronunciationEntryEntityType.Create(this);
             var run = RunEntityType.Create(this);
             var queueItem = QueueItemEntityType.Create(this);
             var videoCost = VideoCostEntityType.Create(this);
@@ -50,6 +51,7 @@ namespace TMConcept.Storage.Database
             StepModelChoiceEntityType.CreateAnnotations(stepModelChoice);
             ProfileEntityType.CreateAnnotations(profile);
             ProfileImageEntityType.CreateAnnotations(profileImage);
+            PronunciationEntryEntityType.CreateAnnotations(pronunciationEntry);
             RunEntityType.CreateAnnotations(run);
             QueueItemEntityType.CreateAnnotations(queueItem);
             VideoCostEntityType.CreateAnnotations(videoCost);

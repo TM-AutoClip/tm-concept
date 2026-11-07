@@ -50,9 +50,7 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
     /// Output languages (concept, narration, subtitles and on-screen text are written in it): the language's own name with its name in the
     /// interface language ("Deutsch — Almanca"). The channel concept and the extra request may still be written in the interface language.
     /// </summary>
-    public IReadOnlyList<ChoiceOption> Languages => _languages ??= ContentLanguages.Definitions
-        .Select(d => new ChoiceOption(d.Code, OutputLanguages.NameIn(d.Code, text.Language) is var name && name != d.Native ? d.Native + " — " + name : d.Native))
-        .ToList();
+    public IReadOnlyList<ChoiceOption> Languages => _languages ??= LanguageOptions.For(text);
 
     private IReadOnlyList<ChoiceOption>? _languages;
 

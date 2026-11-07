@@ -533,5 +533,19 @@
   "restore.contents.profiles": "{0} profile(s) with their model choices",
   "restore.contents.images": "{0} sample image(s)",
   "restore.contents.concepts": "{0} concept(s), {1} video record(s)",
-  "restore.contents.settings": "the settings"
+  "restore.contents.settings": "the settings",
+  "settings.voices": "Voice and pronunciation",
+  "voices.words.title": "Pronunciation dictionary",
+  "voices.words.explain": "In the chosen video language the voice reads these words as written on the right; subtitles and the narration file keep the original spelling. Only a whole word matches (\"Viking's\" yes, \"Vikings\" no; you can add the other form too). Upper and lower case are compared by the language's own rules (Turkish I/ı and İ/i). To change a built-in word, add the same word with your reading; removing yours brings the built-in reading back.",
+  "voices.words.language": "Language",
+  "voices.words.word": "Word (as written)",
+  "voices.words.spoken": "Read as (as the voice should read it)",
+  "voices.words.add": "Add",
+  "voices.words.builtin": "built in",
+  "voices.words.own": "yours",
+  "voices.words.empty": "Write the word and how it is read.",
+  "voices.words.long": "The word and its reading can have at most 60 characters.",
+  "voices.words.added": "Saved: {0}",
+  "voices.words.removed": "Removed: {0}",
+  "voices.words.none": "This language has no built-in words; you can add your own."
 }

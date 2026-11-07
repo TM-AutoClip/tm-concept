@@ -6,6 +6,7 @@ using TMConcept.Core.Duplicates;
 using TMConcept.Core.Keys;
 using TMConcept.Core.Models;
 using TMConcept.Core.Profiles;
+using TMConcept.Core.Pronunciation;
 using TMConcept.Core.Runs;
 using TMConcept.Core.Videos;
 
@@ -65,6 +66,9 @@ internal sealed class ConceptDbContext(DbContextOptions<ConceptDbContext> option
 
     /// <summary>Settings documents.</summary>
     public DbSet<SettingRow> Settings => Set<SettingRow>();
+
+    /// <summary>The user's pronunciation dictionary.</summary>
+    public DbSet<PronunciationEntry> Pronunciations => Set<PronunciationEntry>();
 
     /// <summary>The file's tables and indexes (<c>sqlite_master</c>).</summary>
     public DbSet<SchemaObjectRow> SchemaObjects => Set<SchemaObjectRow>();
@@ -192,6 +196,13 @@ internal sealed class ConceptDbContext(DbContextOptions<ConceptDbContext> option
         {
             e.ToTable(ConceptSchema.Settings);
             e.HasKey(s => s.Key);
+        });
+        modelBuilder.Entity<PronunciationEntry>(e =>
+        {
+            e.ToTable("pronunciations");
+            e.HasKey(p => p.Id);
+            e.Property(p => p.Id).ValueGeneratedNever();
+            e.HasIndex(p => p.Language);
         });
         // SQLite's views of the file. A pragma with an argument is read through its hidden "arg" column (pragma_table_info WHERE arg = …).
         modelBuilder.Entity<SchemaObjectRow>(e =>

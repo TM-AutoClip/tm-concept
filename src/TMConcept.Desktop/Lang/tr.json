@@ -533,5 +533,19 @@
   "restore.contents.profiles": "model seçimleriyle {0} profil",
   "restore.contents.images": "{0} örnek görsel",
   "restore.contents.concepts": "{0} konsept, {1} video kaydı",
-  "restore.contents.settings": "ayarlar"
+  "restore.contents.settings": "ayarlar",
+  "settings.voices": "Ses ve telaffuz",
+  "voices.words.title": "Telaffuz sözlüğü",
+  "voices.words.explain": "Ses, seçtiğin video dilinde bu kelimeleri sağdaki gibi okur; altyazıda ve konuşma metni dosyasında kelimenin asıl yazımı kalır. Yalnız bütün kelime eşleşir (\"Viking'ler\" evet, \"Vikingler\" hayır; ekli biçimi ayrıca ekleyebilirsin). Büyük/küçük harf dilin kurallarıyla karşılaştırılır (Türkçede I/ı ve İ/i). Hazır bir kelimeyi değiştirmek için aynı kelimeyi kendi okunuşunla ekle; kendi kaydını silince hazır okunuş geri gelir.",
+  "voices.words.language": "Dil",
+  "voices.words.word": "Kelime (yazıldığı gibi)",
+  "voices.words.spoken": "Okunuşu (sesin okuyacağı gibi)",
+  "voices.words.add": "Ekle",
+  "voices.words.builtin": "hazır",
+  "voices.words.own": "senin",
+  "voices.words.empty": "Kelimeyi ve okunuşunu yaz.",
+  "voices.words.long": "Kelime ve okunuşu en çok 60 karakter olabilir.",
+  "voices.words.added": "Kaydedildi: {0}",
+  "voices.words.removed": "Silindi: {0}",
+  "voices.words.none": "Bu dilde hazır kelime yok; kendi kelimelerini ekleyebilirsin."
 }

@@ -135,6 +135,8 @@ adım ne işe yaradığını yazar:
 - **Seslendirme** — *Kapalı* (sessiz video, sarı uyarı), **Supertonic 3** (yerel, ücretsiz; Türkçe ve İngilizce), **Kokoro 82M** (yerel,
   ücretsiz; yalnız İngilizce, Amerikan ve İngiliz sesleri; sözlüklü bir ses: bilmediği adları ve kelimeleri seste atlar, uyarı verir) ya da
   bir online ses. Ses, hız ve ▶ Dinle adımın içinde.
+- **Telaffuz** — Ayarlar → Ses ve telaffuz: her video dili için sesin farklı okuması gereken kelimeler (Türkçede "Viking" → "Vikink";
+  Türkçe küçük bir hazır listeyle gelir, kendi kelimelerini eklersin). Yalnız ses değişir; altyazı yazıldığı gibi kalır.
 - **Anlamca tekrar denetimi** — isteğe bağlı: yerel **Multilingual MiniLM** (ücretsiz, bu bilgisayarda, Türkçe dahil 50'den fazla dil) ya
   da bir online model. **Örnek görsel açıklama** — isteğe bağlı, ucuz bir online yardımcı.
 

@@ -7,6 +7,8 @@
     <!-- Ready channel templates (read-only, one file each). -->
     <EmbeddedResource Include="Templates/Files/**/*.json" LogicalName="TMConcept.Templates.%(Filename)%(Extension)" />
     <EmbeddedResource Include="Concepts/Files/focus.json" LogicalName="TMConcept.Focus.json" />
+    <!-- Built-in pronunciations, one file per output language that has some. -->
+    <EmbeddedResource Include="Pronunciation/Files/*.txt" LogicalName="TMConcept.Pronunciation.%(Filename)%(Extension)" />
     <!-- Model prompts, one folder per content language. -->
     <EmbeddedResource Include="Prompts/Files/tr/*.txt" LogicalName="TMConcept.Prompts.tr.%(Filename)%(Extension)" />
     <EmbeddedResource Include="Prompts/Files/en/*.txt" LogicalName="TMConcept.Prompts.en.%(Filename)%(Extension)" />

@@ -1,0 +1,47 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:TMConcept.Desktop.ViewModels"
+             x:Class="TMConcept.Desktop.Views.VoiceSettingsView"
+             x:DataType="vm:VoiceSettingsViewModel">
+  <ScrollViewer>
+    <StackPanel Spacing="12" Margin="0,12" MaxWidth="820" HorizontalAlignment="Left">
+      <Border Classes="card">
+        <StackPanel Spacing="8">
+          <TextBlock Text="{DynamicResource voices.words.title}" Classes="h2" />
+          <TextBlock Text="{DynamicResource voices.words.explain}" Classes="small" TextWrapping="Wrap" />
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <TextBlock Text="{DynamicResource voices.words.language}" VerticalAlignment="Center" />
+            <ComboBox ItemsSource="{Binding Languages}" SelectedItem="{Binding Language}" MinWidth="240" MaxDropDownHeight="420">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:ChoiceOption">
+                  <TextBlock Text="{Binding Label}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+          </StackPanel>
+          <Grid ColumnDefinitions="*,*,Auto" ColumnSpacing="8">
+            <TextBox Text="{Binding NewWord}" PlaceholderText="{DynamicResource voices.words.word}" MaxLength="60" />
+            <TextBox Grid.Column="1" Text="{Binding NewSpoken}" PlaceholderText="{DynamicResource voices.words.spoken}" MaxLength="60" />
+            <Button Grid.Column="2" Classes="accent" Content="{DynamicResource voices.words.add}" Command="{Binding AddWordCommand}" />
+          </Grid>
+          <TextBlock Text="{Binding Status}" Classes="muted" TextWrapping="Wrap" />
+          <TextBlock Text="{DynamicResource voices.words.none}" Classes="small" IsVisible="{Binding !Words.Count}" />
+          <ItemsControl ItemsSource="{Binding Words}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:PronunciationRow">
+                <Grid ColumnDefinitions="*,24,*,80,Auto" Margin="0,2">
+                  <TextBlock Text="{Binding Word}" VerticalAlignment="Center" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="1" Text="→" Classes="muted" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                  <TextBlock Grid.Column="2" Text="{Binding Spoken}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="3" Text="{Binding Tag}" Classes="small muted" VerticalAlignment="Center" />
+                  <Button Grid.Column="4" Classes="danger" Content="✕" IsVisible="{Binding Own}"
+                          Command="{Binding $parent[ItemsControl].((vm:VoiceSettingsViewModel)DataContext).DeleteWordCommand}" CommandParameter="{Binding}" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

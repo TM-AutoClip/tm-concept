@@ -6,15 +6,19 @@ using TMConcept.Core.Models;
 using TMConcept.Core.Paths;
 using TMConcept.Core.Pipeline;
 using TMConcept.Core.Profiles;
+using TMConcept.Core.Pronunciation;
 
 namespace TMConcept.Core.Speech;
 
 /// <summary>
 /// The narration step: a local model names its engine by its id ("local/supertonic"), an online model by its provider. The choice comes
 /// from the profile's choice made on the video page (off = a silent video). A cache keeps every spoken text: the key is the SHA-256 of
-/// text, engine, model, voice and speed, so a repeated scene is not spoken (or paid) twice.
+/// text, engine, model, voice and speed, so a repeated scene is not spoken (or paid) twice. The text is put through the language's
+/// pronunciation dictionary first (<see cref="PronunciationService"/>: "Viking" is read "Vikink" in Turkish); the key is that of the spoken
+/// text, so a changed dictionary word is spoken again. Subtitles never see the spoken text.
 /// </summary>
-public sealed class SpeechService(IEnumerable<ISpeechEngine> engines, StepModelResolver resolver, IAppPaths paths, ILogger<SpeechService> logger)
+public sealed class SpeechService(IEnumerable<ISpeechEngine> engines, StepModelResolver resolver, IAppPaths paths, PronunciationService pronunciations,
+    ILogger<SpeechService> logger)
 {
     /// <summary>Every engine.</summary>
     public IReadOnlyList<ISpeechEngine> Engines { get; } = engines.ToList();
@@ -75,15 +79,16 @@ public sealed class SpeechService(IEnumerable<ISpeechEngine> engines, StepModelR
     {
         ArgumentNullException.ThrowIfNull(setup);
         var voice = setup.Voice.Length > 0 ? setup.Voice : setup.Engine.Voices(language).FirstOrDefault()?.Id ?? string.Empty;
-        var cache = Path.Combine(paths.WorkDirectory, "speech-cache", Key(text, setup.Engine.Code, setup.Model.Id, voice, setup.Speed) + ".wav");
+        var spoken = await pronunciations.PrepareAsync(text, language, cancellationToken).ConfigureAwait(false);
+        var cache = Path.Combine(paths.WorkDirectory, "speech-cache", Key(spoken, setup.Engine.Code, setup.Model.Id, voice, setup.Speed) + ".wav");
         Directory.CreateDirectory(Path.GetDirectoryName(outputWav)!);
         if (File.Exists(cache))
         {
             File.Copy(cache, outputWav, overwrite: true);
-            return new SpeechClip(outputWav, WaveFile.DurationMs(outputWav), text.Length, 0, setup.Engine.Code);
+            return new SpeechClip(outputWav, WaveFile.DurationMs(outputWav), spoken.Length, 0, setup.Engine.Code);
         }
 
-        var clip = await setup.Engine.SynthesizeAsync(new SpeechRequest(text, language, voice, setup.Speed, outputWav, setup.Online), cancellationToken)
+        var clip = await setup.Engine.SynthesizeAsync(new SpeechRequest(spoken, language, voice, setup.Speed, outputWav, setup.Online), cancellationToken)
             .ConfigureAwait(false);
         Directory.CreateDirectory(Path.GetDirectoryName(cache)!);
         File.Copy(outputWav, cache, overwrite: true);

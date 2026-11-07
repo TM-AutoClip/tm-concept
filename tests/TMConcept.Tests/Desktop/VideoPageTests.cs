@@ -129,6 +129,7 @@ public sealed class VideoPageTests
         var (_, concept) = await PrepareAsync(h);
         await h.Get<IStepModelStore>().SaveAsync(new StepModelChoice { Step = PipelineSteps.Speech, ProfileId = concept.ProfileId, Provider = ModelProviders.Local,
             Model = voice.Code }, CancellationToken.None);
+        (await h.Get<TMConcept.Core.Pronunciation.PronunciationService>().AddAsync(ContentLanguages.English, "siege", "seej", CancellationToken.None)).ShouldBeNull();
 
         var record = await RunAsync(h, concept, new VideoOptions { Engine = engine.Kind, Speech = true });
 
@@ -136,6 +137,11 @@ public sealed class VideoPageTests
         Directory.GetFiles(Path.Combine(folder, VideoFolders.Audio)).Select(Path.GetFileName).ShouldBe(["1.wav", "2.wav"], ignoreOrder: true);
         File.ReadAllText(Path.Combine(folder, VideoFolders.NarrationFile)).ShouldContain("strange fire");
         File.ReadAllText(Path.Combine(folder, VideoFolders.Source, "input.json")).ShouldContain("siege");
+
+        // The pronunciation dictionary changes only what the voice reads; subtitles and the narration file keep the written word.
+        voice.Requests.First().Text.ShouldBe("In 672 the city was under seej.");
+        File.ReadAllText(Path.Combine(folder, "subtitles.srt")).ShouldContain("under siege");
+        File.ReadAllText(Path.Combine(folder, VideoFolders.NarrationFile)).ShouldNotContain("seej");
         record.Warnings.ShouldNotContain(VideoWarnings.SpeechFailed);
     }
 

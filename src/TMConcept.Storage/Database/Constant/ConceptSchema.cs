@@ -5,12 +5,13 @@ namespace TMConcept.Storage.Database;
 /// file and writes <see cref="Version"/> into the settings row <see cref="VersionSetting"/>. Only a file of exactly this version is opened:
 /// there is no upgrade from older files and no reading of their layout (no backward compatibility, 7 Nov 2026). A file without the row
 /// (0.1.0–0.1.6) or with another number is refused with <see cref="DatabaseVersionException"/>, and the app offers to set it aside and
-/// start fresh. Change <see cref="Version"/> whenever the mapping changes (4: the queue keeps the last failure and what failures paid).
+/// start fresh. Change <see cref="Version"/> whenever the mapping changes (4: the queue keeps the last failure and what failures paid; 5: the
+/// pronunciation dictionary).
 /// </summary>
 internal static class ConceptSchema
 {
     /// <summary>The version a new file is created with and the only one that is opened.</summary>
-    public const int Version = 4;
+    public const int Version = 5;
 
     /// <summary>The settings row that holds the schema version.</summary>
     public const string VersionSetting = "schema-version";
