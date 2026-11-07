@@ -97,7 +97,6 @@ public sealed class VideoCostEstimator(ICostCalculator costs)
     {
         ArgumentNullException.ThrowIfNull(narration);
         var words = narration.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
-        var rate = language == ContentLanguages.Turkish ? NarrationRate.TurkishWordsPerSecond : NarrationRate.EnglishWordsPerSecond;
-        return (long)Math.Round(words / rate * 1000);
+        return (long)Math.Round(words / OutputLanguages.Of(language).WordsPerSecond * 1000);
     }
 }

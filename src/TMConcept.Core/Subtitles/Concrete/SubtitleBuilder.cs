@@ -14,6 +14,8 @@ public static class SubtitleBuilder
     /// <summary>Characters per line.</summary>
     public const int LineMax = 42;
 
+    private static readonly char[] WordSeparators = [' ', '\n', '\r', '\t'];
+
     /// <summary>Cues of the scenes.</summary>
     public static IReadOnlyList<SubtitleCue> Build(IReadOnlyList<SubtitleSource> scenes)
     {
@@ -76,9 +78,32 @@ public static class SubtitleBuilder
         return text.ToString();
     }
 
+    /// <summary>Whether a word ends a sentence: ".", "!", "?", "…" (also before a closing quote or bracket: «… dedi.»", "(1453).").</summary>
+    public static bool EndsSentence(string word)
+    {
+        ArgumentNullException.ThrowIfNull(word);
+        var end = word.TrimEnd('"', '\'', '»', '«', '”', '“', '’', ')', ']', '›');
+        return end.Length > 0 && end[^1] is '.' or '!' or '?' or '…';
+    }
+
+    /// <summary>
+    /// The words of a text (split at spaces, tabs and line ends; a no-break space, as in French "Bonjour !", stays inside its word so a line
+    /// never starts with the "!"), a word longer than a line cut into line-long parts, so nothing of it is lost.
+    /// </summary>
+    private static IEnumerable<string> Words(string text)
+    {
+        foreach (var word in text.Split(WordSeparators, StringSplitOptions.RemoveEmptyEntries))
+        {
+            for (var i = 0; i < word.Length; i += LineMax)
+            {
+                yield return word.Substring(i, Math.Min(LineMax, word.Length - i));
+            }
+        }
+    }
+
     private static List<List<string>> Pieces(string text)
     {
-        var words = text.Replace('\n', ' ').Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var words = Words(text);
         var pieces = new List<List<string>>();
         var lines = new List<string>();
         var line = new StringBuilder();
@@ -100,8 +125,8 @@ public static class SubtitleBuilder
                 line.Append(' ');
             }
 
-            line.Append(word.Length > LineMax ? word[..LineMax] : word);
-            if (word.EndsWith('.') || word.EndsWith('!') || word.EndsWith('?'))
+            line.Append(word);
+            if (EndsSentence(word))
             {
                 lines.Add(line.ToString());
                 line.Clear();

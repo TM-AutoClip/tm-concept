@@ -46,8 +46,15 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
     [ObservableProperty]
     public partial TemplateOption? SelectedTemplate { get; set; }
 
-    /// <summary>Content languages.</summary>
-    public IReadOnlyList<ChoiceOption> Languages { get; } = [new(ContentLanguages.Turkish, "Türkçe"), new(ContentLanguages.English, "English")];
+    /// <summary>
+    /// Output languages (concept, narration, subtitles and on-screen text are written in it): the language's own name with its name in the
+    /// interface language ("Deutsch — Almanca"). The channel concept and the extra request may still be written in the interface language.
+    /// </summary>
+    public IReadOnlyList<ChoiceOption> Languages => _languages ??= ContentLanguages.Definitions
+        .Select(d => new ChoiceOption(d.Code, OutputLanguages.NameIn(d.Code, text.Language) is var name && name != d.Native ? d.Native + " — " + name : d.Native))
+        .ToList();
+
+    private IReadOnlyList<ChoiceOption>? _languages;
 
     /// <summary>Whether a new profile is being created.</summary>
     [ObservableProperty]
@@ -308,7 +315,7 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
                 ".gif" => "image/gif",
                 _ => "image/jpeg",
             };
-            var (caption, cost) = await describer.DescribeAsync(bytes, mime, Language?.Value ?? ContentLanguages.English, _editing?.Id, CancellationToken.None)
+            var (caption, cost) = await describer.DescribeAsync(bytes, mime, text.Language == "tr" ? ContentLanguages.Turkish : ContentLanguages.English, _editing?.Id, CancellationToken.None)
                 .ConfigureAwait(true);
             image.Caption = caption;
             activity.Add(ActivityLevel.Info, text.Format("profile.describe.done", text.Usd(cost)));
@@ -425,7 +432,7 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
     private void Fill(Profile profile)
     {
         Name = profile.Name;
-        Language = Languages.FirstOrDefault(l => l.Value == profile.ContentLanguage) ?? Languages[1];
+        Language = Languages.FirstOrDefault(l => l.Value == profile.ContentLanguage) ?? Languages.First(l => l.Value == ContentLanguages.English);
         Vertical = profile.Format == VideoFormat.Vertical;
         TargetSeconds = profile.TargetSeconds;
         ConceptText = profile.ConceptText;

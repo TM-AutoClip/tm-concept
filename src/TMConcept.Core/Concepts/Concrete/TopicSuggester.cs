@@ -159,7 +159,7 @@ public sealed class TopicSuggester(IConceptStore concepts, IRunStore runs, IChat
         var user = new StringBuilder()
             .Append("CHANNEL: «").Append(Data(profile.Name, ProfileLimits.NameMax)).Append("»\n")
             .Append("CHANNEL CONCEPT: «").Append(Data(profile.ConceptText, ProfileLimits.ConceptTextMax)).Append("»\n")
-            .Append("VIDEO LANGUAGE: ").Append(profile.ContentLanguage).Append('\n');
+            .Append("VIDEO LANGUAGE: ").Append(OutputLanguages.Of(profile.ContentLanguage).English).Append(" (the topics stay in the language asked for above)\n");
         if (category.Length > 0)
         {
             user.Append("CATEGORY: ").Append(Data(category, ConceptLimits.TitleHardMax)).Append('\n');

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
+using TMConcept.Core.Profiles;
 using TMConcept.Core.Text;
 
 namespace TMConcept.Core.Duplicates;
@@ -10,32 +11,34 @@ namespace TMConcept.Core.Duplicates;
 /// the concepts accepted before it in the same batch, so an idea that comes twice in one answer is dropped the second time.
 /// <list type="bullet">
 /// <item>Similarity: average of the title word-set Jaccard and the title letter-trigram Dice (Turkish folded, filler words dropped, the part
-/// marker removed), mixed with the summary words when both summaries are long enough.</item>
+/// marker removed), mixed with the summary words when both summaries are long enough. Filler words are those of the profile's output language
+/// (with the English ones); part words of every output language are recognised ("Teil 3", "Parte 2", "Часть 4").</item>
 /// <item>Series rule: the same subject with different part numbers ("… — Part 2" vs "… — Part 3") is a continuation, not a duplicate.</item>
 /// </list>
 /// </summary>
 public static partial class DuplicateCheck
 {
-    private static readonly HashSet<string> Filler = new[]
-    {
-        "ve", "ile", "bir", "bu", "su", "o", "da", "de", "mi", "mu", "icin", "gibi", "en", "ne", "nasil", "neden", "kim", "hangi",
-        "olan", "oldu", "cok", "daha", "ki", "ya", "veya", "ama", "her", "hakkinda", "nedir", "kimdi", "bolum", "kisim", "seri",
-        "the", "a", "an", "and", "or", "of", "in", "on", "to", "for", "with", "by", "is", "was", "how", "why", "what", "who", "part", "episode",
-    }.ToHashSet(StringComparer.Ordinal);
+    // Filler words per output language (its own and the English ones), folded once.
+    private static readonly Dictionary<string, HashSet<string>> Fillers = ContentLanguages.Definitions.ToDictionary(d => d.Code,
+        d => d.StopWords.Concat(ContentLanguages.EnglishStopWords).Select(TurkishFold.Fold).ToHashSet(StringComparer.Ordinal), StringComparer.Ordinal);
 
-    /// <summary>Features of a concept.</summary>
-    public static DuplicateFeatures Features(DuplicateSubject subject)
+    // An unknown or missing language: the filler words of every language.
+    private static readonly HashSet<string> AnyFiller = Fillers.Values.SelectMany(f => f).ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>Features of a concept written in <paramref name="language"/> (null: any output language).</summary>
+    public static DuplicateFeatures Features(DuplicateSubject subject, string? language = null)
     {
         ArgumentNullException.ThrowIfNull(subject);
         var (baseTitle, part) = SplitPart(subject.Title);
         var folded = TurkishFold.Fold(baseTitle);
+        var filler = language is not null && Fillers.TryGetValue(language, out var own) ? own : AnyFiller;
         return new DuplicateFeatures
         {
             Subject = subject,
             BaseTitle = folded,
-            Words = Words(folded),
+            Words = Words(folded, filler),
             Trigrams = Trigrams(folded),
-            SummaryWords = Words(TurkishFold.Fold(subject.Summary)),
+            SummaryWords = Words(TurkishFold.Fold(subject.Summary), filler),
             Part = part,
         };
     }
@@ -96,16 +99,19 @@ public static partial class DuplicateCheck
         return best;
     }
 
-    /// <summary>Checks a batch in order; an accepted concept joins the history for the ones after it.</summary>
-    public static IReadOnlyList<DuplicateVerdict> Sift(IEnumerable<DuplicateSubject> candidates, IEnumerable<DuplicateSubject> history)
+    /// <summary>
+    /// Checks a batch in order; an accepted concept joins the history for the ones after it. <paramref name="language"/>: the profile's output
+    /// language (its filler words are left out; null: those of every language).
+    /// </summary>
+    public static IReadOnlyList<DuplicateVerdict> Sift(IEnumerable<DuplicateSubject> candidates, IEnumerable<DuplicateSubject> history, string? language = null)
     {
         ArgumentNullException.ThrowIfNull(candidates);
         ArgumentNullException.ThrowIfNull(history);
-        var pool = history.Select(Features).ToList();
+        var pool = history.Select(h => Features(h, language)).ToList();
         var verdicts = new List<DuplicateVerdict>();
         foreach (var candidate in candidates)
         {
-            var features = Features(candidate);
+            var features = Features(candidate, language);
             var result = Check(features, pool);
             verdicts.Add(new DuplicateVerdict(candidate, result));
             if (result.Accepted)
@@ -140,9 +146,9 @@ public static partial class DuplicateCheck
         return (text, 0);
     }
 
-    private static HashSet<string> Words(string folded) =>
+    private static HashSet<string> Words(string folded, HashSet<string> filler) =>
         folded.Split(' ', StringSplitOptions.RemoveEmptyEntries)
-            .Where(w => w.Length >= 2 && !Filler.Contains(w))
+            .Where(w => w.Length >= 2 && !filler.Contains(w))
             .Select(w => w.All(char.IsDigit) || w.Length <= 6 ? w : w[..6])
             .ToHashSet(StringComparer.Ordinal);
 
@@ -190,9 +196,9 @@ public static partial class DuplicateCheck
         return 2.0 * common / (a.Count + b.Count);
     }
 
-    [GeneratedRegex(@"[\s\-–—:|,(]*(?<no>\d{1,5})\s*(?:\.|'?(?:st|nd|rd|th))?\s*(?:bölüm|bolum|kısım|kisim|part|episode)\b\)?", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"[\s\-–—:|,(]*(?<no>\d{1,5})\s*(?:\.|'?(?:st|nd|rd|th)|e|ème|ª|º)?\s*(?:bölüm|bolum|kısım|kisim|part|episode|teil|folge|parte|partie|épisode|episodio|episódio|capítulo|capitulo|puntata|deel|aflevering|część|czesc|odcinek|часть|серия|avsnitt|bagian)\b\)?", RegexOptions.IgnoreCase)]
     private static partial Regex PartAfter();
 
-    [GeneratedRegex(@"[\s\-–—:|,(]*(?:bölüm|bolum|kısım|kisim|part|episode|ep\.?|#)\s*(?<no>\d{1,5})\b\)?", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"[\s\-–—:|,(]*(?<![\p{L}\p{M}])(?:bölüm|bolum|kısım|kisim|part|episode|teil|folge|parte|partie|épisode|episodio|episódio|capítulo|capitulo|puntata|deel|aflevering|część|czesc|odcinek|часть|серия|avsnitt|bagian|ep\.?|#)\s*(?<no>\d{1,5})\b\)?", RegexOptions.IgnoreCase)]
     private static partial Regex PartBefore();
 }

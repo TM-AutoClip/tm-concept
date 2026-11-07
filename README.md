@@ -23,7 +23,8 @@ needed) and narrates it with a **free local voice**. It runs on Windows and Linu
 
 ## What it does
 
-- **Profiles = channels.** Channel name, content language (Turkish or English), vertical short or horizontal video, target length
+- **Profiles = channels.** Channel name, video language (Turkish, English, German, Spanish, French, Italian, Portuguese, Dutch, Polish,
+  Russian, Swedish or Indonesian; your notes may stay in your own language, the video is written in this one), vertical short or horizontal video, target length
   (15–180 s), the channel's concept in your words, optional sample images, and its own models for any step (voice, images, engine…)
   where it should differ from the general setting. Four ready templates fill the fields
   (history: Byzantine, Ottoman; technology: ancient, modern).

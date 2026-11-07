@@ -1,4 +1,3 @@
-using TMConcept.Core.Costs;
 using TMConcept.Core.Profiles;
 
 namespace TMConcept.Core.Concepts;
@@ -21,11 +20,10 @@ public static class ConceptOutputBudget
     /// <summary>Expected visible output tokens of one concept.</summary>
     public static long TokensPerConcept(string language, int seconds)
     {
-        var turkish = language == ContentLanguages.Turkish;
+        var rates = OutputLanguages.Of(language);
         var words = ConceptPromptBuilder.Words(language, Math.Clamp(seconds, ProfileLimits.SecondsMin, ProfileLimits.SecondsMax));
-        var characters = (words * (turkish ? NarrationRate.TurkishCharactersPerWord : NarrationRate.EnglishCharactersPerWord) * (1 + NarrationRate.SceneLineShare))
-            + NarrationRate.ConceptOverheadCharacters;
-        return (long)Math.Ceiling(characters / (turkish ? TokenRules.TurkishCharactersPerToken : TokenRules.EnglishCharactersPerToken));
+        var characters = (words * rates.CharactersPerWord * (1 + NarrationRate.SceneLineShare)) + NarrationRate.ConceptOverheadCharacters;
+        return (long)Math.Ceiling(characters / rates.CharactersPerToken);
     }
 
     /// <summary>max_tokens of a batch of <paramref name="count"/> concepts.</summary>

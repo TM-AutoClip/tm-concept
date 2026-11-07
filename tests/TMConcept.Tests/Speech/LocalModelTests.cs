@@ -145,13 +145,32 @@ public sealed class LocalModelTests
         tokenizer.Encode(string.Join(' ', Enumerable.Repeat("walls", 200))).Length.ShouldBe(UnigramTokenizer.MaxTokens);
     }
 
+    [Fact]
+    public void SupertonicSpeaksEveryOutputLanguageUnderItsOwnCode()
+    {
+        using var paths = new TempPaths();
+        foreach (var language in ContentLanguages.All)
+        {
+            SupertonicSpeechEngine.Languages.ShouldContain(language);
+            new RequestProbe<SupertonicSpeechEngine>().Make(new TMConcept.Core.Speech.SpeechRequest("Text.", language, "3", 1, Path.Combine(paths.WorkDirectory, "a.wav")))
+                .Language.ShouldBe(language);
+        }
+    }
+
     /// <summary>Calls the protected request builder of the Kokoro engine.</summary>
     private sealed class KokoroRequestProbe
     {
+        public SpeechWorkerRequest Make(TMConcept.Core.Speech.SpeechRequest request) => new RequestProbe<KokoroSpeechEngine>().Make(request);
+    }
+
+    /// <summary>Calls the protected request builder of a local engine.</summary>
+    internal sealed class RequestProbe<TEngine>
+        where TEngine : SherpaSpeechEngineBase
+    {
         public SpeechWorkerRequest Make(TMConcept.Core.Speech.SpeechRequest request)
         {
-            var method = typeof(KokoroSpeechEngine).GetMethod("Request", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
-            var engine = (KokoroSpeechEngine)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(KokoroSpeechEngine));
+            var method = typeof(TEngine).GetMethod("Request", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+            var engine = (TEngine)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(TEngine));
             return (SpeechWorkerRequest)method.Invoke(engine, [request])!;
         }
     }

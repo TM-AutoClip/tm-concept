@@ -30,14 +30,17 @@
       <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="10" ColumnSpacing="12">
         <TextBlock Text="{DynamicResource profile.name}" VerticalAlignment="Center" />
         <TextBox Grid.Column="1" Text="{Binding Name}" MaxLength="80" />
-        <TextBlock Grid.Row="1" Text="{DynamicResource profile.language}" VerticalAlignment="Center" />
-        <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Languages}" SelectedItem="{Binding Language}" MinWidth="200">
-          <ComboBox.ItemTemplate>
-            <DataTemplate x:DataType="vm:ChoiceOption">
-              <TextBlock Text="{Binding Label}" />
-            </DataTemplate>
-          </ComboBox.ItemTemplate>
-        </ComboBox>
+        <TextBlock Grid.Row="1" Text="{DynamicResource profile.language}" VerticalAlignment="Top" Margin="0,6,0,0" />
+        <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4">
+          <ComboBox ItemsSource="{Binding Languages}" SelectedItem="{Binding Language}" MinWidth="240" MaxDropDownHeight="420">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:ChoiceOption">
+                <TextBlock Text="{Binding Label}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+          <TextBlock Text="{DynamicResource profile.language.hint}" Classes="small" TextWrapping="Wrap" />
+        </StackPanel>
         <TextBlock Grid.Row="2" Text="{DynamicResource profile.format}" VerticalAlignment="Center" />
         <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Spacing="16">
           <RadioButton GroupName="format" IsChecked="{Binding Vertical}" Content="{DynamicResource profile.format.vertical}" />

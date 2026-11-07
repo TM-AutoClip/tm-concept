@@ -7,7 +7,8 @@ using TMConcept.Core.Text;
 namespace TMConcept.Core.Concepts;
 
 /// <summary>
-/// Builds the concept prompt from the embedded template of the content language (Prompts/&lt;lang&gt;/concepts.txt). The order follows the
+/// Builds the concept prompt from the embedded template of the prompt language (Prompts/&lt;lang&gt;/concepts.txt: Turkish for Turkish videos,
+/// English for every other output language, which the prompt names; the user's texts may be written in the interface language). The order follows the
 /// cache: the fixed part (rules + channel + concept + format + sample images) comes first and carries the cache mark; the changing part
 /// (history, extra request, count) comes last. The history grows after every batch, so inside the cached part it made every call write a
 /// new cache entry (1.25× input price) and never read one. User text is put inside « » (rule 10) with the guillemets themselves removed from it, so it cannot close the block.
@@ -22,7 +23,8 @@ public static class ConceptPromptBuilder
     {
         ArgumentNullException.ThrowIfNull(input);
         var profile = input.Profile;
-        var (words, template) = Template(profile.ContentLanguage);
+        var language = OutputLanguages.Of(profile.ContentLanguage);
+        var (words, template) = Template(language.PromptLanguage);
         var images = input.Images.Count == 0
             ? null
             : string.Join("; ", input.Images.Select((image, i) => string.Create(CultureInfo.InvariantCulture, $"{i + 1}: «{Data(image.Caption, ProfileLimits.CaptionMax)}»")));
@@ -31,6 +33,9 @@ public static class ConceptPromptBuilder
         {
             ["channel"] = Data(profile.Name, ProfileLimits.NameMax),
             ["concept"] = Data(profile.ConceptText, ProfileLimits.ConceptTextMax),
+            // The output language by name in the prompt's language; the user's « » texts may be in another one (rule 12 of the prompt).
+            ["language"] = language.PromptLanguage == ContentLanguages.Turkish ? language.Turkish : language.English,
+            ["part"] = language.PartWord,
             ["format"] = profile.Format == VideoFormat.Vertical ? words["vertical"] : words["horizontal"],
             ["seconds"] = profile.TargetSeconds.ToString(CultureInfo.InvariantCulture),
             ["words"] = Words(profile.ContentLanguage, profile.TargetSeconds).ToString(CultureInfo.InvariantCulture),
@@ -45,15 +50,14 @@ public static class ConceptPromptBuilder
 
             // The markers ([hard cut], [emphasis]…) the channel concept or the extra request use, with their meaning; in the changing part
             // (after the extra request), so a marker added to the extra request does not change the cached part.
-            ["markers"] = Markers.MarkerText.Legend(profile.ContentLanguage, profile.ConceptText, input.ExtraPrompt),
+            ["markers"] = Markers.MarkerText.Legend(language.PromptLanguage, profile.ConceptText, input.ExtraPrompt),
         };
         var split = template.IndexOf(Separator, StringComparison.Ordinal);
         return new ConceptPrompt(Fill(template[..split], values), Fill(template[(split + Separator.Length)..], values), Schema());
     }
 
-    /// <summary>Narration words for a target length (estimated speaking rate).</summary>
-    public static int Words(string language, int seconds) =>
-        (int)Math.Round(seconds * (language == ContentLanguages.Turkish ? NarrationRate.TurkishWordsPerSecond : NarrationRate.EnglishWordsPerSecond));
+    /// <summary>Narration words for a target length (estimated speaking rate of the output language).</summary>
+    public static int Words(string language, int seconds) => (int)Math.Round(seconds * OutputLanguages.Of(language).WordsPerSecond);
 
     /// <summary>The strict answer schema: every field required, no extra fields.</summary>
     public static JsonObject Schema()
@@ -114,9 +118,8 @@ public static class ConceptPromptBuilder
         return output.ToString().TrimEnd('\n');
     }
 
-    private static (Dictionary<string, string> Words, string Template) Template(string language)
+    private static (Dictionary<string, string> Words, string Template) Template(string code)
     {
-        var code = language == ContentLanguages.Turkish ? "tr" : "en";
         using var stream = typeof(ConceptPromptBuilder).Assembly.GetManifestResourceStream($"TMConcept.Prompts.{code}.concepts.txt")
             ?? throw new InvalidOperationException($"The concept prompt for '{code}' is missing from the build.");
         using var reader = new StreamReader(stream, Encoding.UTF8);

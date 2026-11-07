@@ -270,7 +270,7 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
             var choice = Desired(row) ?? new StepModelChoice();
             var setup = await speech.SetupAsync(choice, _language, CancellationToken.None).ConfigureAwait(true);
             var wav = Path.Combine(paths.WorkDirectory, "listen", "sample.wav");
-            await speech.SynthesizeAsync(setup, _language, text[_language == ContentLanguages.Turkish ? "speech.sample.tr" : "speech.sample.en"], wav,
+            await speech.SynthesizeAsync(setup, _language, OutputLanguages.Of(_language).Sample, wav,
                 CancellationToken.None).ConfigureAwait(true);
             shell.OpenPath(wav);
         }

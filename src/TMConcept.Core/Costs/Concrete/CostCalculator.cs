@@ -44,8 +44,7 @@ public sealed class CostCalculator : ICostCalculator
     /// <inheritdoc />
     public long Tokens(string text, string language)
     {
-        var perToken = language == ContentLanguages.Turkish ? TokenRules.TurkishCharactersPerToken : TokenRules.EnglishCharactersPerToken;
-        return (long)Math.Ceiling((text ?? string.Empty).Length / perToken);
+        return (long)Math.Ceiling((text ?? string.Empty).Length / OutputLanguages.Of(language).CharactersPerToken);
     }
 
     private static (decimal Input, decimal Output) Prices(CatalogModel model, long promptTokens) =>

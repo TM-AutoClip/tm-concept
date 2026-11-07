@@ -13,8 +13,8 @@ namespace TMConcept.Core.Videos;
 /// </summary>
 public static class VideoCodePrompt
 {
-    /// <summary>Version of the prompts, kept on every video (2: subtitle rule and the names the safety check refuses).</summary>
-    public const string Version = "2";
+    /// <summary>Version of the prompts, kept on every video (2: subtitle rule and the names the safety check refuses; 3: the video's language).</summary>
+    public const string Version = "3";
 
     /// <summary>The system text of an engine; <paramref name="subtitles"/>: subtitles are burned in after the render.</summary>
     public static string System(IVideoEngine engine, bool subtitles)
@@ -49,6 +49,11 @@ public static class VideoCodePrompt
         var c = CultureInfo.InvariantCulture;
         var text = new StringBuilder();
         text.Append(c, $"Video: «{Clean(input.Title)}», {input.Width}×{input.Height}, {input.Fps} fps, {input.DurationSeconds:0.##} s, {input.Scenes.Count} scenes.\n");
+
+        // The visuals and captions are in the video's language; a word the model writes into the code itself (a label, a year's caption)
+        // must be in that language too, never in English by habit.
+        var language = Profiles.OutputLanguages.Of(input.Language);
+        text.Append(c, $"Video language: {language.English} ({language.Code}). Any word you write into the code yourself is in {language.English}.\n");
         foreach (var scene in input.Scenes)
         {
             text.Append(c, $"Scene {scene.Number}: {scene.StartSeconds:0.##}–{scene.StartSeconds + scene.DurationSeconds:0.##} s; visual «{Clean(scene.Visual)}»; ")

@@ -24,7 +24,8 @@ veritabanını şifreli tutar.
 
 ## Ne yapar
 
-- **Profil = kanal.** Kanal adı, içerik dili (Türkçe ya da İngilizce), dikey kısa ya da yatay video, hedef süre (15–180 sn), kanalın
+- **Profil = kanal.** Kanal adı, video dili (Türkçe, İngilizce, Almanca, İspanyolca, Fransızca, İtalyanca, Portekizce, Felemenkçe,
+  Lehçe, Rusça, İsveççe ya da Endonezce; notların kendi dilinde kalabilir, video bu dilde yazılır), dikey kısa ya da yatay video, hedef süre (15–180 sn), kanalın
   konsepti, isteğe bağlı örnek görseller ve genel ayardan farklı olmasını istediğin her adım için kendi modelleri (ses, görseller, motor…). Dört hazır şablon alanları doldurur (tarih: Bizans, Osmanlı; teknoloji:
   antik, modern).
 - **Konsept üret.** Tek basışta 1–100 konsept, 20'şerlik turlarla. Basmadan önce tahmini ücret aralığı, sonra sağlayıcının bildirdiği

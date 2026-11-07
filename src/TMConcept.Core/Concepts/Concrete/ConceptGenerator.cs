@@ -78,12 +78,12 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
             return (CostEstimate.Zero, backfill);
         }
 
-        var tokens = (count + backfill) * (long)EmbeddingTokensPerConcept * (profile.ContentLanguage == Profiles.ContentLanguages.Turkish ? 2 : 1);
+        var tokens = (count + backfill) * (long)Math.Ceiling(EmbeddingTokensPerConcept * Profiles.OutputLanguages.Of(profile.ContentLanguage).EmbeddingTokenFactor);
         var usd = tokens * model.InputUsd / 1_000_000m;
         return (new CostEstimate(usd, usd, tokens, 0, 0), backfill);
     }
 
-    /// <summary>Tokens of one concept's title and summary in English (Turkish counts about twice).</summary>
+    /// <summary>Tokens of one concept's title and summary in English (other languages: <see cref="Profiles.OutputLanguage.EmbeddingTokenFactor"/>; Turkish about twice).</summary>
     public const int EmbeddingTokensPerConcept = 80;
 
     /// <summary>Generates in batches; <paramref name="progress"/> gets every saved batch.</summary>
@@ -166,7 +166,7 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
                 var batchCandidates = parsed.Concepts.Take(sizes[index])
                     .Select(c => (Parsed: c, Subject: new DuplicateSubject(Guid.NewGuid(), 0, c.Title, c.Summary))).ToList();
                 var verdicts = request.LocalCheck
-                    ? DuplicateCheck.Sift(batchCandidates.Select(c => c.Subject), subjects)
+                    ? DuplicateCheck.Sift(batchCandidates.Select(c => c.Subject), subjects, profile.ContentLanguage)
                     : batchCandidates.Select(c => new DuplicateVerdict(c.Subject, DuplicateResult.None)).ToList();
                 var semantic = await SemanticAsync(request, run, verdicts, subjects, cancellationToken).ConfigureAwait(false);
                 verdicts = semantic.Verdicts;

@@ -48,7 +48,7 @@ public static partial class MarkerText
             return null;
         }
 
-        var turkish = language == ContentLanguages.Turkish;
+        var turkish = OutputLanguages.Of(language).PromptLanguage == ContentLanguages.Turkish;
         return string.Join("; ", used.Select(m => m.Token.Tr + " / " + m.Token.En + " = " + (turkish ? m.Meaning.Tr : m.Meaning.En)));
     }
 
