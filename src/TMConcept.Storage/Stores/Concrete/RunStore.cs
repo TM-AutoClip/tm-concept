@@ -20,6 +20,13 @@ public sealed class RunStore(ConceptDatabase database) : IRunStore
     }
 
     /// <inheritdoc />
+    public async Task<Run?> GetAsync(Guid id, CancellationToken cancellationToken)
+    {
+        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
+        return await db.Runs.FirstOrDefaultAsync(r => r.Id == id, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public async Task UpdateAsync(Run run, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(run);

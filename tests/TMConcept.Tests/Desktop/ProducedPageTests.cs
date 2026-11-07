@@ -42,7 +42,12 @@ public sealed class ProducedPageTests
             Warnings = VideoWarnings.AiVoice,
             TotalUsd = 0.12m,
         };
-        await h.Get<IVideoStore>().AddAsync(video, [new VideoCost { VideoId = video.Id, Step = "video-code", Usd = 0.12m, Exact = true }], CancellationToken.None);
+        await h.Get<IVideoStore>().AddAsync(video,
+        [
+            new VideoCost { VideoId = video.Id, Step = "video-code", Usd = 0.10m, Exact = true },
+            new VideoCost { VideoId = video.Id, Step = "image-prompt", Usd = 0.02m, Exact = true },
+            new VideoCost { VideoId = video.Id, Step = "concepts", Usd = 0.022m, Exact = true },
+        ], CancellationToken.None);
         var page = h.Get<ProducedViewModel>();
         await page.ActivateAsync();
 
@@ -54,6 +59,19 @@ public sealed class ProducedPageTests
 
         page.Details.ShouldContain(h.Get<Localizer>()["produced.note.ai_voice"]);
         page.Items.Single().Badges.ShouldNotBeEmpty();
+
+        // The cost lines follow the work, with readable names, and the total says the concept share is in it.
+        var text = h.Get<Localizer>();
+        int At(string step) => page.Details.IndexOf(text["produced.cost." + step], StringComparison.Ordinal);
+        string[] order = ["concepts", "narration-text", "image-prompt", "video-code"];
+        order.Select(At).ShouldAllBe(i => i >= 0);
+        order.Select(At).ShouldBeInOrder();
+        page.Details.ShouldNotContain("step.");
+        page.Details.ShouldContain(text.Format("produced.detail.total_share", text.Usd(0.142m), text.Usd(0.022m), text.Usd(0.12m)));
+        foreach (var step in VideoCostBreakdown.Order)
+        {
+            text["produced.cost." + step].ShouldNotStartWith("produced.cost.");
+        }
 
         // The in-app player takes the chosen video but never starts by itself.
         page.Player.IsPlaying.ShouldBeFalse();

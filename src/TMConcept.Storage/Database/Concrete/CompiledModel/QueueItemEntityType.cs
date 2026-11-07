@@ -20,7 +20,7 @@ namespace TMConcept.Storage.Database
                 "TMConcept.Core.Videos.QueueItem",
                 typeof(QueueItem),
                 baseEntityType,
-                propertyCount: 6,
+                propertyCount: 9,
                 foreignKeyCount: 2,
                 unnamedIndexCount: 2,
                 keyCount: 1);
@@ -49,6 +49,26 @@ namespace TMConcept.Storage.Database
                 fieldInfo: typeof(QueueItem).GetField("<ConceptId>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
                 valueConverter: new StoredIdConverter());
             conceptId.SetSentinelFromProviderValue("00000000-0000-0000-0000-000000000000");
+
+            var failedUsd = runtimeEntityType.AddProperty(
+                "FailedUsd",
+                typeof(decimal),
+                propertyInfo: typeof(QueueItem).GetProperty("FailedUsd", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(QueueItem).GetField("<FailedUsd>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                valueConverter: new MoneyConverter());
+            failedUsd.SetSentinelFromProviderValue("0.0");
+
+            var lastErrorCode = runtimeEntityType.AddProperty(
+                "LastErrorCode",
+                typeof(string),
+                propertyInfo: typeof(QueueItem).GetProperty("LastErrorCode", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(QueueItem).GetField("<LastErrorCode>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly));
+
+            var lastErrorDetail = runtimeEntityType.AddProperty(
+                "LastErrorDetail",
+                typeof(string),
+                propertyInfo: typeof(QueueItem).GetProperty("LastErrorDetail", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(QueueItem).GetField("<LastErrorDetail>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly));
 
             var position = runtimeEntityType.AddProperty(
                 "Position",

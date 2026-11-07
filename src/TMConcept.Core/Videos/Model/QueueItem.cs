@@ -20,4 +20,13 @@ public sealed class QueueItem
 
     /// <summary>Added (UTC).</summary>
     public DateTimeOffset AddedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+
+    /// <summary>Failure code of the last try (<see cref="VideoException.Code"/>; empty = it has not failed).</summary>
+    public string LastErrorCode { get; set; } = string.Empty;
+
+    /// <summary>Detail of the last failure (the pipeline's English message; the interface shows its own text for the code).</summary>
+    public string LastErrorDetail { get; set; } = string.Empty;
+
+    /// <summary>What the failed tries of this item paid together (USD): money lost because of the failures.</summary>
+    public decimal FailedUsd { get; set; }
 }

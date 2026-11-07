@@ -287,13 +287,20 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
                 .Append(text.Format("produced.detail.images", v.ImageModel.Length == 0 ? text["produced.detail.images_none"]
                     : v.ImageModel == Core.Images.ImageSources.Samples ? text["step.images.samples"] : v.ImageModel)).Append('\n')
                 .Append(text.Format("produced.detail.elapsed", (v.ElapsedMs / 1000.0).ToString("0", CultureInfo.InvariantCulture))).Append('\n');
-            foreach (var cost in costs)
+            // In the order of the work: concept share, narration text, image prompts, images, narration audio, video code, total.
+            decimal share = 0;
+            foreach (var line in VideoCostBreakdown.Lines(costs))
             {
-                details.Append(text.Format("produced.detail.cost", text["step." + cost.Step], text.Usd(cost.Usd), cost.Exact ? text["produced.exact"] : text["produced.estimated"]))
-                    .Append('\n');
+                var label = text["produced.cost." + line.Step] + (line.Count > 1 ? " ×" + line.Count.ToString(CultureInfo.InvariantCulture) : string.Empty);
+                var kind = line.Step == VideoCostBreakdown.NarrationText ? text["produced.cost.free"] : line.Exact ? text["produced.exact"] : text["produced.estimated"];
+                details.Append(text.Format("produced.detail.cost", label, text.Usd(line.Usd), kind)).Append('\n');
+                share += line.Step == Core.Pipeline.PipelineSteps.Concepts ? line.Usd : 0;
             }
 
-            details.Append(text.Format("produced.detail.total", text.Usd(v.TotalUsd))).Append('\n');
+            // The video's own total excludes the concept share (that run is counted once, with the concept runs).
+            details.Append(share > 0
+                ? text.Format("produced.detail.total_share", text.Usd(v.TotalUsd + share), text.Usd(share), text.Usd(v.TotalUsd))
+                : text.Format("produced.detail.total", text.Usd(v.TotalUsd))).Append('\n');
             foreach (var warning in v.Warnings.Split(',', StringSplitOptions.RemoveEmptyEntries))
             {
                 details.Append("• ").Append(text["produced.note." + warning]).Append('\n');

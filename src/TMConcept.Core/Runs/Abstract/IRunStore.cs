@@ -6,6 +6,9 @@ public interface IRunStore
     /// <summary>Adds.</summary>
     Task AddAsync(Run run, CancellationToken cancellationToken);
 
+    /// <summary>One run; <c>null</c> when there is none.</summary>
+    Task<Run?> GetAsync(Guid id, CancellationToken cancellationToken);
+
     /// <summary>Updates (finished, failed).</summary>
     Task UpdateAsync(Run run, CancellationToken cancellationToken);
 

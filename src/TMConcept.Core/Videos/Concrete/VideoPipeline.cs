@@ -15,6 +15,7 @@ using TMConcept.Core.Paths;
 using TMConcept.Core.Pipeline;
 using TMConcept.Core.Profiles;
 using TMConcept.Core.Render;
+using TMConcept.Core.Runs;
 using TMConcept.Core.Scenes;
 using TMConcept.Core.Speech;
 using TMConcept.Core.Subtitles;
@@ -28,13 +29,14 @@ namespace TMConcept.Core.Videos;
 /// images and their prompts are kept per concept until the video is made, so a retry does not pay for them again) · E
 /// video code from the model, safety check, one repair · F render (processor only), one repair with the error text · H mux into the work
 /// folder, then the finished file is moved into the library folder; subtitles (.srt always, burned ASS when chosen), narration text file ·
-/// I thumbnail, video and cost rows, concept marked produced. Every paid call is counted in the cost, also when it fails (a cut-off code
-/// answer is billed). A failed or canceled run leaves nothing half-written in the library and removes its work files (a rejected code is
-/// kept there as text for reading).
+/// I thumbnail, video and cost rows (with the concept's share of its generation run as a line of its own, outside the video's total),
+/// concept marked produced. Every paid call is counted in the cost, also when it fails (a cut-off code answer is billed). A failed or
+/// canceled run leaves nothing half-written in the library and removes its work files (a rejected code is kept there as text for
+/// reading); what it paid is kept as a <see cref="RunKind.FailedVideo"/> run, so the month's spending counts it.
 /// </summary>
 public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechService speech, IEnumerable<IImageEngine> images, StepModelResolver resolver,
-    IChatClientFactory chats, ICostCalculator costs, IMediaTools media, IVideoStore videos, IConceptStore concepts, IProfileStore profiles, IAppPaths paths,
-    TimeProvider clock, ILogger<VideoPipeline> logger)
+    IChatClientFactory chats, ICostCalculator costs, IMediaTools media, IVideoStore videos, IConceptStore concepts, IProfileStore profiles, IRunStore runs,
+    IAppPaths paths, TimeProvider clock, ILogger<VideoPipeline> logger)
 {
     /// <summary>Work folders of runs older than this are removed by <see cref="CleanWork"/>.</summary>
     public static readonly TimeSpan WorkKeep = TimeSpan.FromDays(7);
@@ -338,7 +340,8 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                 Warnings = string.Join(',', warnings.Distinct()),
                 CreatedAtUtc = clock.GetUtcNow(),
             };
-            await videos.AddAsync(record, spent, CancellationToken.None).ConfigureAwait(false);
+            await videos.AddAsync(record, [.. await ConceptShareAsync(job.Concept, id).ConfigureAwait(false), .. spent], CancellationToken.None)
+                .ConfigureAwait(false);
             await concepts.SetStatusAsync([job.Concept.Id], ConceptStatus.Produced, CancellationToken.None).ConfigureAwait(false);
             Finish("save");
             logger.LogInformation("Video {Id} made in {Seconds:0} s ({Engine}, {Usd} USD)", id, watch.Elapsed.TotalSeconds, engine.Name, record.TotalUsd);
@@ -350,6 +353,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         {
             logger.LogError("Video failed ({Code}): {Message}", ex.Code, ex.Message);
             CleanFailed(work, folder, folderCreated);
+            await KeepLostAsync(job, spent, ex.Code, RunStatus.Failed, watch.Elapsed).ConfigureAwait(false);
             throw new VideoException(ex.Message, ex) { Code = ex.Code, SpentUsd = spent.Sum(c => c.Usd) };
         }
         catch (Providers.ProviderException ex)
@@ -357,19 +361,75 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
             logger.LogError("Video failed: provider error ({Code}, request {RequestId}) after {Usd} USD", ex.Code, ex.RequestId.Length > 0 ? ex.RequestId : "-",
                 spent.Sum(c => c.Usd));
             CleanFailed(work, folder, folderCreated);
+            await KeepLostAsync(job, spent, VideoException.ProviderPrefix + ex.Code, RunStatus.Failed, watch.Elapsed).ConfigureAwait(false);
             throw new VideoException(ex.Message, ex) { Code = VideoException.ProviderPrefix + ex.Code, SpentUsd = spent.Sum(c => c.Usd) };
         }
         catch (OperationCanceledException)
         {
             logger.LogWarning("Video canceled after {Usd} USD were spent", spent.Sum(c => c.Usd));
             CleanFailed(work, folder, folderCreated);
+            await KeepLostAsync(job, spent, "canceled", RunStatus.Canceled, watch.Elapsed).ConfigureAwait(false);
             throw;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             logger.LogError(ex, "Video failed: a file could not be written");
             CleanFailed(work, folder, folderCreated);
+            await KeepLostAsync(job, spent, "files", RunStatus.Failed, watch.Elapsed).ConfigureAwait(false);
             throw new VideoException("A file could not be written: " + ex.Message, ex) { Code = "files", SpentUsd = spent.Sum(c => c.Usd) };
+        }
+    }
+
+    /// <summary>
+    /// The concept's share of the run it was generated in (that run's cost ÷ the concepts it kept), as a cost line of its own: shown first in
+    /// the video's cost details, but not in the video's total (the run is counted once, in the month's spending of the concept runs).
+    /// Nothing when the concept has no run (made by hand) or the run is gone.
+    /// </summary>
+    private async Task<IReadOnlyList<VideoCost>> ConceptShareAsync(Concept concept, Guid videoId)
+    {
+        if (concept.RunId is not { } runId || await runs.GetAsync(runId, CancellationToken.None).ConfigureAwait(false) is not { } run)
+        {
+            return [];
+        }
+
+        var share = VideoCostBreakdown.ConceptShare(run.ActualUsd, run.Accepted);
+        return share <= 0 ? [] : [new VideoCost { VideoId = videoId, Step = PipelineSteps.Concepts, RunId = runId, Usd = share, Exact = run.CostExact }];
+    }
+
+    /// <summary>
+    /// Keeps what a failed or canceled video paid as a run of its own (nothing when it paid nothing). A failure to write it is logged and
+    /// does not hide the video's own failure.
+    /// </summary>
+    private async Task KeepLostAsync(VideoJob job, List<VideoCost> spent, string code, RunStatus status, TimeSpan elapsed)
+    {
+        var usd = spent.Sum(c => c.Usd);
+        if (usd <= 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var now = clock.GetUtcNow();
+            await runs.AddAsync(new Run
+            {
+                ProfileId = job.Profile.Id,
+                Kind = RunKind.FailedVideo,
+                Provider = job.CodeModel.Model.Provider,
+                Model = job.CodeModel.Model.Id,
+                KeyLabel = job.CodeModel.Key.Label,
+                Requested = 1,
+                ActualUsd = usd,
+                CostExact = spent.All(c => c.Exact),
+                StartedAtUtc = now - elapsed,
+                FinishedAtUtc = now,
+                Status = status,
+                Error = code,
+            }, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "What the failed video paid ({Usd} USD) could not be kept", usd);
         }
     }
 

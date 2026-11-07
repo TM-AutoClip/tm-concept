@@ -12,6 +12,9 @@ public interface IQueueStore
     /// <summary>Removes an entry.</summary>
     Task RemoveAsync(Guid id, CancellationToken cancellationToken);
 
+    /// <summary>Keeps the failure of a try: its code and detail, and adds what it paid to <see cref="QueueItem.FailedUsd"/>.</summary>
+    Task RecordFailureAsync(Guid id, string code, string detail, decimal spentUsd, CancellationToken cancellationToken);
+
     /// <summary>Saves a new order (ids in order).</summary>
     Task ReorderAsync(Guid profileId, IReadOnlyList<Guid> ids, CancellationToken cancellationToken);
 }

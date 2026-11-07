@@ -36,6 +36,22 @@ public sealed class QueueStore(ConceptDatabase database) : IQueueStore
     }
 
     /// <inheritdoc />
+    public async Task RecordFailureAsync(Guid id, string code, string detail, decimal spentUsd, CancellationToken cancellationToken)
+    {
+        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
+        if (await db.QueueItems.AsTracking().FirstOrDefaultAsync(q => q.Id == id, cancellationToken).ConfigureAwait(false) is not { } item)
+        {
+            // Taken out of the queue while it ran: nothing to keep.
+            return;
+        }
+
+        item.LastErrorCode = code;
+        item.LastErrorDetail = detail;
+        item.FailedUsd += spentUsd;
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public async Task ReorderAsync(Guid profileId, IReadOnlyList<Guid> ids, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(ids);

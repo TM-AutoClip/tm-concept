@@ -23,4 +23,10 @@ public enum RunKind
 
     /// <summary>Connection test of a key.</summary>
     ConnectionTest = 6,
+
+    /// <summary>
+    /// What a video that failed or was canceled had paid until then (narration, images, code; a made video keeps its cost in its own
+    /// record instead), so the month's spending counts it.
+    /// </summary>
+    FailedVideo = 7,
 }

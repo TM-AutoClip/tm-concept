@@ -7,7 +7,7 @@ namespace TMConcept.Desktop.Localization;
 
 /// <summary>
 /// Price lines shown next to the estimates (since 0.1.6 Settings has nothing about models): where the prices come from and their date, and
-/// this month's spending (concept runs per provider and the videos; no limits or balances).
+/// this month's spending (concept runs per provider, the videos, and what failed videos paid; no limits or balances).
 /// </summary>
 public static class PriceInfo
 {
@@ -39,8 +39,10 @@ public static class PriceInfo
         var now = clock.GetUtcNow();
         var month = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
         var list = await runs.ListAsync(month, cancellationToken).ConfigureAwait(true);
-        var parts = list.GroupBy(r => r.Provider).Where(g => g.Key.Length > 0 && g.Sum(r => r.ActualUsd) > 0)
+        // What failed videos paid is a part of its own (its narration, images and code may come from several providers).
+        var parts = list.Where(r => r.Kind != RunKind.FailedVideo).GroupBy(r => r.Provider).Where(g => g.Key.Length > 0 && g.Sum(r => r.ActualUsd) > 0)
             .Select(g => g.Key + " " + text.Usd(g.Sum(r => r.ActualUsd))).ToList();
+        var lost = list.Where(r => r.Kind == RunKind.FailedVideo).Sum(r => r.ActualUsd);
         decimal made = 0;
         foreach (var profile in await profiles.ListAsync(cancellationToken).ConfigureAwait(true))
         {
@@ -50,6 +52,11 @@ public static class PriceInfo
         if (made > 0)
         {
             parts.Add(text.Format("models.spending.videos", text.Usd(made)));
+        }
+
+        if (lost > 0)
+        {
+            parts.Add(text.Format("models.spending.failed", text.Usd(lost)));
         }
 
         var total = text.Usd(list.Sum(r => r.ActualUsd) + made);

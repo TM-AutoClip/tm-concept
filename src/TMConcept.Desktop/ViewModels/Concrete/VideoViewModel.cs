@@ -410,11 +410,17 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
         }
         catch (VideoException ex)
         {
-            // The pipeline wrote the cause (with its step and code); the activity line below goes to the log too.
-            row.Error = Reason(ex);
+            // The pipeline wrote the cause (with its step and code); the activity line below goes to the log too. The failure and what it
+            // paid stay with the queue item, so the row still says it after a restart.
+            row.Item.LastErrorCode = ex.Code;
+            row.Item.LastErrorDetail = ex.Message;
+            row.Item.FailedUsd += ex.SpentUsd;
+            await KeepFailureAsync(row.Item, ex).ConfigureAwait(true);
+            row.Error = FailureText(row.Item);
+            var reason = Reason(ex.Code, ex.Message, ex.SpentUsd);
             LastCost = text.Format("video.last_cost.failed", text.Usd(ex.SpentUsd));
-            activity.Add(ActivityLevel.Error, text.Format("video.failed", row.Title, row.Error, text.Usd(ex.SpentUsd)),
-                text.Format("video.failed", ActivityPlaceholders.Title, row.Error, text.Usd(ex.SpentUsd)));
+            activity.Add(ActivityLevel.Error, text.Format("video.failed", row.Title, reason, text.Usd(ex.SpentUsd)),
+                text.Format("video.failed", ActivityPlaceholders.Title, reason, text.Usd(ex.SpentUsd)));
             notifier.Notify(new AppNotification(NotificationKind.Failed, text["video.failed.title"], row.Title));
         }
         catch (OperationCanceledException)
@@ -480,19 +486,44 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
         events.Raise(this);
     }
 
+    // The provider's code of an answer cut at its output limit.
+    private const string Truncated = "truncated";
+
     /// <summary>
     /// Why a video failed. A cut-off answer here is the video code (the image prompts fall back to the scene texts): the shared provider text
     /// speaks of concepts kept before the cut, which means nothing for a video, so it has its own text with what was paid.
     /// </summary>
-    private string Reason(VideoException ex)
+    private string Reason(string code, string detail, decimal spentUsd)
     {
-        if (!ex.Code.StartsWith(VideoException.ProviderPrefix, StringComparison.Ordinal))
+        if (!code.StartsWith(VideoException.ProviderPrefix, StringComparison.Ordinal))
         {
-            return text["video.error." + ex.Code] + " " + ex.Message;
+            return text["video.error." + code] + " " + detail;
         }
 
-        var code = ex.Code[VideoException.ProviderPrefix.Length..];
-        return code == "truncated" ? text.Format("video.error.truncated", text.Usd(ex.SpentUsd)) : ProviderErrors.Text(text, code);
+        var provider = code[VideoException.ProviderPrefix.Length..];
+        return provider == Truncated ? text.Format("video.error.truncated", text.Usd(spentUsd)) : ProviderErrors.Text(text, provider);
+    }
+
+    /// <summary>The row's error: the last failure and what the failed tries of this item paid together ("spent because of the failure").</summary>
+    private string FailureText(QueueItem item)
+    {
+        var reason = Reason(item.LastErrorCode, item.LastErrorDetail, item.FailedUsd);
+        return item.FailedUsd <= 0 || item.LastErrorCode == VideoException.ProviderPrefix + Truncated
+            ? reason
+            : reason + " " + text.Format("video.failed.spent", text.Usd(item.FailedUsd));
+    }
+
+    private async Task KeepFailureAsync(QueueItem item, VideoException failure)
+    {
+        try
+        {
+            await queue.RecordFailureAsync(item.Id, failure.Code, failure.Message, failure.SpentUsd, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The row shows it anyway; only after a restart it would be gone.
+            logger.LogError(ex, "The failure of a queue item could not be kept");
+        }
     }
 
     private VideoOptions Options() => new()
@@ -602,7 +633,10 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
         CollectionSync.Apply(Approved, approved.Select(c => cards.TryGetValue(c.Id, out var card) ? card : new ConceptCardViewModel(c, text)).ToList());
         var rows = Queue.ToDictionary(r => r.Item.Id);
         CollectionSync.Apply(Queue, items.Select(item => rows.TryGetValue(item.Id, out var row) ? row : new QueueRowViewModel(item,
-            queued.TryGetValue(item.ConceptId, out var concept) ? "#" + concept.Number.ToString(CultureInfo.InvariantCulture) + " " + concept.Title : "?")).ToList());
+            queued.TryGetValue(item.ConceptId, out var concept) ? "#" + concept.Number.ToString(CultureInfo.InvariantCulture) + " " + concept.Title : "?")
+        {
+            Error = item.LastErrorCode.Length > 0 ? FailureText(item) : string.Empty,
+        }).ToList());
 
         Produced.Clear();
         foreach (var title in produced)

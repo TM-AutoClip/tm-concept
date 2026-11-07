@@ -103,7 +103,8 @@ public sealed class VideoPageTests
     public async Task ARenderThatFailsTwiceStaysInTheQueueWithItsError()
     {
         var engine = new FakeEngine { FailRenders = 2 };
-        using var h = Harness(new FakeChat().Answer(_ => Code(engine.SampleCode)).Answer(_ => Code(engine.SampleCode)), engine);
+        var chat = new FakeChat().Answer(_ => Code(engine.SampleCode)).Answer(_ => Code(engine.SampleCode));
+        using var h = Harness(chat, engine);
         var (page, concept) = await PrepareAsync(h);
 
         await page.ProduceAllAsync();
@@ -111,6 +112,50 @@ public sealed class VideoPageTests
         page.Queue.Single().Failed.ShouldBeTrue();
         (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!.Status.ShouldBe(ConceptStatus.Queued);
         (await h.Get<IVideoStore>().ListAsync(concept.ProfileId, CancellationToken.None)).ShouldBeEmpty();
+
+        // Two code calls were paid (800 output tokens each): the row says what the failure cost, the queue item keeps it for a restart,
+        // and the month's spending counts it as a failed video.
+        var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
+        var model = h.Get<IModelCatalog>().Find("anthropic", "claude-sonnet-5-5")!;
+        var paid = 2 * h.Get<TMConcept.Core.Costs.ICostCalculator>().Exact(model, new ChatUsage(500, 0, 0, 800));
+        page.Queue.Single().Error.ShouldEndWith(text.Format("video.failed.spent", text.Usd(paid)));
+        var item = (await h.Get<IQueueStore>().ListAsync(concept.ProfileId, CancellationToken.None)).Single();
+        (item.LastErrorCode, item.FailedUsd).ShouldBe(("render", paid));
+        var lost = (await h.Get<TMConcept.Core.Runs.IRunStore>().ListAsync(DateTimeOffset.UtcNow.AddHours(-1), CancellationToken.None))
+            .Single(r => r.Kind == TMConcept.Core.Runs.RunKind.FailedVideo);
+        (lost.ActualUsd, lost.Status, lost.Error).ShouldBe((paid, TMConcept.Core.Runs.RunStatus.Failed, "render"));
+        var spending = await TMConcept.Desktop.Localization.PriceInfo.SpendingAsync(h.Get<TMConcept.Core.Runs.IRunStore>(), h.Get<IProfileStore>(),
+            h.Get<IVideoStore>(), TimeProvider.System, text, CancellationToken.None);
+        spending.ShouldContain(text.Format("models.spending.failed", text.Usd(paid)));
+
+        // A second failure adds to what the item lost.
+        engine.FailRenders = 2;
+        chat.Answer(_ => Code(engine.SampleCode)).Answer(_ => Code(engine.SampleCode));
+        await page.ProduceAllAsync();
+        (await h.Get<IQueueStore>().ListAsync(concept.ProfileId, CancellationToken.None)).Single().FailedUsd.ShouldBe(2 * paid);
+        page.Queue.Single().Error.ShouldEndWith(text.Format("video.failed.spent", text.Usd(2 * paid)));
+    }
+
+    [AvaloniaFact]
+    public async Task AMadeVideoCarriesItsConceptShareOutsideItsOwnTotal()
+    {
+        var engine = new FakeEngine();
+        using var h = Harness(new FakeChat().Answer(_ => Code(engine.SampleCode)), engine);
+        var (_, concept) = await PrepareAsync(h);
+
+        // The concept came from a run of 0.11 $ that kept 5 concepts.
+        var run = new TMConcept.Core.Runs.Run { ProfileId = concept.ProfileId, Kind = TMConcept.Core.Runs.RunKind.Concepts, ActualUsd = 0.11m, Accepted = 5,
+            CostExact = true, Status = TMConcept.Core.Runs.RunStatus.Succeeded };
+        await h.Get<TMConcept.Core.Runs.IRunStore>().AddAsync(run, CancellationToken.None);
+        var generated = new Concept { ProfileId = concept.ProfileId, Title = "Iconoclasm", Summary = "s", Content = Content, Language = "en",
+            Status = ConceptStatus.Queued, RunId = run.Id };
+        await h.Get<IConceptStore>().AddAsync([generated], CancellationToken.None);
+        var record = await RunAsync(h, generated, new VideoOptions { Engine = engine.Kind, Speech = false });
+
+        var costs = await h.Get<IVideoStore>().CostsAsync(record.Id, CancellationToken.None);
+        var share = costs.Single(c => c.Step == PipelineSteps.Concepts);
+        (share.Usd, share.RunId, share.Exact).ShouldBe((0.022m, (Guid?)run.Id, true));
+        record.TotalUsd.ShouldBe(costs.Where(c => c.Step != PipelineSteps.Concepts).Sum(c => c.Usd));
     }
 
     [AvaloniaFact]
