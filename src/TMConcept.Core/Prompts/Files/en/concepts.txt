@@ -25,4 +25,5 @@ SAMPLE IMAGES (may be used in scenes): {images}
 HISTORY — do NOT produce these ({history_count} concepts):
 {history}
 EXTRA REQUEST: «{extra}»
+MARKERS in the « » texts above (the user's style requests; apply their meaning and never copy a marker into the answer): {markers}
 REQUESTED: {count} new concepts. JSON: {"konseptler":[{"baslik":"…","ozet":"…","icerik":"…"}]}

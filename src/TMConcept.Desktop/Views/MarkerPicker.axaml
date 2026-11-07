@@ -1,0 +1,12 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:TMConcept.Desktop.ViewModels"
+             x:Class="TMConcept.Desktop.Views.MarkerPicker">
+  <ComboBox Name="List" PlaceholderText="{DynamicResource markers.insert}" MinWidth="220" ToolTip.Tip="{DynamicResource markers.insert.tip}">
+    <ComboBox.ItemTemplate>
+      <DataTemplate x:DataType="vm:MarkerOption">
+        <TextBlock Text="{Binding Label}" />
+      </DataTemplate>
+    </ComboBox.ItemTemplate>
+  </ComboBox>
+</UserControl>

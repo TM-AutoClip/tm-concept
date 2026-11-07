@@ -25,4 +25,5 @@ BİÇİM: {format}; hedef süre {seconds} sn ≈ {words} kelime seslendirme
 GEÇMİŞ — bunları ÜRETME ({history_count} konsept):
 {history}
 EK İSTEK: «{extra}»
+YUKARIDAKİ « » METİNLERİNDEKİ İŞARETLER (kullanıcının biçim istekleri; anlamlarını uygula, işareti yanıta asla kopyalama): {markers}
 İSTENEN: {count} yeni konsept. JSON: {"konseptler":[{"baslik":"…","ozet":"…","icerik":"…"}]}

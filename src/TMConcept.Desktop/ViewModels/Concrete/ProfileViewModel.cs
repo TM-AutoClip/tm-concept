@@ -81,6 +81,9 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
     [ObservableProperty]
     public partial string ConceptText { get; set; } = string.Empty;
 
+    /// <summary>The markers of the channel concept's drop-down (sent to the concept model with their meaning).</summary>
+    public IReadOnlyList<MarkerOption> PromptMarkers => MarkerOptions.For(Core.Markers.MarkerKind.Prompt, text);
+
     /// <summary>Sample images.</summary>
     public ObservableCollection<ProfileImageViewModel> Images { get; } = [];
 

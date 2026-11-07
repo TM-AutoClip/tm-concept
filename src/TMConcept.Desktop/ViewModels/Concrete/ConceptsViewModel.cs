@@ -49,6 +49,9 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
     [ObservableProperty]
     public partial string ExtraPrompt { get; set; } = string.Empty;
 
+    /// <summary>The markers of the extra request's drop-down (sent to the concept model with their meaning).</summary>
+    public IReadOnlyList<MarkerOption> PromptMarkers => MarkerOptions.For(Core.Markers.MarkerKind.Prompt, text);
+
     /// <summary>The models of this page: the concept model and the semantic duplicate check (the profile's last choices).</summary>
     public StepPickerViewModel Picker { get; } = picker;
 

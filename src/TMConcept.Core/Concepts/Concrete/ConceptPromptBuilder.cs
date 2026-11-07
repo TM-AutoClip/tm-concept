@@ -11,7 +11,7 @@ namespace TMConcept.Core.Concepts;
 /// cache: the fixed part (rules + channel + concept + format + sample images) comes first and carries the cache mark; the changing part
 /// (history, extra request, count) comes last. The history grows after every batch, so inside the cached part it made every call write a
 /// new cache entry (1.25× input price) and never read one. User text is put inside « » (rule 10) with the guillemets themselves removed from it, so it cannot close the block.
-/// A line whose value is empty is left out (no images, no history, no extra request).
+/// A line whose value is empty is left out (no images, no history, no extra request, no marker used).
 /// </summary>
 public static class ConceptPromptBuilder
 {
@@ -39,6 +39,10 @@ public static class ConceptPromptBuilder
             ["history"] = history,
             ["extra"] = string.IsNullOrWhiteSpace(input.ExtraPrompt) ? null : Data(input.ExtraPrompt, ConceptLimits.ExtraPromptMax),
             ["count"] = input.Count.ToString(CultureInfo.InvariantCulture),
+
+            // The markers ([hard cut], [emphasis]…) the channel concept or the extra request use, with their meaning; in the changing part
+            // (after the extra request), so a marker added to the extra request does not change the cached part.
+            ["markers"] = Markers.MarkerText.Legend(profile.ContentLanguage, profile.ConceptText, input.ExtraPrompt),
         };
         var split = template.IndexOf(Separator, StringComparison.Ordinal);
         return new ConceptPrompt(Fill(template[..split], values), Fill(template[(split + Separator.Length)..], values), Schema());

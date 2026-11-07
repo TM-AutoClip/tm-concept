@@ -11,8 +11,9 @@
         <TextBlock Text="{DynamicResource concepts.count}" FontWeight="SemiBold" />
         <NumericUpDown Value="{Binding Count}" Minimum="1" Maximum="100" Increment="1" FormatString="0" />
         <TextBlock Text="{DynamicResource concepts.extra}" FontWeight="SemiBold" />
-        <TextBox Text="{Binding ExtraPrompt}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="90" MaxLength="1000"
+        <TextBox Name="ExtraBox" Text="{Binding ExtraPrompt}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="90" MaxLength="1000"
                  PlaceholderText="{DynamicResource concepts.extra.placeholder}" />
+        <views:MarkerPicker Target="{Binding #ExtraBox}" Markers="{Binding PromptMarkers}" ToolTip.Tip="{DynamicResource markers.prompt.hint}" />
         <TextBlock Text="{DynamicResource concepts.check}" FontWeight="SemiBold" />
         <CheckBox IsChecked="{Binding LocalCheck}" Content="{DynamicResource concepts.check.local}" />
         <TextBlock Text="{DynamicResource concepts.models}" FontWeight="SemiBold" Margin="0,8,0,0" />
