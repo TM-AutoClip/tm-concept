@@ -7,4 +7,5 @@ namespace TMConcept.Speech.Speech;
 [JsonSerializable(typeof(SpeechWorkerRequest))]
 [JsonSerializable(typeof(SpeechWorkerReply))]
 [JsonSerializable(typeof(SpeechWorkerExtra))]
+[JsonSerializable(typeof(SpeechWorkerPocketExtra))]
 internal sealed partial class SpeechWorkerJsonContext : JsonSerializerContext;

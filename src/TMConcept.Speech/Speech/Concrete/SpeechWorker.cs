@@ -156,7 +156,15 @@ public static class SpeechWorker
     {
         IReadOnlyList<string> skipped = [];
         var text = lexicon is null ? request.Text : lexicon.Prepare(request.Text, out skipped);
-        var (samples, rate) = synthesizer.Speak(text, request.Language, request.Speaker, request.Speed, request.Steps);
+
+        // A voice that copies a voice reads its sample here; only the numbers reach the native library, never the path.
+        var (reference, referenceRate) = request.ReferenceWav is { Length: > 0 } wav ? WaveFile.ReadMonoPcm16(wav) : (null, 0);
+        if (synthesizer.IsPocket && reference is not { Length: > 0 })
+        {
+            return new SpeechWorkerReply(false, 0, "engine", "Pocket TTS needs a voice sample.");
+        }
+
+        var (samples, rate) = synthesizer.Speak(text, request.Language, request.Speaker, request.Speed, request.Steps, reference, referenceRate);
 
         // An engine that could not turn the text into sounds returns no samples: that is a failure, never a silent clip.
         if (rate <= 0 || samples.Length == 0)

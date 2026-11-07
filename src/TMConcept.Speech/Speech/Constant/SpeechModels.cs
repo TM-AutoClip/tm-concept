@@ -20,6 +20,19 @@ public static class SpeechModels
         new Uri("https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-int8-multi-lang-v1_0.tar.bz2"),
         "72c347230107ef8a31098ec4d468a605244beef5f1ed00db97efa13518800653", "kokoro-int8-multi-lang-v1_0", "model.int8.onnx", 132_353_410);
 
-    /// <summary>Folders of a voice archive that are never kept (espeak-ng data, GPL-3.0, unused by sherpa-onnx 2.x).</summary>
-    public static readonly IReadOnlyList<string> Unused = ["espeak-ng-data"];
+    /// <summary>
+    /// Pocket TTS int8 (Kyutai, ONNX export by KevinAHM, packed by sherpa-onnx): weights CC-BY-4.0 (the archive's LICENSE; attribution in
+    /// THIRD-PARTY-NOTICES), English only, speaks with a reference voice. The archive's README says "It is for non-commercial", which the
+    /// licenses of the weights (CC-BY-4.0, kyutai/pocket-tts and KevinAHM/pocket-tts-onnx) do not; probably meant for its test voices,
+    /// which are removed right after unpacking (their own licenses are not stated).
+    /// </summary>
+    public static readonly ToolArchive Pocket = new(ToolKind.PocketVoice, "int8-2026-01-26", "any",
+        new Uri("https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/sherpa-onnx-pocket-tts-int8-2026-01-26.tar.bz2"),
+        "2f3b88823cbbb9bf0b2477ec8ae7b3fec417b3a87b6bb5f256dba66f2ad967cb", "sherpa-onnx-pocket-tts-int8-2026-01-26", "lm_main.int8.onnx", 98_336_520);
+
+    /// <summary>
+    /// Folders of a voice archive that are never kept: espeak-ng data (GPL-3.0, unused by sherpa-onnx 2.x) and Pocket TTS's test voices
+    /// (recordings of other people; the app speaks only with the user's own samples).
+    /// </summary>
+    public static readonly IReadOnlyList<string> Unused = ["espeak-ng-data", "test_wavs"];
 }

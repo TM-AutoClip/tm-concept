@@ -31,7 +31,7 @@ namespace TMConcept.Desktop.ViewModels;
 /// Anything declined, missing or failed stops the process before anything is paid for, with the reason on the page and in the log.
 /// </summary>
 public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepModelStore steps, StepModelResolver resolver, IEnumerable<IVideoEngine> engines,
-    SpeechService speech, ComponentInstallFlow installs, AppSession session, IConfirmDialog confirm, IApiKeyDialog keyDialog, IGpuInfo gpu, IAppPaths paths,
+    SpeechService speech, VoiceSampleLibrary voiceSamples, ComponentInstallFlow installs, AppSession session, IConfirmDialog confirm, IApiKeyDialog keyDialog, IGpuInfo gpu, IAppPaths paths,
     ShellLauncher shell, Localizer text, ILogger<StepPickerViewModel> logger) : ObservableObject
 {
     /// <summary>The "saved" mark of a row whose saved choice is not offered any more: never equal to a row's key, so it is saved again.</summary>
@@ -103,6 +103,9 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
 
         // A Node.js on the PATH counts as installed only once it was looked at (once per run): before any note says "not installed".
         await installs.Planner.RefreshAllAsync(CancellationToken.None).ConfigureAwait(true);
+
+        // The user's own voices (a voice that copies a voice lists them): added or removed on the settings page meanwhile.
+        await voiceSamples.RefreshAsync(CancellationToken.None).ConfigureAwait(true);
         var saved = profileId is { } id ? await steps.ListAsync(id, CancellationToken.None).ConfigureAwait(true) : [];
         foreach (var old in Rows)
         {
@@ -179,6 +182,16 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
                 row.NoteIsWarning = true;
                 logger.LogWarning("Process not started: the step {Step} has no model", row.Step.Code);
                 Status = text.Format("picker.not_started.model", row.Title);
+                return false;
+            }
+
+            foreach (var row in rows.Where(r => r.IsVoiceStep && r.Selected?.Model is not null && r.Voices.Count == 0))
+            {
+                // A voice model without a voice to choose (Pocket TTS before the user added an own voice).
+                row.Note = text["speech.voices.none"];
+                row.NoteIsWarning = true;
+                logger.LogWarning("Process not started: the narration model has no voice to choose");
+                Status = text.Format("picker.not_started.voice", row.Title);
                 return false;
             }
 
@@ -539,6 +552,11 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
         if (row.IsVoiceStep)
         {
             parts.Add(text[model.Provider != ModelProviders.Local ? "speech.online.note" : "speech." + model.Id + ".note"]);
+            if (row.Voices.Count == 0)
+            {
+                parts.Add(text["speech.voices.none"]);
+                row.NoteIsWarning = true;
+            }
         }
 
         if (model.MinVideoMemoryGb > 0)

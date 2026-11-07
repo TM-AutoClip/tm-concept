@@ -64,7 +64,7 @@ public sealed class StorageFormatTests
         }
 
         (await h.QueryAsync(db => db.SchemaObjects.CountAsync(o => o.Type == "index" && o.Name.StartsWith("IX_")))).ShouldBe(12, "11 and the language index of the pronunciations");
-        (await h.QueryAsync(db => db.SchemaObjects.CountAsync(o => o.Type == ConceptSchema.TableType))).ShouldBe(13);
+        (await h.QueryAsync(db => db.SchemaObjects.CountAsync(o => o.Type == ConceptSchema.TableType))).ShouldBe(14);
 
         // Opening again leaves an existing schema alone.
         await h.QueryAsync(async db =>
@@ -72,7 +72,7 @@ public sealed class StorageFormatTests
             await ConceptDatabase.EnsureSchemaAsync(db, CancellationToken.None);
             return 0;
         });
-        (await h.QueryAsync(db => db.SchemaObjects.CountAsync(o => o.Type == ConceptSchema.TableType))).ShouldBe(13);
+        (await h.QueryAsync(db => db.SchemaObjects.CountAsync(o => o.Type == ConceptSchema.TableType))).ShouldBe(14);
         (await h.QueryAsync(db => db.Settings.Where(s => s.Key == ConceptSchema.VersionSetting).Select(s => s.Value).SingleAsync()))
             .ShouldBe(ConceptSchema.Version.ToString(System.Globalization.CultureInfo.InvariantCulture));
     }

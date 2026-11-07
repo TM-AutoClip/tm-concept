@@ -8,4 +8,7 @@ public static class SpeechEngines
 
     /// <summary>Local Kokoro 82M (English only).</summary>
     public const string Kokoro = "kokoro";
+
+    /// <summary>Local Pocket TTS (English only; speaks with the user's own voice sample).</summary>
+    public const string Pocket = "pocket";
 }

@@ -29,4 +29,7 @@ public enum ToolKind
 
     /// <summary>A file of the local embedding model (one file, not an archive; run with the ONNX Runtime of the speech libraries).</summary>
     EmbeddingWeights = 8,
+
+    /// <summary>Pocket TTS voice model (sherpa-onnx, English, copies a voice from a sample).</summary>
+    PocketVoice = 9,
 }

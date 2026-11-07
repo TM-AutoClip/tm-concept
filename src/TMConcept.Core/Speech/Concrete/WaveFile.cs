@@ -125,6 +125,28 @@ public static class WaveFile
         data.Write(new byte[bytes]);
     }
 
+    /// <summary>
+    /// The samples (in [-1, 1]) and sample rate of a mono 16-bit PCM WAV file (what <see cref="WritePcm16"/> and a voice sample are); an
+    /// <see cref="InvalidDataException"/> for any other format.
+    /// </summary>
+    public static (float[] Samples, int SampleRate) ReadMonoPcm16(string path)
+    {
+        var (format, data) = Read(path);
+        if (format.Length < 16 || BinaryPrimitives.ReadInt16LittleEndian(format.AsSpan(0, 2)) != 1 || BinaryPrimitives.ReadInt16LittleEndian(format.AsSpan(2, 2)) != 1
+            || BinaryPrimitives.ReadInt16LittleEndian(format.AsSpan(14, 2)) != 16)
+        {
+            throw new InvalidDataException("The WAV file is not mono 16-bit PCM.");
+        }
+
+        var samples = new float[data.Length / 2];
+        for (var i = 0; i < samples.Length; i++)
+        {
+            samples[i] = BinaryPrimitives.ReadInt16LittleEndian(data.AsSpan(i * 2, 2)) / (float)short.MaxValue;
+        }
+
+        return (samples, BinaryPrimitives.ReadInt32LittleEndian(format.AsSpan(4, 4)));
+    }
+
     /// <summary>The fmt chunk and the sample bytes of a WAV file.</summary>
     private static (byte[] Format, byte[] Samples) Read(string path)
     {

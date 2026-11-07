@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 
 namespace TMConcept.Speech.Speech;
 
-/// <summary>sherpa-onnx 2.0.1 <c>SherpaOnnxGenerationConfig</c> (reference audio, phonemes and tokens stay empty).</summary>
+/// <summary>sherpa-onnx 2.0.1 <c>SherpaOnnxGenerationConfig</c> (reference audio only for Pocket TTS; phonemes and tokens stay empty).</summary>
 [StructLayout(LayoutKind.Sequential)]
 internal struct SherpaGenerationConfig
 {

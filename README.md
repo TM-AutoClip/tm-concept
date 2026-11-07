@@ -52,7 +52,8 @@ needed) and narrates it with a **free local voice**. It runs on Windows and Linu
   in (API keys only when you tick them).
 - **Two interface languages:** English and Turkish.
 
-It does **not** read other channels, does not use reference videos and does not clone voices.
+It does **not** read other channels and does not use reference videos. It can speak English videos with **your own voice** (Pocket TTS,
+from a short recording you add; whose voice you copy is your responsibility).
 
 ## What it costs
 
@@ -140,6 +141,9 @@ the model that describes a sample image. Each step says what it is for:
   warning), or an online voice. Only voices that speak the profile's video language are listed; when the language changes, a voice that
   does not speak the new one is replaced by the language's default voice, with a warning on the step. Voice, speed and ▶ Listen (a
   short sentence in the video language) are in the step.
+- **Your own voice** — **Pocket TTS** (local, free, English only): Settings → Voice and pronunciation → add a clean recording of 3–15 s
+  (WAV, MP3, M4A, OGG, FLAC; ffmpeg converts it), then choose it as the voice of the step. The recording stays in the encrypted
+  database. Weights CC-BY-4.0: credit "Pocket TTS, Kyutai (CC-BY-4.0)" when you publish. No speed setting.
 - **Pronunciation** — Settings → Voice and pronunciation: per video language, words the voice should read differently ("Viking" →
   "Vikink" in Turkish; Turkish comes with a small list, you add your own). Only the voice changes; subtitles keep the written word.
 - **Duplicate check by meaning** — optional: the local **Multilingual MiniLM** (free, on this computer, 50+ languages including Turkish)
@@ -159,6 +163,7 @@ starts and nothing is paid for; the reason is shown. A kept choice whose compone
 | Engine packages + Chrome Headless Shell | registry.npmjs.org, storage.googleapis.com | 200–350 MB |
 | Supertonic 3 + sherpa-onnx 2.0.1 | github.com (k2-fsa) | 140 MB |
 | Kokoro 82M v1.0 int8 (needs sherpa-onnx) | github.com (k2-fsa) | 130 MB |
+| Pocket TTS int8 (needs sherpa-onnx) | github.com (k2-fsa) | 98 MB |
 | Multilingual MiniLM (paraphrase-multilingual-MiniLM-L12-v2, int8 ONNX + tokenizer; needs sherpa-onnx) | huggingface.co | 127 MB |
 | stable-diffusion.cpp master-890 (Windows: CUDA 12 build + CUDA runtime; Linux x64: Vulkan build) | github.com (leejet) | 900 MB / 40 MB |
 | FLUX.2 klein 4B weights (model, Qwen3-4B text encoder, VAE) | huggingface.co | 5.3 GB |

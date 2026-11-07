@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:TMConcept.Desktop.ViewModels"
+             xmlns:core="using:TMConcept.Core.Speech"
              x:Class="TMConcept.Desktop.Views.VoiceSettingsView"
              x:DataType="vm:VoiceSettingsViewModel">
   <ScrollViewer>
@@ -36,6 +37,33 @@
                   <TextBlock Grid.Column="3" Text="{Binding Tag}" Classes="small muted" VerticalAlignment="Center" />
                   <Button Grid.Column="4" Classes="danger" Content="✕" IsVisible="{Binding Own}"
                           Command="{Binding $parent[ItemsControl].((vm:VoiceSettingsViewModel)DataContext).DeleteWordCommand}" CommandParameter="{Binding}" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+
+      <Border Classes="card">
+        <StackPanel Spacing="8">
+          <TextBlock Text="{DynamicResource voices.samples.title}" Classes="h2" />
+          <TextBlock Text="{DynamicResource voices.samples.explain}" Classes="small" TextWrapping="Wrap" />
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <TextBox Text="{Binding SampleName}" PlaceholderText="{DynamicResource voices.samples.name}" MaxLength="40" />
+            <Button Grid.Column="1" Classes="accent" Content="{DynamicResource voices.samples.add}" Command="{Binding AddSampleCommand}" IsEnabled="{Binding !Busy}" />
+          </Grid>
+          <ProgressBar IsIndeterminate="True" IsVisible="{Binding Busy}" />
+          <TextBlock Text="{Binding SampleStatus}" Classes="muted" TextWrapping="Wrap" />
+          <TextBlock Text="{DynamicResource voices.samples.none}" Classes="small" IsVisible="{Binding !Samples.Count}" />
+          <ItemsControl ItemsSource="{Binding Samples}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="core:VoiceSampleInfo">
+                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6" Margin="0,2">
+                  <TextBlock Text="{Binding Name}" VerticalAlignment="Center" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                  <Button Grid.Column="1" Content="{DynamicResource voices.samples.play}"
+                          Command="{Binding $parent[ItemsControl].((vm:VoiceSettingsViewModel)DataContext).PlaySampleCommand}" CommandParameter="{Binding}" />
+                  <Button Grid.Column="2" Classes="danger" Content="✕"
+                          Command="{Binding $parent[ItemsControl].((vm:VoiceSettingsViewModel)DataContext).DeleteSampleCommand}" CommandParameter="{Binding}" />
                 </Grid>
               </DataTemplate>
             </ItemsControl.ItemTemplate>

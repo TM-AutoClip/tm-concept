@@ -6,7 +6,7 @@ namespace TMConcept.Storage.Database;
 /// there is no upgrade from older files and no reading of their layout (no backward compatibility, 7 Nov 2026). A file without the row
 /// (0.1.0–0.1.6) or with another number is refused with <see cref="DatabaseVersionException"/>, and the app offers to set it aside and
 /// start fresh. Change <see cref="Version"/> whenever the mapping changes (4: the queue keeps the last failure and what failures paid; 5: the
-/// pronunciation dictionary).
+/// pronunciation dictionary and the voice samples).
 /// </summary>
 internal static class ConceptSchema
 {

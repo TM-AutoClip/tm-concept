@@ -398,6 +398,7 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
         {
             await db.Settings.Where(s => s.Key != ConceptSchema.VersionSetting).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
             await db.Pronunciations.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+            await db.VoiceSamples.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
         }
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);

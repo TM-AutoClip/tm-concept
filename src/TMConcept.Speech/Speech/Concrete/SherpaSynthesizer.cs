@@ -4,10 +4,11 @@ using System.Text.Json;
 namespace TMConcept.Speech.Speech;
 
 /// <summary>
-/// One loaded voice model in the speech worker (processor only): Supertonic 3 or Kokoro, told apart by the files of the current folder. The
+/// One loaded voice model in the speech worker (processor only): Supertonic 3, Kokoro or Pocket TTS, told apart by the files of the current folder. The
 /// model files are named relative to the current folder (the worker starts in the model folder), so no path with the user's folder names
 /// crosses into the native library: its file functions take narrow strings, which on Windows would mangle a non-ASCII user name. Kokoro reads
-/// English words from its dictionary (sherpa-onnx 2.x has no espeak-ng; the engine spells numbers out before).
+/// English words from its dictionary (sherpa-onnx 2.x has no espeak-ng; the engine spells numbers out before). Pocket TTS speaks with the
+/// samples of a voice sample (given as numbers, never as a file path).
 /// </summary>
 internal sealed class SherpaSynthesizer : IDisposable
 {
@@ -21,17 +22,35 @@ internal sealed class SherpaSynthesizer : IDisposable
     /// <summary>The files of the Kokoro model: model, voices, tokens, the American English dictionary.</summary>
     public static readonly IReadOnlyList<string> KokoroFiles = ["model.int8.onnx", "voices.bin", "tokens.txt", "lexicon-us-en.txt"];
 
+    /// <summary>The files of the Pocket TTS model, in the order of the configuration.</summary>
+    public static readonly IReadOnlyList<string> PocketFiles =
+        ["lm_flow.int8.onnx", "lm_main.int8.onnx", "encoder.onnx", "decoder.int8.onnx", "text_conditioner.onnx", "vocab.json", "token_scores.json"];
+
+    /// <summary>Seconds of a voice sample Pocket TTS uses (the whole sample: samples are cut to this length when they are added).</summary>
+    private const float PocketReferenceSeconds = Core.Speech.VoiceSampleLimits.MaxSeconds;
+
+    /// <summary>Voice embeddings Pocket TTS keeps (one per sample used in a row).</summary>
+    private const int PocketVoiceCache = 4;
+
+    /// <summary>The fixed seed of Pocket TTS: every scene of a video gets the same voice.</summary>
+    private const int PocketSeed = 42;
+
     private IntPtr _tts;
 
     /// <summary>Whether the loaded model is Kokoro (it reads English words only from its dictionary).</summary>
     public bool IsKokoro { get; }
 
+    /// <summary>Whether the loaded model is Pocket TTS (it needs a voice sample).</summary>
+    public bool IsPocket { get; }
+
     /// <summary>Loads the model of the current folder with <paramref name="threads"/> processor threads.</summary>
     public SherpaSynthesizer(int threads)
     {
-        var kokoro = File.Exists(KokoroFiles[1]) && !File.Exists(ModelFiles[4]);
+        var pocket = File.Exists(PocketFiles[1]);
+        var kokoro = !pocket && File.Exists(KokoroFiles[1]) && !File.Exists(ModelFiles[4]);
         IsKokoro = kokoro;
-        var files = kokoro ? KokoroFiles : ModelFiles;
+        IsPocket = pocket;
+        var files = pocket ? PocketFiles : kokoro ? KokoroFiles : ModelFiles;
         var missing = files.FirstOrDefault(f => !File.Exists(f));
         if (missing is not null)
         {
@@ -52,7 +71,21 @@ internal sealed class SherpaSynthesizer : IDisposable
             config.Model.NumThreads = threads;
             config.Model.Debug = 0;
             config.Model.Provider = Text("cpu");
-            if (kokoro)
+            if (pocket)
+            {
+                config.Model.Pocket = new SherpaPocketConfig
+                {
+                    LmFlow = Text(PocketFiles[0]),
+                    LmMain = Text(PocketFiles[1]),
+                    Encoder = Text(PocketFiles[2]),
+                    Decoder = Text(PocketFiles[3]),
+                    TextConditioner = Text(PocketFiles[4]),
+                    VocabJson = Text(PocketFiles[5]),
+                    TokenScoresJson = Text(PocketFiles[6]),
+                    VoiceEmbeddingCacheCapacity = PocketVoiceCache,
+                };
+            }
+            else if (kokoro)
             {
                 config.Model.Kokoro = new SherpaKokoroConfig
                 {
@@ -95,14 +128,29 @@ internal sealed class SherpaSynthesizer : IDisposable
         }
     }
 
-    /// <summary>Speaks <paramref name="text"/>; returns the samples and their sample rate (no samples = the engine produced nothing).</summary>
-    public (float[] Samples, int SampleRate) Speak(string text, string language, int speaker, float speed, int steps)
+    /// <summary>
+    /// Speaks <paramref name="text"/>; returns the samples and their sample rate (no samples = the engine produced nothing).
+    /// <paramref name="reference"/>: the samples of a voice sample (Pocket TTS) at <paramref name="referenceRate"/> Hz.
+    /// </summary>
+    public (float[] Samples, int SampleRate) Speak(string text, string language, int speaker, float speed, int steps, float[]? reference = null,
+        int referenceRate = 0)
     {
         ObjectDisposedException.ThrowIf(_tts == IntPtr.Zero, this);
-        var extra = Marshal.StringToCoTaskMemUTF8(JsonSerializer.Serialize(new SpeechWorkerExtra(language), SpeechWorkerJsonContext.Default.SpeechWorkerExtra));
+        var json = IsPocket
+            ? JsonSerializer.Serialize(new SpeechWorkerPocketExtra(PocketReferenceSeconds, PocketSeed), SpeechWorkerJsonContext.Default.SpeechWorkerPocketExtra)
+            : JsonSerializer.Serialize(new SpeechWorkerExtra(language), SpeechWorkerJsonContext.Default.SpeechWorkerExtra);
+        var extra = Marshal.StringToCoTaskMemUTF8(json);
+        var pinned = reference is { Length: > 0 } ? GCHandle.Alloc(reference, GCHandleType.Pinned) : default;
         try
         {
             var generation = new SherpaGenerationConfig { SilenceScale = 0.2f, Speed = speed, Sid = speaker, NumSteps = steps, Extra = extra };
+            if (pinned.IsAllocated)
+            {
+                generation.ReferenceAudio = pinned.AddrOfPinnedObject();
+                generation.ReferenceAudioLen = reference!.Length;
+                generation.ReferenceSampleRate = referenceRate;
+            }
+
             var audio = SherpaNative.SherpaOnnxOfflineTtsGenerateWithConfig(_tts, text, in generation, IntPtr.Zero, IntPtr.Zero);
             if (audio == IntPtr.Zero)
             {
@@ -127,6 +175,11 @@ internal sealed class SherpaSynthesizer : IDisposable
         }
         finally
         {
+            if (pinned.IsAllocated)
+            {
+                pinned.Free();
+            }
+
             Marshal.FreeCoTaskMem(extra);
         }
     }

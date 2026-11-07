@@ -16,7 +16,7 @@ public sealed class BackupContents
     /// <summary>Concepts (also the trash), the queue, the video list, the cost history.</summary>
     public bool Concepts { get; set; } = true;
 
-    /// <summary>The app's settings (with the pronunciation dictionary).</summary>
+    /// <summary>The app's settings (with the pronunciation dictionary and the voice samples).</summary>
     public bool Settings { get; set; } = true;
 
     /// <summary>The default of automatic backups: everything except the API keys.</summary>

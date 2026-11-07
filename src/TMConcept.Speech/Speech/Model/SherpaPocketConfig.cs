@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 
 namespace TMConcept.Speech.Speech;
 
-/// <summary>sherpa-onnx 2.0.1 <c>SherpaOnnxOfflineTtsPocketModelConfig</c> (unused; zero).</summary>
+/// <summary>sherpa-onnx 2.0.1 <c>SherpaOnnxOfflineTtsPocketModelConfig</c> (Pocket TTS).</summary>
 [StructLayout(LayoutKind.Sequential)]
 internal struct SherpaPocketConfig
 {

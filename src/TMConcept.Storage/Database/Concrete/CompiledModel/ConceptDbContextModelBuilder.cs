@@ -11,7 +11,7 @@ namespace TMConcept.Storage.Database
     public partial class ConceptDbContextModel
     {
         private ConceptDbContextModel()
-            : base(skipDetectChanges: false, modelId: new Guid("d44122b3-7fce-4951-8a52-5274a1ba153c"), entityTypeCount: 15)
+            : base(skipDetectChanges: false, modelId: new Guid("2454fca8-d5a8-41cb-9497-fc732c345697"), entityTypeCount: 16)
         {
         }
 
@@ -26,6 +26,7 @@ namespace TMConcept.Storage.Database
             var profileImage = ProfileImageEntityType.Create(this);
             var pronunciationEntry = PronunciationEntryEntityType.Create(this);
             var run = RunEntityType.Create(this);
+            var voiceSample = VoiceSampleEntityType.Create(this);
             var queueItem = QueueItemEntityType.Create(this);
             var videoCost = VideoCostEntityType.Create(this);
             var videoRecord = VideoRecordEntityType.Create(this);
@@ -53,6 +54,7 @@ namespace TMConcept.Storage.Database
             ProfileImageEntityType.CreateAnnotations(profileImage);
             PronunciationEntryEntityType.CreateAnnotations(pronunciationEntry);
             RunEntityType.CreateAnnotations(run);
+            VoiceSampleEntityType.CreateAnnotations(voiceSample);
             QueueItemEntityType.CreateAnnotations(queueItem);
             VideoCostEntityType.CreateAnnotations(videoCost);
             VideoRecordEntityType.CreateAnnotations(videoRecord);

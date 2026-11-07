@@ -58,8 +58,18 @@ public abstract class SherpaSpeechEngineBase(SpeechModelInstaller installer, ITo
             throw new SpeechException("The speech libraries (sherpa-onnx) are not installed. They are installed when a process that uses a local voice starts (after a confirmation).") { Code = "missing" };
         }
 
-        var reply = await worker.SpeakAsync(Path.GetDirectoryName(runtime.ExecutablePath)!, installer.Folder(model), Threads, Request(request),
-            cancellationToken).ConfigureAwait(false);
+        var workerRequest = await RequestAsync(request, cancellationToken).ConfigureAwait(false);
+        SpeechWorkerReply reply;
+        try
+        {
+            reply = await worker.SpeakAsync(Path.GetDirectoryName(runtime.ExecutablePath)!, installer.Folder(model), Threads, workerRequest,
+                cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            Done(workerRequest);
+        }
+
         if (!reply.Ok)
         {
             logger.LogError("{Engine} failed ({Code}): {Error}", Name, reply.Code, reply.Error);
@@ -71,4 +81,12 @@ public abstract class SherpaSpeechEngineBase(SpeechModelInstaller installer, ITo
 
     /// <summary>The worker request of a speech request (voice, speed, steps and language of this model).</summary>
     protected abstract SpeechWorkerRequest Request(SpeechRequest request);
+
+    /// <summary>The worker request, with what must be prepared first (a voice that copies a voice writes its sample to a work file).</summary>
+    protected virtual Task<SpeechWorkerRequest> RequestAsync(SpeechRequest request, CancellationToken cancellationToken) => Task.FromResult(Request(request));
+
+    /// <summary>After the worker answered (or failed): removes what <see cref="RequestAsync"/> prepared.</summary>
+    protected virtual void Done(SpeechWorkerRequest request)
+    {
+    }
 }
