@@ -12,8 +12,10 @@
       <TextBlock Text="{DynamicResource unlock.title}" Classes="h1" VerticalAlignment="Center" />
     </StackPanel>
     <TextBox Classes="secret" Text="{Binding Password}" PlaceholderText="{DynamicResource password.master}" IsVisible="{Binding NeedsPassword}" />
-    <TextBlock Text="{Binding Error}" Classes="error" />
-    <Button Classes="accent" Content="{DynamicResource unlock.open}" Command="{Binding UnlockCommand}" IsEnabled="{Binding !Busy}" IsDefault="True" />
+    <TextBlock Text="{Binding Error}" Classes="error" TextWrapping="Wrap" />
+    <Button Classes="accent" Content="{DynamicResource unlock.open}" Command="{Binding UnlockCommand}" IsEnabled="{Binding !Busy}" IsDefault="True"
+            IsVisible="{Binding CanUnlock}" />
+    <Button Classes="accent" Content="{DynamicResource unlock.start_fresh}" Command="{Binding StartFreshCommand}" IsVisible="{Binding Incompatible}" />
     <TextBlock Text="{DynamicResource unlock.forgotten}" Classes="small" TextWrapping="Wrap" />
     <ProgressBar IsIndeterminate="True" IsVisible="{Binding Busy}" />
   </StackPanel>

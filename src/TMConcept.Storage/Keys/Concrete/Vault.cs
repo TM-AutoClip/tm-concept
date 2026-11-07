@@ -128,8 +128,8 @@ public sealed class Vault(IAppPaths paths, DatabaseKey key, IEnumerable<IKeyProt
     }
 
     /// <summary>
-    /// Installs a database file with its key (used by restore): the file is copied in and brought to the current schema, and only then is
-    /// the key file written (sealed with this computer's protector). When the schema step fails, the copied file is removed again and no key
+    /// Installs a database file with its key (used by restore): the file is copied in and checked against the current schema, and only then
+    /// is the key file written (sealed with this computer's protector). When the schema step fails, the copied file is removed again and no key
     /// file is written, so the folder stays "not created" and another restore can be tried.
     /// </summary>
     public async Task InstallAsync(string databaseFile, byte[] dek, IKeyProtector protector, CancellationToken cancellationToken)
@@ -150,8 +150,8 @@ public sealed class Vault(IAppPaths paths, DatabaseKey key, IEnumerable<IKeyProt
         File.Copy(databaseFile, paths.DatabaseFile, overwrite: true);
         key.Load(dek);
 
-        // A backup of an older version has an older schema: it is upgraded now, before anything uses it (0.1.5 skipped this, so a profile
-        // saved right after restoring a 0.1.4 backup failed with "no such table: profile_step_models"). The key file comes after it.
+        // The copy is checked against this version's schema before anything uses it (a backup of another version is refused). The key
+        // file comes after it.
         try
         {
             await using (var db = await new ConceptDatabase(paths, key).OpenAsync(cancellationToken).ConfigureAwait(false))
@@ -164,7 +164,7 @@ public sealed class Vault(IAppPaths paths, DatabaseKey key, IEnumerable<IKeyProt
         catch (Exception ex)
         {
             key.Clear();
-            logger.LogError(ex, "The restored database could not be brought to this version's schema; it is removed again and nothing is installed");
+            logger.LogError(ex, "The restored database does not have this version's schema; it is removed again and nothing is installed");
             Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
             try
             {
@@ -189,6 +189,36 @@ public sealed class Vault(IAppPaths paths, DatabaseKey key, IEnumerable<IKeyProt
         }
 
         logger.LogInformation("Database installed from a backup (key protection: {Method})", protector.Method);
+    }
+
+    /// <summary>
+    /// Sets aside a database this version does not open (<see cref="Database.DatabaseVersionException"/>): the database file and its key file
+    /// are renamed in the data folder (".set-aside-&lt;UTC time&gt;"), never deleted, and the app starts fresh (first start). The key seal is
+    /// kept, so the version that made the file can still open it when both files get their names back. Returns the new name of the database.
+    /// </summary>
+    public string SetAside()
+    {
+        if (State == VaultState.Open)
+        {
+            throw new InvalidOperationException("Close the database before setting it aside.");
+        }
+
+        key.Clear();
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        var suffix = ".set-aside-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss", System.Globalization.CultureInfo.InvariantCulture);
+        var database = paths.DatabaseFile + suffix;
+        if (File.Exists(paths.DatabaseFile))
+        {
+            File.Move(paths.DatabaseFile, database);
+        }
+
+        if (File.Exists(paths.KeyFile))
+        {
+            File.Move(paths.KeyFile, paths.KeyFile + suffix);
+        }
+
+        logger.LogWarning("A database this version does not open was set aside ({Name}); the app starts fresh", Path.GetFileName(database));
+        return database;
     }
 
     /// <summary>Forgets the key in memory (the database is locked again).</summary>

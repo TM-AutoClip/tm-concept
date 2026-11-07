@@ -1,4 +1,5 @@
 using Avalonia.Headless.XUnit;
+using Microsoft.EntityFrameworkCore;
 using Shouldly;
 using TMConcept.Desktop.Startup;
 using TMConcept.Desktop.ViewModels;
@@ -88,5 +89,43 @@ public sealed class FirstRunTests
         model.Step.ShouldBe(FirstRunStep.Choice);
         model.ChooseEnglishCommand.Execute(null);
         h.Get<TMConcept.Desktop.Localization.Localizer>()["common.back"].ShouldBe("Back");
+    }
+
+    [AvaloniaFact]
+    public async Task ADatabaseOfAnotherVersionIsSaidPlainlyAndCanBeSetAsideForAFreshStart()
+    {
+        using var h = new DesktopHarness();
+        await CreateAsync(h);
+        var paths = h.Get<TMConcept.Core.Paths.IAppPaths>();
+        var key = h.Get<DatabaseKey>();
+        await using (var db = await TMConcept.Storage.Database.ConceptDatabase.OpenAsync(
+            TMConcept.Storage.Database.ConceptDatabase.ConnectionString(paths.DatabaseFile, key.Passphrase()), CancellationToken.None))
+        {
+            // What a newer version would have written.
+            await db.Settings.Where(s => s.Key == TMConcept.Storage.Database.ConceptSchema.VersionSetting)
+                .ExecuteUpdateAsync(s => s.SetProperty(r => r.Value, "999"), CancellationToken.None);
+        }
+
+        var vault = h.Get<Vault>();
+        vault.Lock();
+        var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
+        var unlock = h.Get<UnlockViewModel>();
+        var fresh = false;
+        unlock.StartedFresh += (_, _) => fresh = true;
+        unlock.Password = Master;
+
+        await unlock.UnlockAsync();
+
+        unlock.Incompatible.ShouldBeTrue();
+        unlock.CanUnlock.ShouldBeFalse();
+        unlock.Error.ShouldBe(text["unlock.incompatible.newer"]);
+        vault.State.ShouldBe(VaultState.Locked);
+
+        unlock.StartFresh();
+
+        fresh.ShouldBeTrue();
+        vault.State.ShouldBe(VaultState.NotCreated);
+        Directory.GetFiles(Path.GetDirectoryName(paths.DatabaseFile)!, Path.GetFileName(paths.DatabaseFile) + ".set-aside-*").Length.ShouldBe(1);
+        h.Get<AppSession>().PendingMessage.ShouldNotBeNull().ShouldContain(".set-aside-");
     }
 }

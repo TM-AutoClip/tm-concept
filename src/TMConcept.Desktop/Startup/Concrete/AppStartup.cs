@@ -20,7 +20,7 @@ namespace TMConcept.Desktop.Startup;
 
 /// <summary>
 /// Startup flow: first run (language → new start or restore → protection and backup password) · unlock (automatic keyring, or master
-/// password) · main window. After the main window opens: old work files are cleaned and the daily backup runs. Closing the main window
+/// password; a database of another version is not opened, the unlock window offers to set it aside and start fresh) · main window. After the main window opens: old work files are cleaned and the daily backup runs. Closing the main window
 /// ends the app; while a page works (a generation, a video render) it asks first and stops the work (its Node / Chrome / ffmpeg processes
 /// are ended with it) before the app closes. An exception that reaches the interface thread is logged and shown instead of ending the app.
 /// </summary>
@@ -99,14 +99,25 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
         Present(window);
     }
 
-    private void ShowUnlock(string? error)
+    private void ShowUnlock(string? error, Storage.Database.DatabaseVersionException? incompatible = null)
     {
         var model = services.GetRequiredService<UnlockViewModel>();
         model.Error = error ?? string.Empty;
+        if (incompatible is not null)
+        {
+            model.ShowIncompatible(incompatible);
+        }
+
         var window = new UnlockWindow { DataContext = model };
         model.Completed += async (_, _) =>
         {
             await StartMainAsync().ConfigureAwait(true);
+            window.Close();
+        };
+        model.StartedFresh += (_, _) =>
+        {
+            // The first-start window becomes the active one before this one closes, so closing it does not end the app.
+            ShowFirstRun(FirstRunStep.Choice);
             window.Close();
         };
         Present(window);
@@ -134,6 +145,12 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
         {
             await vault.OpenAsync(CancellationToken.None).ConfigureAwait(true);
             await StartMainAsync().ConfigureAwait(true);
+        }
+        catch (Storage.Database.DatabaseVersionException ex)
+        {
+            // The key opened the file, but it is of another version: nothing to unlock; the window offers to set it aside.
+            logger.LogCritical(ex, "The database is of another version (schema {Found}) and is not opened", ex.Found);
+            ShowUnlock(null, ex);
         }
         catch (Exception ex)
         {

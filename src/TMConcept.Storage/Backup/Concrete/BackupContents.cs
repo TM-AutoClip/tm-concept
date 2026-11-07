@@ -22,9 +22,6 @@ public sealed class BackupContents
     /// <summary>The default of automatic backups: everything except the API keys.</summary>
     public static BackupContents Automatic => new();
 
-    /// <summary>Everything a backup of 0.1.1–0.1.5 held (no keys, no image files).</summary>
-    public static BackupContents Version2 => new() { Keys = false, Profiles = true, Concepts = true, Settings = true };
-
     /// <summary>Whether something is chosen and the choice holds together (concepts need their profiles).</summary>
     public bool IsValid => (Keys || Profiles || Concepts || Settings) && (!Concepts || Profiles);
 

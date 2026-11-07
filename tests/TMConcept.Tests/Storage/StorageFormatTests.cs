@@ -6,11 +6,11 @@ using TMConcept.Storage.Stores;
 
 namespace TMConcept.Tests.Storage;
 
-/// <summary>Values must keep the stored form of every earlier version (0.1.0–0.1.2 EF Core, 0.1.3–0.1.6 hand-written SQL, 0.1.7 EF Core again).</summary>
+/// <summary>How values and the schema are stored (TEXT ids, UTC ticks, invariant money text, 0/1 flags; EF Core creates the tables).</summary>
 public sealed class StorageFormatTests
 {
     [Fact]
-    public async Task ValuesAreStoredAsTheEarlierVersionsStoredThem()
+    public async Task ValuesKeepTheirStoredForm()
     {
         using var h = await StorageHarness.CreatedAsync();
         var id = Guid.NewGuid();
@@ -54,16 +54,7 @@ public sealed class StorageFormatTests
     }
 
     [Fact]
-    public async Task ARunOfThe016FileIsStoredInTheSameFormAsANewOne()
-    {
-        using var h = OldFiles.Harness(OldFiles.Version3);
-        await using var raw = InspectionContext.Open(h.ConnectionString);
-        var run = await raw.Runs.SingleAsync(r => r.Id == OldFileValues.Run1.ToString().ToUpperInvariant(), CancellationToken.None);
-        (run.EstimateMinUsd, run.EstimateMaxUsd, run.ActualUsd, run.CostExact).ShouldBe(("0.01", "0.0425", "0.0123", 1L));
-    }
-
-    [Fact]
-    public async Task ANewFileGetsTheSchemaOfTheEarlierVersions()
+    public async Task ANewFileGetsItsTablesIndexesAndCascades()
     {
         using var h = await StorageHarness.CreatedAsync();
         await using (var inspect = InspectionContext.Open(h.ConnectionString))

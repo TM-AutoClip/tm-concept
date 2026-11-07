@@ -197,7 +197,7 @@ public sealed class BackupTests
     }
 
     [Fact]
-    public async Task ABackupOfVersion015StillRestores()
+    public async Task ABackupOfAnOlderFormatIsRefusedAsSuchNotAsAWrongPassword()
     {
         var (source, _) = await BackupAsync();
         using var __ = source;
@@ -212,10 +212,26 @@ public sealed class BackupTests
         await File.WriteAllBytesAsync(old, SealedBox.Seal(System.Text.Encoding.ASCII.GetBytes("TMCBAK02"), Password, plain, KdfParameters.Fast), None);
 
         using var target = new StorageHarness();
-        (await Service(target).InspectAsync(old, Password, None)).Profiles.ShouldBe(1);
-        var report = await Service(target).RestoreAsync(old, Password, target.Protector, None);
-        report.Profiles.ShouldBe(1);
-        report.Contents.Keys.ShouldBeFalse();
+        (await Should.ThrowAsync<BackupRefusedException>(() => Service(target).InspectAsync(old, Password, None))).Message.ShouldContain("format 02");
+        await Should.ThrowAsync<BackupRefusedException>(() => Service(target).RestoreAsync(old, Password, target.Protector, None));
+        target.Vault.State.ShouldBe(VaultState.NotCreated);
+        File.Exists(target.Paths.DatabaseFile).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task ABackupWhoseDatabaseHasNoVersionRowIsRefusedAtInspection()
+    {
+        // What a 0.1.6 backup holds: the current container, but a database without the schema-version row.
+        var (source, _) = await BackupAsync();
+        using var __ = source;
+        await source.QueryAsync(db => db.Settings.Where(s => s.Key == TMConcept.Storage.Database.ConceptSchema.VersionSetting).ExecuteDeleteAsync());
+        var old = Path.Combine(source.Paths.DataDirectory, "unversioned" + BackupRules.Extension);
+        await Service(source).CreateAsync(old, BackupContents.Automatic, None);
+
+        using var target = new StorageHarness();
+        await Should.ThrowAsync<BackupRefusedException>(() => Service(target).InspectAsync(old, Password, None));
+        await Should.ThrowAsync<BackupRefusedException>(() => Service(target).RestoreAsync(old, Password, target.Protector, None));
+        target.Vault.State.ShouldBe(VaultState.NotCreated);
     }
 
     [Fact]

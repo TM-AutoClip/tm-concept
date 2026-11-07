@@ -11,7 +11,7 @@ namespace TMConcept.Storage.Database
     public partial class ConceptDbContextModel
     {
         private ConceptDbContextModel()
-            : base(skipDetectChanges: false, modelId: new Guid("a4757fdb-73e5-4d59-a161-fb193b7752af"), entityTypeCount: 17)
+            : base(skipDetectChanges: false, modelId: new Guid("0d7d798e-9196-4b2d-83f3-93aa1a4913dc"), entityTypeCount: 14)
         {
         }
 
@@ -28,12 +28,9 @@ namespace TMConcept.Storage.Database
             var queueItem = QueueItemEntityType.Create(this);
             var videoCost = VideoCostEntityType.Create(this);
             var videoRecord = VideoRecordEntityType.Create(this);
-            var generalStepModelRow = GeneralStepModelRowEntityType.Create(this);
             var schemaObjectRow = SchemaObjectRowEntityType.Create(this);
             var secureDeleteRow = SecureDeleteRowEntityType.Create(this);
             var settingRow = SettingRowEntityType.Create(this);
-            var tableColumnRow = TableColumnRowEntityType.Create(this);
-            var userVersionRow = UserVersionRowEntityType.Create(this);
 
             ConceptEntityType.CreateForeignKey1(concept, profile);
             ConceptEmbeddingEntityType.CreateForeignKey1(conceptEmbedding, concept);
@@ -57,12 +54,9 @@ namespace TMConcept.Storage.Database
             QueueItemEntityType.CreateAnnotations(queueItem);
             VideoCostEntityType.CreateAnnotations(videoCost);
             VideoRecordEntityType.CreateAnnotations(videoRecord);
-            GeneralStepModelRowEntityType.CreateAnnotations(generalStepModelRow);
             SchemaObjectRowEntityType.CreateAnnotations(schemaObjectRow);
             SecureDeleteRowEntityType.CreateAnnotations(secureDeleteRow);
             SettingRowEntityType.CreateAnnotations(settingRow);
-            TableColumnRowEntityType.CreateAnnotations(tableColumnRow);
-            UserVersionRowEntityType.CreateAnnotations(userVersionRow);
 
             AddAnnotation("ProductVersion", "10.0.14");
         }

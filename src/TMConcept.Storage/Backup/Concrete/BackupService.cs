@@ -23,8 +23,9 @@ namespace TMConcept.Storage.Backup;
 /// Videos are never in a backup. The backup password is required at the first start; the key derived from it is kept only in the encrypted
 /// database (never in a backup file), so daily backups need no password. Opening a backup always needs the password; changing it needs the
 /// current one. A forgotten backup password cannot be recovered. A restore is possible only while there is no database yet (first start),
-/// says what the file holds before anything is replaced, and brings back exactly that. Format 02 (0.1.1–0.1.5, no keys, no image files) is
-/// still read; 01 is not (0.1.0 had no users).
+/// says what the file holds before anything is replaced, and brings back exactly that. Only this format and a database of this schema
+/// version are restored (no backward compatibility, 7 Nov 2026): a file of format 02 (0.1.1–0.1.5) or a database of another version
+/// (0.1.6 and older wrote no schema version) is refused with <see cref="BackupRefusedException"/> before anything changes.
 /// </summary>
 public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault, ConceptDatabase database, KdfParameters kdf,
     TimeProvider clock, ILogger<BackupService> logger)
@@ -35,7 +36,9 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
     private const string ContentsSetting = "backup-contents";
 
     private static readonly byte[] Magic = Encoding.ASCII.GetBytes("TMCBAK03");
-    private static readonly byte[] Magic2 = Encoding.ASCII.GetBytes("TMCBAK02");
+
+    // Every backup file starts with "TMCBAK" and its two-digit format.
+    private static readonly byte[] MagicFamily = Encoding.ASCII.GetBytes("TMCBAK");
 
     /// <summary>Whether a backup password was set.</summary>
     public async Task<bool> HasPasswordAsync(CancellationToken cancellationToken) => await LoadKeyAsync(cancellationToken).ConfigureAwait(false) is not null;
@@ -301,13 +304,10 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
         var copy = TemporaryFile();
         try
         {
-            if (payload.Header.Format >= 3)
-            {
-                return Report(payload.Header);
-            }
-
+            // A backup of another version is refused here already, before the page offers to restore it.
             await File.WriteAllBytesAsync(copy, payload.Database.ToArray(), cancellationToken).ConfigureAwait(false);
-            return await CountAsync(copy, payload.Key, payload.Header, cancellationToken).ConfigureAwait(false);
+            await VerifyAsync(copy, payload.Key, cancellationToken).ConfigureAwait(false);
+            return Report(payload.Header);
         }
         finally
         {
@@ -343,7 +343,6 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
                 File.Move(paths.DatabaseFile, paths.DatabaseFile + ".orphan-" + clock.GetUtcNow().ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture));
             }
 
-            // Installing also brings a backup of an older version to the current schema.
             await vault.InstallAsync(copy, payload.Key, protector, cancellationToken).ConfigureAwait(false);
             var images = await RestoreImagesAsync(payload, cancellationToken).ConfigureAwait(false);
 
@@ -469,17 +468,12 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
     private static async Task<BackupPayload> OpenAsync(string source, string password, CancellationToken cancellationToken)
     {
         var sealedData = await File.ReadAllBytesAsync(source, cancellationToken).ConfigureAwait(false);
-        if (sealedData.Length >= 8 && sealedData.AsSpan(0, 8).SequenceEqual(Magic2))
+        if (sealedData.Length >= Magic.Length && sealedData.AsSpan(0, MagicFamily.Length).SequenceEqual(MagicFamily)
+            && !sealedData.AsSpan(0, Magic.Length).SequenceEqual(Magic))
         {
-            // 0.1.1–0.1.5: [key length (1) | key (32) | database]; no keys, no image files.
-            var old = SealedBox.Open(Magic2, password, sealedData);
-            if (old.Length < 33 || old[0] != 32)
-            {
-                CryptographicOperations.ZeroMemory(old);
-                throw new SealedBoxException("The backup content is damaged.");
-            }
-
-            return new BackupPayload(new BackupHeader { Format = 2, Contents = BackupContents.Version2, DatabaseLength = old.Length - 33 }, old, 1, 33, old.Length);
+            // Another format of this app (02 = 0.1.1–0.1.5): told apart from a damaged file, and not read.
+            throw new BackupRefusedException(
+                $"This backup has format {Encoding.ASCII.GetString(sealedData, MagicFamily.Length, Magic.Length - MagicFamily.Length)} of another TM Concept version; only backups of this version can be restored. Nothing was restored.");
         }
 
         var plain = SealedBox.Open(Magic, password, sealedData);
@@ -579,8 +573,8 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
     }
 
     /// <summary>
-    /// Opens the temporary copy and brings it to this version's schema before anything is installed: a backup of a newer version, or one
-    /// whose upgrade fails, is refused here and nothing in the data folder changes.
+    /// Opens the temporary copy and checks it against this version's schema before anything is installed: a backup of another version
+    /// (older or newer) is refused here and nothing in the data folder changes.
     /// </summary>
     private async Task VerifyAsync(string file, byte[] dek, CancellationToken cancellationToken)
     {
@@ -593,12 +587,18 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
             {
                 await ConceptDatabase.EnsureSchemaAsync(db, cancellationToken).ConfigureAwait(false);
             }
+            catch (DatabaseVersionException ex)
+            {
+                logger.LogError(ex, "Restore refused: the backup was made by another version (schema {Found})", ex.Found);
+                throw new BackupRefusedException("This backup was made by another version of TM Concept; only backups of this version can be restored. "
+                    + ex.Message + " Nothing was restored.", ex);
+            }
             catch (Exception ex) when (ex is InvalidOperationException or SqliteException or DbUpdateException)
             {
-                logger.LogError(ex, "Restore refused: the backup's database cannot be brought to this version's schema");
+                logger.LogError(ex, "Restore refused: the backup's database does not have this version's schema");
                 throw new BackupRefusedException(ex is InvalidOperationException
                     ? ex.Message
-                    : "This backup's database could not be brought to this version's schema; nothing was restored.", ex);
+                    : "This backup's database does not have this version's schema; nothing was restored.", ex);
             }
         }
         catch (SqliteException ex)
@@ -611,35 +611,13 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
         }
     }
 
-    /// <summary>The counts of an old (format 02) backup's database copy.</summary>
-    private static async Task<RestoreReport> CountAsync(string file, byte[] dek, BackupHeader header, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await using var db = await ConceptDatabase.OpenAsync(ConceptDatabase.ConnectionString(file, Convert.ToHexString(dek)), cancellationToken)
-                .ConfigureAwait(false);
-            header.ProfileCount = await db.Profiles.CountAsync(cancellationToken).ConfigureAwait(false);
-            header.ConceptCount = await db.Concepts.CountAsync(cancellationToken).ConfigureAwait(false);
-            header.VideoCount = await db.Videos.CountAsync(cancellationToken).ConfigureAwait(false);
-            return Report(header);
-        }
-        catch (SqliteException ex)
-        {
-            throw new SealedBoxException("The database inside the backup does not open; the backup is damaged.", ex);
-        }
-        finally
-        {
-            SqliteConnection.ClearAllPools();
-        }
-    }
-
-    private static RestoreReport Report(BackupHeader header) => new(header.Format >= 3 ? header.CreatedAtUtc : null, header.Contents, header.KeyCount,
+    private static RestoreReport Report(BackupHeader header) => new(header.CreatedAtUtc, header.Contents, header.KeyCount,
         header.ProfileCount, header.Images.Count, header.ConceptCount, header.VideoCount);
 
     private async Task<RestoreReport> ReportAsync(BackupHeader header, int images, CancellationToken cancellationToken)
     {
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        return new RestoreReport(header.Format >= 3 ? header.CreatedAtUtc : null, header.Contents,
+        return new RestoreReport(header.CreatedAtUtc, header.Contents,
             await db.ApiKeys.CountAsync(cancellationToken).ConfigureAwait(false),
             await db.Profiles.CountAsync(cancellationToken).ConfigureAwait(false),
             images,
