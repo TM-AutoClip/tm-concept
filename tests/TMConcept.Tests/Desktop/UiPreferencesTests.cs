@@ -6,17 +6,17 @@ namespace TMConcept.Tests.Desktop;
 public sealed class UiPreferencesTests
 {
     [Fact]
-    public void DrawingIsOnTheProcessorUntilChosenAndOnePreferenceNeverResetsAnother()
+    public void DrawingIsOnTheGraphicsCardUntilChosenAndOnePreferenceNeverResetsAnother()
     {
         using var h = new DesktopHarness();
         var file = h.Get<UiPreferencesFile>();
-        file.Read().UseGraphicsCard.ShouldBeFalse();
+        file.Read().UseGraphicsCard.ShouldBeTrue("a new install draws with the graphics card");
 
-        file.Change(p => p.UseGraphicsCard = true);
+        file.Change(p => p.UseGraphicsCard = false);
         file.Change(p => p.Language = "tr");
 
         var read = file.Read();
-        read.UseGraphicsCard.ShouldBeTrue();
+        read.UseGraphicsCard.ShouldBeFalse();
         read.Language.ShouldBe("tr");
     }
 }

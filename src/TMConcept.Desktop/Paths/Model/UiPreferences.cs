@@ -7,8 +7,9 @@ public sealed class UiPreferences
     public string Language { get; set; } = string.Empty;
 
     /// <summary>
-    /// Draw the window with the graphics card (Direct3D / OpenGL). Off by default since 0.1.3: drawing on the processor looks the same and
-    /// keeps about 50–70 MB less memory (the graphics driver's own memory and threads live in the app's process). Read at start.
+    /// Draw the window with the graphics card (Direct3D / OpenGL). On by default since 0.1.7 (the developer's choice: scrolling and the
+    /// player are smoother); 0.1.3–0.1.6 drew on the processor by default, which keeps about 50–70 MB less memory (the graphics driver's own
+    /// memory and threads live in the app's process). A preferences file that says false keeps it off. Read at start.
     /// </summary>
-    public bool UseGraphicsCard { get; set; }
+    public bool UseGraphicsCard { get; set; } = true;
 }

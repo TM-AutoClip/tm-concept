@@ -70,7 +70,7 @@
   "settings.notifications": "Notifications",
   "settings.drawing": "Drawing",
   "settings.drawing.gpu": "Draw the window with the graphics card",
-  "settings.drawing.note": "Off: the processor draws the window. It looks the same and uses about 50–70 MB less memory. Turn it on only if scrolling or the player feels slow. Takes effect after a restart.",
+  "settings.drawing.note": "On (the default of a new install): scrolling and the player are smoother. Off: the processor draws the window; it looks the same and uses about 50–70 MB less memory. Takes effect after a restart.",
   "settings.drawing.restart": "Saved. Takes effect after you restart TM Concept.",
   "settings.notifications.enabled": "Show a notification at the bottom right when a job finishes or fails",
   "settings.notifications.seconds": "Shown for (seconds)",
