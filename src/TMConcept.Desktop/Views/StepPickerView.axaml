@@ -1,11 +1,12 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:TMConcept.Desktop.ViewModels"
+             xmlns:views="using:TMConcept.Desktop.Views"
              x:Class="TMConcept.Desktop.Views.StepPickerView"
              x:DataType="vm:StepPickerViewModel">
   <StackPanel Spacing="6">
     <!-- Locked while a process is prepared (keys, installs): what is saved is what the rows showed when it started. -->
-    <ItemsControl ItemsSource="{Binding Rows}" IsEnabled="{Binding !Busy}">
+    <ItemsControl ItemsSource="{Binding Cards}" IsEnabled="{Binding !Busy}">
       <ItemsControl.ItemsPanel>
         <ItemsPanelTemplate>
           <UniformGrid Columns="{Binding $parent[ItemsControl].((vm:StepPickerViewModel)DataContext).Columns}" />
@@ -15,11 +16,13 @@
         <DataTemplate x:DataType="vm:StepModelRowViewModel">
           <Border Classes="card" Margin="0,4,8,4">
             <StackPanel Spacing="6">
-              <StackPanel Spacing="2">
-                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" ToolTip.Tip="{Binding Purpose}" />
-                <TextBlock Text="{Binding Purpose}" Classes="small" TextWrapping="Wrap"
-                           IsVisible="{Binding $parent[ItemsControl].((vm:StepPickerViewModel)DataContext).ShowPurpose}" />
-              </StackPanel>
+              <!-- What the step is for is the "?" next to its title, not a line that is always open. -->
+              <TextBlock FontWeight="SemiBold" TextWrapping="Wrap">
+                <Run Text="{Binding Title}" />
+                <InlineUIContainer BaselineAlignment="Center">
+                  <views:HelpTip Text="{Binding Purpose}" />
+                </InlineUIContainer>
+              </TextBlock>
               <StackPanel Spacing="6">
                 <WrapPanel>
                   <ComboBox ItemsSource="{Binding Options}" SelectedItem="{Binding Selected}" MinWidth="220" MaxWidth="520" Margin="0,0,8,4">
@@ -63,7 +66,7 @@
                           Command="{Binding $parent[ItemsControl].((vm:StepPickerViewModel)DataContext).ListenCommand}" CommandParameter="{Binding}"
                           IsEnabled="{Binding !$parent[ItemsControl].((vm:StepPickerViewModel)DataContext).Listening}" />
                 </WrapPanel>
-                <Border Classes="badge" HorizontalAlignment="Left">
+                <Border Classes="badge" HorizontalAlignment="Left" IsVisible="{Binding ShowRecommended}">
                   <TextBlock Text="{Binding Recommended}" Classes="small" />
                 </Border>
                 <TextBlock Text="{Binding Note}" Classes="small" Classes.warning="{Binding NoteIsWarning}" TextWrapping="Wrap"

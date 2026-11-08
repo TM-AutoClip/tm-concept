@@ -85,7 +85,10 @@
             <TabItem Header="{DynamicResource produced.tab.version}">
               <Panel DataContext="{Binding Editor}">
               <StackPanel Spacing="10" Margin="0,8,0,0" x:DataType="vm:VersionEditorViewModel">
-                <TextBlock Text="{DynamicResource version.hint}" Classes="small" TextWrapping="Wrap" />
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Text="{DynamicResource version.title}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                  <v:HelpTip Text="{DynamicResource version.hint}" />
+                </StackPanel>
                 <TextBlock Text="{Binding Status}" Classes="warning" TextWrapping="Wrap"
                            IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                 <StackPanel Spacing="10" IsVisible="{Binding CanEdit}">
@@ -110,16 +113,20 @@
                   </ItemsControl>
                   <Border Classes="card">
                     <StackPanel Spacing="6">
-                      <TextBlock Text="{DynamicResource version.revoice.hint}" Classes="small" TextWrapping="Wrap" />
                       <TextBlock Text="{Binding VoiceCost}" TextWrapping="Wrap" />
-                      <Button Classes="accent" Content="{DynamicResource version.revoice}" Command="{Binding RevoiceCommand}" IsEnabled="{Binding CanStart}" />
+                      <StackPanel Orientation="Horizontal">
+                        <Button Classes="accent" Content="{DynamicResource version.revoice}" Command="{Binding RevoiceCommand}" IsEnabled="{Binding CanStart}" />
+                        <v:HelpTip Text="{DynamicResource version.revoice.hint}" />
+                      </StackPanel>
                     </StackPanel>
                   </Border>
                   <Border Classes="card">
                     <StackPanel Spacing="6">
-                      <TextBlock Text="{DynamicResource version.recode.hint}" Classes="small" TextWrapping="Wrap" />
                       <TextBlock Text="{Binding RecodeEstimate}" TextWrapping="Wrap" />
-                      <Button Content="{DynamicResource version.recode}" Command="{Binding RecodeCommand}" IsEnabled="{Binding CanStart}" />
+                      <StackPanel Orientation="Horizontal">
+                        <Button Content="{DynamicResource version.recode}" Command="{Binding RecodeCommand}" IsEnabled="{Binding CanStart}" />
+                        <v:HelpTip Text="{DynamicResource version.recode.hint}" />
+                      </StackPanel>
                     </StackPanel>
                   </Border>
                   <StackPanel Spacing="4" IsVisible="{Binding Busy}">

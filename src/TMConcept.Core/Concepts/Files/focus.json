@@ -1,138 +1,38 @@
 {
-  "categories": [
+  "dimensions": [
     {
-      "id": "general",
-      "name": { "tr": "Genel", "en": "General" },
-      "dimensions": [
-        {
-          "id": "tone",
-          "name": { "tr": "Ton", "en": "Tone" },
-          "options": [
-            { "id": "mysterious", "name": { "tr": "gizemli", "en": "mysterious" } },
-            { "id": "educational", "name": { "tr": "eğitici", "en": "educational" } },
-            { "id": "dramatic", "name": { "tr": "dramatik", "en": "dramatic" } },
-            { "id": "calm", "name": { "tr": "sakin belgesel", "en": "calm documentary" } },
-            { "id": "humorous", "name": { "tr": "esprili", "en": "humorous" } },
-            { "id": "inspiring", "name": { "tr": "ilham verici", "en": "inspiring" } },
-            { "id": "critical", "name": { "tr": "sorgulayıcı", "en": "questioning" } }
-          ]
-        },
-        {
-          "id": "audience",
-          "name": { "tr": "İzleyici", "en": "Audience" },
-          "options": [
-            { "id": "beginners", "name": { "tr": "konuya yeni başlayanlar", "en": "newcomers to the subject" } },
-            { "id": "enthusiasts", "name": { "tr": "meraklılar", "en": "enthusiasts" } },
-            { "id": "family", "name": { "tr": "aile ve çocuklara uygun", "en": "suitable for families and children" } },
-            { "id": "experts", "name": { "tr": "konuyu bilenler", "en": "people who know the subject" } }
-          ]
-        },
-        {
-          "id": "structure",
-          "name": { "tr": "Anlatım biçimi", "en": "Structure" },
-          "options": [
-            { "id": "story", "name": { "tr": "tek bir hikâye", "en": "one story" } },
-            { "id": "list", "name": { "tr": "sıralı liste (\"5 …\")", "en": "a ranked list (\"5 …\")" } },
-            { "id": "myth-fact", "name": { "tr": "efsane mi gerçek mi", "en": "myth or fact" } },
-            { "id": "what-if", "name": { "tr": "ya olsaydı", "en": "what if" } },
-            { "id": "versus", "name": { "tr": "iki şeyi karşılaştırma", "en": "comparing two things" } },
-            { "id": "day-in-life", "name": { "tr": "bir günün hikâyesi", "en": "a day in the life" } }
-          ]
-        }
+      "id": "tone",
+      "name": { "tr": "Ton", "en": "Tone" },
+      "options": [
+        { "id": "mysterious", "name": { "tr": "gizemli", "en": "mysterious" } },
+        { "id": "educational", "name": { "tr": "eğitici", "en": "educational" } },
+        { "id": "dramatic", "name": { "tr": "dramatik", "en": "dramatic" } },
+        { "id": "calm", "name": { "tr": "sakin belgesel", "en": "calm documentary" } },
+        { "id": "humorous", "name": { "tr": "esprili", "en": "humorous" } },
+        { "id": "inspiring", "name": { "tr": "ilham verici", "en": "inspiring" } },
+        { "id": "critical", "name": { "tr": "sorgulayıcı", "en": "questioning" } }
       ]
     },
     {
-      "id": "history",
-      "name": { "tr": "Tarih", "en": "History" },
-      "dimensions": [
-        {
-          "id": "period",
-          "name": { "tr": "Dönem", "en": "Period" },
-          "options": [
-            { "id": "antiquity", "name": { "tr": "İlk Çağ (500 öncesi)", "en": "Antiquity (before 500)" } },
-            { "id": "late-antiquity", "name": { "tr": "Geç Antik Çağ (300–700)", "en": "Late Antiquity (300–700)" } },
-            { "id": "early-middle-ages", "name": { "tr": "Erken Orta Çağ (500–1000)", "en": "Early Middle Ages (500–1000)" } },
-            { "id": "high-middle-ages", "name": { "tr": "Yüksek Orta Çağ (1000–1300)", "en": "High Middle Ages (1000–1300)" } },
-            { "id": "late-middle-ages", "name": { "tr": "Geç Orta Çağ (1300–1500)", "en": "Late Middle Ages (1300–1500)" } },
-            { "id": "early-modern", "name": { "tr": "Erken Yeni Çağ (1500–1800)", "en": "Early modern (1500–1800)" } },
-            { "id": "19th", "name": { "tr": "19. yüzyıl", "en": "19th century" } },
-            { "id": "20th", "name": { "tr": "20. yüzyıl", "en": "20th century" } }
-          ]
-        },
-        {
-          "id": "region",
-          "name": { "tr": "Bölge", "en": "Region" },
-          "options": [
-            { "id": "anatolia", "name": { "tr": "Anadolu", "en": "Anatolia" } },
-            { "id": "constantinople", "name": { "tr": "Konstantinopolis – İstanbul", "en": "Constantinople – Istanbul" } },
-            { "id": "balkans", "name": { "tr": "Balkanlar", "en": "the Balkans" } },
-            { "id": "middle-east", "name": { "tr": "Orta Doğu", "en": "the Middle East" } },
-            { "id": "mediterranean", "name": { "tr": "Akdeniz", "en": "the Mediterranean" } },
-            { "id": "europe", "name": { "tr": "Avrupa", "en": "Europe" } },
-            { "id": "caucasus", "name": { "tr": "Kafkasya", "en": "the Caucasus" } },
-            { "id": "north-africa", "name": { "tr": "Kuzey Afrika", "en": "North Africa" } },
-            { "id": "central-asia", "name": { "tr": "Orta Asya", "en": "Central Asia" } }
-          ]
-        },
-        {
-          "id": "subject",
-          "name": { "tr": "Konu", "en": "Subject" },
-          "options": [
-            { "id": "battles", "name": { "tr": "savaşlar ve kuşatmalar", "en": "wars and sieges" } },
-            { "id": "rulers", "name": { "tr": "hükümdarlar ve saray", "en": "rulers and the court" } },
-            { "id": "daily-life", "name": { "tr": "gündelik hayat", "en": "everyday life" } },
-            { "id": "architecture", "name": { "tr": "mimari ve yapılar", "en": "architecture and buildings" } },
-            { "id": "religion", "name": { "tr": "din ve inanç", "en": "religion and belief" } },
-            { "id": "trade", "name": { "tr": "ticaret ve para", "en": "trade and money" } },
-            { "id": "science", "name": { "tr": "bilim ve buluşlar", "en": "science and inventions" } },
-            { "id": "women", "name": { "tr": "tarihte kadınlar", "en": "women in history" } },
-            { "id": "mysteries", "name": { "tr": "çözülmemiş gizemler", "en": "unsolved mysteries" } }
-          ]
-        }
+      "id": "audience",
+      "name": { "tr": "İzleyici", "en": "Audience" },
+      "options": [
+        { "id": "beginners", "name": { "tr": "konuya yeni başlayanlar", "en": "newcomers to the subject" } },
+        { "id": "enthusiasts", "name": { "tr": "meraklılar", "en": "enthusiasts" } },
+        { "id": "family", "name": { "tr": "aile ve çocuklara uygun", "en": "suitable for families and children" } },
+        { "id": "experts", "name": { "tr": "konuyu bilenler", "en": "people who know the subject" } }
       ]
     },
     {
-      "id": "technology",
-      "name": { "tr": "Teknoloji", "en": "Technology" },
-      "dimensions": [
-        {
-          "id": "era",
-          "name": { "tr": "Dönem", "en": "Era" },
-          "options": [
-            { "id": "ancient", "name": { "tr": "antik dünya", "en": "the ancient world" } },
-            { "id": "medieval", "name": { "tr": "Orta Çağ", "en": "the Middle Ages" } },
-            { "id": "industrial", "name": { "tr": "Sanayi Devrimi", "en": "the Industrial Revolution" } },
-            { "id": "20th", "name": { "tr": "20. yüzyıl", "en": "the 20th century" } },
-            { "id": "today", "name": { "tr": "günümüz", "en": "today" } },
-            { "id": "near-future", "name": { "tr": "yakın gelecek", "en": "the near future" } }
-          ]
-        },
-        {
-          "id": "field",
-          "name": { "tr": "Alan", "en": "Field" },
-          "options": [
-            { "id": "computing", "name": { "tr": "bilgisayar", "en": "computing" } },
-            { "id": "ai", "name": { "tr": "yapay zekâ", "en": "artificial intelligence" } },
-            { "id": "space", "name": { "tr": "uzay", "en": "space" } },
-            { "id": "energy", "name": { "tr": "enerji", "en": "energy" } },
-            { "id": "medicine", "name": { "tr": "tıp", "en": "medicine" } },
-            { "id": "transport", "name": { "tr": "ulaşım", "en": "transport" } },
-            { "id": "communication", "name": { "tr": "iletişim", "en": "communication" } },
-            { "id": "materials", "name": { "tr": "malzemeler", "en": "materials" } },
-            { "id": "engineering", "name": { "tr": "mühendislik harikaları", "en": "engineering marvels" } }
-          ]
-        },
-        {
-          "id": "angle",
-          "name": { "tr": "Bakış açısı", "en": "Angle" },
-          "options": [
-            { "id": "how-it-works", "name": { "tr": "nasıl çalışır", "en": "how it works" } },
-            { "id": "invention-story", "name": { "tr": "buluşun hikâyesi", "en": "the story of the invention" } },
-            { "id": "failures", "name": { "tr": "başarısız denemeler", "en": "failed attempts" } },
-            { "id": "myth-fact", "name": { "tr": "yaygın yanlışlar", "en": "common misconceptions" } },
-            { "id": "impact", "name": { "tr": "hayatımıza etkisi", "en": "its effect on our lives" } }
-          ]
-        }
+      "id": "structure",
+      "name": { "tr": "Anlatım biçimi", "en": "Structure" },
+      "options": [
+        { "id": "story", "name": { "tr": "tek bir hikâye", "en": "one story" } },
+        { "id": "list", "name": { "tr": "sıralı liste (\"5 …\")", "en": "a ranked list (\"5 …\")" } },
+        { "id": "myth-fact", "name": { "tr": "efsane mi gerçek mi", "en": "myth or fact" } },
+        { "id": "what-if", "name": { "tr": "ya olsaydı", "en": "what if" } },
+        { "id": "versus", "name": { "tr": "iki şeyi karşılaştırma", "en": "comparing two things" } },
+        { "id": "day-in-life", "name": { "tr": "bir günün hikâyesi", "en": "a day in the life" } }
       ]
     }
   ]

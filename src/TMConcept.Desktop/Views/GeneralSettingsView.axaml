@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:TMConcept.Desktop.ViewModels"
+             xmlns:views="using:TMConcept.Desktop.Views"
              x:Class="TMConcept.Desktop.Views.GeneralSettingsView"
              x:DataType="vm:GeneralSettingsViewModel">
   <ScrollViewer>
@@ -24,8 +25,10 @@
         <Button Content="{DynamicResource settings.notifications.test}" Command="{Binding TestNotificationCommand}" />
       </StackPanel>
       <TextBlock Text="{Binding Status}" Classes="muted" />
-      <TextBlock Text="{DynamicResource components.title}" Classes="h2" Margin="0,10,0,0" />
-      <TextBlock Text="{DynamicResource components.explain}" Classes="small" TextWrapping="Wrap" />
+      <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+        <TextBlock Text="{DynamicResource components.title}" Classes="h2" VerticalAlignment="Center" />
+        <views:HelpTip Text="{DynamicResource components.explain}" />
+      </StackPanel>
       <TextBlock Text="{DynamicResource components.none}" Classes="muted" IsVisible="{Binding NothingInstalled}" />
       <ItemsControl ItemsSource="{Binding Installed}">
         <ItemsControl.ItemTemplate>

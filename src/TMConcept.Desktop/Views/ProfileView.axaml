@@ -12,7 +12,10 @@
 
       <Border Classes="card">
         <StackPanel Spacing="8">
-          <TextBlock Text="{DynamicResource profile.template}" FontWeight="SemiBold" />
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Text="{DynamicResource profile.template}" FontWeight="SemiBold" VerticalAlignment="Center" />
+            <views:HelpTip Text="{DynamicResource profile.template.hint}" />
+          </StackPanel>
           <StackPanel Orientation="Horizontal" Spacing="8">
             <ComboBox ItemsSource="{Binding Templates}" SelectedItem="{Binding SelectedTemplate}" MinWidth="320">
               <ComboBox.ItemTemplate>
@@ -23,24 +26,23 @@
             </ComboBox>
             <Button Content="{DynamicResource profile.template.apply}" Command="{Binding ApplyTemplateCommand}" />
           </StackPanel>
-          <TextBlock Text="{DynamicResource profile.template.hint}" Classes="small" TextWrapping="Wrap" />
         </StackPanel>
       </Border>
 
       <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="10" ColumnSpacing="12">
         <TextBlock Text="{DynamicResource profile.name}" VerticalAlignment="Center" />
         <TextBox Grid.Column="1" Text="{Binding Name}" MaxLength="80" />
-        <TextBlock Grid.Row="1" Text="{DynamicResource profile.language}" VerticalAlignment="Top" Margin="0,6,0,0" />
-        <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4">
-          <ComboBox ItemsSource="{Binding Languages}" SelectedItem="{Binding Language}" MinWidth="240" MaxDropDownHeight="420">
-            <ComboBox.ItemTemplate>
-              <DataTemplate x:DataType="vm:ChoiceOption">
-                <TextBlock Text="{Binding Label}" />
-              </DataTemplate>
-            </ComboBox.ItemTemplate>
-          </ComboBox>
-          <TextBlock Text="{DynamicResource profile.language.hint}" Classes="small" TextWrapping="Wrap" />
+        <StackPanel Grid.Row="1" Orientation="Horizontal" VerticalAlignment="Center">
+          <TextBlock Text="{DynamicResource profile.language}" VerticalAlignment="Center" />
+          <views:HelpTip Text="{DynamicResource profile.language.hint}" />
         </StackPanel>
+        <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Languages}" SelectedItem="{Binding Language}" MinWidth="240" MaxDropDownHeight="420">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ChoiceOption">
+              <TextBlock Text="{Binding Label}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
         <TextBlock Grid.Row="2" Text="{DynamicResource profile.format}" VerticalAlignment="Center" />
         <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Spacing="16">
           <RadioButton GroupName="format" IsChecked="{Binding Vertical}" Content="{DynamicResource profile.format.vertical}" />
@@ -51,8 +53,10 @@
                        HorizontalAlignment="Left" FormatString="0" />
       </Grid>
 
-      <TextBlock Text="{DynamicResource profile.concept}" FontWeight="SemiBold" />
-      <TextBlock Text="{DynamicResource profile.concept.hint}" Classes="small" TextWrapping="Wrap" />
+      <StackPanel Orientation="Horizontal">
+        <TextBlock Text="{DynamicResource profile.concept}" FontWeight="SemiBold" VerticalAlignment="Center" />
+        <views:HelpTip Text="{DynamicResource profile.concept.hint}" />
+      </StackPanel>
       <TextBox Name="ConceptBox" Text="{Binding ConceptText}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="180" MaxLength="6000" />
       <StackPanel Orientation="Horizontal" Spacing="8">
         <views:MarkerPicker Target="{Binding #ConceptBox}" Markers="{Binding PromptMarkers}" />
@@ -85,7 +89,10 @@
             </ItemsControl.ItemTemplate>
           </ItemsControl>
           <StackPanel Spacing="4" IsVisible="{Binding !IsNew}">
-            <TextBlock Text="{DynamicResource profile.models.hint}" Classes="small" TextWrapping="Wrap" />
+            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+              <TextBlock Text="{DynamicResource profile.models}" FontWeight="SemiBold" VerticalAlignment="Center" />
+              <views:HelpTip Text="{DynamicResource profile.models.hint}" />
+            </StackPanel>
             <views:StepPickerView DataContext="{Binding Picker}" />
           </StackPanel>
         </StackPanel>

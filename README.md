@@ -199,7 +199,7 @@ Then choose the models on the pages that use them (see above). Nothing paid is c
 
 ## Make your first video
 
-1. **Generate concepts:** choose the model, the count and an optional extra request (markers, focus drop-downs such as period or tone,
+1. **Generate concepts:** choose the model, the count and an optional extra request (markers, an optional fine-tuning of tone, audience and structure,
    and **Suggest topics** help with it); check the estimate; press **Generate**.
 2. Open cards, approve the good ones (A), delete the rest (D).
 3. **Concept to video:** click approved concepts to queue them, check the settings, press **Produce the queue in order**.

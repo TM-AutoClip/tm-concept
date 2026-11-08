@@ -3,7 +3,7 @@ using TMConcept.Core.Concepts;
 
 namespace TMConcept.Desktop.ViewModels;
 
-/// <summary>One focus drop-down of the concept page ("Period", "Tone"): its choices in the interface language, the first one "—" (none).</summary>
+/// <summary>One fine-tuning drop-down of the concept page ("Tone"): its choices in the interface language, the first one "any" (none chosen).</summary>
 public sealed partial class FocusRowViewModel : ObservableObject
 {
     /// <summary>Creates the row of <paramref name="dimension"/>.</summary>
@@ -21,13 +21,13 @@ public sealed partial class FocusRowViewModel : ObservableObject
     /// <summary>Its name.</summary>
     public string Title { get; }
 
-    /// <summary>"—" first, then the choices (value = option id).</summary>
+    /// <summary>"Any" first, then the choices (value = option id).</summary>
     public IReadOnlyList<ChoiceOption> Options { get; }
 
-    /// <summary>The chosen one ("—" = none).</summary>
+    /// <summary>The chosen one ("any" = none).</summary>
     [ObservableProperty]
     public partial ChoiceOption? Selected { get; set; }
 
-    /// <summary>The chosen option (null for "—").</summary>
+    /// <summary>The chosen option (null for "any").</summary>
     public FocusOption? Chosen => Dimension.Options.FirstOrDefault(o => o.Id == Selected?.Value);
 }

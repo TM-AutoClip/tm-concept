@@ -14,11 +14,14 @@ using TMConcept.Desktop.Startup;
 namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
-/// 💡 Generate concepts: count (1–100), extra request (with a marker drop-down), the focus drop-downs of the channel's category (period,
-/// region, tone… as data; they go into the prompt as its FOCUS line), "Suggest topics" (a cheap chat model of the topics step brings about
-/// ten topics; a click adds one to the extra request), the concept model (with its effort) and the optional meaning check (local or
-/// online embedding) chosen right here — the selected profile's last choices are shown, a new profile starts with none; the free
-/// word-similarity check (a different check: it compares the words of title and summary, no model). The estimate is recalculated when an input or a model changes; after "Generate" the same box shows the exact cost.
+/// 💡 Generate concepts. The left panel, top to bottom: count (1–100); extra request (with a marker drop-down) and a small "Suggest topics"
+/// next to its title (a cheap chat model of the topics step brings about ten topics from the channel concept and the extra request so far;
+/// a click adds one to the extra request); a folded "Fine-tuning (optional)" with only tone, audience and structure (nothing that asks the
+/// user to know the subject: period, region or field come from the extra request; "any" by default; the choices go into the prompt as its
+/// FOCUS line); the duplicate checks on one line (by words: free, no model; by meaning: a local or online embedding model picked right
+/// there); a folded "Models" whose title names the concept model (opened by itself while none is chosen). Long explanations are "?" tips.
+/// The selected profile's last model choices are shown, a new profile starts with none. The estimate is recalculated when an input or a
+/// model changes; after "Generate" the same box shows the exact cost.
 /// Generate first makes the choices ready (license, an API key asked for in a dialog when the provider has none, installs of a local model)
 /// and saves them for the profile; anything missing stops it before anything is paid for. Concepts arrive batch by batch; a card shows
 /// title and summary, opening it shows the full text; ✓ (A) approves, ✗ (D) moves to the trash. Thrown-away duplicates and the concepts a
@@ -34,6 +37,9 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
     IFocusSource focus, TopicSuggester topics, Dialogs.IConfirmDialog confirm, Core.Costs.ICostCalculator costs, Work.WorkStatus work,
     ILogger<ConceptsViewModel> logger) : PageViewModelBase
 {
+    /// <summary>The steps of the page that are not model cards: the meaning check stands next to the word check.</summary>
+    private static readonly string[] InlineSteps = [PipelineSteps.Embedding];
+
     private readonly List<ConceptCardViewModel> _approved = [];
     private readonly object _topicWork = new();
     private ConceptCallProgress? _live;
@@ -64,15 +70,23 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
     /// <summary>The markers of the extra request's drop-down (sent to the concept model with their meaning).</summary>
     public IReadOnlyList<MarkerOption> PromptMarkers => MarkerOptions.For(Core.Markers.MarkerKind.Prompt, text);
 
-    /// <summary>The categories of the focus drop-downs ("General" first; a profile made from a template starts with its category).</summary>
-    public ObservableCollection<ChoiceOption> FocusCategories { get; } = [];
-
-    /// <summary>The chosen category.</summary>
-    [ObservableProperty]
-    public partial ChoiceOption? FocusCategory { get; set; }
-
-    /// <summary>The focus drop-downs: the chosen category's, then the general ones (tone, audience, structure).</summary>
+    /// <summary>The fine-tuning drop-downs (tone, audience, structure), "any" until the user picks one.</summary>
     public ObservableCollection<FocusRowViewModel> FocusRows { get; } = [];
+
+    /// <summary>"Fine-tuning (optional)", with what is chosen ("Fine-tuning (optional) · mysterious") so the folded title tells it.</summary>
+    [ObservableProperty]
+    public partial string FineTuneHeader { get; set; } = string.Empty;
+
+    /// <summary>"Models · Claude Sonnet 5.5" (or that none is chosen yet).</summary>
+    [ObservableProperty]
+    public partial string ModelsHeader { get; set; } = string.Empty;
+
+    /// <summary>Whether the folded "Models" area is open (it opens by itself while no concept model is chosen).</summary>
+    [ObservableProperty]
+    public partial bool ModelsOpen { get; set; }
+
+    /// <summary>The meaning check's picker, shown on the line of the word check (null before the page is loaded).</summary>
+    public StepModelRowViewModel? Meaning => Picker.Row(PipelineSteps.Embedding);
 
     /// <summary>The topics "Suggest topics" brought (a click adds one to the extra request).</summary>
     public ObservableCollection<string> Topics { get; } = [];
@@ -80,6 +94,10 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
     /// <summary>The estimate of one "Suggest topics" press with the topics step's model (or why there is none).</summary>
     [ObservableProperty]
     public partial string TopicEstimate { get; set; } = string.Empty;
+
+    /// <summary>The short price of one "Suggest topics" press, next to its button ("≈ 0.001–0.003 $"; empty without a model).</summary>
+    [ObservableProperty]
+    public partial string TopicPrice { get; set; } = string.Empty;
 
     /// <summary>What the last "Suggest topics" did (cost, or why it failed).</summary>
     [ObservableProperty]
@@ -114,8 +132,11 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
     /// <summary>Whether "Suggest topics" can be pressed.</summary>
     public bool CanSuggest => !Suggesting && !Busy;
 
-    /// <summary>The models of this page: the concept model and the semantic duplicate check (the profile's last choices).</summary>
-    public StepPickerViewModel Picker { get; } = picker;
+    /// <summary>
+    /// The models of this page (the profile's last choices): the concept model and the topics model as compact cards, the meaning check on
+    /// the line of the word check.
+    /// </summary>
+    public StepPickerViewModel Picker { get; } = Layout(picker);
 
     /// <summary>Local duplicate check.</summary>
     [ObservableProperty]
@@ -198,6 +219,7 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
             _pickerAttached = true;
             Picker.Changed += (_, _) =>
             {
+                ShowModels(open: false);
                 if (!_loading)
                 {
                     _ = SafeAsync(EstimateAsync);
@@ -206,7 +228,7 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         }
 
         await LoadModelsAsync().ConfigureAwait(true);
-        if (FocusCategories.Count == 0)
+        if (FocusRows.Count == 0)
         {
             LoadFocus();
         }
@@ -376,6 +398,7 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         {
             logger.LogWarning("Concept generation not started: the {Step} step has no {Missing}", ex.Step, ex.Missing);
             Status = text["concepts.no_model"];
+            ModelsOpen = true;
             return;
         }
 
@@ -538,11 +561,34 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
             var language = profile?.ContentLanguage ?? (text.Language == "tr" ? Core.Profiles.ContentLanguages.Turkish : Core.Profiles.ContentLanguages.English);
             await Picker.LoadAsync(profile?.Id, language, PipelineSteps.ConceptPage).ConfigureAwait(true);
             PricedOn = PriceInfo.Text(catalog, text);
+            OnPropertyChanged(nameof(Meaning));
+            ShowModels(open: true);
         }
         finally
         {
             _loading = false;
         }
+    }
+
+    /// <summary>
+    /// The folded "Models" title names the concept model; with <paramref name="open"/> (a profile's choices were just shown) the area opens
+    /// while no concept model is chosen, so the first thing to do is in sight.
+    /// </summary>
+    private void ShowModels(bool open)
+    {
+        var model = Picker.Model(PipelineSteps.Concepts);
+        ModelsHeader = model is null ? text["concepts.models.none"] : text.Format("concepts.models.header", model.Name);
+        if (open && model is null)
+        {
+            ModelsOpen = true;
+        }
+    }
+
+    private static StepPickerViewModel Layout(StepPickerViewModel picker)
+    {
+        picker.Compact = true;
+        picker.Inline = InlineSteps;
+        return picker;
     }
 
     /// <summary>
@@ -628,7 +674,9 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
 
         if (Picker.Model(PipelineSteps.Topics) is null)
         {
+            // The step to choose is in the folded "Models": it is opened.
             TopicStatus = text["topics.no_model"];
+            ModelsOpen = true;
             return;
         }
 
@@ -653,7 +701,7 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
             var model = await resolver.ResolveAsync(PipelineSteps.Topics, Picker.Choice(PipelineSteps.Topics), CancellationToken.None).ConfigureAwait(true);
             paid = model.Model;
             TopicCall.Begin(model.Model.Name);
-            var result = await topics.SuggestAsync(profile, model, CategoryName(), Focus(text.Language), ExtraPrompt, text.Language,
+            var result = await topics.SuggestAsync(profile, model, Focus(text.Language), ExtraPrompt, text.Language,
                 new Progress<Core.Chat.ChatProgress>(TopicCall.Report), cancel.Token).ConfigureAwait(true);
             Topics.Clear();
             foreach (var topic in result.Topics)
@@ -723,23 +771,8 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         OnPropertyChanged(nameof(HasTopics));
     }
 
-    /// <summary>The focus drop-downs: the categories, the profile's category chosen, its rows and the general ones.</summary>
+    /// <summary>The fine-tuning drop-downs, every one on "any" (another profile starts without a leftover choice).</summary>
     private void LoadFocus()
-    {
-        FocusCategories.Clear();
-        foreach (var category in focus.Categories)
-        {
-            FocusCategories.Add(new ChoiceOption(category.Id, Name(category.Name)));
-        }
-
-        var start = focus.ForTemplate(session.Profile?.TemplateId)?.Id ?? FocusCatalogFile.GeneralId;
-        FocusCategory = FocusCategories.FirstOrDefault(c => c.Value == start) ?? FocusCategories.FirstOrDefault();
-        BuildFocusRows();
-    }
-
-    partial void OnFocusCategoryChanged(ChoiceOption? value) => BuildFocusRows();
-
-    private void BuildFocusRows()
     {
         foreach (var row in FocusRows)
         {
@@ -747,9 +780,7 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         }
 
         FocusRows.Clear();
-        var chosen = focus.Categories.FirstOrDefault(c => c.Id == FocusCategory?.Value);
-        var general = focus.Categories.FirstOrDefault(c => c.Id == FocusCatalogFile.GeneralId);
-        foreach (var dimension in new[] { chosen, chosen == general ? null : general }.OfType<FocusCategory>().SelectMany(c => c.Dimensions))
+        foreach (var dimension in focus.Dimensions)
         {
             var options = new List<ChoiceOption> { new(string.Empty, text["focus.none"]) };
             options.AddRange(dimension.Options.Select(o => new ChoiceOption(o.Id, Name(o.Name))));
@@ -758,10 +789,21 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
             FocusRows.Add(row);
         }
 
+        ShowFineTune();
         _ = SafeAsync(EstimateAsync);
     }
 
-    private void OnFocusRowChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => _ = SafeAsync(EstimateAsync);
+    private void OnFocusRowChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        ShowFineTune();
+        _ = SafeAsync(EstimateAsync);
+    }
+
+    private void ShowFineTune()
+    {
+        var chosen = FocusRows.Where(r => r.Chosen is not null).Select(r => r.Selected!.Label).ToList();
+        FineTuneHeader = chosen.Count == 0 ? text["focus.title"] : text["focus.title"] + " · " + string.Join(", ", chosen);
+    }
 
     /// <summary>The chosen focus as the prompt's line in <paramref name="language"/> (empty when nothing is chosen).</summary>
     private string Focus(string language) =>
@@ -770,8 +812,6 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
     /// <summary>The effort chosen for the concept model now (empty = automatic).</summary>
     private string ConceptEffort() => Picker.Row(PipelineSteps.Concepts)?.Effort?.Value ?? string.Empty;
 
-    private string CategoryName() => FocusCategory is { Value: not FocusCatalogFile.GeneralId } category ? category.Label : string.Empty;
-
     private string Name(Core.Templates.LocalizedText name) => text.Language == Core.Profiles.ContentLanguages.Turkish ? name.Tr : name.En;
 
     private async Task TopicEstimateAsync(Core.Profiles.Profile profile)
@@ -779,12 +819,14 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         if (Picker.Model(PipelineSteps.Topics) is not { } model)
         {
             TopicEstimate = text["topics.estimate.none"];
+            TopicPrice = string.Empty;
             return;
         }
 
-        var estimate = await topics.EstimateAsync(profile, model, CategoryName(), Focus(text.Language), ExtraPrompt, text.Language, CancellationToken.None)
+        var estimate = await topics.EstimateAsync(profile, model, Focus(text.Language), ExtraPrompt, text.Language, CancellationToken.None)
             .ConfigureAwait(true);
         TopicEstimate = text.Format("topics.estimate", model.Name, text.Usd(estimate.MinUsd), text.Usd(estimate.MaxUsd));
+        TopicPrice = text.Format("topics.price", text.Usd(estimate.MinUsd), text.Usd(estimate.MaxUsd));
     }
 
     private async Task LoadContentAsync(ConceptCardViewModel card)

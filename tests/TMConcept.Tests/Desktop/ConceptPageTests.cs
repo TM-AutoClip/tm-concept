@@ -49,7 +49,7 @@ public sealed class ConceptPageTests
     }
 
     [AvaloniaFact]
-    public async Task TheFocusDropDownsOfTheProfilesCategoryGoIntoThePromptInTheVideosLanguage()
+    public async Task OnlyGeneralFineTuningIsAskedAndItGoesIntoThePromptInTheVideosLanguage()
     {
         var fake = new FakeChat().Concepts(FakeChat.Distinct(3));
         using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
@@ -63,23 +63,69 @@ public sealed class ConceptPageTests
         var row = page.Picker.Row(TMConcept.Core.Pipeline.PipelineSteps.Concepts)!;
         row.Selected = row.Options.First(o => o.Model?.Id == "claude-sonnet-5-5");
 
-        page.FocusCategory!.Value.ShouldBe("history", "a profile made from a template starts with its category");
-        page.FocusRows.Select(r => r.Dimension.Id).ShouldBe(["period", "region", "subject", "tone", "audience", "structure"]);
-        page.FocusRows[0].Title.ShouldBe("Dönem", "the drop-downs speak the interface language");
-        page.FocusRows[0].Selected = page.FocusRows[0].Options.First(o => o.Value == "late-middle-ages");
-        page.FocusRows[3].Selected = page.FocusRows[3].Options.First(o => o.Value == "mysterious");
+        // Nothing asks the user to know the subject (period, region, field…), whatever the profile's template; every choice starts on "any".
+        h.Get<IFocusSource>().Dimensions.Select(d => d.Id).ShouldBe(["tone", "audience", "structure"]);
+        page.FocusRows.Select(r => r.Dimension.Id).ShouldBe(["tone", "audience", "structure"]);
+        page.FocusRows.ShouldAllBe(r => r.Chosen == null);
+        page.FocusRows[0].Title.ShouldBe("Ton", "the drop-downs speak the interface language");
+        page.FocusRows[0].Options[0].Label.ShouldBe("fark etmez");
+        page.FineTuneHeader.ShouldBe("İnce ayar (isteğe bağlı)");
+        page.FocusRows[0].Selected = page.FocusRows[0].Options.First(o => o.Value == "mysterious");
+        page.FineTuneHeader.ShouldBe("İnce ayar (isteğe bağlı) · gizemli", "the folded title tells what is chosen");
         page.Count = 3;
 
         await page.GenerateAsync();
 
-        fake.Requests.Single().User.ShouldContain("FOCUS (chosen by the user from fixed lists; follow it): Period: Late Middle Ages (1300–1500); Tone: mysterious",
-            Case.Sensitive, "the profile writes English videos: the focus line is English");
+        var user = fake.Requests.Single().User;
+        user.ShouldContain("FOCUS (the tone, audience and structure the user chose; follow it): Tone: mysterious", Case.Sensitive,
+            "the profile writes English videos: the focus line is English");
+        user.ShouldNotContain("Period");
+        user.ShouldNotContain("CATEGORY");
+    }
 
-        // Another category shows its own drop-downs and the general ones; "General" alone shows only those.
-        page.FocusCategory = page.FocusCategories.First(c => c.Value == "technology");
-        page.FocusRows.Select(r => r.Dimension.Id).ShouldBe(["era", "field", "angle", "tone", "audience", "structure"]);
-        page.FocusCategory = page.FocusCategories.First(c => c.Value == "general");
-        page.FocusRows.Select(r => r.Dimension.Id).ShouldBe(["tone", "audience", "structure"]);
+    [AvaloniaFact]
+    public async Task TheLeftPanelFoldsFineTuningAndModelsAndPutsBothChecksOnOneLine()
+    {
+        using var h = new DesktopHarness();
+        await PrepareAsync(h);
+        var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
+        var page = h.Get<ConceptsViewModel>();
+        await page.ActivateAsync();
+
+        // A new profile has no concept model: the folded "Models" opens by itself and says so.
+        page.ModelsOpen.ShouldBeTrue();
+        page.ModelsHeader.ShouldBe(text["concepts.models.none"]);
+
+        // Compact cards for the concept and topics models; the meaning check is not a card, it stands next to the word check.
+        page.Picker.Compact.ShouldBeTrue();
+        page.Picker.Cards.Select(c => c.Step.Code).ShouldBe([TMConcept.Core.Pipeline.PipelineSteps.Concepts, TMConcept.Core.Pipeline.PipelineSteps.Topics]);
+        page.Picker.Rows.Select(r => r.Step.Code).ShouldContain(TMConcept.Core.Pipeline.PipelineSteps.Embedding, "it is still prepared and saved");
+        page.Meaning.ShouldBeSameAs(page.Picker.Row(TMConcept.Core.Pipeline.PipelineSteps.Embedding));
+
+        var concepts = page.Picker.Row(TMConcept.Core.Pipeline.PipelineSteps.Concepts)!;
+        concepts.ShowRecommended.ShouldBeTrue("nothing recommended is chosen yet");
+        concepts.Selected = concepts.Options.First(o => o.Model?.Id == "claude-sonnet-5-5");
+        page.ModelsHeader.ShouldBe(text.Format("concepts.models.header", concepts.Selected!.Model!.Name), "the folded title names the concept model");
+        concepts.ShowRecommended.ShouldBeFalse("a recommended model is chosen: the chip would only repeat it");
+
+        var view = new TMConcept.Desktop.Views.ConceptsView { DataContext = page };
+        var window = new Avalonia.Controls.Window { Content = view, Width = 1280, Height = 820 };
+        h.Get<TMConcept.Desktop.Localization.LanguageResources>().Attach(window.Resources.MergedDictionaries);
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        var all = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(view).ToList();
+        all.OfType<Avalonia.Controls.Expander>().Single(e => e.Name == "FineTune").IsExpanded.ShouldBeFalse("fine-tuning is optional and folded");
+        all.OfType<Avalonia.Controls.Expander>().Single(e => e.Name == "Models").IsExpanded.ShouldBeTrue();
+        all.OfType<TMConcept.Desktop.Views.HelpTip>().Select(t => t.Text).ShouldContain(text["concepts.check.hint"]);
+
+        // The long explanations are "?" tips, not lines that are always open.
+        var shown = all.OfType<Avalonia.Controls.TextBlock>().Where(t => t.IsEffectivelyVisible).Select(t => t.Text).ToList();
+        foreach (var key in new[] { "concepts.check.hint", "focus.hint", "concepts.keys", "step.embedding.purpose", "step.concepts.purpose", "topics.hint" })
+        {
+            shown.ShouldNotContain(text[key], key);
+        }
+
+        window.Close();
     }
 
     [AvaloniaFact]
@@ -131,8 +177,9 @@ public sealed class ConceptPageTests
         foreach (var language in new[] { "tr", "en" })
         {
             text.Use(language);
-            text["concepts.check"].ShouldNotBe(text["step.embedding"]);
-            text["concepts.check.hint"].ShouldContain(text["step.embedding"].Split('(')[0].Trim());
+            text["concepts.check.local"].ShouldNotBe(text["concepts.check.meaning"]);
+            text["concepts.check.hint"].ShouldContain(language == "tr" ? "kelimelerini" : "words");
+            text["step.embedding.purpose"].ShouldContain(language == "tr" ? "anlamca" : "by meaning");
             text["step.embedding.off.note"].ShouldNotContain(language == "tr" ? "kelime kelime karşılaştırılır" : "still compared word by word");
         }
     }

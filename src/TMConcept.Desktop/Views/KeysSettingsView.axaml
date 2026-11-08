@@ -1,12 +1,16 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:TMConcept.Desktop.ViewModels"
+             xmlns:views="using:TMConcept.Desktop.Views"
              x:Class="TMConcept.Desktop.Views.KeysSettingsView"
              x:DataType="vm:KeysSettingsViewModel">
   <ScrollViewer>
     <Grid ColumnDefinitions="*,24,*" Margin="0,12">
       <StackPanel Spacing="10">
-        <TextBlock Text="{DynamicResource keys.add}" Classes="h2" />
+        <StackPanel Orientation="Horizontal">
+          <TextBlock Text="{DynamicResource keys.add}" Classes="h2" VerticalAlignment="Center" />
+          <views:HelpTip Text="{DynamicResource keys.storage_note}" />
+        </StackPanel>
         <ComboBox ItemsSource="{Binding Providers}" SelectedItem="{Binding Provider}" MinWidth="240">
           <ComboBox.ItemTemplate>
             <DataTemplate x:DataType="vm:ProviderOption">
@@ -48,7 +52,6 @@
           <TextBlock Text="{Binding Guide}" TextWrapping="Wrap" />
           <Button Content="{DynamicResource keys.open_page}" Command="{Binding OpenKeyPageCommand}" />
           <TextBlock Text="{Binding Policy}" Classes="small" TextWrapping="Wrap" />
-          <TextBlock Text="{DynamicResource keys.storage_note}" Classes="small" TextWrapping="Wrap" />
         </StackPanel>
       </Border>
     </Grid>

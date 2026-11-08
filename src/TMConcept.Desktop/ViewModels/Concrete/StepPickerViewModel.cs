@@ -47,6 +47,15 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
     /// <summary>The steps of the page.</summary>
     public ObservableCollection<StepModelRowViewModel> Rows { get; } = [];
 
+    /// <summary>The steps shown as cards: every row except the <see cref="Inline"/> ones.</summary>
+    public ObservableCollection<StepModelRowViewModel> Cards { get; } = [];
+
+    /// <summary>
+    /// Steps the page shows on a line of its own instead of a card (the concept page puts the meaning check next to the word check); they
+    /// are prepared and saved like every row. Set before <see cref="LoadAsync"/>.
+    /// </summary>
+    public IReadOnlyCollection<string> Inline { get; set; } = [];
+
     /// <summary>The profile whose choices are shown.</summary>
     public Guid? ProfileId => _profile;
 
@@ -78,18 +87,15 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
     public partial int Columns { get; set; } = 1;
 
     /// <summary>
-    /// Compact cards: the purpose of a step is the title's tooltip instead of a line under it, and a note shows at most
-    /// <see cref="CompactNoteLines"/> lines (the whole note is its tooltip).
+    /// Compact cards: a note shows at most <see cref="CompactNoteLines"/> lines (the whole note is its tooltip). The purpose of a step is
+    /// always the "?" next to its title, never a line under it.
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowPurpose), nameof(NoteLines))]
+    [NotifyPropertyChangedFor(nameof(NoteLines))]
     public partial bool Compact { get; set; }
 
     /// <summary>Lines of a note on a compact card.</summary>
     public const int CompactNoteLines = 3;
-
-    /// <summary>Whether the purpose line is shown under each title.</summary>
-    public bool ShowPurpose => !Compact;
 
     /// <summary>Most lines of a note (0 = all).</summary>
     public int NoteLines => Compact ? CompactNoteLines : 0;
@@ -113,6 +119,7 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
         }
 
         Rows.Clear();
+        Cards.Clear();
         Status = string.Empty;
         foreach (var step in PipelineSteps.All.Where(s => stepCodes.Contains(s.Code)))
         {
@@ -137,6 +144,11 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
             row.Saved = stale ? StaleChoice : Key(row);
             row.PropertyChanged += OnRowChanged;
             Rows.Add(row);
+            if (!Inline.Contains(step.Code))
+            {
+                Cards.Add(row);
+            }
+
             await NoteAsync(row).ConfigureAwait(true);
         }
     }
@@ -394,9 +406,10 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
         var recommended = suggested
             .Select(r => (Code: r, Model: catalog.All.FirstOrDefault(m => m.Provider + "/" + m.Id == r)))
             .Where(r => r.Model is null || Usable(step, r.Model))
-            .Select(r => r.Model?.Name ?? r.Code);
+            .ToList();
         var row = new StepModelRowViewModel(step, text["step." + step.Code], text["step." + step.Code + ".purpose"],
-            text.Format("models.recommended", string.Join(" · ", recommended)), text["models.effort.auto"]);
+            text.Format("models.recommended", string.Join(" · ", recommended.Select(r => r.Model?.Name ?? r.Code))), text["models.effort.auto"],
+            recommended.Select(r => r.Code).ToList());
         row.Options.Add(new StepOption(StepOptionKind.None, null, step.Optional ? text["step." + step.Code + ".off"] : text["models.none"]));
         if (step.Code == PipelineSteps.Images)
         {

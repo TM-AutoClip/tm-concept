@@ -1,0 +1,10 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="TMConcept.Desktop.Views.HelpTip"
+             Focusable="True" IsTabStop="True" VerticalAlignment="Center" Margin="6,0,0,0" Cursor="Help"
+             AutomationProperties.Name="{DynamicResource help.name}">
+  <!-- A small round "?" next to a title: its explanation shows on hover and on keyboard focus (no line that is always open). -->
+  <Border Name="Circle" Classes="help">
+    <TextBlock Text="?" />
+  </Border>
+</UserControl>

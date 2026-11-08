@@ -52,6 +52,29 @@
     <Setter Property="Padding" Value="8,2" />
     <Setter Property="Background" Value="{DynamicResource tm-accent-soft}" />
   </Style>
+  <!-- The "?" help mark (Views/HelpTip): a small round sign whose explanation is a tooltip. -->
+  <Style Selector="Border.help">
+    <Setter Property="Width" Value="18" />
+    <Setter Property="Height" Value="18" />
+    <Setter Property="CornerRadius" Value="9" />
+    <Setter Property="BorderThickness" Value="{DynamicResource tm-border-width}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource tm-border-strong}" />
+    <Setter Property="Background" Value="{DynamicResource tm-surface-2}" />
+  </Style>
+  <Style Selector="Border.help > TextBlock">
+    <Setter Property="FontSize" Value="11" />
+    <Setter Property="FontWeight" Value="Bold" />
+    <Setter Property="Foreground" Value="{DynamicResource tm-text-2}" />
+    <Setter Property="HorizontalAlignment" Value="Center" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+  <Style Selector="Border.help:pointerover">
+    <Setter Property="BorderBrush" Value="{DynamicResource tm-accent-2}" />
+  </Style>
+  <Style Selector="UserControl:focus-visible > Border.help">
+    <Setter Property="BorderBrush" Value="{DynamicResource tm-focus}" />
+    <Setter Property="BorderThickness" Value="{DynamicResource tm-focus-width}" />
+  </Style>
   <Style Selector="Button">
     <Setter Property="CornerRadius" Value="{DynamicResource tm-radius-sm}" />
     <Setter Property="Padding" Value="14,7" />
@@ -102,5 +125,10 @@
     <Setter Property="FontSize" Value="15" />
     <Setter Property="MinHeight" Value="34" />
     <Setter Property="Padding" Value="10,4" />
+  </Style>
+  <!-- A small button next to a title ("Suggest topics" next to the extra request); after "Button" so its padding wins. -->
+  <Style Selector="Button.small">
+    <Setter Property="Padding" Value="10,3" />
+    <Setter Property="FontSize" Value="12" />
   </Style>
 </Styles>

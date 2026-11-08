@@ -2,10 +2,10 @@ using TMConcept.Core.Templates;
 
 namespace TMConcept.Core.Concepts;
 
-/// <summary>One focus drop-down of a category ("Period", "Region", "Tone") and its choices.</summary>
+/// <summary>One fine-tuning drop-down ("Tone", "Audience", "Structure") and its choices.</summary>
 public sealed class FocusDimension
 {
-    /// <summary>Id inside its category.</summary>
+    /// <summary>Id.</summary>
     public string Id { get; set; } = string.Empty;
 
     /// <summary>Name in both languages.</summary>

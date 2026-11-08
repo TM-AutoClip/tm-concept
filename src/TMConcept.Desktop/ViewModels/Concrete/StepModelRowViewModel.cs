@@ -7,9 +7,11 @@ namespace TMConcept.Desktop.ViewModels;
 /// <summary>
 /// One step of a page's model pickers: what it is for, its picker (none / off first, the sample images for the images step, then the
 /// models: local first), the effort (only for a model that takes one, never in the topics step; first entry "Automatic" sends no effort), the
-/// engine (video code step), voice and speed (narration step), a note (license, cost, graphics card memory) and the install progress.
+/// engine (video code step), voice and speed (narration step), a note (license, cost, graphics card memory) and the install progress. The
+/// "Recommended" chip is hidden while a recommended model is chosen (it would only repeat the choice).
 /// </summary>
-public sealed partial class StepModelRowViewModel(PipelineStep step, string title, string purpose, string recommended, string automatic) : ObservableObject
+public sealed partial class StepModelRowViewModel(PipelineStep step, string title, string purpose, string recommended, string automatic,
+    IReadOnlyCollection<string>? recommendedCodes = null) : ObservableObject
 {
     /// <summary>Step.</summary>
     public PipelineStep Step { get; } = step;
@@ -23,12 +25,19 @@ public sealed partial class StepModelRowViewModel(PipelineStep step, string titl
     /// <summary>"Recommended: …" text.</summary>
     public string Recommended { get; } = recommended;
 
+    /// <summary>The recommended models ("provider/id").</summary>
+    public IReadOnlyCollection<string> RecommendedCodes { get; } = recommendedCodes ?? [];
+
+    /// <summary>Whether the "Recommended" chip is shown: there is a recommendation and the chosen entry is not one of them.</summary>
+    public bool ShowRecommended => Recommended.Length > 0
+        && (RecommendedCodes.Count == 0 || Selected?.Model is not { } model || !RecommendedCodes.Contains(model.Provider + "/" + model.Id));
+
     /// <summary>The entries of the picker.</summary>
     public ObservableCollection<StepOption> Options { get; } = [];
 
     /// <summary>Chosen entry.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasEfforts), nameof(ShowEngine), nameof(ShowVoice))]
+    [NotifyPropertyChangedFor(nameof(HasEfforts), nameof(ShowEngine), nameof(ShowVoice), nameof(ShowRecommended))]
     public partial StepOption? Selected { get; set; }
 
     /// <summary>Effort levels of the chosen model: "Automatic" (no effort parameter) first; empty for a model without effort levels.</summary>

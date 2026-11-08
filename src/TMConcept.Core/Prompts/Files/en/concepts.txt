@@ -25,6 +25,6 @@ SAMPLE IMAGES (may be used in scenes): {images}
 HISTORY — do NOT produce these ({history_count} concepts):
 {history}
 EXTRA REQUEST: «{extra}»
-FOCUS (chosen by the user from fixed lists; follow it): {focus}
+FOCUS (the tone, audience and structure the user chose; follow it): {focus}
 MARKERS in the « » texts above (the user's style requests; apply their meaning and never copy a marker into the answer): {markers}
 REQUESTED: {count} new concepts. Write exactly {count} concepts, even when the extra request names another number. JSON: {"konseptler":[{"baslik":"…","ozet":"…","icerik":"…"}]}

@@ -25,6 +25,6 @@ BİÇİM: {format}; hedef süre {seconds} sn ≈ {words} kelime {language} sesle
 GEÇMİŞ — bunları ÜRETME ({history_count} konsept):
 {history}
 EK İSTEK: «{extra}»
-ODAK (kullanıcı sabit listelerden seçti; buna uy): {focus}
+ODAK (kullanıcının seçtiği ton, izleyici ve anlatım biçimi; buna uy): {focus}
 YUKARIDAKİ « » METİNLERİNDEKİ İŞARETLER (kullanıcının biçim istekleri; anlamlarını uygula, işareti yanıta asla kopyalama): {markers}
 İSTENEN: {count} yeni konsept. Ek istekte başka bir sayı yazsa da tam {count} konsept yaz. JSON: {"konseptler":[{"baslik":"…","ozet":"…","icerik":"…"}]}

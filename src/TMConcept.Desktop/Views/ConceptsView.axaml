@@ -8,18 +8,30 @@
   <Grid ColumnDefinitions="380,*,300" Margin="16" ColumnSpacing="16">
     <ScrollViewer>
       <StackPanel Spacing="8">
+        <!-- Top to bottom: count, extra request (+ Suggest topics and its card), folded fine-tuning, the duplicate checks on one line, folded
+             models. Long explanations are "?" tips, so the panel fits without much scrolling. -->
         <TextBlock Text="{DynamicResource nav.concepts}" Classes="h1" />
-        <TextBlock Text="{DynamicResource concepts.count}" FontWeight="SemiBold" />
-        <NumericUpDown Value="{Binding Count}" Minimum="1" Maximum="100" Increment="1" FormatString="0" />
-        <TextBlock Text="{DynamicResource concepts.extra}" FontWeight="SemiBold" />
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+          <TextBlock Text="{DynamicResource concepts.count}" FontWeight="SemiBold" VerticalAlignment="Center" />
+          <NumericUpDown Grid.Column="1" Value="{Binding Count}" Minimum="1" Maximum="100" Increment="1" FormatString="0" Width="130" />
+        </Grid>
+        <Grid ColumnDefinitions="Auto,Auto,*,Auto" Margin="0,4,0,0">
+          <TextBlock Text="{DynamicResource concepts.extra}" FontWeight="SemiBold" VerticalAlignment="Center" />
+          <views:HelpTip Grid.Column="1" Text="{DynamicResource concepts.extra.hint}" />
+          <TextBlock Grid.Column="2" Text="{Binding TopicPrice}" Classes="small" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="8,0" />
+          <Button Name="SuggestButton" Grid.Column="3" Classes="small" Content="{DynamicResource topics.button}" Command="{Binding SuggestTopicsCommand}"
+                  IsEnabled="{Binding CanSuggest}">
+            <ToolTip.Tip>
+              <StackPanel Spacing="4" MaxWidth="320">
+                <TextBlock Text="{DynamicResource topics.hint}" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding TopicEstimate}" TextWrapping="Wrap" FontWeight="SemiBold" />
+              </StackPanel>
+            </ToolTip.Tip>
+          </Button>
+        </Grid>
         <TextBox Name="ExtraBox" Text="{Binding ExtraPrompt}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="90" MaxLength="1000"
                  PlaceholderText="{DynamicResource concepts.extra.placeholder}" />
         <views:MarkerPicker Target="{Binding #ExtraBox}" Markers="{Binding PromptMarkers}" ToolTip.Tip="{DynamicResource markers.prompt.hint}" />
-        <WrapPanel>
-          <Button Content="{DynamicResource topics.button}" Command="{Binding SuggestTopicsCommand}" IsEnabled="{Binding CanSuggest}"
-                  ToolTip.Tip="{DynamicResource topics.hint}" Margin="0,0,8,4" />
-          <TextBlock Text="{Binding TopicEstimate}" Classes="small" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="240" />
-        </WrapPanel>
         <!-- The result of "Suggest topics" right below the extra request: the running call's steps, the topics to click, why none came. -->
         <Border Name="TopicCard" Classes="card" Padding="10" IsVisible="{Binding TopicCardShown}">
           <StackPanel Spacing="6">
@@ -44,39 +56,58 @@
                        IsVisible="{Binding TopicStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
           </StackPanel>
         </Border>
-        <TextBlock Text="{DynamicResource focus.title}" FontWeight="SemiBold" Margin="0,8,0,0" />
-        <Grid ColumnDefinitions="120,*" ColumnSpacing="8">
-          <TextBlock Text="{DynamicResource focus.category}" VerticalAlignment="Center" />
-          <ComboBox Grid.Column="1" ItemsSource="{Binding FocusCategories}" SelectedItem="{Binding FocusCategory}" HorizontalAlignment="Stretch">
+        <!-- Only general choices (tone, audience, structure), folded: nothing here asks the user to know the subject. -->
+        <Expander Name="FineTune" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Margin="0,4,0,0">
+          <Expander.Header>
+            <StackPanel Orientation="Horizontal">
+              <TextBlock Text="{Binding FineTuneHeader}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="290" />
+              <views:HelpTip Text="{DynamicResource focus.hint}" />
+            </StackPanel>
+          </Expander.Header>
+          <ItemsControl ItemsSource="{Binding FocusRows}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:FocusRowViewModel">
+                <Grid ColumnDefinitions="120,*" ColumnSpacing="8" Margin="0,2">
+                  <TextBlock Text="{Binding Title}" VerticalAlignment="Center" />
+                  <ComboBox Grid.Column="1" ItemsSource="{Binding Options}" SelectedItem="{Binding Selected}" HorizontalAlignment="Stretch">
+                    <ComboBox.ItemTemplate>
+                      <DataTemplate x:DataType="vm:ChoiceOption">
+                        <TextBlock Text="{Binding Label}" />
+                      </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                  </ComboBox>
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </Expander>
+        <!-- The two duplicate checks on one line: by words (free, no model) and by meaning (a model picked right here). -->
+        <TextBlock Text="{DynamicResource concepts.check}" FontWeight="SemiBold" Margin="0,8,0,0" />
+        <Grid Name="CheckLine" ColumnDefinitions="Auto,Auto,16,Auto,*,Auto" ColumnSpacing="4">
+          <CheckBox IsChecked="{Binding LocalCheck}" Content="{DynamicResource concepts.check.local}" />
+          <views:HelpTip Grid.Column="1" Text="{DynamicResource concepts.check.hint}" Margin="0" />
+          <TextBlock Grid.Column="3" Text="{DynamicResource concepts.check.meaning}" VerticalAlignment="Center" />
+          <ComboBox Grid.Column="4" ItemsSource="{Binding Meaning.Options}" SelectedItem="{Binding Meaning.Selected}" HorizontalAlignment="Stretch" MinWidth="0"
+                    IsEnabled="{Binding !Picker.Busy}" ToolTip.Tip="{Binding Meaning.Note}">
             <ComboBox.ItemTemplate>
-              <DataTemplate x:DataType="vm:ChoiceOption">
-                <TextBlock Text="{Binding Label}" />
+              <DataTemplate x:DataType="vm:StepOption">
+                <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
               </DataTemplate>
             </ComboBox.ItemTemplate>
           </ComboBox>
+          <views:HelpTip Grid.Column="5" Text="{Binding Meaning.Purpose}" Margin="0" />
         </Grid>
-        <ItemsControl ItemsSource="{Binding FocusRows}">
-          <ItemsControl.ItemTemplate>
-            <DataTemplate x:DataType="vm:FocusRowViewModel">
-              <Grid ColumnDefinitions="120,*" ColumnSpacing="8" Margin="0,2">
-                <TextBlock Text="{Binding Title}" VerticalAlignment="Center" />
-                <ComboBox Grid.Column="1" ItemsSource="{Binding Options}" SelectedItem="{Binding Selected}" HorizontalAlignment="Stretch">
-                  <ComboBox.ItemTemplate>
-                    <DataTemplate x:DataType="vm:ChoiceOption">
-                      <TextBlock Text="{Binding Label}" />
-                    </DataTemplate>
-                  </ComboBox.ItemTemplate>
-                </ComboBox>
-              </Grid>
-            </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
-        <TextBlock Text="{DynamicResource focus.hint}" Classes="small" TextWrapping="Wrap" />
-        <TextBlock Text="{DynamicResource concepts.check}" FontWeight="SemiBold" Margin="0,8,0,0" />
-        <CheckBox IsChecked="{Binding LocalCheck}" Content="{DynamicResource concepts.check.local}" />
-        <TextBlock Text="{DynamicResource concepts.check.hint}" Classes="small" TextWrapping="Wrap" />
-        <TextBlock Text="{DynamicResource concepts.models}" FontWeight="SemiBold" Margin="0,8,0,0" />
-        <views:StepPickerView DataContext="{Binding Picker}" />
+        <TextBlock Text="{Binding Meaning.Note}" Classes="small warning" TextWrapping="Wrap" IsVisible="{Binding Meaning.NoteIsWarning, FallbackValue=False}" />
+        <!-- Folded; the title names the concept model. It opens by itself while no concept model is chosen. -->
+        <Expander Name="Models" IsExpanded="{Binding ModelsOpen}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Margin="0,8,0,0">
+          <Expander.Header>
+            <StackPanel Orientation="Horizontal">
+              <TextBlock Text="{Binding ModelsHeader}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="290" />
+              <views:HelpTip Text="{DynamicResource concepts.models.hint}" />
+            </StackPanel>
+          </Expander.Header>
+          <views:StepPickerView DataContext="{Binding Picker}" />
+        </Expander>
         <TextBlock Text="{Binding Status}" Classes="error" TextWrapping="Wrap" />
       </StackPanel>
     </ScrollViewer>
@@ -101,8 +132,10 @@
           <TextBlock Name="ProgressLine" Text="{Binding Progress}" Classes="muted" TextWrapping="Wrap" />
           <ProgressBar IsIndeterminate="True" />
         </StackPanel>
-        <TextBlock Text="{Binding NewHeader}" Classes="h2" Margin="0,8,0,0" />
-        <TextBlock Text="{DynamicResource concepts.keys}" Classes="small" />
+        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+          <TextBlock Text="{Binding NewHeader}" Classes="h2" VerticalAlignment="Center" />
+          <views:HelpTip Text="{DynamicResource concepts.keys}" />
+        </StackPanel>
       </StackPanel>
       <ListBox x:Name="NewList" ItemsSource="{Binding NewConcepts}" SelectedItem="{Binding Selected}" KeyDown="OnListKeyDown" Background="Transparent">
         <ListBox.ItemTemplate>

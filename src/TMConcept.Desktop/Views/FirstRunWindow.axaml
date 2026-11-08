@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:TMConcept.Desktop.ViewModels"
+        xmlns:views="using:TMConcept.Desktop.Views"
         x:Class="TMConcept.Desktop.Views.FirstRunWindow"
         x:DataType="vm:FirstRunViewModel"
         Title="TM Concept"
@@ -43,13 +44,15 @@
     </StackPanel>
 
     <StackPanel Spacing="10" IsVisible="{Binding IsRestoreStep}">
-      <TextBlock Text="{DynamicResource firstrun.restore}" Classes="h2" />
+      <StackPanel Orientation="Horizontal">
+        <TextBlock Text="{DynamicResource firstrun.restore}" Classes="h2" VerticalAlignment="Center" />
+        <views:HelpTip Text="{DynamicResource firstrun.restore.hint}" />
+      </StackPanel>
       <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
         <TextBox Text="{Binding BackupFile}" PlaceholderText="{DynamicResource restore.file}" />
         <Button Grid.Column="1" Content="{DynamicResource common.browse}" Command="{Binding BrowseBackupCommand}" />
       </Grid>
       <TextBox Classes="secret" Text="{Binding BackupPassword}" PlaceholderText="{DynamicResource restore.password}" />
-      <TextBlock Text="{DynamicResource firstrun.restore.hint}" Classes="small" TextWrapping="Wrap" />
     </StackPanel>
 
     <StackPanel Spacing="10" IsVisible="{Binding IsNewStep}">

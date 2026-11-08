@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:TMConcept.Desktop.ViewModels"
+             xmlns:views="using:TMConcept.Desktop.Views"
              x:Class="TMConcept.Desktop.Views.BackupSettingsView"
              x:DataType="vm:BackupSettingsViewModel">
   <ScrollViewer>
@@ -41,9 +42,11 @@
         </StackPanel>
       </Border>
 
-      <TextBlock Text="{DynamicResource backup.change_password}" Classes="h2" Margin="0,12,0,0" IsVisible="{Binding HasPassword}" />
+      <StackPanel Orientation="Horizontal" Margin="0,12,0,0" IsVisible="{Binding HasPassword}">
+        <TextBlock Text="{DynamicResource backup.change_password}" Classes="h2" VerticalAlignment="Center" />
+        <views:HelpTip Text="{DynamicResource backup.password.change_explain}" />
+      </StackPanel>
       <TextBlock Text="{DynamicResource backup.set_password}" Classes="h2" Margin="0,12,0,0" IsVisible="{Binding !HasPassword}" />
-      <TextBlock Text="{DynamicResource backup.password.change_explain}" Classes="small" TextWrapping="Wrap" IsVisible="{Binding HasPassword}" />
       <TextBlock Text="{DynamicResource backup.password.set_explain}" Classes="small warning" TextWrapping="Wrap" IsVisible="{Binding !HasPassword}" />
       <TextBox Classes="secret" Text="{Binding CurrentPassword}" PlaceholderText="{DynamicResource backup.password.current}" Width="360" HorizontalAlignment="Left" IsVisible="{Binding HasPassword}" />
       <TextBox Classes="secret" Text="{Binding NewPassword}" PlaceholderText="{DynamicResource backup.password.field}" Width="360" HorizontalAlignment="Left" />
