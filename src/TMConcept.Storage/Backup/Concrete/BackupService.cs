@@ -23,9 +23,9 @@ namespace TMConcept.Storage.Backup;
 /// Videos are never in a backup. The backup password is required at the first start; the key derived from it is kept only in the encrypted
 /// database (never in a backup file), so daily backups need no password. Opening a backup always needs the password; changing it needs the
 /// current one. A forgotten backup password cannot be recovered. A restore is possible only while there is no database yet (first start),
-/// says what the file holds before anything is replaced, and brings back exactly that. Only this format and a database of this schema
-/// version are restored (no backward compatibility, 7 Nov 2026): a file of format 02 (0.1.1–0.1.5) or a database of another version
-/// (0.1.6 and older wrote no schema version) is refused with <see cref="BackupRefusedException"/> before anything changes.
+/// says what the file holds before anything is replaced, and brings back exactly that. Only this file format is restored: a file of
+/// format 02 (0.1.1–0.1.5) is refused with <see cref="BackupRefusedException"/> before anything changes. The database inside is not
+/// recognised by version (no backward compatibility): one of another layout fails where the mapping does not fit.
 /// </summary>
 public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault, ConceptDatabase database, KdfParameters kdf,
     TimeProvider clock, ILogger<BackupService> logger)
@@ -297,14 +297,23 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
     }
 
     /// <summary>What a backup holds, without restoring anything (shown before a restore). <see cref="SealedBoxException"/> as for a restore.</summary>
-    public async Task<RestoreReport> InspectAsync(string source, string password, CancellationToken cancellationToken)
+    public Task<RestoreReport> InspectAsync(string source, string password, CancellationToken cancellationToken) =>
+        InspectAsync(source, password, null, cancellationToken);
+
+    /// <summary>
+    /// <see cref="InspectAsync(string, string, CancellationToken)"/>; <paramref name="progress"/> hears <see cref="RestoreStage.Opening"/> and
+    /// <see cref="RestoreStage.Checking"/>.
+    /// </summary>
+    public async Task<RestoreReport> InspectAsync(string source, string password, IProgress<RestoreStage>? progress, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrEmpty(source);
+        progress?.Report(RestoreStage.Opening);
         var payload = await OpenAsync(source, password, cancellationToken).ConfigureAwait(false);
         var copy = TemporaryFile();
         try
         {
-            // A backup of another version is refused here already, before the page offers to restore it.
+            // A copy that does not open is refused here already, before the page offers to restore it.
+            progress?.Report(RestoreStage.Checking);
             await File.WriteAllBytesAsync(copy, payload.Database.ToArray(), cancellationToken).ConfigureAwait(false);
             await VerifyAsync(copy, payload.Key, cancellationToken).ConfigureAwait(false);
             return Report(payload.Header);
@@ -322,7 +331,15 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
     /// <paramref name="protector"/> (this computer's keyring or a master password). <see cref="SealedBoxException"/> for a wrong password or
     /// a damaged file — the two are deliberately not told apart.
     /// </summary>
-    public async Task<RestoreReport> RestoreAsync(string source, string password, IKeyProtector protector, CancellationToken cancellationToken)
+    public Task<RestoreReport> RestoreAsync(string source, string password, IKeyProtector protector, CancellationToken cancellationToken) =>
+        RestoreAsync(source, password, protector, null, cancellationToken);
+
+    /// <summary>
+    /// <see cref="RestoreAsync(string, string, IKeyProtector, CancellationToken)"/>; <paramref name="progress"/> hears each
+    /// <see cref="RestoreStage"/>.
+    /// </summary>
+    public async Task<RestoreReport> RestoreAsync(string source, string password, IKeyProtector protector, IProgress<RestoreStage>? progress,
+        CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrEmpty(source);
         ArgumentNullException.ThrowIfNull(protector);
@@ -331,12 +348,15 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
             throw new InvalidOperationException("A backup can be restored only at the first start, before any data exists.");
         }
 
+        progress?.Report(RestoreStage.Opening);
         var payload = await OpenAsync(source, password, cancellationToken).ConfigureAwait(false);
         var copy = TemporaryFile();
         try
         {
+            progress?.Report(RestoreStage.Checking);
             await File.WriteAllBytesAsync(copy, payload.Database.ToArray(), cancellationToken).ConfigureAwait(false);
             await VerifyAsync(copy, payload.Key, cancellationToken).ConfigureAwait(false);
+            progress?.Report(RestoreStage.Installing);
             if (File.Exists(paths.DatabaseFile))
             {
                 // A database file without a key file cannot be opened by anyone; it is moved aside, never deleted.
@@ -344,6 +364,7 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
             }
 
             await vault.InstallAsync(copy, payload.Key, protector, cancellationToken).ConfigureAwait(false);
+            progress?.Report(RestoreStage.WritingImages);
             var images = await RestoreImagesAsync(payload, cancellationToken).ConfigureAwait(false);
 
             // The backup carries no backup key: it is derived again from the password just entered, so daily backups go on without asking.
@@ -364,7 +385,7 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
     /// Removes from the copy what was not chosen, and always the stored backup key and the backup bookkeeping, in one transaction. Secure
     /// delete (SQLite3 Multiple Ciphers is built with it; checked whenever a file comes in) overwrites the removed rows and the pages they
     /// free with zeros, so the sealed copy holds nothing of them (DeletedDataTests). The copy is not compacted: VACUUM is SQL with no EF Core
-    /// counterpart, so the zeroed pages stay in it (open decision, release notes 0.1.7). The schema version row stays (a restore reads it).
+    /// counterpart, so the zeroed pages stay in it (open decision, release notes 0.1.7).
     /// </summary>
     private static async Task ScrubAsync(ConceptDbContext db, BackupContents contents, CancellationToken cancellationToken)
     {
@@ -396,7 +417,7 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
 
         if (!contents.Settings)
         {
-            await db.Settings.Where(s => s.Key != ConceptSchema.VersionSetting).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+            await db.Settings.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
             await db.Pronunciations.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
             await db.VoiceSamples.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
         }
@@ -575,8 +596,8 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
     }
 
     /// <summary>
-    /// Opens the temporary copy and checks it against this version's schema before anything is installed: a backup of another version
-    /// (older or newer) is refused here and nothing in the data folder changes.
+    /// Opens the temporary copy before anything is installed (the key and the file must fit; secure delete must be on). Its layout is not
+    /// recognised: a database of another version is not told apart and fails where the mapping does not fit.
     /// </summary>
     private async Task VerifyAsync(string file, byte[] dek, CancellationToken cancellationToken)
     {
@@ -589,18 +610,10 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
             {
                 await ConceptDatabase.EnsureSchemaAsync(db, cancellationToken).ConfigureAwait(false);
             }
-            catch (DatabaseVersionException ex)
+            catch (InvalidOperationException ex)
             {
-                logger.LogError(ex, "Restore refused: the backup was made by another version (schema {Found})", ex.Found);
-                throw new BackupRefusedException("This backup was made by another version of TM Concept; only backups of this version can be restored. "
-                    + ex.Message + " Nothing was restored.", ex);
-            }
-            catch (Exception ex) when (ex is InvalidOperationException or SqliteException or DbUpdateException)
-            {
-                logger.LogError(ex, "Restore refused: the backup's database does not have this version's schema");
-                throw new BackupRefusedException(ex is InvalidOperationException
-                    ? ex.Message
-                    : "This backup's database does not have this version's schema; nothing was restored.", ex);
+                logger.LogError(ex, "Restore refused: the backup's database cannot be used");
+                throw new BackupRefusedException(ex.Message, ex);
             }
         }
         catch (SqliteException ex)

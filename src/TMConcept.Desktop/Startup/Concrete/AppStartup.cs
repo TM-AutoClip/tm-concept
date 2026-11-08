@@ -101,25 +101,15 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
         Present(window);
     }
 
-    private void ShowUnlock(string? error, Storage.Database.DatabaseVersionException? incompatible = null)
+    private void ShowUnlock(string? error)
     {
         var model = services.GetRequiredService<UnlockViewModel>();
         model.Error = error ?? string.Empty;
-        if (incompatible is not null)
-        {
-            model.ShowIncompatible(incompatible);
-        }
 
         var window = new UnlockWindow { DataContext = model };
         model.Completed += async (_, _) =>
         {
             await StartMainAsync().ConfigureAwait(true);
-            window.Close();
-        };
-        model.StartedFresh += (_, _) =>
-        {
-            // The first-start window becomes the active one before this one closes, so closing it does not end the app.
-            ShowFirstRun(FirstRunStep.Choice);
             window.Close();
         };
         Present(window);
@@ -147,12 +137,6 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
         {
             await vault.OpenAsync(CancellationToken.None).ConfigureAwait(true);
             await StartMainAsync().ConfigureAwait(true);
-        }
-        catch (Storage.Database.DatabaseVersionException ex)
-        {
-            // The key opened the file, but it is of another version: nothing to unlock; the window offers to set it aside.
-            logger.LogCritical(ex, "The database is of another version (schema {Found}) and is not opened", ex.Found);
-            ShowUnlock(null, ex);
         }
         catch (Exception ex)
         {

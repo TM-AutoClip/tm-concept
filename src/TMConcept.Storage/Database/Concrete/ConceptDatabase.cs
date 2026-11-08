@@ -1,4 +1,3 @@
-using System.Globalization;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -15,8 +14,7 @@ namespace TMConcept.Storage.Database;
 /// off so a closed database releases its file (restore replaces it). Foreign keys are on (cascades: deleting a profile removes its concepts,
 /// queue, image records, embeddings and video records; deleting a concept removes its embedding and queue entry and leaves its videos with
 /// an empty link). Secure delete (deleted content overwritten with zeros) is how SQLite3 Multiple Ciphers is built; it is checked whenever
-/// a file comes in. EF Core writes every statement (no SQL is written by hand). Only files of this schema version are opened
-/// (<see cref="ConceptSchema"/>).
+/// a file comes in. EF Core writes every statement (no SQL is written by hand).
 /// </summary>
 public sealed class ConceptDatabase(IAppPaths paths, DatabaseKey key)
 {
@@ -57,80 +55,27 @@ public sealed class ConceptDatabase(IAppPaths paths, DatabaseKey key)
     }
 
     /// <summary>
-    /// Creates the tables when the file has none yet (a new database, version <see cref="ConceptSchema.Version"/>, created by EF Core) in one
-    /// transaction; a current file is left as it is. Every way a database file comes in goes through here: first start, unlock, and a
-    /// restored backup. A file of any other version — older (0.1.0–0.1.6 wrote no version row) or newer — is refused with
-    /// <see cref="DatabaseVersionException"/> and left unchanged (older files are not upgraded any more), and so is an SQLite build without
-    /// secure delete.
+    /// Creates the tables when the file has none yet (a new database, created by EF Core from the mapping) in one transaction; a file with
+    /// tables is used as it is. Every way a database file comes in goes through here: first start, unlock, and a restored backup. A file of
+    /// another layout is not recognised or upgraded (no backward compatibility): it fails where the mapping does not fit. An SQLite build
+    /// without secure delete is refused.
     /// </summary>
     internal static async Task EnsureSchemaAsync(ConceptDbContext db, CancellationToken cancellationToken)
     {
-        var (secureDelete, version) = await StateAsync(db, cancellationToken).ConfigureAwait(false);
+        ArgumentNullException.ThrowIfNull(db);
+        var secureDelete = await db.SecureDelete.Select(s => s.Value).FirstAsync(cancellationToken).ConfigureAwait(false);
         if (secureDelete != ConceptSchema.SecureDeleteOn)
         {
             throw new InvalidOperationException("This SQLite build does not overwrite deleted data (secure_delete is off); the database is not used.");
         }
 
-        if (version == ConceptSchema.Version)
+        if (await db.SchemaObjects.AnyAsync(o => o.Type == ConceptSchema.TableType, cancellationToken).ConfigureAwait(false))
         {
             return;
         }
 
-        if (version > ConceptSchema.Version)
-        {
-            throw new DatabaseVersionException(
-                $"The database was made by a newer version of TM Concept (schema {version}; this version uses {ConceptSchema.Version}). Update the app.")
-            {
-                Found = version,
-            };
-        }
-
-        if (version != 0)
-        {
-            throw new DatabaseVersionException(
-                $"The database was made by an older version of TM Concept (schema {(version < 0 ? "unknown" : version)}; this version uses {ConceptSchema.Version}). "
-                + "Older files are not upgraded.")
-            {
-                Found = Math.Max(version, 0),
-            };
-        }
-
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         await db.GetService<IRelationalDatabaseCreator>().CreateTablesAsync(cancellationToken).ConfigureAwait(false);
-        db.Settings.Add(new SettingRow { Key = ConceptSchema.VersionSetting, Value = ConceptSchema.Version.ToString(CultureInfo.InvariantCulture) });
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// The schema version of a file: 0 = no table yet (a new file); the settings row <see cref="ConceptSchema.VersionSetting"/> when it is
-    /// there; −1 for a file with tables but no readable version (0.1.0–0.1.6 wrote none).
-    /// </summary>
-    internal static async Task<int> VersionAsync(ConceptDbContext db, CancellationToken cancellationToken) =>
-        (await StateAsync(db, cancellationToken).ConfigureAwait(false)).Version;
-
-    /// <summary>
-    /// <c>pragma_secure_delete</c> and the schema version (<see cref="VersionAsync"/>). Few queries on purpose: this runs at every unlock, and
-    /// each new query costs its first translation there.
-    /// </summary>
-    private static async Task<(long SecureDelete, int Version)> StateAsync(ConceptDbContext db, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(db);
-        var secureDelete = await db.SecureDelete.Select(s => s.Value).FirstAsync(cancellationToken).ConfigureAwait(false);
-        var tables = await db.SchemaObjects.Where(o => o.Type == ConceptSchema.TableType).Select(o => o.Name).ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
-        if (tables.Count == 0)
-        {
-            return (secureDelete, 0);
-        }
-
-        if (!tables.Contains(ConceptSchema.Settings, StringComparer.Ordinal))
-        {
-            return (secureDelete, -1);
-        }
-
-        var text = await db.Settings.Where(s => s.Key == ConceptSchema.VersionSetting).Select(s => s.Value).FirstOrDefaultAsync(cancellationToken)
-            .ConfigureAwait(false);
-        return (secureDelete, text is not null && int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var number) && number > 0 ? number : -1);
     }
 }

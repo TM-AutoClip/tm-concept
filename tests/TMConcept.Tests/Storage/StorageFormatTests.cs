@@ -73,7 +73,6 @@ public sealed class StorageFormatTests
             return 0;
         });
         (await h.QueryAsync(db => db.SchemaObjects.CountAsync(o => o.Type == ConceptSchema.TableType))).ShouldBe(14);
-        (await h.QueryAsync(db => db.Settings.Where(s => s.Key == ConceptSchema.VersionSetting).Select(s => s.Value).SingleAsync()))
-            .ShouldBe(ConceptSchema.Version.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        (await h.QueryAsync(db => db.Settings.CountAsync())).ShouldBe(0, "no schema version or any other row is written for a new file");
     }
 }

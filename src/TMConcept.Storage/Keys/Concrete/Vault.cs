@@ -191,36 +191,6 @@ public sealed class Vault(IAppPaths paths, DatabaseKey key, IEnumerable<IKeyProt
         logger.LogInformation("Database installed from a backup (key protection: {Method})", protector.Method);
     }
 
-    /// <summary>
-    /// Sets aside a database this version does not open (<see cref="Database.DatabaseVersionException"/>): the database file and its key file
-    /// are renamed in the data folder (".set-aside-&lt;UTC time&gt;"), never deleted, and the app starts fresh (first start). The key seal is
-    /// kept, so the version that made the file can still open it when both files get their names back. Returns the new name of the database.
-    /// </summary>
-    public string SetAside()
-    {
-        if (State == VaultState.Open)
-        {
-            throw new InvalidOperationException("Close the database before setting it aside.");
-        }
-
-        key.Clear();
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-        var suffix = ".set-aside-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss", System.Globalization.CultureInfo.InvariantCulture);
-        var database = paths.DatabaseFile + suffix;
-        if (File.Exists(paths.DatabaseFile))
-        {
-            File.Move(paths.DatabaseFile, database);
-        }
-
-        if (File.Exists(paths.KeyFile))
-        {
-            File.Move(paths.KeyFile, paths.KeyFile + suffix);
-        }
-
-        logger.LogWarning("A database this version does not open was set aside ({Name}); the app starts fresh", Path.GetFileName(database));
-        return database;
-    }
-
     /// <summary>Forgets the key in memory (the database is locked again).</summary>
     public void Lock() => key.Clear();
 }

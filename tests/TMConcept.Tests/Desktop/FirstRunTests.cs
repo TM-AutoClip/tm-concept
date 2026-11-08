@@ -92,40 +92,82 @@ public sealed class FirstRunTests
     }
 
     [AvaloniaFact]
-    public async Task ADatabaseOfAnotherVersionIsSaidPlainlyAndCanBeSetAsideForAFreshStart()
+    public void BackClearsTheBackupFieldsTheTwoPagesShare()
     {
         using var h = new DesktopHarness();
-        await CreateAsync(h);
-        var paths = h.Get<TMConcept.Core.Paths.IAppPaths>();
-        var key = h.Get<DatabaseKey>();
-        await using (var db = await TMConcept.Storage.Database.ConceptDatabase.OpenAsync(
-            TMConcept.Storage.Database.ConceptDatabase.ConnectionString(paths.DatabaseFile, key.Passphrase()), CancellationToken.None))
+        var model = h.Get<FirstRunViewModel>();
+        model.ChooseRestoreCommand.Execute(null);
+        model.BackupFile = "C:/somewhere/old.tmcbak";
+        model.BackupPassword = BackupPassword;
+
+        model.BackCommand.Execute(null);
+        model.ChooseNewCommand.Execute(null);
+
+        model.BackupPassword.ShouldBeEmpty("the password of the backup to restore is not the new backup password");
+        model.BackupPasswordRepeat.ShouldBeEmpty();
+        model.BackupFile.ShouldBeEmpty();
+    }
+
+    [AvaloniaFact]
+    public async Task ARefusedBackupIsSaidPlainlyWithoutTheTechnicalReason()
+    {
+        using var source = new DesktopHarness();
+        await CreateAsync(source);
+        var file = await source.Get<BackupService>().CreateInFolderAsync(null, CancellationToken.None);
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        var bytes = await File.ReadAllBytesAsync(file);
+        System.Text.Encoding.ASCII.GetBytes("TMCBAK02").CopyTo(bytes, 0);
+        await File.WriteAllBytesAsync(file, bytes);
+
+        using var target = new DesktopHarness();
+        var text = target.Get<TMConcept.Desktop.Localization.Localizer>();
+        text.Use("tr");
+        var model = target.Get<FirstRunViewModel>();
+        model.Step = FirstRunStep.Restore;
+        model.UseMasterPassword = true;
+        model.MasterPassword = model.MasterPasswordRepeat = Master;
+        model.BackupFile = file;
+        model.BackupPassword = BackupPassword;
+
+        await model.RestoreAsync();
+
+        model.Message.ShouldBe(text["restore.refused"]);
+        model.Message.ShouldNotContain("format");
+        model.Message.ShouldNotContain("güncelle");
+        model.Status.ShouldBeEmpty();
+        target.Get<Vault>().State.ShouldBe(VaultState.NotCreated);
+    }
+
+    [AvaloniaFact]
+    public async Task RestoreShowsItsStepsAndClearsThemAtTheEnd()
+    {
+        using var source = new DesktopHarness();
+        await CreateAsync(source);
+        var file = await source.Get<BackupService>().CreateInFolderAsync(null, CancellationToken.None);
+
+        using var target = new DesktopHarness(s => Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<TMConcept.Desktop.Dialogs.IConfirmDialog>(s, new FakeConfirm()));
+        var text = target.Get<TMConcept.Desktop.Localization.Localizer>();
+        var model = target.Get<FirstRunViewModel>();
+        var seen = new List<string>();
+        model.PropertyChanged += (_, e) =>
         {
-            // What a newer version would have written.
-            await db.Settings.Where(s => s.Key == TMConcept.Storage.Database.ConceptSchema.VersionSetting)
-                .ExecuteUpdateAsync(s => s.SetProperty(r => r.Value, "999"), CancellationToken.None);
-        }
+            if (e.PropertyName == nameof(FirstRunViewModel.Status) && model.Status.Length > 0)
+            {
+                seen.Add(model.Status);
+            }
+        };
+        model.Step = FirstRunStep.Restore;
+        model.UseMasterPassword = true;
+        model.MasterPassword = model.MasterPasswordRepeat = Master;
+        model.BackupFile = file;
+        model.BackupPassword = BackupPassword;
 
-        var vault = h.Get<Vault>();
-        vault.Lock();
-        var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
-        var unlock = h.Get<UnlockViewModel>();
-        var fresh = false;
-        unlock.StartedFresh += (_, _) => fresh = true;
-        unlock.Password = Master;
+        await model.RestoreAsync();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
 
-        await unlock.UnlockAsync();
-
-        unlock.Incompatible.ShouldBeTrue();
-        unlock.CanUnlock.ShouldBeFalse();
-        unlock.Error.ShouldBe(text["unlock.incompatible.newer"]);
-        vault.State.ShouldBe(VaultState.Locked);
-
-        unlock.StartFresh();
-
-        fresh.ShouldBeTrue();
-        vault.State.ShouldBe(VaultState.NotCreated);
-        Directory.GetFiles(Path.GetDirectoryName(paths.DatabaseFile)!, Path.GetFileName(paths.DatabaseFile) + ".set-aside-*").Length.ShouldBe(1);
-        h.Get<AppSession>().PendingMessage.ShouldNotBeNull().ShouldContain(".set-aside-");
+        target.Get<Vault>().State.ShouldBe(VaultState.Open, model.Message);
+        seen.ShouldContain(text["restore.stage.opening"]);
+        seen.ShouldContain(text["restore.stage.installing"]);
+        model.Status.ShouldBeEmpty();
     }
 }

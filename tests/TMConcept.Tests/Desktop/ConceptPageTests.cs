@@ -692,4 +692,38 @@ public sealed class ConceptPageTests
         row.Selected = row.Options.First(o => o.Model?.Id == local.Id);
         await Until(() => page.Estimate.Contains(h.Get<TMConcept.Desktop.Localization.Localizer>().Format("concepts.estimate.backfill", 30), StringComparison.Ordinal));
     }
+
+    [AvaloniaFact]
+    public async Task ARestoredProfileWhoseLocalMeaningModelIsNotInstalledAsksToInstallItInsteadOfFailing()
+    {
+        // After a restore the profile still chooses the local MiniLM meaning check, but the tools folder is not in a backup.
+        var embedding = new FakeComponent(TMConcept.Core.Components.ComponentCodes.EmbeddingPrefix + "paraphrase-multilingual-minilm", ready: false);
+        var confirm = new FakeConfirm();
+        var fake = new FakeChat().Concepts(FakeChat.Distinct(2));
+        using var h = new DesktopHarness(s =>
+        {
+            s.AddSingleton<IChatClientFactory>(fake);
+            s.AddSingleton<IConfirmDialog>(confirm);
+            Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions.RemoveAll<TMConcept.Core.Components.IComponentSource>(s);
+            s.AddSingleton<TMConcept.Core.Components.IComponentSource>(new FakeComponents(embedding));
+        });
+        var profile = await PrepareAsync(h);
+        await h.Get<TMConcept.Core.Models.IStepModelStore>().SaveAsync(new TMConcept.Core.Models.StepModelChoice
+        {
+            Step = TMConcept.Core.Pipeline.PipelineSteps.Embedding, ProfileId = profile.Id, Provider = "local", Model = "paraphrase-multilingual-minilm",
+        }, CancellationToken.None);
+        var page = await PageAsync(h);
+        page.Meaning!.Selected!.Model!.Id.ShouldBe("paraphrase-multilingual-minilm", "the restored choice is loaded");
+        page.Count = 2;
+
+        // Declined: nothing starts, nothing is paid, and the page says why (no provider error).
+        confirm.Answers.Enqueue(false);
+        await page.GenerateAsync();
+
+        confirm.Messages.ShouldHaveSingleItem().ShouldContain(embedding.Name);
+        embedding.Installs.ShouldBe(0);
+        fake.Requests.ShouldBeEmpty();
+        page.Picker.Status.ShouldNotBeEmpty();
+        page.Picker.Status.ShouldNotContain("is not installed");
+    }
 }

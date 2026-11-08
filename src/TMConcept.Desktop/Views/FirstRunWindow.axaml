@@ -36,10 +36,7 @@
         </StackPanel>
       </Button>
       <Button HorizontalAlignment="Stretch" Command="{Binding ChooseRestoreCommand}">
-        <StackPanel>
-          <TextBlock Text="{DynamicResource firstrun.restore}" FontWeight="SemiBold" />
-          <TextBlock Text="{DynamicResource firstrun.restore.hint}" TextWrapping="Wrap" FontSize="12" />
-        </StackPanel>
+        <TextBlock Text="{DynamicResource firstrun.restore}" FontWeight="SemiBold" />
       </Button>
     </StackPanel>
 
@@ -82,6 +79,7 @@
       </StackPanel>
     </StackPanel>
 
+    <TextBlock Text="{Binding Status}" Classes="muted" IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
     <ProgressBar IsIndeterminate="True" IsVisible="{Binding Busy}" />
     <TextBlock Text="{Binding Message}" Classes="error" />
   </StackPanel>

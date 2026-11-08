@@ -87,6 +87,10 @@ public sealed partial class FirstRunViewModel(Vault vault, BackupService backup,
     [ObservableProperty]
     public partial string Message { get; set; } = string.Empty;
 
+    /// <summary>The step a restore is at ("Opening the backup…"); empty when none runs.</summary>
+    [ObservableProperty]
+    public partial string Status { get; set; } = string.Empty;
+
     /// <summary>A long operation runs.</summary>
     [ObservableProperty]
     public partial bool Busy { get; set; }
@@ -111,7 +115,9 @@ public sealed partial class FirstRunViewModel(Vault vault, BackupService backup,
     [RelayCommand]
     private void Back()
     {
+        // The two pages share the backup password field: what was typed on one never stays for the other.
         Message = string.Empty;
+        BackupPassword = BackupPasswordRepeat = BackupFile = string.Empty;
         Step = FirstRunStep.Choice;
     }
 
@@ -157,10 +163,13 @@ public sealed partial class FirstRunViewModel(Vault vault, BackupService backup,
             return;
         }
 
+        // Posted to the window's thread: the service reports from wherever its awaits continue.
+        var progress = new Progress<RestoreStage>(stage => Status = Busy ? text[StageKey(stage)] : string.Empty);
         await RunAsync(async () =>
         {
             // What the backup holds is said first; nothing is replaced before the user agrees.
-            var held = await backup.InspectAsync(BackupFile, BackupPassword, CancellationToken.None).ConfigureAwait(true);
+            var held = await backup.InspectAsync(BackupFile, BackupPassword, progress, CancellationToken.None).ConfigureAwait(true);
+            Status = string.Empty;
             var when = held.CreatedAtUtc is { } at ? at.ToLocalTime().ToString("g", text.Culture) : "-";
             var answer = await confirm.AskAsync(text["restore.contents.title"], text.Format("restore.contents.message", when, Describe(held)),
                 text["restore.contents.confirm"], danger: false).ConfigureAwait(true);
@@ -170,11 +179,20 @@ public sealed partial class FirstRunViewModel(Vault vault, BackupService backup,
                 return;
             }
 
-            var report = await backup.RestoreAsync(BackupFile, BackupPassword, Protector(), CancellationToken.None).ConfigureAwait(true);
+            var report = await backup.RestoreAsync(BackupFile, BackupPassword, Protector(), progress, CancellationToken.None).ConfigureAwait(true);
             session.PendingMessage = text.Format("restore.done", Describe(report));
             await FinishAsync().ConfigureAwait(true);
         }).ConfigureAwait(true);
     }
+
+    /// <summary>The text key of a restore step.</summary>
+    internal static string StageKey(RestoreStage stage) => stage switch
+    {
+        RestoreStage.Opening => "restore.stage.opening",
+        RestoreStage.Checking => "restore.stage.checking",
+        RestoreStage.Installing => "restore.stage.installing",
+        _ => "restore.stage.images",
+    };
 
     /// <summary>"2 profiles with their model choices, 3 sample images, 40 concepts, 5 video records, the settings, 2 API keys".</summary>
     private string Describe(RestoreReport report)
@@ -281,8 +299,9 @@ public sealed partial class FirstRunViewModel(Vault vault, BackupService backup,
         }
         catch (BackupRefusedException ex)
         {
-            logger.LogWarning(ex, "Backup refused by this version");
-            Message = text.Format("restore.refused", ex.Message);
+            // The reason (English, technical) goes to the log; the page says it plainly.
+            logger.LogWarning(ex, "Backup refused by this version: {Reason}", ex.Message);
+            Message = text["restore.refused"];
         }
         catch (Exception ex)
         {
@@ -292,6 +311,7 @@ public sealed partial class FirstRunViewModel(Vault vault, BackupService backup,
         finally
         {
             Busy = false;
+            Status = string.Empty;
         }
     }
 }

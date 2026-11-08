@@ -219,22 +219,6 @@ public sealed class BackupTests
     }
 
     [Fact]
-    public async Task ABackupWhoseDatabaseHasNoVersionRowIsRefusedAtInspection()
-    {
-        // What a 0.1.6 backup holds: the current container, but a database without the schema-version row.
-        var (source, _) = await BackupAsync();
-        using var __ = source;
-        await source.QueryAsync(db => db.Settings.Where(s => s.Key == TMConcept.Storage.Database.ConceptSchema.VersionSetting).ExecuteDeleteAsync());
-        var old = Path.Combine(source.Paths.DataDirectory, "unversioned" + BackupRules.Extension);
-        await Service(source).CreateAsync(old, BackupContents.Automatic, None);
-
-        using var target = new StorageHarness();
-        await Should.ThrowAsync<BackupRefusedException>(() => Service(target).InspectAsync(old, Password, None));
-        await Should.ThrowAsync<BackupRefusedException>(() => Service(target).RestoreAsync(old, Password, target.Protector, None));
-        target.Vault.State.ShouldBe(VaultState.NotCreated);
-    }
-
-    [Fact]
     public async Task ChangingTheBackupPasswordNeedsTheCurrentOne()
     {
         using var h = await StorageHarness.CreatedAsync();
@@ -348,31 +332,41 @@ public sealed class BackupTests
     }
 
     [Fact]
-    public async Task ABackupOfANewerVersionIsRefusedAndAnotherRestoreCanBeTried()
+    public async Task ABackupOfTheReleased017WithItsSchemaVersionRowRestoresAndTheRowIsHarmless()
     {
-        var (source, file) = await BackupAsync();
+        // Earlier 0.1.7 builds wrote a "schema-version" row into the settings; this build neither writes nor reads it.
+        var (source, _) = await BackupAsync();
         using var _ = source;
-        await SchemaVersionAsync(source, TMConcept.Storage.Database.ConceptSchema.Version + 1);
-
-        var newer = Path.Combine(source.Paths.DataDirectory, "newer" + BackupRules.Extension);
-        await Service(source).CreateAsync(newer, BackupContents.Automatic, None);
+        await source.QueryAsync(db =>
+        {
+            db.Settings.Add(new TMConcept.Storage.Database.SettingRow { Key = "schema-version", Value = "5" });
+            return db.SaveChangesAsync();
+        });
+        var released = Path.Combine(source.Paths.DataDirectory, "released" + BackupRules.Extension);
+        await Service(source).CreateAsync(released, BackupContents.Automatic, None);
 
         using var target = new StorageHarness();
-        await Should.ThrowAsync<BackupRefusedException>(() => Service(target).RestoreAsync(newer, Password, target.Protector, None));
-        target.Vault.State.ShouldBe(VaultState.NotCreated);
-        File.Exists(target.Paths.DatabaseFile).ShouldBeFalse();
+        var stages = new List<RestoreStage>();
+        var progress = new TMConcept.Core.Chat.ForwardProgress<RestoreStage>(stages.Add);
+        (await Service(target).InspectAsync(released, Password, progress, None)).Profiles.ShouldBe(1);
+        stages.ShouldBe([RestoreStage.Opening, RestoreStage.Checking]);
 
-        await SchemaVersionAsync(source, TMConcept.Storage.Database.ConceptSchema.Version);
+        stages.Clear();
+        (await Service(target).RestoreAsync(released, Password, target.Protector, progress, None)).Profiles.ShouldBe(1);
+        stages.ShouldBe([RestoreStage.Opening, RestoreStage.Checking, RestoreStage.Installing, RestoreStage.WritingImages]);
 
-        var current = Path.Combine(source.Paths.DataDirectory, "current" + BackupRules.Extension);
-        await Service(source).CreateAsync(current, BackupContents.Automatic, None);
-        (await Service(target).RestoreAsync(current, Password, target.Protector, None)).Profiles.ShouldBe(1);
+        target.Vault.State.ShouldBe(VaultState.Open);
+        (await new ProfileStore(target.Database).ListAsync(None)).Single().Name.ShouldBe("Kept channel");
+        var settings = await new SettingsStore(target.Database).GetAsync(None);
+        settings.ShouldNotBeNull();
+        await new SettingsStore(target.Database).SaveAsync(settings, None);
+        (await target.QueryAsync(db => db.Settings.CountAsync(s => s.Key == "schema-version"))).ShouldBe(1, "the old row stays and does no harm");
+
+        // The database opens again later, row and all.
+        target.Vault.Lock();
+        await target.Vault.OpenAsync(None);
+        target.Vault.State.ShouldBe(VaultState.Open);
     }
-
-    /// <summary>Sets the schema version row of a harness's database (what a newer version would write).</summary>
-    private static Task<int> SchemaVersionAsync(StorageHarness h, int version) => h.QueryAsync(db =>
-        db.Settings.Where(s => s.Key == TMConcept.Storage.Database.ConceptSchema.VersionSetting)
-            .ExecuteUpdateAsync(s => s.SetProperty(r => r.Value, version.ToString(System.Globalization.CultureInfo.InvariantCulture))));
 
     [Fact]
     public async Task ShortPasswordIsRejected()
