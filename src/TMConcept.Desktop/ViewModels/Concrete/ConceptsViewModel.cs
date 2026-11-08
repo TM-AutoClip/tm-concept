@@ -146,6 +146,13 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
     [ObservableProperty]
     public partial string Estimate { get; set; } = string.Empty;
 
+    /// <summary>
+    /// A warning of the last press shown right under its buttons (an answer cut off or ended early: how many were saved, how many are
+    /// missing and why); errors stay in <see cref="PageViewModelBase.Status"/>, shown in red next to it.
+    /// </summary>
+    [ObservableProperty]
+    public partial string Notice { get; set; } = string.Empty;
+
     /// <summary>Exact cost of the last press.</summary>
     [ObservableProperty]
     public partial string LastCost { get; set; } = string.Empty;
@@ -261,9 +268,20 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
             return;
         }
 
-        await concepts.UpdateContentAsync(card.Id, content, CancellationToken.None).ConfigureAwait(true);
+        try
+        {
+            await concepts.UpdateContentAsync(card.Id, content, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // A locked database or a full disk: the editor stays open with the text, the reason is shown under it.
+            logger.LogError(ex, "Saving the edited concept text failed");
+            EditStatus = text.Format("error.generic", ex.Message);
+            return;
+        }
+
         card.ShowContent(content);
-        activity.Add(ActivityLevel.Info, text.Format("concepts.edit.saved", card.Title));
+        activity.Add(ActivityLevel.Info, text.Format("concepts.edit.saved", card.Title), text.Format("concepts.edit.saved", ActivityPlaceholders.Title));
         EditCard = null;
     }
 
@@ -311,6 +329,9 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
     /// <inheritdoc />
     public override async Task ProfileChangedAsync()
     {
+        // The last press's lines belong to the old profile (its "Fill the missing" button goes too).
+        Status = string.Empty;
+        Notice = string.Empty;
         Missing = 0;
         LastCost = string.Empty;
         Topics.Clear();
@@ -344,13 +365,23 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
 
         if (session.Profile is { } profile && Picker.Model(PipelineSteps.Concepts) is { } model)
         {
-            var estimate = await generator.EstimateAsync(profile, missing, ExtraPrompt, Focus(profile.ContentLanguage), model, ConceptEffort(),
-                CancellationToken.None).ConfigureAwait(true);
-            var answer = await confirm.AskAsync(text["concepts.fill_missing.title"],
-                text.Format("concepts.fill_missing.message", missing, model.Name, text.Usd(estimate.MinUsd), text.Usd(estimate.MaxUsd)),
-                text.Format("concepts.fill_missing", missing), danger: false).ConfigureAwait(true);
-            if (!answer.Confirmed)
+            try
             {
+                var estimate = await generator.EstimateAsync(profile, missing, ExtraPrompt, Focus(profile.ContentLanguage), model, ConceptEffort(),
+                    CancellationToken.None).ConfigureAwait(true);
+                var answer = await confirm.AskAsync(text["concepts.fill_missing.title"],
+                    text.Format("concepts.fill_missing.message", missing, model.Name, text.Usd(estimate.MinUsd), text.Usd(estimate.MaxUsd)),
+                    text.Format("concepts.fill_missing", missing), danger: false).ConfigureAwait(true);
+                if (!answer.Confirmed)
+                {
+                    return;
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Without an estimate nothing is paid for: the reason is shown and nothing starts.
+                logger.LogError(ex, "The estimate for the missing concepts failed");
+                Status = text.Format("error.generic", ex.Message);
                 return;
             }
         }
@@ -475,6 +506,7 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         }
 
         Status = string.Empty;
+        Notice = string.Empty;
         Missing = 0;
         Busy = true;
         _live = null;
@@ -606,17 +638,22 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
             case "canceled":
                 activity.Add(ActivityLevel.Warning, text.Format("concepts.canceled", result.Accepted.Count, cost));
                 break;
-            case "truncated":
-                // The model reached its answer limit: the complete concepts before the cut were saved; a warning, not a failure (and only a
-                // failure when none was saved).
-                var cut = text.Format("concepts.cut", result.Accepted.Count, result.Missing, cost);
+            case "truncated" or "incomplete":
+                // The model reached its answer limit (or the answer ended early): the complete concepts before the cut were saved; a
+                // warning under the buttons, not a failure (and only a failure when none was saved). The missing count tells apart the
+                // concepts thrown away as duplicates.
+                var dropped = result.RejectedDuplicates > 0 ? text.Format("concepts.missing.dropped", result.RejectedDuplicates) : string.Empty;
+                var cut = text.Format(result.ErrorCode == "truncated" ? "concepts.cut" : "concepts.incomplete", result.Accepted.Count, result.Missing, cost,
+                    dropped);
                 activity.Add(result.Accepted.Count > 0 ? ActivityLevel.Warning : ActivityLevel.Error, cut);
-                Status = cut;
+                Notice = cut;
                 notifier.Notify(new AppNotification(result.Accepted.Count > 0 ? NotificationKind.Warning : NotificationKind.Failed, text["concepts.cut.title"], cut));
                 break;
             default:
                 var reason = result.ErrorCode == "parse" ? text["concepts.parse_failed"] : ProviderErrors.Text(text, result.ErrorCode);
-                activity.Add(ActivityLevel.Error, text.Format("concepts.error", reason, result.Accepted.Count, cost));
+                var error = text.Format("concepts.error", reason, result.Accepted.Count, cost);
+                activity.Add(ActivityLevel.Error, error);
+                Status = error;
                 notifier.Notify(new AppNotification(NotificationKind.Failed, text["concepts.error.title"], reason));
                 break;
         }
@@ -721,7 +758,8 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         var backfill = 0;
         if (Picker.Model(PipelineSteps.Embedding) is { } embedding)
         {
-            var meaning = await generator.EstimateEmbeddingAsync(profile, embedding, count, CancellationToken.None).ConfigureAwait(true);
+            var size = await generator.BatchSizeAsync(profile, model, ConceptEffort(), CancellationToken.None).ConfigureAwait(true);
+            var meaning = await generator.EstimateEmbeddingAsync(profile, embedding, count, CancellationToken.None, size).ConfigureAwait(true);
             estimate = estimate.Plus(meaning.Estimate);
             backfill = meaning.Backfill;
         }
@@ -801,10 +839,11 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
             TopicStatus = text.Format("topics.failed", ProviderErrors.Text(text, ex.Code)) + " · " + text.Format("cost.exact", text.Usd(spent));
             activity.Add(ActivityLevel.Error, TopicStatus);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
+            // What was counted for the canceled call is said (0 when it was canceled before anything was sent).
             logger.LogInformation("Topic suggestions canceled");
-            TopicStatus = text["topics.canceled"];
+            TopicStatus = text.Format("topics.canceled", text.Usd(ex is TopicsCanceledException counted ? counted.EstimatedUsd : 0));
             activity.Add(ActivityLevel.Warning, TopicStatus);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

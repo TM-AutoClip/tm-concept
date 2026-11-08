@@ -27,6 +27,13 @@ public sealed class OpenRouterProvider(ProviderHttp http, ILogger<OpenRouterProv
     protected override string TestPath => "key";
 
     /// <inheritdoc />
+    public override void SetEffort(JsonObject body, string effort)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+        body["reasoning"] = new JsonObject { ["effort"] = effort };
+    }
+
+    /// <inheritdoc />
     public override void Extend(JsonObject body)
     {
         ArgumentNullException.ThrowIfNull(body);

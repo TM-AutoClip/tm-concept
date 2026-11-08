@@ -67,7 +67,10 @@
       </StackPanel>
       <StackPanel Spacing="8" IsVisible="{Binding IsNewStep}">
         <TextBlock Text="{DynamicResource backup.password.title}" FontWeight="SemiBold" />
-        <TextBlock Text="{DynamicResource backup.password.explain}" Classes="small" TextWrapping="Wrap" />
+        <StackPanel Orientation="Horizontal">
+          <TextBlock Text="{DynamicResource backup.password.explain}" Classes="small" TextWrapping="Wrap" VerticalAlignment="Center" />
+          <views:HelpTip Text="{DynamicResource backup.password.more}" />
+        </StackPanel>
         <TextBox Classes="secret" Text="{Binding BackupPassword}" PlaceholderText="{DynamicResource backup.password.field}" />
         <TextBox Classes="secret" Text="{Binding BackupPasswordRepeat}" PlaceholderText="{DynamicResource password.repeat}" />
         <ProgressBar Minimum="0" Maximum="4" Value="{Binding BackupPasswordStrength}" Height="4" />

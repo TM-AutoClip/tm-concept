@@ -29,6 +29,21 @@ public sealed class ConceptPageTests
         return profile;
     }
 
+    /// <summary>
+    /// An earlier run (outside the tests' "last hour") that measured <paramref name="perConcept"/> output tokens per concept: short concepts,
+    /// so a batch of 20 fits.
+    /// </summary>
+    private static Task MeasuredAsync(DesktopHarness h, Profile profile, int perConcept = 1_000) => h.Get<IRunStore>().AddAsync(new Run
+    {
+        ProfileId = profile.Id,
+        Kind = RunKind.Concepts,
+        Status = RunStatus.Succeeded,
+        Accepted = 20,
+        OutputTokens = 20 * perConcept,
+        StartedAtUtc = DateTimeOffset.UtcNow.AddDays(-2),
+        FinishedAtUtc = DateTimeOffset.UtcNow.AddDays(-2),
+    }, CancellationToken.None);
+
     private static async Task<ConceptsViewModel> PageAsync(DesktopHarness h)
     {
         var page = h.Get<ConceptsViewModel>();
@@ -129,6 +144,41 @@ public sealed class ConceptPageTests
     }
 
     [AvaloniaFact]
+    public async Task ACanceledTopicCallIsKeptWithTheEstimatedPromptCostAndTheLowestEffortIsUsed()
+    {
+        var fake = new FakeChat().Answer(_ => throw new OperationCanceledException());
+        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
+        var profile = await PrepareAsync(h);
+        var haiku = h.Get<TMConcept.Core.Models.IModelCatalog>().Find("anthropic", "claude-haiku-5-5")!;
+        var key = (await h.Get<IApiKeyStore>().ListAsync("anthropic", CancellationToken.None)).First();
+        var model = new TMConcept.Core.Models.ResolvedModel(haiku, key, string.Empty);
+
+        // Awaited directly: a canceled task gives back the exception it was canceled with (Shouldly's ThrowAsync would see a new one).
+        TopicsCanceledException? canceled = null;
+        try
+        {
+            await h.Get<TopicSuggester>().SuggestAsync(profile, model, string.Empty, string.Empty, "en", null, CancellationToken.None);
+        }
+        catch (TopicsCanceledException ex)
+        {
+            canceled = ex;
+        }
+
+        canceled.ShouldNotBeNull();
+
+        var run = (await h.Get<IRunStore>().ListAsync(DateTimeOffset.UtcNow.AddHours(-1), CancellationToken.None)).Single(r => r.Kind == RunKind.Topics);
+        run.Status.ShouldBe(RunStatus.Canceled);
+        run.CostExact.ShouldBeFalse();
+        run.ActualUsd.ShouldBeGreaterThan(0, "the prompt may be billed: it is counted in the month's spending");
+        canceled.EstimatedUsd.ShouldBe(run.ActualUsd);
+
+        TopicSuggester.EffortFor(new TMConcept.Core.Models.CatalogModel { Efforts = ["minimal", "medium", "high"] }).ShouldBe("minimal");
+        TopicSuggester.EffortFor(new TMConcept.Core.Models.CatalogModel { Efforts = ["medium", "high"] }).ShouldBe("medium");
+        TopicSuggester.EffortFor(haiku).ShouldBe(TopicSuggester.Effort);
+        TopicSuggester.EffortFor(new TMConcept.Core.Models.CatalogModel()).ShouldBeEmpty();
+    }
+
+    [AvaloniaFact]
     public async Task SuggestTopicsBringsTopicsThatGoIntoTheExtraRequestAndCountsTheCost()
     {
         var fake = new FakeChat().Answer(_ => new ChatResponse("{\"topics\": [\"The fall of Trebizond\", \"Greek fire\", \"greek  fire\", \"\"]}",
@@ -193,6 +243,7 @@ public sealed class ConceptPageTests
             .Concepts([.. FakeChat.Distinct(4), first[2]]);
         using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
         var profile = await PrepareAsync(h);
+        await MeasuredAsync(h, profile);
         var page = await PageAsync(h);
         page.Count = 25;
         page.Estimate.ShouldContain("Claude Sonnet 5.5");
@@ -223,7 +274,7 @@ public sealed class ConceptPageTests
             .Concepts(FakeChat.Distinct(20))
             .Answer(_ => throw new ProviderException("cut") { Code = "truncated", ChargedUsage = new ChatUsage(1000, 0, 0, 1000) });
         using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
-        await PrepareAsync(h);
+        await MeasuredAsync(h, await PrepareAsync(h));
         var page = await PageAsync(h);
         page.Count = 40;
 
@@ -269,8 +320,42 @@ public sealed class ConceptPageTests
         run.Accepted.ShouldBe(3);
         run.OutputTokens.ShouldBe(36_000);
         var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
-        page.Status.ShouldBe(text.Format("concepts.cut", 3, 17, text.Usd(run.ActualUsd)), "it says how many were saved and how many are missing");
+        page.Notice.ShouldBe(text.Format("concepts.cut", 3, 17, text.Usd(run.ActualUsd), string.Empty), "it says how many were saved and how many are missing");
+        page.Status.ShouldBeEmpty("a cut is a warning under the buttons, not a red error");
         fake.Requests.Count.ShouldBe(1, "no extra batch is started without asking");
+
+        // Another profile does not keep this press's lines.
+        page.Status = "old";
+        await page.ProfileChangedAsync();
+        page.Notice.ShouldBeEmpty();
+        page.Status.ShouldBeEmpty();
+    }
+
+    [AvaloniaFact]
+    public async Task AnAnswerThatEndedEarlyKeepsItsCompleteConceptsAndSaysSo()
+    {
+        var full = FakeChat.Json(FakeChat.Distinct(5));
+        var second = full.IndexOf("{\"baslik\"", full.IndexOf("{\"baslik\"", StringComparison.Ordinal) + 1, StringComparison.Ordinal);
+        var fake = new FakeChat()
+            .Answer(_ => throw new ProviderException("ended")
+            {
+                Code = "incomplete",
+                ChargedUsage = new ChatUsage(1000, 0, 0, 2_000),
+                PartialText = full[..(second + 12)],
+            });
+        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
+        await PrepareAsync(h);
+        var page = await PageAsync(h);
+        page.Count = 5;
+
+        await page.GenerateAsync();
+
+        page.NewConcepts.Count.ShouldBe(1);
+        page.Missing.ShouldBe(4);
+        var run = (await h.Get<IRunStore>().ListAsync(DateTimeOffset.UtcNow.AddHours(-1), CancellationToken.None)).Single();
+        var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
+        page.Notice.ShouldBe(text.Format("concepts.incomplete", 1, 4, text.Usd(run.ActualUsd), string.Empty));
+        page.Status.ShouldBeEmpty();
     }
 
     [AvaloniaFact]
@@ -480,9 +565,9 @@ public sealed class ConceptPageTests
     }
 
     [AvaloniaFact]
-    public async Task TheBatchBudgetIsTheModelsLimitAtMost64000WhateverTheLength()
+    public async Task TheBatchBudgetIsTheModelsLimitAtMost64000AndALongScriptGetsSmallerBatches()
     {
-        var fake = new FakeChat().Concepts(FakeChat.Distinct(20));
+        var fake = new FakeChat();
         using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
         var profile = await PrepareAsync(h);
         profile.ContentLanguage = ContentLanguages.Turkish;
@@ -491,11 +576,20 @@ public sealed class ConceptPageTests
         await h.Get<AppSession>().SelectProfileAsync(profile, CancellationToken.None);
         var page = await PageAsync(h);
         page.Count = 20;
+        var model = h.Get<TMConcept.Core.Models.IModelCatalog>().Find("anthropic", "claude-sonnet-5-5")!;
+        var size = await h.Get<ConceptGenerator>().BatchSizeAsync(profile, model, string.Empty, CancellationToken.None);
+        size.ShouldBeLessThan(20, "20 long Turkish scripts at the automatic (high) effort do not fit 64 000 tokens");
+        var batches = ConceptGenerator.Batches(20, size).ToList();
+        foreach (var batch in batches)
+        {
+            fake.Concepts(FakeChat.Distinct(batch));
+        }
 
         await page.GenerateAsync();
 
-        // Only what is produced is paid for (the call streams): the roof is the model's limit, capped at 64 000.
-        fake.Requests.Single().MaxOutputTokens.ShouldBe(ConceptOutputBudget.Ceiling);
+        // Only what is produced is paid for (the call streams): the roof is the model's limit, capped at 64 000, for every batch.
+        fake.Requests.Count.ShouldBe(batches.Count);
+        fake.Requests.ShouldAllBe(r => r.MaxOutputTokens == ConceptOutputBudget.Ceiling);
         ConceptOutputBudget.MaxOutputTokens(new TMConcept.Core.Models.CatalogModel { MaxOutputTokens = 8_192 }).ShouldBe(8_192);
         ConceptOutputBudget.MaxOutputTokens(new TMConcept.Core.Models.CatalogModel()).ShouldBe(ConceptOutputBudget.Ceiling, "unknown limit: 64 000");
     }
@@ -516,7 +610,10 @@ public sealed class ConceptPageTests
         var low = await generator.EstimateAsync(profile, 5, string.Empty, string.Empty, model, "low", CancellationToken.None);
         low.MaxUsd.ShouldBeLessThan(first.MaxUsd, "a lower effort thinks less");
         var many = await generator.EstimateAsync(profile, 20, string.Empty, string.Empty, model, "max", CancellationToken.None);
-        many.OutputTokensMax.ShouldBeLessThanOrEqualTo(ConceptOutputBudget.Ceiling, "a batch never produces more than its max_tokens");
+        var size = await generator.BatchSizeAsync(profile, model, "max", CancellationToken.None);
+        (size * guess / 5.0 * ConceptOutputBudget.ThinkingShare(model, "max").High).ShouldBeLessThanOrEqualTo(ConceptOutputBudget.Ceiling,
+            "a batch is sized so its high end fits its max_tokens");
+        many.OutputTokensMax.ShouldBeLessThanOrEqualTo(ConceptOutputBudget.Ceiling * (long)ConceptGenerator.Batches(20, size).Count());
 
         await h.Get<IRunStore>().AddAsync(new Run
         {

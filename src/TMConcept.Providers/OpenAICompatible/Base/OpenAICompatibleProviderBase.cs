@@ -24,6 +24,16 @@ public abstract class OpenAICompatibleProviderBase(ProviderHttp http, ILogger lo
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
     }
 
+    /// <summary>The field that carries the output limit (<c>max_tokens</c>; OpenAI: <c>max_completion_tokens</c>).</summary>
+    public virtual string MaxTokensField => "max_tokens";
+
+    /// <summary>Puts a chosen effort into the request (<c>reasoning_effort</c>; OpenRouter: <c>reasoning.effort</c>).</summary>
+    public virtual void SetEffort(JsonObject body, string effort)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+        body["reasoning_effort"] = effort;
+    }
+
     /// <summary>Extra request fields of this provider (OpenRouter asks for the cost in the usage).</summary>
     public virtual void Extend(JsonObject body)
     {

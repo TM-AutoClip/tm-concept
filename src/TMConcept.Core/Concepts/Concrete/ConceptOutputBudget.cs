@@ -31,6 +31,13 @@ public static class ConceptOutputBudget
     }
 
     /// <summary>
+    /// Concepts per batch: as many as fit <paramref name="maxTokens"/> when each takes <paramref name="perConceptHigh"/> output tokens (the
+    /// high end, thinking included), at least 1 and at most <see cref="ConceptLimits.BatchSize"/>.
+    /// </summary>
+    public static int BatchSize(int maxTokens, double perConceptHigh) =>
+        perConceptHigh <= 0 ? ConceptLimits.BatchSize : (int)Math.Clamp(Math.Floor(maxTokens / perConceptHigh), 1, ConceptLimits.BatchSize);
+
+    /// <summary>
     /// The whole output (thinking included) as a multiple of the visible text, low and high end, by effort. A model without effort levels
     /// thinks little or not at all. "Automatic" (empty) counts as high: that is the default of the Claude models. Measured on 8 Nov 2026:
     /// Sonnet 5.5 at high spent about 4–6× the visible text.

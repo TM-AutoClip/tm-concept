@@ -17,4 +17,7 @@ public sealed class OpenAIProvider(ProviderHttp http, ILogger<OpenAIProvider> lo
 
     /// <inheritdoc />
     public override Uri KeyPage { get; } = new("https://platform.openai.com/api-keys");
+
+    /// <inheritdoc />
+    public override string MaxTokensField => "max_completion_tokens";
 }

@@ -46,8 +46,26 @@ public sealed class TopicSuggester(IConceptStore concepts, IRunStore runs, IChat
     /// <summary>Output tokens of a usual answer at effort low (ten short topics and a little thinking): the high end of the estimate.</summary>
     public const int OutputExpected = 3_000;
 
-    /// <summary>The effort sent: low when the model has effort levels, otherwise none.</summary>
+    /// <summary>The effort sent when the model has it (otherwise its lowest known level, see <see cref="EffortFor"/>).</summary>
     public const string Effort = "low";
+
+    /// <summary>Effort levels from the cheapest up (a model's own list may hold only some of them).</summary>
+    private static readonly string[] EffortOrder = ["minimal", "low", "medium", "high", "xhigh", "max"];
+
+    /// <summary>
+    /// The effort sent with <paramref name="model"/>: <see cref="Effort"/> when it has it, otherwise the lowest of its levels known to
+    /// <see cref="EffortOrder"/> (a model with "minimal, medium, high" gets minimal, not the automatic high); none without effort levels.
+    /// </summary>
+    public static string EffortFor(CatalogModel model)
+    {
+        ArgumentNullException.ThrowIfNull(model);
+        if (model.Efforts.Contains(Effort))
+        {
+            return Effort;
+        }
+
+        return EffortOrder.FirstOrDefault(model.Efforts.Contains) ?? string.Empty;
+    }
 
     /// <summary>max_tokens for <paramref name="model"/>: <see cref="OutputMax"/>, or the model's limit when it is smaller.</summary>
     public static int OutputFor(CatalogModel model)
@@ -89,7 +107,7 @@ public sealed class TopicSuggester(IConceptStore concepts, IRunStore runs, IChat
         var cut = false;
         try
         {
-            var effort = model.Model.Efforts.Contains(Effort) ? Effort : string.Empty;
+            var effort = EffortFor(model.Model);
             var answer = await chats.Create(model.Model, model.Key.Secret).SendAsync(new ChatRequest(system, user, Schema: Schema(),
                 MaxOutputTokens: OutputFor(model.Model), Effort: effort, Stream: true, Progress: progress), cancellationToken).ConfigureAwait(false);
             text = answer.Text;
@@ -117,6 +135,21 @@ public sealed class TopicSuggester(IConceptStore concepts, IRunStore runs, IChat
             logger.LogWarning("Topic suggestions failed ({Code}, stop reason {StopReason}, request {RequestId}, {Output} output tokens) after {Usd} USD", ex.Code,
                 ex.StopReason.Length > 0 ? ex.StopReason : "-", ex.RequestId.Length > 0 ? ex.RequestId : "-", ex.ChargedUsage?.Output ?? 0, run.ActualUsd);
             throw;
+        }
+        catch (OperationCanceledException)
+        {
+            // Canceled while the call ran: the provider may bill the prompt (and what was written so far, which is not known here). The
+            // prompt is kept as an estimated cost, so the month's spending does not miss the call.
+            var input = costs.Tokens(system + user, language);
+            run.InputTokens = input;
+            run.ActualUsd = costs.Exact(model.Model, new ChatUsage(input, 0, 0, 0));
+            run.CostExact = false;
+            run.Status = RunStatus.Canceled;
+            run.Error = "canceled";
+            run.FinishedAtUtc = clock.GetUtcNow();
+            await KeepAsync(run).ConfigureAwait(false);
+            logger.LogInformation("Topic suggestions canceled; about {Usd} USD counted for the prompt", run.ActualUsd);
+            throw new TopicsCanceledException(run.ActualUsd);
         }
 
         var topics = cut ? ParsePartial(text) : Parse(text);

@@ -12,7 +12,8 @@ namespace TMConcept.Core.Concepts;
 /// Concept generation. Estimate (no network): prompt tokens from the text; output = count × the profile's measured average ± 15 % (the
 /// measured tokens already include thinking), or before the first run count × the size expected from the target length × the thinking
 /// share of the chosen effort (<see cref="ConceptOutputBudget.ThinkingShare"/>); a batch never costs more output than its max_tokens.
-/// Generate: batches of 20; before every batch the history is read again (so a batch also avoids the concepts of the previous
+/// Generate: batches as large as fit the batch's max_tokens at the high end of that output (<see cref="BatchSizeAsync"/>, 20 at most; 0.1.7
+/// sent 20 whatever the length and effort, so a long Turkish profile at effort high was cut off after about eight); before every batch the history is read again (so a batch also avoids the concepts of the previous
 /// batches; the history is in the user part, so the cached system part stays the same for the whole run), the answer is parsed, the local
 /// duplicate check throws away duplicates and marks similar ones, the batch is saved at once and the run row is updated with the exact
 /// cost. Every batch asks for <see cref="ConceptOutputBudget.MaxOutputTokens"/> (the model's limit, at most 64 000) and logs it. A batch
@@ -40,14 +41,11 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
         count = Math.Clamp(count, ConceptLimits.CountMin, ConceptLimits.CountMax);
         var images = await profiles.ImagesAsync(profile.Id, cancellationToken).ConfigureAwait(false);
         var history = await HistoryTitlesAsync(profile.Id, cancellationToken).ConfigureAwait(false);
-        var average = await runs.AverageConceptOutputTokensAsync(profile.Id, cancellationToken).ConfigureAwait(false);
-        var (perConcept, band) = average > 0
-            ? (average, MeasuredBand)
-            : (ConceptOutputBudget.TokensPerConcept(profile.ContentLanguage, profile.TargetSeconds), ConceptOutputBudget.ThinkingShare(model, effort ?? string.Empty));
+        var (perConcept, band) = await OutputPerConceptAsync(profile, model, effort, cancellationToken).ConfigureAwait(false);
         var roof = ConceptOutputBudget.MaxOutputTokens(model);
         var total = CostEstimate.Zero;
         var first = true;
-        foreach (var size in Batches(count))
+        foreach (var size in Batches(count, ConceptOutputBudget.BatchSize(roof, perConcept * band.High)))
         {
             var prompt = ConceptPromptBuilder.Build(new ConceptPromptInput(profile, images, history, extraPrompt, size, focus));
             var system = costs.Tokens(prompt.System, profile.ContentLanguage);
@@ -68,7 +66,7 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
     /// but the backfill count is still returned: embedding hundreds of earlier concepts takes a while on this computer.
     /// </summary>
     public async Task<(CostEstimate Estimate, int Backfill)> EstimateEmbeddingAsync(Profile profile, Models.CatalogModel model, int count,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, int batchSize = ConceptLimits.BatchSize)
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(model);
@@ -76,7 +74,7 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
         var history = await concepts.HistoryAsync(profile.Id, cancellationToken).ConfigureAwait(false);
         var embedded = (await embeddings.ListAsync(profile.Id, model.Id, cancellationToken).ConfigureAwait(false)).Select(e => e.ConceptId).ToHashSet();
         var missing = history.Count(h => !embedded.Contains(h.Id));
-        var backfill = Math.Min(missing, BackfillLimit * Batches(count).Count());
+        var backfill = Math.Min(missing, BackfillLimit * Batches(count, batchSize).Count());
         if (model.Provider == Models.ModelProviders.Local)
         {
             return (CostEstimate.Zero, backfill);
@@ -85,6 +83,18 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
         var tokens = (count + backfill) * (long)Math.Ceiling(EmbeddingTokensPerConcept * Profiles.OutputLanguages.Of(profile.ContentLanguage).EmbeddingTokenFactor);
         var usd = tokens * model.InputUsd / 1_000_000m;
         return (new CostEstimate(usd, usd, tokens, 0, 0), backfill);
+    }
+
+    /// <summary>
+    /// Concepts per batch for <paramref name="model"/> at <paramref name="effort"/>: as many as fit the batch's max_tokens at the high end of
+    /// the expected output per concept (thinking included), so a full batch is not cut off by its own roof (20 at most).
+    /// </summary>
+    public async Task<int> BatchSizeAsync(Profile profile, Models.CatalogModel model, string effort, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        ArgumentNullException.ThrowIfNull(model);
+        var (perConcept, band) = await OutputPerConceptAsync(profile, model, effort, cancellationToken).ConfigureAwait(false);
+        return ConceptOutputBudget.BatchSize(ConceptOutputBudget.MaxOutputTokens(model), perConcept * band.High);
     }
 
     /// <summary>Tokens of one concept's title and summary in English (other languages: <see cref="Profiles.OutputLanguage.EmbeddingTokenFactor"/>; Turkish about twice).</summary>
@@ -124,7 +134,7 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
         var accepted = new List<Concept>();
         var rejected = 0;
         var problems = 0;
-        var sizes = Batches(count).ToList();
+        var sizes = Batches(count, await BatchSizeAsync(profile, request.Model.Model, request.Model.Effort, cancellationToken).ConfigureAwait(false)).ToList();
         var errorCode = string.Empty;
         var errorDetail = string.Empty;
         var semanticSkipped = 0;
@@ -168,6 +178,16 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
                         run.Id, index + 1, ex.Code, ex.StopReason.Length > 0 ? ex.StopReason : "-", maxTokens, charged.Output);
                     cut = ex;
                     answer = ex.PartialText;
+                }
+                catch (OperationCanceledException)
+                {
+                    // Canceled while the call ran: the provider may bill the prompt (and what was written so far, which is not known here).
+                    // At least the prompt is counted, as an estimate, so the month's spending does not miss the call.
+                    var input = costs.Tokens(prompt.System, profile.ContentLanguage) + costs.Tokens(prompt.User, profile.ContentLanguage);
+                    run.InputTokens += input;
+                    run.ActualUsd += costs.Exact(request.Model.Model, new ChatUsage(input, 0, 0, 0));
+                    run.CostExact = false;
+                    throw;
                 }
 
                 var parsed = ConceptResponseParser.Parse(answer);
@@ -265,13 +285,30 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
         return new ConceptRunResult(run, accepted, rejected, problems, errorCode, errorDetail, semanticSkipped);
     }
 
-    /// <summary>Batch sizes of a count (20, 20, …, rest).</summary>
-    public static IEnumerable<int> Batches(int count)
+    /// <summary>Batch sizes of a count at the largest batch (20, 20, …, rest).</summary>
+    public static IEnumerable<int> Batches(int count) => Batches(count, ConceptLimits.BatchSize);
+
+    /// <summary>Batch sizes of a count with <paramref name="size"/> per batch (size, size, …, rest; the size is kept within 1–20).</summary>
+    public static IEnumerable<int> Batches(int count, int size)
     {
-        for (var left = count; left > 0; left -= ConceptLimits.BatchSize)
+        size = Math.Clamp(size, 1, ConceptLimits.BatchSize);
+        for (var left = count; left > 0; left -= size)
         {
-            yield return Math.Min(left, ConceptLimits.BatchSize);
+            yield return Math.Min(left, size);
         }
+    }
+
+    /// <summary>
+    /// The expected output of one concept and its band: the profile's measured average ± 15 % (it already holds the thinking), or before the
+    /// first run the size expected from the target length × the thinking share of <paramref name="effort"/>.
+    /// </summary>
+    private async Task<(double PerConcept, (double Low, double High) Band)> OutputPerConceptAsync(Profile profile, Models.CatalogModel model, string effort,
+        CancellationToken cancellationToken)
+    {
+        var average = await runs.AverageConceptOutputTokensAsync(profile.Id, cancellationToken).ConfigureAwait(false);
+        return average > 0
+            ? (average, MeasuredBand)
+            : (ConceptOutputBudget.TokensPerConcept(profile.ContentLanguage, profile.TargetSeconds), ConceptOutputBudget.ThinkingShare(model, effort ?? string.Empty));
     }
 
     /// <summary>

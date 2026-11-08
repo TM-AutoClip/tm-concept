@@ -13,10 +13,12 @@ namespace TMConcept.Providers.OpenAICompatible;
 /// <c>POST chat/completions</c>. Images as <c>image_url</c> data addresses; a schema as <c>response_format</c> (json_schema, or json_object
 /// on providers without it). A long call (<see cref="ChatRequest.Stream"/>) is streamed with <c>stream_options.include_usage</c> and read
 /// line by line (<see cref="OpenAICompatibleStreamReader"/>). When the provider rejects one of the optional fields with 400 or 422, the
-/// request is sent once more without them (the parser tolerates a loose answer). No sampling parameters. <c>finish_reason: length</c> (with
+/// request is sent once more without them (the parser tolerates a loose answer). The request's output limit goes as <c>max_tokens</c>
+/// (<c>max_completion_tokens</c> on OpenAI), lowered to the model's limit, and a chosen effort as <c>reasoning_effort</c> (<c>reasoning.effort</c>
+/// on OpenRouter); both are optional fields too. No sampling parameters. <c>finish_reason: length</c> (with
 /// the partial text), a refusal, an <c>error</c> object or <c>finish_reason: error</c> inside a 200 answer, an answer without choices and a
 /// stream that ended without a finish reason are errors with the billed usage (and the raw finish reason). Every answer writes one log
-/// line: model, raw finish reason, the max_tokens and effort sent (most of these providers get neither: "-"), the tokens, the request id and
+/// line: model, raw finish reason, the max_tokens and effort sent ("-" when none, or after a provider refused them), the tokens, the request id and
 /// the time (a warning when it ended badly; never the prompt or the key). The request's progress gets sent → thinking → writing (a streamed
 /// call; reasoning chunks carry no visible text) → done (<see cref="ChatProgressReporter"/>).
 /// </summary>
@@ -24,7 +26,7 @@ public sealed class OpenAICompatibleChatClient(OpenAICompatibleProviderBase prov
     : IChatClient
 {
     // Fields a provider may not know: after a 400/422 the request goes once more without the ones it had.
-    private static readonly string[] Optional = ["response_format", "stream_options"];
+    private static readonly string[] Optional = ["response_format", "stream_options", "max_tokens", "max_completion_tokens", "reasoning_effort", "reasoning"];
 
     /// <inheritdoc />
     public CatalogModel Model { get; } = model;
@@ -53,6 +55,18 @@ public sealed class OpenAICompatibleChatClient(OpenAICompatibleProviderBase prov
             // Without this OpenAI and DeepSeek send no usage in a stream (the cost would be unknown); a provider that rejects it gets the
             // request once more without it.
             body["stream_options"] = new JsonObject { ["include_usage"] = true };
+        }
+
+        // The output limit of the request (lowered to the model's own limit): without it a provider uses its default (DeepSeek: a few
+        // thousand tokens), and a long answer was cut off whatever the program asked for.
+        if (request.MaxOutputTokens > 0)
+        {
+            body[provider.MaxTokensField] = Model.MaxOutputTokens > 0 ? Math.Min(request.MaxOutputTokens, Model.MaxOutputTokens) : request.MaxOutputTokens;
+        }
+
+        if (request.Effort.Length > 0)
+        {
+            provider.SetEffort(body, request.Effort);
         }
 
         if (request.Schema is not null)

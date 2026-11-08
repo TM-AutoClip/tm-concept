@@ -107,7 +107,6 @@
           </Expander.Header>
           <views:StepPickerView DataContext="{Binding Picker}" />
         </Expander>
-        <TextBlock Text="{Binding Status}" Classes="error" TextWrapping="Wrap" />
       </StackPanel>
     </ScrollViewer>
 
@@ -126,6 +125,11 @@
           <Button Content="{DynamicResource common.cancel}" Command="{Binding CancelCommand}" IsVisible="{Binding Busy}" />
           <Button Content="{Binding FillMissingText}" Command="{Binding FillMissingCommand}" IsVisible="{Binding HasMissing}" />
         </StackPanel>
+        <!-- Right under the buttons: why concepts are missing (a warning) and what went wrong (red). -->
+        <TextBlock Name="NoticeLine" Text="{Binding Notice}" Classes="warning" TextWrapping="Wrap"
+                   IsVisible="{Binding Notice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+        <TextBlock Name="StatusLine" Text="{Binding Status}" Classes="error" TextWrapping="Wrap"
+                   IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
         <!-- The running call step by step (sent, thinking with the seconds, writing, concepts ready), so a long wait does not look like a hang. -->
         <StackPanel Spacing="4" IsVisible="{Binding Busy}">
           <TextBlock Name="ProgressLine" Text="{Binding Progress}" Classes="muted" TextWrapping="Wrap" />
@@ -166,9 +170,9 @@
                   <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
                   <Button Grid.Column="1" Content="✎" IsVisible="{Binding Expanded}" ToolTip.Tip="{DynamicResource concepts.edit.tip}"
                           Command="{Binding $parent[ListBox].((vm:ConceptsViewModel)DataContext).EditCommand}" CommandParameter="{Binding}" />
-                  <Button Grid.Column="2" Classes="accent" Content="✓" IsVisible="{Binding Expanded}" ToolTip.Tip="A"
+                  <Button Grid.Column="2" Classes="accent" Content="✓" IsVisible="{Binding Expanded}" ToolTip.Tip="{DynamicResource concepts.approve.tip}"
                           Command="{Binding $parent[ListBox].((vm:ConceptsViewModel)DataContext).ApproveCommand}" CommandParameter="{Binding}" />
-                  <Button Grid.Column="3" Classes="danger" Content="✗" IsVisible="{Binding Expanded}" ToolTip.Tip="D"
+                  <Button Grid.Column="3" Classes="danger" Content="✗" IsVisible="{Binding Expanded}" ToolTip.Tip="{DynamicResource concepts.trash.tip}"
                           Command="{Binding $parent[ListBox].((vm:ConceptsViewModel)DataContext).TrashCommand}" CommandParameter="{Binding}" />
                 </Grid>
                 <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" Classes="muted" IsVisible="{Binding !Expanded}" />
@@ -199,7 +203,14 @@
             <!-- A click opens the text in the editor (fix it, add placeholders). -->
             <Button Classes="link" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                     Command="{Binding $parent[ListBox].((vm:ConceptsViewModel)DataContext).EditCommand}" CommandParameter="{Binding}">
-              <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Summary}" />
+              <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis">
+                <ToolTip.Tip>
+                  <StackPanel Spacing="4" MaxWidth="320">
+                    <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" />
+                    <TextBlock Text="{DynamicResource concepts.approved.tip}" FontWeight="SemiBold" />
+                  </StackPanel>
+                </ToolTip.Tip>
+              </TextBlock>
             </Button>
           </DataTemplate>
         </ListBox.ItemTemplate>

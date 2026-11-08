@@ -65,7 +65,10 @@
             <TextBlock Text="{DynamicResource profile.images}" FontWeight="SemiBold" VerticalAlignment="Center" />
             <Button Content="{DynamicResource profile.images.add}" Command="{Binding AddImagesCommand}" IsEnabled="{Binding !IsNew}" />
           </StackPanel>
-          <TextBlock Text="{DynamicResource profile.images.warning}" Classes="warning" TextWrapping="Wrap" />
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Text="{DynamicResource profile.images.warning}" Classes="warning" TextWrapping="Wrap" VerticalAlignment="Center" />
+            <views:HelpTip Text="{DynamicResource profile.images.warning.more}" />
+          </StackPanel>
           <ItemsControl ItemsSource="{Binding Images}">
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:ProfileImageViewModel">

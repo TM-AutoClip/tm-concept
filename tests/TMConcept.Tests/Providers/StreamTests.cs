@@ -134,8 +134,33 @@ public sealed class StreamTests
         cut.StopReason.ShouldBe("length");
         var line = logger.Entries.Single(e => e.Message.Contains("finish reason", StringComparison.Ordinal));
         line.Level.ShouldBe(LogLevel.Warning);
-        line.Message.ShouldContain("finish reason length, max_tokens -, effort -, tokens in 10 / out 9 / cache read 0");
+        line.Message.ShouldContain("finish reason length, max_tokens 16000, effort -, tokens in 10 / out 9 / cache read 0");
         logger.Entries.ShouldAllBe(e => !e.Message.Contains("PROMPT-TEXT", StringComparison.Ordinal) && !e.Message.Contains(Key, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AnOpenAICompatibleBodyCarriesTheOutputLimitAndTheEffort()
+    {
+        var http = Http(new FakeHttp().Transport);
+        var openai = Catalog.All.First(m => m.Provider == "openai" && m.Id == "gpt-6-luna");
+        var openaiBody = ((OpenAICompatibleChatClient)new OpenAIProvider(http, new ListLogger<OpenAIProvider>()).CreateChat(openai, Key))
+            .Body(new ChatRequest("S", "U", MaxOutputTokens: 100_000, Effort: "low"));
+        openaiBody["max_completion_tokens"]!.GetValue<int>().ShouldBe(64_000, "lowered to the model's own limit");
+        openaiBody.ContainsKey("max_tokens").ShouldBeFalse();
+        openaiBody["reasoning_effort"]!.GetValue<string>().ShouldBe("low");
+
+        var routed = Catalog.All.First(m => m.Provider == "openrouter" && m.Capabilities.HasFlag(ModelCapability.Chat));
+        var routerBody = ((OpenAICompatibleChatClient)new OpenRouterProvider(http, new ListLogger<OpenRouterProvider>()).CreateChat(routed, Key))
+            .Body(new ChatRequest("S", "U", MaxOutputTokens: 64_000, Effort: "high"));
+        routerBody["max_tokens"]!.GetValue<int>().ShouldBe(64_000);
+        routerBody["reasoning"]!["effort"]!.GetValue<string>().ShouldBe("high");
+        routerBody.ContainsKey("reasoning_effort").ShouldBeFalse();
+
+        var deepseek = Catalog.All.First(m => m.Provider == "deepseek" && m.Capabilities.HasFlag(ModelCapability.Chat));
+        var plain = ((OpenAICompatibleChatClient)new DeepSeekProvider(http, new ListLogger<DeepSeekProvider>()).CreateChat(deepseek, Key))
+            .Body(new ChatRequest("S", "U", MaxOutputTokens: 64_000));
+        plain["max_tokens"]!.GetValue<int>().ShouldBe(64_000, "no known limit: the request's own");
+        plain.ContainsKey("reasoning_effort").ShouldBeFalse("no effort chosen: none sent");
     }
 
     [Fact]

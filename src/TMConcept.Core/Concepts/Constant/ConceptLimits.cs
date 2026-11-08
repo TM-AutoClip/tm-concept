@@ -9,7 +9,10 @@ public static class ConceptLimits
     /// <summary>Most concepts in one request.</summary>
     public const int CountMax = 100;
 
-    /// <summary>Concepts per model call (a request of 50 runs as 20 + 20 + 10).</summary>
+    /// <summary>
+    /// Most concepts per model call (a request of 50 runs as 20 + 20 + 10 at most; a long script at a high effort gets smaller batches, see
+    /// <see cref="ConceptOutputBudget.BatchSize"/>).
+    /// </summary>
     public const int BatchSize = 20;
 
     /// <summary>Longest title.</summary>

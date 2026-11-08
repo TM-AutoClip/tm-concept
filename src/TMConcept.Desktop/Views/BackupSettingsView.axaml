@@ -6,7 +6,10 @@
              x:DataType="vm:BackupSettingsViewModel">
   <ScrollViewer>
     <StackPanel Spacing="12" Margin="0,12" MaxWidth="760" HorizontalAlignment="Left">
-      <TextBlock Text="{DynamicResource backup.explain}" TextWrapping="Wrap" Classes="muted" />
+      <StackPanel Orientation="Horizontal">
+        <TextBlock Text="{DynamicResource backup.explain}" TextWrapping="Wrap" Classes="muted" VerticalAlignment="Center" />
+        <views:HelpTip Text="{DynamicResource backup.explain.more}" />
+      </StackPanel>
       <StackPanel Orientation="Horizontal" Spacing="8">
         <TextBlock Text="{DynamicResource backup.last}" />
         <TextBlock Text="{Binding LastBackup}" FontWeight="SemiBold" />
