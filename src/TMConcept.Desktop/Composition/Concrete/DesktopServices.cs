@@ -81,6 +81,7 @@ public static class DesktopServices
         services.AddSingleton<Core.Speech.IVoiceSampleConverter, Engines.Media.FfmpegVoiceSampleConverter>();
         services.AddSingleton<Core.Speech.VoiceSampleLibrary>();
         services.AddSingleton<Core.Speech.ISpeechEngine, Speech.Speech.PocketSpeechEngine>();
+        services.AddSingleton<Core.Speech.ISpeechEngine, Speech.Speech.ChatterboxSpeechEngine>();
         services.AddSingleton<Speech.Embeddings.LocalEmbedder>();
         services.AddSingleton<Core.Duplicates.ILocalEmbedder>(s => s.GetRequiredService<Speech.Embeddings.LocalEmbedder>());
         services.AddSingleton<Core.Speech.ISpeechEngine, Providers.Speech.OpenAISpeechEngine>();

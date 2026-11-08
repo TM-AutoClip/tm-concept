@@ -32,4 +32,7 @@ public enum ToolKind
 
     /// <summary>Pocket TTS voice model (sherpa-onnx, English, copies a voice from a sample).</summary>
     PocketVoice = 9,
+
+    /// <summary>A file of the Chatterbox Multilingual V3 voice model (ONNX graphs, run with the ONNX Runtime of the speech libraries).</summary>
+    ChatterboxVoice = 10,
 }

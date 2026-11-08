@@ -52,8 +52,9 @@ needed) and narrates it with a **free local voice**. It runs on Windows and Linu
   in (API keys only when you tick them).
 - **Two interface languages:** English and Turkish.
 
-It does **not** read other channels and does not use reference videos. It can speak English videos with **your own voice** (Pocket TTS,
-from a short recording you add; whose voice you copy is your responsibility).
+It does **not** read other channels and does not use reference videos. It can speak videos with **your own voice** (Pocket TTS for English,
+Chatterbox Multilingual V3 for Turkish and nine more languages, from a short recording you add; whose voice you copy is your
+responsibility).
 
 ## What it costs
 
@@ -144,6 +145,10 @@ the model that describes a sample image. Each step says what it is for:
 - **Your own voice** — **Pocket TTS** (local, free, English only): Settings → Voice and pronunciation → add a clean recording of 3–15 s
   (WAV, MP3, M4A, OGG, FLAC; ffmpeg converts it), then choose it as the voice of the step. The recording stays in the encrypted
   database. Weights CC-BY-4.0: credit "Pocket TTS, Kyutai (CC-BY-4.0)" when you publish. No speed setting.
+  **Chatterbox Multilingual V3** (Resemble AI, MIT; local, free) speaks Turkish, English, German, Spanish, French, Italian, Portuguese,
+  Dutch, Polish and Swedish with the same recordings. It runs on the processor only (the graphics card is not used) and is slow: about
+  6× the length of the speech on an 8-thread share of a 16-thread processor, plus about 1.5 minutes to load the model for the first scene.
+  Long scenes are spoken sentence by sentence (at most 300 characters at a time). No speed setting, no watermark.
 - **Pronunciation** — Settings → Voice and pronunciation: per video language, words the voice should read differently ("Viking" →
   "Vikink" in Turkish; Turkish comes with a small list, you add your own). Only the voice changes; subtitles keep the written word.
 - **Duplicate check by meaning** — optional: the local **Multilingual MiniLM** (free, on this computer, 50+ languages including Turkish)
@@ -164,6 +169,7 @@ starts and nothing is paid for; the reason is shown. A kept choice whose compone
 | Supertonic 3 + sherpa-onnx 2.0.1 | github.com (k2-fsa) | 140 MB |
 | Kokoro 82M v1.0 int8 (needs sherpa-onnx) | github.com (k2-fsa) | 130 MB |
 | Pocket TTS int8 (needs sherpa-onnx) | github.com (k2-fsa) | 98 MB |
+| Chatterbox Multilingual V3 ONNX (Masterx export, 4-bit language model; needs sherpa-onnx) | huggingface.co | 1.56 GB |
 | Multilingual MiniLM (paraphrase-multilingual-MiniLM-L12-v2, int8 ONNX + tokenizer; needs sherpa-onnx) | huggingface.co | 127 MB |
 | stable-diffusion.cpp master-890 (Windows: CUDA 12 build + CUDA runtime; Linux x64: Vulkan build) | github.com (leejet) | 900 MB / 40 MB |
 | FLUX.2 klein 4B weights (model, Qwen3-4B text encoder, VAE) | huggingface.co | 5.3 GB |

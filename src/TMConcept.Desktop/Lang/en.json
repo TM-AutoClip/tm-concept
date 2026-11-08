@@ -551,7 +551,7 @@
   "speech.fallback.language": "The saved voice ({0}) does not speak {1}; the language's default voice is chosen: {2}.",
   "speech.fallback.voice": "The saved voice is gone; {0} is chosen.",
   "voices.samples.title": "Your own voices (voice copy)",
-  "voices.samples.explain": "Pocket TTS (English videos only) speaks with one of these recordings, in the recording's voice. Choose a clean recording of one person speaking, 3–15 seconds long (WAV, MP3, M4A, OGG or FLAC); a longer one is cut at 15 seconds. The recording is kept in the encrypted database and goes into a backup with the settings. Whose voice you copy is your responsibility: do not use someone else's voice without their permission.",
+  "voices.samples.explain": "Pocket TTS (English videos only) and Chatterbox Multilingual V3 (Turkish and nine more video languages) speak with one of these recordings, in the recording's voice. Choose a clean recording of one person speaking, 3–15 seconds long (WAV, MP3, M4A, OGG or FLAC); a longer one is cut at 15 seconds. The recording is kept in the encrypted database and goes into a backup with the settings. Whose voice you copy is your responsibility: do not use someone else's voice without their permission.",
   "voices.samples.name": "Name (e.g. My voice)",
   "voices.samples.add": "Choose a recording and add…",
   "voices.samples.play": "▶ Play the recording",
@@ -567,6 +567,7 @@
   "voices.samples.problem.same": "This recording is already added.",
   "install.purpose.voice_sample": "If you cancel, the recording is not added.",
   "speech.pocket.note": "Pocket TTS (Kyutai): free, runs on this computer, English only; it speaks with your own voice added in Settings → Voice and pronunciation. The speed setting has no effect on this voice. Weights CC-BY-4.0: when you publish, write \"Voice: Pocket TTS, Kyutai (CC-BY-4.0)\" in the description. Whose voice you copy is your responsibility.",
+  "speech.chatterbox.note": "Chatterbox Multilingual V3 (Resemble AI): free, runs on this computer, speaks Turkish, English, German, Spanish, French, Italian, Portuguese, Dutch, Polish and Swedish with your own voice added in Settings → Voice and pronunciation. It runs on the processor only (the graphics card is not used): about 6 times as long as the speech on a 16-thread processor (longer with fewer cores), so a 5-minute narration takes about half an hour. The first scene also waits about 1.5 minutes while the model loads. The speed setting has no effect on this voice. MIT license, no watermark: say that the voice is AI-generated when you publish. Whose voice you copy is your responsibility.",
   "speech.voices.none": "This model has no voice to choose: add your own voice in Settings → Voice and pronunciation.",
   "picker.not_started.voice": "Not started: \"{0}\" has no voice — add your own voice in Settings → Voice and pronunciation."
 }

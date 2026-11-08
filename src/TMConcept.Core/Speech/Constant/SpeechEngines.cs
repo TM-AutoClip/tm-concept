@@ -11,4 +11,7 @@ public static class SpeechEngines
 
     /// <summary>Local Pocket TTS (English only; speaks with the user's own voice sample).</summary>
     public const string Pocket = "pocket";
+
+    /// <summary>Local Chatterbox Multilingual V3 (Turkish and nine more languages; speaks with the user's own voice sample).</summary>
+    public const string Chatterbox = "chatterbox";
 }

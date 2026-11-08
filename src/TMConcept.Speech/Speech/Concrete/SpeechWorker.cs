@@ -47,6 +47,7 @@ public static class SpeechWorker
         SherpaSynthesizer? synthesizer = null;
         KokoroLexicon? lexicon = null;
         Embeddings.OnnxEmbedder? embedder = null;
+        Chatterbox.ChatterboxSynthesizer? chatterbox = null;
         try
         {
             while (reader.ReadLine() is { } line)
@@ -59,13 +60,18 @@ public static class SpeechWorker
                 SpeechWorkerReply reply;
                 try
                 {
-                    if (synthesizer is null && embedder is null)
+                    if (synthesizer is null && embedder is null && chatterbox is null)
                     {
                         var loading = Stopwatch.StartNew();
                         if (Embeddings.OnnxEmbedder.IsHere())
                         {
                             embedder = new Embeddings.OnnxEmbedder(arguments[1], Math.Clamp(threads, 1, 16));
                             logger.LogInformation("Embedding model loaded in {Ms} ms (ONNX Runtime {Version})", loading.ElapsedMilliseconds, embedder.RuntimeVersion);
+                        }
+                        else if (Chatterbox.ChatterboxSynthesizer.IsHere())
+                        {
+                            chatterbox = new Chatterbox.ChatterboxSynthesizer(arguments[1], Math.Clamp(threads, 1, 16));
+                            logger.LogInformation("Chatterbox loaded in {Ms} ms (ONNX Runtime {Version}): {Graphs}", loading.ElapsedMilliseconds, chatterbox.RuntimeVersion, chatterbox.LoadTimes);
                         }
                         else
                         {
@@ -92,9 +98,16 @@ public static class SpeechWorker
                         logger.LogInformation("Kokoro dictionary read: {Words} words", lexicon.Count);
                     }
 
-                    reply = synthesizer is null
-                        ? new SpeechWorkerReply(false, 0, "engine", "This worker holds the embedding model, not a voice.")
-                        : Speak(synthesizer, lexicon, request);
+                    reply = chatterbox is not null
+                        ? Speak(chatterbox, request)
+                        : synthesizer is null
+                            ? new SpeechWorkerReply(false, 0, "engine", "This worker holds the embedding model, not a voice.")
+                            : Speak(synthesizer, lexicon, request);
+                    if (chatterbox is not null && reply.Ok)
+                    {
+                        logger.LogInformation("Chatterbox: {Tokens} speech tokens; voice sample {Sample} ms, language model {Language} ms, decoder {Decoder} ms",
+                            chatterbox.LastTokens, chatterbox.LastTimes.Sample, chatterbox.LastTimes.Language, chatterbox.LastTimes.Decoder);
+                    }
                     if (reply.Ok)
                     {
                         logger.LogInformation("Scene spoken ({Language}, {Characters} characters): {AudioMs} ms of audio in {Ms} ms", request.Language,
@@ -136,6 +149,7 @@ public static class SpeechWorker
         {
             synthesizer?.Dispose();
             embedder?.Dispose();
+            chatterbox?.Dispose();
         }
     }
 
@@ -150,6 +164,29 @@ public static class SpeechWorker
 
         SherpaNative.Use(libraryFolder);
         return new SherpaSynthesizer(Math.Clamp(threads, 1, 16));
+    }
+
+    private static SpeechWorkerReply Speak(Chatterbox.ChatterboxSynthesizer chatterbox, SpeechWorkerRequest request)
+    {
+        if (request.ReferenceWav is not { Length: > 0 } wav)
+        {
+            return new SpeechWorkerReply(false, 0, "engine", "Chatterbox needs a voice sample.");
+        }
+
+        var (reference, rate) = WaveFile.ReadMonoPcm16(wav);
+        if (rate != Chatterbox.ChatterboxModel.SampleRate || reference.Length == 0)
+        {
+            return new SpeechWorkerReply(false, 0, "engine", "The voice sample is not a 24 kHz recording.");
+        }
+
+        var samples = chatterbox.Speak(request.Text, request.Language, reference);
+        if (samples.Length == 0)
+        {
+            return new SpeechWorkerReply(false, 0, "engine", "The voice produced no audio for the text.");
+        }
+
+        WaveFile.WritePcm16(request.OutputWav, samples, Chatterbox.ChatterboxModel.SampleRate);
+        return new SpeechWorkerReply(true, (long)Math.Round(samples.Length * 1000.0 / Chatterbox.ChatterboxModel.SampleRate), string.Empty, string.Empty);
     }
 
     private static SpeechWorkerReply Speak(SherpaSynthesizer synthesizer, KokoroLexicon? lexicon, SpeechWorkerRequest request)

@@ -4,8 +4,8 @@ using TMConcept.Speech.Speech;
 
 namespace TMConcept.Speech.Components;
 
-/// <summary>A local voice model (after the sherpa-onnx libraries).</summary>
-public sealed class VoiceComponent(SherpaSpeechEngineBase voice, SpeechModelInstaller installer) : IComponent
+/// <summary>A local voice model (after the sherpa-onnx libraries, which every local voice needs).</summary>
+public sealed class VoiceComponent(LocalSpeechEngineBase voice) : IComponent
 {
     /// <inheritdoc />
     public string Code => ComponentCodes.VoicePrefix + voice.Code;
@@ -23,12 +23,10 @@ public sealed class VoiceComponent(SherpaSpeechEngineBase voice, SpeechModelInst
     public bool Ready => voice.Ready;
 
     /// <inheritdoc />
-    public IReadOnlyList<ComponentDownload> Downloads() => voice.ModelInstalled
-        ? []
-        : [new ComponentDownload(voice.Name + " " + voice.Model.Version, voice.Model.Url.Host, voice.Model.ApproximateBytes)];
+    public IReadOnlyList<ComponentDownload> Downloads() => voice.Downloads();
 
     /// <inheritdoc />
-    public IReadOnlyList<string> Folders() => [Path.GetDirectoryName(installer.Folder(voice.Model))!];
+    public IReadOnlyList<string> Folders() => [voice.InstallFolder];
 
     /// <inheritdoc />
     public Task RefreshAsync(CancellationToken cancellationToken) => Task.CompletedTask;

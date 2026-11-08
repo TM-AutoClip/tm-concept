@@ -51,8 +51,8 @@ veritabanını şifreli tutar.
   (API anahtarları yalnız işaretlersen).
 - **İki arayüz dili:** Türkçe ve İngilizce.
 
-Başka kanalları **okumaz**, referans video kullanmaz. İngilizce videoları **kendi sesinle** seslendirebilir (Pocket TTS, eklediğin kısa bir
-kayıttan; kimin sesini kopyaladığın senin sorumluluğunda).
+Başka kanalları **okumaz**, referans video kullanmaz. Videoları **kendi sesinle** seslendirebilir (İngilizce için Pocket TTS, Türkçe ve
+dokuz dil daha için Chatterbox Multilingual V3; eklediğin kısa bir kayıttan; kimin sesini kopyaladığın senin sorumluluğunda).
 
 ## Ne kadar tutar
 
@@ -140,6 +140,10 @@ adım ne işe yaradığını yazar:
 - **Kendi sesin** — **Pocket TTS** (yerel, ücretsiz, yalnız İngilizce): Ayarlar → Ses ve telaffuz → 3–15 saniyelik temiz bir kayıt ekle
   (WAV, MP3, M4A, OGG, FLAC; ffmpeg dönüştürür), sonra adımda ses olarak seç. Kayıt şifreli veritabanında kalır. Ağırlıklar CC-BY-4.0:
   yayınlarken "Pocket TTS, Kyutai (CC-BY-4.0)" atfını yaz. Hız ayarı yok.
+  **Chatterbox Multilingual V3** (Resemble AI, MIT; yerel, ücretsiz) aynı kayıtlarla Türkçe, İngilizce, Almanca, İspanyolca, Fransızca,
+  İtalyanca, Portekizce, Felemenkçe, Lehçe ve İsveççe konuşur. Yalnız işlemcide çalışır (ekran kartı kullanılmaz) ve yavaştır: 16 iş
+  parçacıklı bir işlemcinin 8 iş parçacığıyla konuşmanın yaklaşık 6 katı, ilk sahnede ayrıca modelin yüklenmesi için yaklaşık 1,5
+  dakika. Uzun sahneler cümle cümle (bir seferde en çok 300 karakter) okunur. Hız ayarı yok, filigran yok.
 - **Telaffuz** — Ayarlar → Ses ve telaffuz: her video dili için sesin farklı okuması gereken kelimeler (Türkçede "Viking" → "Vikink";
   Türkçe küçük bir hazır listeyle gelir, kendi kelimelerini eklersin). Yalnız ses değişir; altyazı yazıldığı gibi kalır.
 - **Anlamca tekrar denetimi** — isteğe bağlı: yerel **Multilingual MiniLM** (ücretsiz, bu bilgisayarda, Türkçe dahil 50'den fazla dil) ya
@@ -160,6 +164,7 @@ başlamaz, hiçbir şey ödenmez; sebebi görünür. Saklanan bir seçimin bile�
 | Supertonic 3 + sherpa-onnx 2.0.1 | github.com (k2-fsa) | 140 MB |
 | Kokoro 82M v1.0 int8 (sherpa-onnx gerekir) | github.com (k2-fsa) | 130 MB |
 | Pocket TTS int8 (sherpa-onnx gerekir) | github.com (k2-fsa) | 98 MB |
+| Chatterbox Multilingual V3 ONNX (Masterx dönüşümü, 4 bit dil modeli; sherpa-onnx gerekir) | huggingface.co | 1,56 GB |
 | Multilingual MiniLM (paraphrase-multilingual-MiniLM-L12-v2, int8 ONNX + tokenizer; sherpa-onnx gerekir) | huggingface.co | 127 MB |
 | stable-diffusion.cpp master-890 (Windows: CUDA 12 derlemesi + CUDA kitaplıkları; Linux x64: Vulkan derlemesi) | github.com (leejet) | 900 MB / 40 MB |
 | FLUX.2 klein 4B ağırlıkları (model, Qwen3-4B metin kodlayıcı, VAE) | huggingface.co | 5,3 GB |

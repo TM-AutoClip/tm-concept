@@ -164,8 +164,117 @@ internal sealed unsafe class OnnxRuntime : IDisposable
         }
     }
 
+    /// <summary>A float tensor over <paramref name="data"/> (not copied: the array stays pinned until the value is disposed).</summary>
+    public Value Tensor(float[] data, params long[] shape) => Tensor(data, sizeof(float), TensorFloat, shape);
+
+    /// <summary>An int64 tensor over <paramref name="data"/> (not copied: the array stays pinned until the value is disposed).</summary>
+    public Value Tensor(long[] data, params long[] shape) => Tensor(data, sizeof(long), TensorInt64, shape);
+
+    /// <summary>
+    /// Runs <paramref name="session"/> with the named values and returns the named outputs in that order (ONNX Runtime allocates them; the
+    /// caller disposes them). Used by the voice of Chatterbox, whose language model hands its key/value cache from one step to the next
+    /// without copying it into managed memory.
+    /// </summary>
+    public Value[] Run(Session session, IReadOnlyList<(string Name, Value Value)> inputs, IReadOnlyList<string> outputs)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(inputs);
+        ArgumentNullException.ThrowIfNull(outputs);
+        var inputNames = new IntPtr[inputs.Count];
+        var inputValues = new IntPtr[inputs.Count];
+        for (var i = 0; i < inputs.Count; i++)
+        {
+            inputNames[i] = session.NameOf(inputs[i].Name);
+            inputValues[i] = inputs[i].Value.Handle;
+        }
+
+        var outputNames = new IntPtr[outputs.Count];
+        for (var i = 0; i < outputs.Count; i++)
+        {
+            outputNames[i] = session.NameOf(outputs[i]);
+        }
+
+        var results = new IntPtr[outputs.Count];
+        fixed (IntPtr* names = inputNames)
+        fixed (IntPtr* values = inputValues)
+        fixed (IntPtr* wanted = outputNames)
+        fixed (IntPtr* produced = results)
+        {
+            Check(((delegate* unmanaged<IntPtr, IntPtr, IntPtr*, IntPtr*, nuint, IntPtr*, nuint, IntPtr*, IntPtr>)_api[9])(session.Handle, IntPtr.Zero,
+                names, values, (nuint)inputNames.Length, wanted, (nuint)outputNames.Length, produced));
+        }
+
+        return results.Select(r => new Value(this, r, default)).ToArray();
+    }
+
     /// <summary>Closes a session.</summary>
     public void Close(IntPtr session) => ((delegate* unmanaged<IntPtr, void>)_api[95])(session);
+
+    private Value Tensor(Array data, int elementSize, int type, long[] shape)
+    {
+        ArgumentNullException.ThrowIfNull(data);
+        ArgumentNullException.ThrowIfNull(shape);
+        if (shape.Aggregate(1L, (a, b) => a * b) != data.Length)
+        {
+            throw new ArgumentException("The tensor shape does not match its data.", nameof(shape));
+        }
+
+        IntPtr memory;
+        Check(((delegate* unmanaged<int, int, IntPtr*, IntPtr>)_api[69])(1, 0, &memory));
+        var pin = GCHandle.Alloc(data, GCHandleType.Pinned);
+        try
+        {
+            IntPtr value;
+            fixed (long* dims = shape)
+            {
+                // An empty tensor (the key/value cache before the first step) still needs a valid data address; its length is 0.
+                Check(((delegate* unmanaged<IntPtr, IntPtr, nuint, long*, nuint, int, IntPtr*, IntPtr>)_api[49])(memory, pin.AddrOfPinnedObject(),
+                    (nuint)(data.Length * elementSize), dims, (nuint)shape.Length, type, &value));
+            }
+
+            return new Value(this, value, pin);
+        }
+        catch
+        {
+            pin.Free();
+            throw;
+        }
+        finally
+        {
+            ((delegate* unmanaged<IntPtr, void>)_api[94])(memory);
+        }
+    }
+
+    private long[] ShapeOf(IntPtr value)
+    {
+        IntPtr info;
+        Check(((delegate* unmanaged<IntPtr, IntPtr*, IntPtr>)_api[65])(value, &info));
+        try
+        {
+            nuint count;
+            Check(((delegate* unmanaged<IntPtr, nuint*, IntPtr>)_api[61])(info, &count));
+            var dims = new long[(int)count];
+            fixed (long* d = dims)
+            {
+                Check(((delegate* unmanaged<IntPtr, long*, nuint, IntPtr>)_api[62])(info, d, count));
+            }
+
+            return dims;
+        }
+        finally
+        {
+            ((delegate* unmanaged<IntPtr, void>)_api[99])(info);
+        }
+    }
+
+    private IntPtr DataOf(IntPtr value)
+    {
+        IntPtr pointer;
+        Check(((delegate* unmanaged<IntPtr, IntPtr*, IntPtr>)_api[51])(value, &pointer));
+        return pointer;
+    }
+
+    private void Release(IntPtr value) => ((delegate* unmanaged<IntPtr, void>)_api[96])(value);
 
     /// <inheritdoc />
     public void Dispose()
@@ -210,6 +319,9 @@ internal sealed unsafe class OnnxRuntime : IDisposable
     /// <summary>An open model: its handle and the names of its inputs and outputs.</summary>
     internal sealed class Session(OnnxRuntime runtime, IntPtr handle, IReadOnlyList<string> inputs, IReadOnlyList<string> outputs) : IDisposable
     {
+        // UTF-8 copies of the names, made once: a language model step passes 61 names, thousands of steps per video.
+        private readonly Dictionary<string, IntPtr> _names = new(StringComparer.Ordinal);
+
         /// <summary>The native handle.</summary>
         public IntPtr Handle { get; private set; } = handle;
 
@@ -219,6 +331,18 @@ internal sealed unsafe class OnnxRuntime : IDisposable
         /// <summary>Output names.</summary>
         public IReadOnlyList<string> Outputs { get; } = outputs;
 
+        /// <summary>The native UTF-8 copy of an input or output name (kept until the session is closed).</summary>
+        public IntPtr NameOf(string name)
+        {
+            if (!_names.TryGetValue(name, out var pointer))
+            {
+                pointer = Marshal.StringToCoTaskMemUTF8(name);
+                _names[name] = pointer;
+            }
+
+            return pointer;
+        }
+
         /// <inheritdoc />
         public void Dispose()
         {
@@ -226,6 +350,54 @@ internal sealed unsafe class OnnxRuntime : IDisposable
             {
                 runtime.Close(Handle);
                 Handle = IntPtr.Zero;
+            }
+
+            foreach (var pointer in _names.Values)
+            {
+                Marshal.FreeCoTaskMem(pointer);
+            }
+
+            _names.Clear();
+        }
+    }
+
+    /// <summary>A tensor of ONNX Runtime: an input over a pinned managed array, or an output ONNX Runtime allocated.</summary>
+    internal sealed class Value(OnnxRuntime runtime, IntPtr handle, GCHandle pin) : IDisposable
+    {
+        private GCHandle _pin = pin;
+
+        /// <summary>The native handle.</summary>
+        public IntPtr Handle { get; private set; } = handle;
+
+        /// <summary>The shape.</summary>
+        public long[] Shape() => runtime.ShapeOf(Handle);
+
+        /// <summary>The float data in place (valid while the value lives).</summary>
+        public ReadOnlySpan<float> Floats()
+        {
+            var count = Shape().Aggregate(1L, (a, b) => a * b);
+            return new ReadOnlySpan<float>((void*)runtime.DataOf(Handle), checked((int)count));
+        }
+
+        /// <summary>A copy of the int64 data.</summary>
+        public long[] Longs()
+        {
+            var count = Shape().Aggregate(1L, (a, b) => a * b);
+            return new ReadOnlySpan<long>((void*)runtime.DataOf(Handle), checked((int)count)).ToArray();
+        }
+
+        /// <inheritdoc />
+        public void Dispose()
+        {
+            if (Handle != IntPtr.Zero)
+            {
+                runtime.Release(Handle);
+                Handle = IntPtr.Zero;
+            }
+
+            if (_pin.IsAllocated)
+            {
+                _pin.Free();
             }
         }
     }

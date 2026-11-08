@@ -97,6 +97,22 @@ public sealed class VoiceSampleLibrary(IVoiceSampleStore store, IVoiceSampleConv
         logger.LogInformation("Voice sample removed");
     }
 
+    /// <summary>The samples as the voices of a voice that copies a voice ("My voice (12 s)").</summary>
+    public IReadOnlyList<SpeechVoice> Voices() =>
+        Samples.Select(s => new SpeechVoice(VoiceId(s.Id), s.Name + " (" + (s.DurationMs / 1000.0).ToString("0", CultureInfo.InvariantCulture) + " s)"))
+            .ToList();
+
+    /// <summary>
+    /// Writes the sample <paramref name="voice"/> names to a work file for one request of <paramref name="engine"/> (the caller deletes it with
+    /// <see cref="Delete"/>); a <see cref="SpeechException"/> (code "voice") when the voice names no sample or the sample is gone.
+    /// </summary>
+    public Task<string> WriteForAsync(string voice, string engine, CancellationToken cancellationToken)
+    {
+        var id = SampleOf(voice) ?? throw new SpeechException(
+            engine + " speaks with your own voice: add a voice sample in Settings → Voice and pronunciation and choose it.") { Code = "voice" };
+        return WriteAsync(id, cancellationToken);
+    }
+
     /// <summary>
     /// Writes a sample to a work file for one speech request and returns its path (the caller deletes it with <see cref="Delete"/>); a
     /// <see cref="SpeechException"/> (code "voice") when the sample is gone.

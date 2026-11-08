@@ -5,6 +5,7 @@
     { "id": "supertonic", "name": "Supertonic 3", "capabilities": "Speech", "requires": ["voice.supertonic"] },
     { "id": "kokoro", "name": "Kokoro 82M (English)", "capabilities": "Speech", "requires": ["voice.kokoro"] },
     { "id": "pocket", "name": "Pocket TTS (English, your own voice)", "capabilities": "Speech", "requires": ["voice.pocket"] },
+    { "id": "chatterbox", "name": "Chatterbox Multilingual V3 (your own voice)", "capabilities": "Speech", "requires": ["voice.chatterbox"] },
     { "id": "paraphrase-multilingual-minilm", "name": "Multilingual MiniLM (meaning check)", "capabilities": "Embedding", "requires": ["embedding.paraphrase-multilingual-minilm"] },
     { "id": "flux2-klein-4b", "name": "FLUX.2 klein 4B", "capabilities": "Image", "requires": ["image.flux2-klein-4b"], "minVideoMemoryGb": 6 },
     { "id": "z-image-turbo", "name": "Z-Image Turbo", "capabilities": "Image", "requires": ["image.z-image-turbo"], "minVideoMemoryGb": 6 }

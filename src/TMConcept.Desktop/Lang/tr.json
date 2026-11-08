@@ -551,7 +551,7 @@
   "speech.fallback.language": "Kayıtlı ses ({0}) {1} konuşmuyor; bu dilin varsayılan sesi seçildi: {2}.",
   "speech.fallback.voice": "Kayıtlı ses artık yok; {0} seçildi.",
   "voices.samples.title": "Kendi seslerim (ses kopyalama)",
-  "voices.samples.explain": "Pocket TTS (yalnız İngilizce videolar) bu kayıtlardan biriyle, kaydın sesiyle konuşur. Tek kişinin konuştuğu, gürültüsüz, 3–15 saniyelik bir kayıt seç (WAV, MP3, M4A, OGG ya da FLAC); daha uzunu 15. saniyede kesilir. Kayıt şifreli veritabanında tutulur ve yedeğe ayarlarla girer. Kimin sesini kopyaladığın senin sorumluluğunda: başkasının sesini izni olmadan kullanma.",
+  "voices.samples.explain": "Pocket TTS (yalnız İngilizce videolar) ve Chatterbox Multilingual V3 (Türkçe ve dokuz video dili daha) bu kayıtlardan biriyle, kaydın sesiyle konuşur. Tek kişinin konuştuğu, gürültüsüz, 3–15 saniyelik bir kayıt seç (WAV, MP3, M4A, OGG ya da FLAC); daha uzunu 15. saniyede kesilir. Kayıt şifreli veritabanında tutulur ve yedeğe ayarlarla girer. Kimin sesini kopyaladığın senin sorumluluğunda: başkasının sesini izni olmadan kullanma.",
   "voices.samples.name": "Adı (ör. Kendi sesim)",
   "voices.samples.add": "Kayıt seç ve ekle…",
   "voices.samples.play": "▶ Kaydı dinle",
@@ -567,6 +567,7 @@
   "voices.samples.problem.same": "Bu kayıt zaten ekli.",
   "install.purpose.voice_sample": "Vazgeçersen kayıt eklenmez.",
   "speech.pocket.note": "Pocket TTS (Kyutai): ücretsiz, bu bilgisayarda çalışır, yalnız İngilizce; Ayarlar → Ses ve telaffuz'da eklediğin kendi sesinle konuşur. Hız ayarı bu seste etkisiz. Ağırlıklar CC-BY-4.0: yayınlarken açıklamaya \"Ses: Pocket TTS, Kyutai (CC-BY-4.0)\" yaz. Kimin sesini kopyaladığın senin sorumluluğunda.",
+  "speech.chatterbox.note": "Chatterbox Multilingual V3 (Resemble AI): ücretsiz, bu bilgisayarda çalışır; Ayarlar → Ses ve telaffuz'da eklediğin kendi sesinle Türkçe, İngilizce, Almanca, İspanyolca, Fransızca, İtalyanca, Portekizce, Felemenkçe, Lehçe ve İsveççe konuşur. Yalnız işlemcide çalışır (ekran kartı kullanılmaz): 16 iş parçacıklı bir işlemcide konuşmanın yaklaşık 6 katı sürer (daha az çekirdekte daha uzun), 5 dakikalık bir seslendirme yaklaşık yarım saat tutar. İlk sahne ayrıca modelin yüklenmesi için yaklaşık 1,5 dakika bekler. Hız ayarı bu seste etkisiz. MIT lisansı, filigran yok: yayınlarken sesin yapay zekâ ile üretildiğini belirt. Kimin sesini kopyaladığın senin sorumluluğunda.",
   "speech.voices.none": "Bu modelin seçilecek sesi yok: Ayarlar → Ses ve telaffuz'dan kendi sesini ekle.",
   "picker.not_started.voice": "Başlamadı: \"{0}\" için ses yok — Ayarlar → Ses ve telaffuz'dan kendi sesini ekle."
 }

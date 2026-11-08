@@ -1,4 +1,3 @@
-using System.Globalization;
 using Microsoft.Extensions.Logging;
 using TMConcept.Core.Profiles;
 using TMConcept.Core.Speech;
@@ -30,9 +29,7 @@ public sealed class PocketSpeechEngine(SpeechModelInstaller installer, IToolLoca
     public override bool Supports(string language) => language == ContentLanguages.English;
 
     /// <inheritdoc />
-    public override IReadOnlyList<SpeechVoice> Voices(string language) =>
-        samples.Samples.Select(s => new SpeechVoice(VoiceSampleLibrary.VoiceId(s.Id),
-            s.Name + " (" + (s.DurationMs / 1000.0).ToString("0", CultureInfo.InvariantCulture) + " s)")).ToList();
+    public override IReadOnlyList<SpeechVoice> Voices(string language) => samples.Voices();
 
     /// <inheritdoc />
     protected override SpeechWorkerRequest Request(SpeechRequest request)
@@ -45,12 +42,7 @@ public sealed class PocketSpeechEngine(SpeechModelInstaller installer, IToolLoca
     protected override async Task<SpeechWorkerRequest> RequestAsync(SpeechRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var id = VoiceSampleLibrary.SampleOf(request.Voice)
-            ?? throw new SpeechException("Pocket TTS speaks with your own voice: add a voice sample in Settings → Voice and pronunciation and choose it.")
-            {
-                Code = "voice",
-            };
-        var reference = await samples.WriteAsync(id, cancellationToken).ConfigureAwait(false);
+        var reference = await samples.WriteForAsync(request.Voice, Name, cancellationToken).ConfigureAwait(false);
         return Request(request) with { ReferenceWav = reference };
     }
 
