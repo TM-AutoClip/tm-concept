@@ -15,9 +15,9 @@ public static class VideoCodePrompt
 {
     /// <summary>
     /// Version of the prompts, kept on every video (2: subtitle rule and the names the safety check refuses; 3: the video's language; 4: the
-    /// scene transitions).
+    /// scene transitions; 5: the transitions are read from the input, never hard-coded, so a later version with edited ones follows them).
     /// </summary>
-    public const string Version = "4";
+    public const string Version = "5";
 
     /// <summary>The system text of an engine; <paramref name="subtitles"/>: subtitles are burned in after the render.</summary>
     public static string System(IVideoEngine engine, bool subtitles)
@@ -38,6 +38,8 @@ public static class VideoCodePrompt
             {caption}
             A scene marked "hard cut" begins with a hard cut: no cross-fade, slide or other animated transition into it. A scene marked "fade"
             gets a short fade through black at its start from the program after the render: do not animate a transition into it yourself.
+            Read each scene's transition from the input at render time ("cut", "fade" or empty) and never hard-code which scenes have one:
+            the same code is rendered again later with edited transitions.
             The code passes an automatic safety check. Write plain drawing code only, and also avoid these harmless forms the check refuses:
             no variable, parameter or property named location, top, parent, opener or process; no escape sequences for ASCII characters
             (write the character itself; "—" or "·" may be written directly); no web addresses; no words "from" or "import" followed by a

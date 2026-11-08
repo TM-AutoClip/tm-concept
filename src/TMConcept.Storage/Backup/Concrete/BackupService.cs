@@ -596,8 +596,10 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
     }
 
     /// <summary>
-    /// Opens the temporary copy before anything is installed (the key and the file must fit; secure delete must be on). Its layout is not
-    /// recognised: a database of another version is not told apart and fails where the mapping does not fit.
+    /// Opens the temporary copy before anything is installed (the key and the file must fit; secure delete must be on), then reads one row
+    /// of every table through the mapping itself (<see cref="ReadEveryTableAsync"/>). No version is recognised: a database of another
+    /// version simply fails where the mapping does not fit, and that happens here, before anything is installed
+    /// (<see cref="BackupRefusedException"/>), not later on the first page that reads it.
     /// </summary>
     private async Task VerifyAsync(string file, byte[] dek, CancellationToken cancellationToken)
     {
@@ -615,6 +617,17 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
                 logger.LogError(ex, "Restore refused: the backup's database cannot be used");
                 throw new BackupRefusedException(ex.Message, ex);
             }
+
+            try
+            {
+                await ReadEveryTableAsync(db, cancellationToken).ConfigureAwait(false);
+            }
+            catch (SqliteException ex)
+            {
+                // The file opened with the key, so it is not damaged: its tables do not fit this version's mapping (another version's layout).
+                logger.LogError(ex, "Restore refused: the backup's tables do not fit this version");
+                throw new BackupRefusedException("The backup's tables do not fit this version: " + ex.Message, ex);
+            }
         }
         catch (SqliteException ex)
         {
@@ -624,6 +637,28 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
         {
             SqliteConnection.ClearAllPools();
         }
+    }
+
+    /// <summary>
+    /// One whole row of every mapped table (every column by its name, as the pages read them): a table or a column this version maps but
+    /// the file lacks throws <see cref="SqliteException"/>.
+    /// </summary>
+    private static async Task ReadEveryTableAsync(ConceptDbContext db, CancellationToken cancellationToken)
+    {
+        await db.Profiles.AsNoTracking().Take(1).ToListAsync(cancellationToken).ConfigureAwait(false);
+        await db.ProfileImages.AsNoTracking().Take(1).ToListAsync(cancellationToken).ConfigureAwait(false);
+        await db.Concepts.AsNoTracking().Take(1).ToListAsync(cancellationToken).ConfigureAwait(false);
+        await db.Embeddings.AsNoTracking().Take(1).ToListAsync(cancellationToken).ConfigureAwait(false);
+        await db.HistoryDigests.AsNoTracking().Take(1).ToListAsync(cancellationToken).ConfigureAwait(false);
+        await db.Runs.AsNoTracking().Take(1).ToListAsync(cancellationToken).ConfigureAwait(false);
+        await db.QueueItems.AsNoTracking().Take(1).ToListAsync(cancellationToken).ConfigureAwait(false);
+        await db.Videos.AsNoTracking().Take(1).ToListAsync(cancellationToken).ConfigureAwait(false);
+        await db.VideoCosts.AsNoTracking().Take(1).ToListAsync(cancellationToken).ConfigureAwait(false);
+        await db.ApiKeys.AsNoTracking().Take(1).ToListAsync(cancellationToken).ConfigureAwait(false);
+        await db.ProfileStepModels.AsNoTracking().Take(1).ToListAsync(cancellationToken).ConfigureAwait(false);
+        await db.Settings.AsNoTracking().Take(1).ToListAsync(cancellationToken).ConfigureAwait(false);
+        await db.Pronunciations.AsNoTracking().Take(1).ToListAsync(cancellationToken).ConfigureAwait(false);
+        await db.VoiceSamples.AsNoTracking().Take(1).ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static RestoreReport Report(BackupHeader header) => new(header.CreatedAtUtc, header.Contents, header.KeyCount,

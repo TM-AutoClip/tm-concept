@@ -4,10 +4,11 @@ using TMConcept.Core.Templates;
 namespace TMConcept.Core.Markers;
 
 /// <summary>
-/// The placeholders of the drop-downs: only what the program applies itself, exactly, whatever a model writes. A pause is silence in the
-/// voice and lengthens its scene; a speed marker changes the voice's speed; a hard cut is told to the video code (and is the default
-/// anyway); a soft transition is a short fade through black that ffmpeg adds after the render. Nothing is sent to a model as a request:
-/// what cannot be applied exactly (emphasis on screen, a big number…) is not offered.
+/// The placeholders of the drop-downs. Applied by the program itself, exactly, whatever a model writes: a pause is silence in the voice and
+/// lengthens its scene; a speed marker changes the voice's speed; a soft transition is a short fade through black that ffmpeg adds after the
+/// render. The one exception is the hard cut: it is only told to the video code (as the scene's "transition" in the input), so it depends on
+/// that code — the help text says so, and whether the program should force it (or drop it) is the developer's open question. Nothing else
+/// is sent to a model as a request: what cannot be applied (emphasis on screen, a big number…) is not offered.
 /// </summary>
 public static class MarkerCatalog
 {
@@ -32,7 +33,7 @@ public static class MarkerCatalog
         Pace(Slow, T("[yavaş]", "[slow]"), T("sonrası daha yavaş okunur", "what follows is read slower"), SlowSpeed),
         Pace(Fast, T("[hızlı]", "[fast]"), T("sonrası daha hızlı okunur", "what follows is read faster"), FastSpeed),
         Pace("normal-speed", T("[normal hız]", "[normal speed]"), T("sesin kendi hızına dön", "back to the voice's own speed"), 1),
-        Transition("hard-cut", T("[sert geçiş]", "[hard cut]"), T("sahneye ani kesmeyle geçilir", "the scene starts with a sudden cut"), SceneTransitions.Cut),
+        Transition("hard-cut", T("[sert geçiş]", "[hard cut]"), T("video koduna ani kesme diye söylenir", "passed on to the video code as a sudden cut"), SceneTransitions.Cut),
         Transition("soft-transition", T("[yumuşak geçiş]", "[soft transition]"), T("sahneye kısa bir kararmayla geçilir", "the scene starts after a short fade through black"),
             SceneTransitions.Fade),
     ];

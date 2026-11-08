@@ -11,7 +11,9 @@ namespace TMConcept.Core.Scenes;
 /// narration (the model is told not to use brackets elsewhere). The placeholders of <see cref="MarkerCatalog"/> are not scenes: a pause or
 /// speed placeholder stays in the scene's <see cref="Scene.Script"/> where it stands (on a line of its own too), and a transition
 /// placeholder (<c>[sert geçiş]</c>, <c>[yumuşak geçiş]</c>) sets how a scene begins: the scene whose text it is in (its narration or its
-/// scene line), or, on a line of its own, the next scene. The first scene has no transition.
+/// scene line), or, on a line of its own, the next scene (one on a line of its own after the last scene begins nothing and is ignored; it is
+/// not a problem, so the text can still be saved). The first scene has no transition. The script (with its placeholders) is cut where its
+/// spoken text reaches <see cref="MaxNarration"/>, like the narration, so voice and subtitles say the same.
 /// </summary>
 public static partial class SceneSplitter
 {
@@ -87,7 +89,7 @@ public static partial class SceneSplitter
             .Take(MaxScenes)
             .Select((s, i) => new Scene(i + 1, s.Visual, Cut(s.Narration.ToString(), MaxNarration))
             {
-                Script = Cut(s.Script.ToString(), MaxNarration + 400),
+                Script = CutSpoken(s.Script.ToString(), MaxNarration),
                 Transition = i == 0 ? SceneTransitions.None : s.Transition,
             })
             .ToList();
@@ -132,6 +134,47 @@ public static partial class SceneSplitter
     }
 
     private static string Cut(string text, int max) => text.Length <= max ? text : text[..max].TrimEnd();
+
+    /// <summary>
+    /// A script cut where its spoken text (without the placeholders, spaces collapsed) reaches <paramref name="max"/> characters, so the voice
+    /// never reads past what the narration and the subtitles keep (0.1.7 allowed 400 characters more for the placeholders, and with no
+    /// placeholder the voice read up to 400 characters the subtitles did not show).
+    /// </summary>
+    private static string CutSpoken(string script, int max)
+    {
+        var spoken = 0;
+        var inBracket = false;
+        var lastSpace = true;
+        for (var i = 0; i < script.Length; i++)
+        {
+            var ch = script[i];
+            if (ch == '[')
+            {
+                inBracket = true;
+                continue;
+            }
+
+            if (inBracket)
+            {
+                inBracket = ch != ']';
+                continue;
+            }
+
+            var space = char.IsWhiteSpace(ch);
+            if (space && lastSpace)
+            {
+                continue;
+            }
+
+            lastSpace = space;
+            if (++spoken > max)
+            {
+                return script[..i].TrimEnd();
+            }
+        }
+
+        return script;
+    }
 
     [GeneratedRegex(@"\[([^\[\]]*)\]")]
     private static partial Regex Bracket();

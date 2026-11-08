@@ -47,12 +47,15 @@ public sealed class SceneNarrator(SpeechService speech, ILogger<SceneNarrator> l
         decimal cost = 0;
         var characters = 0;
         var skipped = new HashSet<string>(StringComparer.Ordinal);
+        var spans = new List<SpeechSpan>();
+        long at = 0;
         for (var k = 0; k < parts.Count; k++)
         {
             var part = parts[k];
             if (part.Text.Length == 0)
             {
                 pieces.Add((null, part.PauseAfterMs));
+                at += part.PauseAfterMs;
                 continue;
             }
 
@@ -63,10 +66,16 @@ public sealed class SceneNarrator(SpeechService speech, ILogger<SceneNarrator> l
             characters += clip.Characters;
             skipped.UnionWith(clip.SkippedWords);
             pieces.Add((clip.File, part.PauseAfterMs));
+            spans.Add(new SpeechSpan(at, clip.DurationMs, part.Text));
+            at += clip.DurationMs + part.PauseAfterMs;
         }
 
         var length = WaveFile.Join(pieces, joined);
-        return new SpeechClip(joined, length, characters, cost, voice.Engine.Code) { SkippedWords = skipped.Order(StringComparer.Ordinal).ToList() };
+        return new SpeechClip(joined, length, characters, cost, voice.Engine.Code)
+        {
+            SkippedWords = skipped.Order(StringComparer.Ordinal).ToList(),
+            Spans = spans,
+        };
     }
 
     private static SpeechSetup Speed(SpeechSetup voice, double factor) =>

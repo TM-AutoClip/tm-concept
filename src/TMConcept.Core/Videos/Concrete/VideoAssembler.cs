@@ -134,7 +134,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
     }
 
     /// <summary>
-    /// H + I: subtitles from the input's captions (burned in when chosen), the clips joined with the silent video into the work folder (with a
+    /// H + I: subtitles from the input's captions, timed by the spoken parts around the pauses (<see cref="SubtitleSources"/>; burned in when chosen), the clips joined with the silent video into the work folder (with a
     /// fade through black at the start of each scene with a soft transition, see <see cref="Fades"/>), then
     /// the version folder gets only finished files — subtitles, the narration text, the engine project as it rendered and the clips, the
     /// video, the thumbnail — and the record with its cost lines is saved.
@@ -147,7 +147,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         var clips = save.Clips;
         var cueSources = input.Scenes.Select(s => new SubtitleSource((long)Math.Round(s.StartSeconds * 1000),
             clips.ElementAtOrDefault(s.Number - 1)?.DurationMs ?? (long)Math.Round(s.DurationSeconds * 1000), s.Caption)).ToList();
-        var cues = SubtitleBuilder.Build(cueSources);
+        var cues = SubtitleBuilder.Build(SubtitleSources(input, clips));
         string? ass = null;
         if (save.Options.Subtitles && cues.Count > 0)
         {
@@ -219,6 +219,32 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         await videos.AddAsync(record, [.. save.ExtraCosts, .. save.Spent], CancellationToken.None).ConfigureAwait(false);
         steps.Finish("save");
         return record;
+    }
+
+    /// <summary>
+    /// What the subtitles show and when: a scene whose clip was joined from parts with pauses gets one source per spoken part at that part's
+    /// time (a pause at the start or in the middle shows no subtitle, and the text does not run ahead of the voice); any other scene one
+    /// source over its clip (or its planned length when silent).
+    /// </summary>
+    public static IReadOnlyList<SubtitleSource> SubtitleSources(RenderInput input, IReadOnlyList<SpeechClip?> clips)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(clips);
+        var sources = new List<SubtitleSource>();
+        foreach (var scene in input.Scenes)
+        {
+            var start = (long)Math.Round(scene.StartSeconds * 1000);
+            var clip = clips.ElementAtOrDefault(scene.Number - 1);
+            if (clip is { Spans.Count: > 0 })
+            {
+                sources.AddRange(clip.Spans.Select(s => new SubtitleSource(start + s.StartMs, s.DurationMs, s.Text)));
+                continue;
+            }
+
+            sources.Add(new SubtitleSource(start, clip?.DurationMs ?? (long)Math.Round(scene.DurationSeconds * 1000), scene.Caption));
+        }
+
+        return sources;
     }
 
     /// <summary>The starts of the scenes that begin with a soft transition (ffmpeg fades through black there at the mux).</summary>

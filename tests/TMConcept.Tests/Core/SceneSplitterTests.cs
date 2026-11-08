@@ -18,6 +18,26 @@ public sealed class SceneSplitterTests
     }
 
     [Fact]
+    public void TheVoiceNeverReadsPastWhatTheSubtitlesKeep()
+    {
+        var plain = SceneSplitter.Split("[map]\n" + new string('a', SceneSplitter.MaxNarration + 300)).Scenes.Single();
+        plain.Narration.Length.ShouldBe(SceneSplitter.MaxNarration);
+        plain.Script.ShouldBe(plain.Narration, "without placeholders the voice reads exactly the narration");
+
+        var marked = SceneSplitter.Split("[map]\n[pause 1 s] " + new string('b', SceneSplitter.MaxNarration + 300)).Scenes.Single();
+        marked.Script.ShouldStartWith("[pause 1 s]");
+        TMConcept.Core.Markers.MarkerText.Spoken(marked.Script).Length.ShouldBe(SceneSplitter.MaxNarration, "placeholders do not count, spoken text does");
+    }
+
+    [Fact]
+    public void ATransitionAfterTheLastSceneIsIgnoredAndTheTextStaysUsable()
+    {
+        var split = SceneSplitter.Split("[map]\nThe end.\n[hard cut]");
+        split.IsValid.ShouldBeTrue();
+        split.Scenes.Single().Narration.ShouldBe("The end.");
+    }
+
+    [Fact]
     public void TextBeforeTheFirstBracketIsAScene()
     {
         var split = SceneSplitter.Split("Hook first.\n[map]\nThen more.");

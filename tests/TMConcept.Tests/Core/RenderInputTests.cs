@@ -35,6 +35,25 @@ public sealed class RenderInputTests
     }
 
     [Fact]
+    public void SubtitlesFollowTheSpokenPartsAroundThePauses()
+    {
+        var input = RenderInputBuilder.Build("t", "en", [new("v1", "Bizans düştü. Sonra sessizlik.", "", 5000), new("v2", "Plain.", "", 1000)], 1080, 1920, 30);
+        var paused = new TMConcept.Core.Speech.SpeechClip("1.wav", 5000, 20, 0, "x")
+        {
+            Spans = [new(2000, 1500, "Bizans düştü."), new(3500, 1500, "Sonra sessizlik.")],
+        };
+        var plain = new TMConcept.Core.Speech.SpeechClip("2.wav", 1000, 6, 0, "x");
+
+        var sources = TMConcept.Core.Videos.VideoAssembler.SubtitleSources(input, [paused, plain]);
+
+        sources.Count.ShouldBe(3);
+        sources[0].ShouldBe(new TMConcept.Core.Subtitles.SubtitleSource(2000, 1500, "Bizans düştü."), "no subtitle during the opening pause");
+        sources[1].StartMs.ShouldBe(3500);
+        var second = (long)Math.Round(input.Scenes[1].StartSeconds * 1000);
+        sources[2].ShouldBe(new TMConcept.Core.Subtitles.SubtitleSource(second, 1000, "Plain."));
+    }
+
+    [Fact]
     public void SizesAreEven()
     {
         RenderInputBuilder.Size(VideoFormat.Vertical).ShouldBe((1080, 1920));

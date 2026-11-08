@@ -58,44 +58,52 @@ public sealed class ComponentInstallFlow(ComponentPlanner planner, IConfirmDialo
         activity.Add(ActivityLevel.Info, text.Format("install.started", names));
         using var model = new InstallViewModel(plan.Missing, text);
         var cancelled = false;
-        var error = await window.RunAsync(model, async m =>
+        string error;
+        try
         {
-            using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, m.Cancellation);
-            var overall = new Progress<ToolProgress>(p =>
+            error = await window.RunAsync(model, async m =>
             {
-                m.Percent = Math.Round(p.Share * 100);
-                work.Show(this, text.Format("work.install", m.Percent, names));
-                progress?.Report(p);
-            });
-            try
-            {
-                await planner.InstallAsync(plan, overall, linked.Token, new Progress<ComponentStep>(m.Apply)).ConfigureAwait(true);
-                return string.Empty;
-            }
-            catch (OperationCanceledException)
-            {
-                // Cancel pressed (in the window or on the page): what was installed before stays; the rest is downloaded the next time.
-                logger.LogInformation("The install of {Components} was cancelled", string.Join(", ", plan.Missing.Select(c => c.Code)));
-                activity.Add(ActivityLevel.Warning, text.Format("install.cancelled.log", names));
-                cancelled = true;
-                return string.Empty;
-            }
-            catch (ToolInstallException ex)
-            {
-                var reason = text.Format("install.failed", text.Format("tools.fail." + ex.Code, ex.Code == "unavailable" ? "ffmpeg" : string.Empty));
-                activity.Add(ActivityLevel.Error, reason);
-                return reason;
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or HttpRequestException or InvalidOperationException
-                or InvalidDataException or EngineException)
-            {
-                // The planner logged the exception with the component; the user gets its message.
-                var reason = text.Format("install.failed", ex.Message);
-                activity.Add(ActivityLevel.Error, reason);
-                return reason;
-            }
-        }).ConfigureAwait(true);
-        work.Clear(this);
+                using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, m.Cancellation);
+                var overall = new Progress<ToolProgress>(p =>
+                {
+                    m.Percent = Math.Round(p.Share * 100);
+                    work.Show(this, text.Format("work.install", m.Percent, names));
+                    progress?.Report(p);
+                });
+                try
+                {
+                    await planner.InstallAsync(plan, overall, linked.Token, new Progress<ComponentStep>(m.Apply)).ConfigureAwait(true);
+                    return string.Empty;
+                }
+                catch (OperationCanceledException)
+                {
+                    // Cancel pressed (in the window or on the page): what was installed before stays; the rest is downloaded the next time.
+                    logger.LogInformation("The install of {Components} was cancelled", string.Join(", ", plan.Missing.Select(c => c.Code)));
+                    activity.Add(ActivityLevel.Warning, text.Format("install.cancelled.log", names));
+                    cancelled = true;
+                    return string.Empty;
+                }
+                catch (ToolInstallException ex)
+                {
+                    var reason = text.Format("install.failed", text.Format("tools.fail." + ex.Code, ex.Code == "unavailable" ? "ffmpeg" : string.Empty));
+                    activity.Add(ActivityLevel.Error, reason);
+                    return reason;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or HttpRequestException or InvalidOperationException
+                    or InvalidDataException or EngineException)
+                {
+                    // The planner logged the exception with the component; the user gets its message.
+                    var reason = text.Format("install.failed", ex.Message);
+                    activity.Add(ActivityLevel.Error, reason);
+                    return reason;
+                }
+            }).ConfigureAwait(true);
+        }
+        finally
+        {
+            // Also when the window ends with an exception nobody expected: the strip's step and spinner never stay behind.
+            work.Clear(this);
+        }
 
         if (cancelled)
         {
