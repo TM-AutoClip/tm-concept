@@ -1,9 +1,10 @@
 namespace TMConcept.Core.Activity;
 
 /// <summary>
-/// What the app did, for the log file (info, warnings, errors; complete, for finding a problem later). Texts are already localized and
-/// contain no keys, tokens or personal paths. There is no activity panel (0.1.7): a line the user must see is also shown on its page or
-/// as a notification by the caller.
+/// What the app did: every line goes to the log file (info, warnings, errors; complete, for finding a problem later) and to the one-line
+/// strip at the bottom of the main window (<see cref="IActivityFeed"/>; the last line, the last lines when opened). Texts are already
+/// localized and contain no keys, tokens or personal paths; a line about money says what was paid. A line the user must act on is also
+/// shown on its page or as a notification by the caller.
 /// </summary>
 public interface IActivityLog
 {

@@ -27,7 +27,7 @@ namespace TMConcept.Desktop.ViewModels;
 /// </summary>
 public sealed partial class VersionEditorViewModel(StepPickerViewModel picker, VideoRemaker remaker, SpeechService speech, StepModelResolver resolver,
     VideoCostEstimator estimator, IEnumerable<IVideoEngine> engines, Core.Media.IMediaTools media, IConfirmDialog confirm, INotifier notifier,
-    IActivityLog activity, Localizer text, ILogger<VersionEditorViewModel> logger) : ObservableObject
+    IActivityLog activity, Localizer text, Work.WorkStatus work, ILogger<VersionEditorViewModel> logger) : ObservableObject
 {
     private static readonly IReadOnlyList<string> Steps = [PipelineSteps.VideoCode, PipelineSteps.Speech];
 
@@ -240,6 +240,7 @@ public sealed partial class VersionEditorViewModel(StepPickerViewModel picker, V
             {
                 Percent = Math.Round(p.Share * 100);
                 Step = text["video.step." + p.Step] + (p.Detail.Length > 0 ? " · " + p.Detail : string.Empty);
+                work.Show(this, text.Format("work.version", Percent, Step));
             });
             var record = await make(cancel.Token, progress).ConfigureAwait(true);
             var name = VersionName(record);
@@ -258,6 +259,7 @@ public sealed partial class VersionEditorViewModel(StepPickerViewModel picker, V
         catch (OperationCanceledException)
         {
             Status = text["video.canceled"];
+            activity.Add(ActivityLevel.Warning, text["version.canceled"]);
         }
         catch (Exception ex) when (ex is ModelNotReadyException or SpeechException)
         {
@@ -269,6 +271,7 @@ public sealed partial class VersionEditorViewModel(StepPickerViewModel picker, V
             _cancel = null;
             Busy = false;
             Step = string.Empty;
+            work.Clear(this);
         }
     }
 

@@ -32,7 +32,7 @@ namespace TMConcept.Desktop.ViewModels;
 public sealed partial class VideoViewModel(AppSession session, IConceptStore concepts, IQueueStore queue, IVideoStore videos, IProfileStore profiles,
     VideoPipeline pipeline, IEnumerable<IVideoEngine> engines, IModelCatalog catalog, StepModelResolver resolver, Core.Media.IMediaTools media,
     VideoCostEstimator estimator, StepPickerViewModel picker, ConceptEvents events, INotifier notifier, IActivityLog activity, Localizer text,
-    ILogger<VideoViewModel> logger) : PageViewModelBase
+    Work.WorkStatus work, ILogger<VideoViewModel> logger) : PageViewModelBase
 {
     private readonly IReadOnlyList<IVideoEngine> _engines = engines.ToList();
     private CancellationTokenSource? _cancel;
@@ -402,6 +402,7 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
             {
                 row.Percent = Math.Round(p.Share * 100);
                 row.Step = text["video.step." + p.Step] + (p.Detail.Length > 0 ? " · " + p.Detail : string.Empty);
+                work.Show(this, text.Format("work.video", row.Percent, row.Step));
             });
             var record = await pipeline.RunAsync(new VideoJob(concept, profile, options, model), progress, cancellationToken).ConfigureAwait(true);
             await queue.RemoveAsync(row.Item.Id, CancellationToken.None).ConfigureAwait(true);
@@ -420,7 +421,7 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
             LastCost = text.Format("video.last_cost.failed", text.Usd(ex.SpentUsd));
             activity.Add(ActivityLevel.Error, text.Format("video.failed", row.Title, reason, text.Usd(ex.SpentUsd)),
                 text.Format("video.failed", ActivityPlaceholders.Title, reason, text.Usd(ex.SpentUsd)));
-            // The notification carries the reason and what was paid (the activity panel that said it is gone since 0.1.7).
+            // The notification carries the reason and what was paid (the strip at the bottom shows the activity line too).
             notifier.Notify(new AppNotification(NotificationKind.Failed, text["video.failed.title"], text.Format("video.failed", row.Title, reason, text.Usd(ex.SpentUsd))));
         }
         catch (OperationCanceledException)
@@ -439,6 +440,7 @@ public sealed partial class VideoViewModel(AppSession session, IConceptStore con
         {
             row.Busy = false;
             _running = null;
+            work.Clear(this);
 
             // The job's buffers (scene images, audio, model answers) are garbage now: give the memory back (small machines).
             Memory.MemoryRelease.Now(logger, "a video job");

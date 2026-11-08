@@ -161,6 +161,8 @@ public static class DesktopServices
         services.AddSingleton<FileDialogs>();
         services.AddSingleton<ActivityLog>();
         services.AddSingleton<IActivityLog>(s => s.GetRequiredService<ActivityLog>());
+        services.AddSingleton<IActivityFeed>(s => s.GetRequiredService<ActivityLog>());
+        services.AddSingleton<Work.WorkStatus>();
         services.AddSingleton<ToastNotifier>();
         services.AddSingleton<INotifier>(s => s.GetRequiredService<ToastNotifier>());
         services.AddSingleton<AppStartup>();

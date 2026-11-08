@@ -15,7 +15,7 @@ namespace TMConcept.Tests.Desktop;
 public sealed class ShellTests
 {
     [AvaloniaFact]
-    public async Task MainWindowOpensWithSidebarAndNoActivityPanel()
+    public async Task MainWindowOpensWithSidebarAndAOneLineActivityStrip()
     {
         using var h = new DesktopHarness();
         await FirstRunTests.CreateAsync(h);
@@ -26,11 +26,49 @@ public sealed class ShellTests
         await shell.StartAsync();
         shell.Items.ShouldNotBeEmpty();
         shell.Current.ShouldNotBeNull();
-        window.GetVisualDescendants().OfType<ScrollViewer>().ShouldNotContain(s => s.Name == "LogScroll", "the activity panel is gone");
+        window.GetVisualDescendants().OfType<ScrollViewer>().ShouldNotContain(s => s.Name == "LogScroll", "not the old panel: one line, a list only on a click");
+        window.GetVisualDescendants().OfType<TextBlock>().ShouldContain(t => t.Name == "LastLine");
 
-        // An activity line still goes to the log file (and nowhere on the screen).
+        // The newest line is on the strip with its time; a warning is yellow, an error red; the list is newest first.
         h.Get<ActivityLog>().Add(ActivityLevel.Warning, "narration off");
+        shell.Last!.IsWarning.ShouldBeTrue();
+        h.Get<ActivityLog>().Add(ActivityLevel.Error, "Concept generation stopped · exact 0.14 $");
+        shell.LastLine.ShouldEndWith(" · Concept generation stopped · exact 0.14 $");
+        shell.Last!.IsError.ShouldBeTrue();
+        shell.Lines[0].ShouldBeSameAs(shell.Last);
+        shell.Lines[1].Line.ShouldEndWith("narration off");
         window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task TheStripKeepsTheLastHundredLinesAndShowsTheRunningWorksStep()
+    {
+        using var h = new DesktopHarness();
+        await FirstRunTests.CreateAsync(h);
+        var shell = h.Get<ShellViewModel>();
+        var log = h.Get<ActivityLog>();
+        for (var i = 0; i < 250; i++)
+        {
+            log.Add(ActivityLevel.Info, "line " + i);
+        }
+
+        shell.Lines.Count.ShouldBe(ShellViewModel.ListMax);
+        shell.Lines[0].Line.ShouldEndWith("line 249");
+        log.Recent().Count.ShouldBe(ActivityLog.Keep, "the memory keeps 200, the list shows 100");
+
+        // A line that names something shows the name on the screen and the placeholder in the file only.
+        log.Add(ActivityLevel.Info, "Profile \"Byzantium\" created.", "Profile \"" + ActivityPlaceholders.Name + "\" created.");
+        shell.LastLine.ShouldEndWith("Profile \"Byzantium\" created.");
+
+        var work = h.Get<TMConcept.Desktop.Work.WorkStatus>();
+        shell.Spinning.ShouldBeFalse();
+        var owner = new object();
+        work.Show(owner, "Generating concepts · Claude Sonnet 5.5 is thinking (12 s)");
+        shell.CurrentStep.ShouldBe("Generating concepts · Claude Sonnet 5.5 is thinking (12 s)");
+        shell.Spinning.ShouldBeTrue();
+        work.Clear(owner);
+        shell.CurrentStep.ShouldBeEmpty();
+        shell.Spinning.ShouldBeFalse();
     }
 
     [AvaloniaFact]

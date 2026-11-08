@@ -24,12 +24,20 @@ namespace TMConcept.Desktop.ViewModels;
 /// title and summary, opening it shows the full text; ✓ (A) approves, ✗ (D) moves to the trash. Thrown-away duplicates and the concepts a
 /// cut-off answer did not reach are not replaced automatically: a "Fill the missing" button appears, and it asks first with the estimate
 /// (nothing more is paid for without a yes). A cut-off answer is a warning, not a failure: the complete concepts before the cut are kept.
+/// A running call is followed step by step (getting ready, sent, thinking with the seconds, writing with about how many tokens and how many
+/// concepts are complete, answer received), on the page and on the strip at the bottom of the window, so a long wait does not look like a
+/// hang; Cancel stays next to it. "Suggest topics" shows the same steps under its button, a spinner and Cancel, and its result in a card
+/// right below the extra request (the topics to click, why none came, a failure in red); the profile cannot be switched meanwhile.
 /// </summary>
 public sealed partial class ConceptsViewModel(AppSession session, IConceptStore concepts, ConceptGenerator generator, StepModelResolver resolver,
     IModelCatalog catalog, ConceptEvents events, INotifier notifier, IActivityLog activity, Localizer text, StepPickerViewModel picker,
-    IFocusSource focus, TopicSuggester topics, Dialogs.IConfirmDialog confirm, ILogger<ConceptsViewModel> logger) : PageViewModelBase
+    IFocusSource focus, TopicSuggester topics, Dialogs.IConfirmDialog confirm, Core.Costs.ICostCalculator costs, Work.WorkStatus work,
+    ILogger<ConceptsViewModel> logger) : PageViewModelBase
 {
     private readonly List<ConceptCardViewModel> _approved = [];
+    private readonly object _topicWork = new();
+    private ConceptCallProgress? _live;
+    private bool _callAttached;
     private CancellationTokenSource? _cancel;
     private CancellationTokenSource? _topicCancel;
     private bool _attached;
@@ -75,11 +83,32 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
 
     /// <summary>What the last "Suggest topics" did (cost, or why it failed).</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TopicCardShown))]
     public partial string TopicStatus { get; set; } = string.Empty;
+
+    /// <summary>The last "Suggest topics" failed or brought nothing (its line is red).</summary>
+    [ObservableProperty]
+    public partial bool TopicFailed { get; set; }
+
+    /// <summary>"Topic suggestions (10)".</summary>
+    [ObservableProperty]
+    public partial string TopicsHeader { get; set; } = string.Empty;
+
+    /// <summary>Whether the topic card is shown (a request runs, or it brought topics or a result line).</summary>
+    public bool TopicCardShown => Suggesting || Topics.Count > 0 || TopicStatus.Length > 0;
+
+    /// <summary>Whether there are topics to click.</summary>
+    public bool HasTopics => Topics.Count > 0;
+
+    /// <summary>The steps of the running "Suggest topics" call.</summary>
+    public CallStatusViewModel TopicCall { get; } = new(text);
+
+    /// <summary>The steps of the running concept batch's call.</summary>
+    public CallStatusViewModel Call { get; } = new(text);
 
     /// <summary>Topics are being asked for.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanSuggest))]
+    [NotifyPropertyChangedFor(nameof(CanSuggest), nameof(TopicCardShown))]
     public partial bool Suggesting { get; set; }
 
     /// <summary>Whether "Suggest topics" can be pressed.</summary>
@@ -192,6 +221,9 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         LastCost = string.Empty;
         Topics.Clear();
         TopicStatus = string.Empty;
+        TopicFailed = false;
+        OnPropertyChanged(nameof(TopicCardShown));
+        OnPropertyChanged(nameof(HasTopics));
         LoadFocus();
 
         // Each profile keeps its own last choices: the new profile's are shown.
@@ -291,9 +323,11 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
 
     partial void OnBusyChanged(bool value)
     {
-        Working = value;
+        Working = value || Suggesting;
         OnPropertyChanged(nameof(HasMissing));
     }
+
+    partial void OnSuggestingChanged(bool value) => Working = value || Busy;
 
     /// <inheritdoc />
     public override void CancelWork() => Cancel();
@@ -310,6 +344,8 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
             Status = text["concepts.no_profile"];
             return;
         }
+
+        AttachCalls();
 
         // The choices are made ready (license, a key for an online provider, installs of a local embedding model) and saved for the
         // profile; nothing is paid for before this passes.
@@ -346,14 +382,16 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         Status = string.Empty;
         Missing = 0;
         Busy = true;
-        Progress = text.Format("concepts.progress", 0, ConceptGenerator.Batches(count).Count());
+        _live = null;
+        Call.Begin(resolved.Model.Name);
         using var cancel = new CancellationTokenSource();
         _cancel = cancel;
         try
         {
             var progress = new Progress<ConceptBatch>(OnBatch);
+            var live = new Progress<ConceptCallProgress>(OnLive);
             var result = await generator.GenerateAsync(new ConceptRequest(profile, count, ExtraPrompt.Trim(), resolved, LocalCheck, embedding,
-                Focus(profile.ContentLanguage)), progress, cancel.Token).ConfigureAwait(true);
+                Focus(profile.ContentLanguage)), progress, live, cancel.Token).ConfigureAwait(true);
             Report(result);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -366,15 +404,81 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         finally
         {
             _cancel = null;
+            _live = null;
+            Call.Stop();
             Busy = false;
             Progress = string.Empty;
+            work.Clear(this);
             await ReloadAsync().ConfigureAwait(true);
         }
     }
 
+    /// <summary>The page follows its two calls: every new step of one is shown on the page and on the strip.</summary>
+    private void AttachCalls()
+    {
+        if (_callAttached)
+        {
+            return;
+        }
+
+        _callAttached = true;
+        Call.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(CallStatusViewModel.Text) && Busy)
+            {
+                ShowProgress();
+            }
+        };
+        TopicCall.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(CallStatusViewModel.Text) && TopicCall.Active)
+            {
+                work.Show(_topicWork, text.Format("work.topics", TopicCall.Text));
+            }
+        };
+    }
+
+    private void OnLive(ConceptCallProgress live)
+    {
+        _live = live;
+        Call.Report(live.Call);
+        ShowProgress();
+    }
+
+    /// <summary>"Batch 2/5 · Claude Sonnet 5.5 is writing (~3,100 tokens) · concept 2/5 ready" (the batch only when there are several).</summary>
+    private void ShowProgress()
+    {
+        if (!Busy)
+        {
+            return;
+        }
+
+        var parts = new List<string>();
+        if (_live is { Batches: > 1 } batches)
+        {
+            parts.Add(text.Format("concepts.progress", batches.Batch, batches.Batches));
+        }
+
+        if (Call.Text.Length > 0)
+        {
+            parts.Add(Call.Text);
+        }
+
+        if (_live is { Call.Phase: Core.Chat.ChatPhase.Writing, Ready: > 0 } writing)
+        {
+            parts.Add(text.Format("concepts.ready", writing.Ready, writing.Size));
+        }
+        else if (_live is { Call.Phase: Core.Chat.ChatPhase.Done })
+        {
+            parts.Add(text["concepts.saving"]);
+        }
+
+        Progress = string.Join(" · ", parts);
+        work.Show(this, text.Format("work.concepts", Progress));
+    }
+
     private void OnBatch(ConceptBatch batch)
     {
-        Progress = text.Format("concepts.progress", batch.Index, batch.Batches);
         foreach (var concept in batch.Accepted.Where(c => NewConcepts.All(n => n.Id != c.Id)))
         {
             NewConcepts.Add(new ConceptCardViewModel(concept, text));
@@ -528,27 +632,36 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
             return;
         }
 
+        AttachCalls();
+        TopicFailed = false;
+        TopicStatus = string.Empty;
         Suggesting = true;
+        TopicCall.Preparing();
         using var cancel = new CancellationTokenSource();
         _topicCancel = cancel;
+        CatalogModel? paid = null;
         try
         {
             if (!await Picker.PrepareAsync([PipelineSteps.Topics], "install.purpose.topics", CancellationToken.None).ConfigureAwait(true))
             {
+                TopicFailed = true;
                 TopicStatus = Picker.Status;
                 return;
             }
 
+            cancel.Token.ThrowIfCancellationRequested();
             var model = await resolver.ResolveAsync(PipelineSteps.Topics, Picker.Choice(PipelineSteps.Topics), CancellationToken.None).ConfigureAwait(true);
-            TopicStatus = text.Format("topics.asking", model.Model.Name);
-            var result = await topics.SuggestAsync(profile, model, CategoryName(), Focus(text.Language), ExtraPrompt, text.Language, cancel.Token)
-                .ConfigureAwait(true);
+            paid = model.Model;
+            TopicCall.Begin(model.Model.Name);
+            var result = await topics.SuggestAsync(profile, model, CategoryName(), Focus(text.Language), ExtraPrompt, text.Language,
+                new Progress<Core.Chat.ChatProgress>(TopicCall.Report), cancel.Token).ConfigureAwait(true);
             Topics.Clear();
             foreach (var topic in result.Topics)
             {
                 Topics.Add(topic);
             }
 
+            TopicFailed = result.Topics.Count == 0;
             TopicStatus = result.Topics.Count == 0
                 ? text.Format("topics.none", text.Usd(result.CostUsd))
                 : text.Format(result.Cut ? "topics.done_cut" : "topics.done", result.Topics.Count, text.Usd(result.CostUsd));
@@ -557,28 +670,39 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         catch (ModelNotReadyException ex)
         {
             logger.LogWarning("Topic suggestions not started: the {Step} step has no {Missing}", ex.Step, ex.Missing);
+            TopicFailed = true;
             TopicStatus = text["topics.no_model"];
         }
         catch (Core.Providers.ProviderException ex)
         {
-            TopicStatus = text.Format("topics.failed", ProviderErrors.Text(text, ex.Code));
+            // What a failed call was billed is said too (also on the strip).
+            TopicFailed = true;
+            var spent = ex.ChargedUsage is { } charged && paid is not null ? costs.Exact(paid, charged) : 0;
+            TopicStatus = text.Format("topics.failed", ProviderErrors.Text(text, ex.Code)) + " · " + text.Format("cost.exact", text.Usd(spent));
             activity.Add(ActivityLevel.Error, TopicStatus);
         }
         catch (OperationCanceledException)
         {
             logger.LogInformation("Topic suggestions canceled");
             TopicStatus = text["topics.canceled"];
+            activity.Add(ActivityLevel.Warning, TopicStatus);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "Topic suggestions failed");
+            TopicFailed = true;
             TopicStatus = text.Format("topics.failed", ex.Message);
             activity.Add(ActivityLevel.Error, TopicStatus);
         }
         finally
         {
             _topicCancel = null;
+            TopicCall.Stop();
+            work.Clear(_topicWork);
             Suggesting = false;
+            TopicsHeader = text.Format("topics.title", Topics.Count);
+            OnPropertyChanged(nameof(TopicCardShown));
+            OnPropertyChanged(nameof(HasTopics));
         }
     }
 
@@ -594,6 +718,9 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         var current = ExtraPrompt.TrimEnd();
         ExtraPrompt = current.Length == 0 ? topic : current + "\n" + topic;
         Topics.Remove(topic);
+        TopicsHeader = text.Format("topics.title", Topics.Count);
+        OnPropertyChanged(nameof(TopicCardShown));
+        OnPropertyChanged(nameof(HasTopics));
     }
 
     /// <summary>The focus drop-downs: the categories, the profile's category chosen, its rows and the general ones.</summary>

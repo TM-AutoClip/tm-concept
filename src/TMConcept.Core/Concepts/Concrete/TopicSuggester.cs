@@ -65,9 +65,9 @@ public sealed class TopicSuggester(IConceptStore concepts, IRunStore runs, IChat
         return costs.EstimateChat(model, costs.Tokens(system + user, language), 0, OutputMin, Math.Min(OutputExpected, OutputFor(model)));
     }
 
-    /// <summary>Asks for the topics.</summary>
+    /// <summary>Asks for the topics; <paramref name="progress"/> gets the call's steps (sent, thinking, writing, done).</summary>
     public async Task<TopicSuggestions> SuggestAsync(Profile profile, ResolvedModel model, string category, string focus, string extraPrompt, string language,
-        CancellationToken cancellationToken)
+        IProgress<ChatProgress>? progress, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(model);
@@ -91,7 +91,7 @@ public sealed class TopicSuggester(IConceptStore concepts, IRunStore runs, IChat
         {
             var effort = model.Model.Efforts.Contains(Effort) ? Effort : string.Empty;
             var answer = await chats.Create(model.Model, model.Key.Secret).SendAsync(new ChatRequest(system, user, Schema: Schema(),
-                MaxOutputTokens: OutputFor(model.Model), Effort: effort, Stream: true), cancellationToken).ConfigureAwait(false);
+                MaxOutputTokens: OutputFor(model.Model), Effort: effort, Stream: true, Progress: progress), cancellationToken).ConfigureAwait(false);
             text = answer.Text;
             usage = answer.Usage;
             reported = answer.ReportedCostUsd;

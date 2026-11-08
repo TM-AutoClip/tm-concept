@@ -1,18 +1,24 @@
 using System.Collections.ObjectModel;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using TMConcept.Core.Activity;
 using TMConcept.Core.Notifications;
 using TMConcept.Core.Profiles;
 using TMConcept.Desktop.Dialogs;
 using TMConcept.Desktop.Localization;
 using TMConcept.Desktop.Startup;
+using TMConcept.Desktop.Work;
 
 namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
-/// The main window: profile selector (every page is filtered by it), the sidebar of pages with "Report a problem" at its bottom and the
-/// current page. The activity panel at the bottom is gone since 0.1.7: activity lines go to the log file, a failure is a notification.
+/// The main window: profile selector (every page is filtered by it), the sidebar of pages with "Report a problem" at its bottom, the
+/// current page and a thin strip at the bottom: on the left the last activity line (time and text; a warning yellow, an error red; lines
+/// about money say what was paid), a click opens the last <see cref="ListMax"/> lines in a small list that is closed by default; on the
+/// right the step of the running work (a concept call, "Suggest topics", a video, an install) with a spinner. The developer asked for it
+/// on 8 Nov 2026 ("what was done must be shown somewhere, at worst at the bottom of the screen"); it is not the old activity panel.
 /// </summary>
 public sealed partial class ShellViewModel : ObservableObject
 {
@@ -22,12 +28,18 @@ public sealed partial class ShellViewModel : ObservableObject
     private readonly INotifier _notifier;
     private readonly ILogger<ShellViewModel> _logger;
     private readonly IReportDialog _report;
+    private readonly WorkStatus _work;
     private bool _loadingProfiles;
+
+    /// <summary>Lines the strip's list shows.</summary>
+    public const int ListMax = 100;
 
     /// <summary>Builds the sidebar from every registered page.</summary>
     public ShellViewModel(IEnumerable<PageViewModelBase> pages, Localizer text, AppSession session, IProfileStore profiles, INotifier notifier,
-        IReportDialog report, ILogger<ShellViewModel> logger)
+        IReportDialog report, IActivityFeed feed, WorkStatus work, ILogger<ShellViewModel> logger)
     {
+        ArgumentNullException.ThrowIfNull(feed);
+        ArgumentNullException.ThrowIfNull(work);
         ArgumentNullException.ThrowIfNull(text);
         _text = text;
         _session = session;
@@ -44,9 +56,34 @@ public sealed partial class ShellViewModel : ObservableObject
                 {
                     _session.WorkRunning = AnyWorking;
                     OnPropertyChanged(nameof(CanSwitchProfile));
+                    OnPropertyChanged(nameof(AnyWorking));
+                    OnPropertyChanged(nameof(Spinning));
                 }
             };
         }
+
+        _work = work;
+        work.Changed += (_, _) =>
+        {
+            OnPropertyChanged(nameof(CurrentStep));
+            OnPropertyChanged(nameof(Spinning));
+        };
+        foreach (var entry in feed.Recent().TakeLast(ListMax))
+        {
+            Show(entry);
+        }
+
+        feed.Added += (_, entry) =>
+        {
+            if (Dispatcher.UIThread.CheckAccess())
+            {
+                Show(entry);
+            }
+            else
+            {
+                Dispatcher.UIThread.Post(() => Show(entry));
+            }
+        };
 
         RefreshTitles();
         _text.LanguageChanged += (_, _) => RefreshTitles();
@@ -68,6 +105,23 @@ public sealed partial class ShellViewModel : ObservableObject
 
     /// <summary>Whether a page runs work (a generation, a video queue).</summary>
     public bool AnyWorking => Items.Any(i => i.Page.Working);
+
+    /// <summary>The strip's list: the last activity lines, newest first.</summary>
+    public ObservableCollection<ActivityLineViewModel> Lines { get; } = [];
+
+    /// <summary>The newest activity line (null before the first).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LastLine))]
+    public partial ActivityLineViewModel? Last { get; private set; }
+
+    /// <summary>The strip's left side: "14:23 · Concepts ready: 5 · exact 0.14 $", or that nothing was done yet.</summary>
+    public string LastLine => Last?.Line ?? _text["strip.empty"];
+
+    /// <summary>The step of the running work (the newest one); empty when nothing runs.</summary>
+    public string CurrentStep => _work.Text;
+
+    /// <summary>Whether the strip's spinner turns (a page works or a work shows a step).</summary>
+    public bool Spinning => AnyWorking || _work.Active;
 
     /// <summary>The profile can be switched only while no page works for the selected one.</summary>
     public bool CanSwitchProfile => !AnyWorking;
@@ -220,6 +274,18 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>Opens "Report a problem" (nothing is sent from there by itself).</summary>
     [RelayCommand]
     private Task ReportProblemAsync() => _report.ShowAsync();
+
+    private void Show(ActivityEntry entry)
+    {
+        var line = new ActivityLineViewModel(entry, entry.At.ToString("HH:mm", _text.Culture) + " · " + entry.Text);
+        Lines.Insert(0, line);
+        while (Lines.Count > ListMax)
+        {
+            Lines.RemoveAt(Lines.Count - 1);
+        }
+
+        Last = line;
+    }
 
     private void RefreshTitles()
     {

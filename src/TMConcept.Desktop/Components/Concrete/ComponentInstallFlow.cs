@@ -19,7 +19,7 @@ namespace TMConcept.Desktop.Components;
 /// downloaded without the confirmation. A cancellation during the install is an outcome, not an error. Every step goes to the log file.
 /// </summary>
 public sealed class ComponentInstallFlow(ComponentPlanner planner, IConfirmDialog confirm, IInstallDialog window, IActivityLog activity, Localizer text,
-    ILogger<ComponentInstallFlow> logger)
+    Work.WorkStatus work, ILogger<ComponentInstallFlow> logger)
 {
     /// <summary>The planner.</summary>
     public ComponentPlanner Planner => planner;
@@ -64,6 +64,7 @@ public sealed class ComponentInstallFlow(ComponentPlanner planner, IConfirmDialo
             var overall = new Progress<ToolProgress>(p =>
             {
                 m.Percent = Math.Round(p.Share * 100);
+                work.Show(this, text.Format("work.install", m.Percent, names));
                 progress?.Report(p);
             });
             try
@@ -94,6 +95,7 @@ public sealed class ComponentInstallFlow(ComponentPlanner planner, IConfirmDialo
                 return reason;
             }
         }).ConfigureAwait(true);
+        work.Clear(this);
 
         if (cancelled)
         {

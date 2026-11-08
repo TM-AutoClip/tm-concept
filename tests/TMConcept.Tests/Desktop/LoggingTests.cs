@@ -246,7 +246,7 @@ public sealed class LoggingTests : IDisposable
     public void AnActivityLineThatNamesSomethingGoesToTheFileWithPlaceholders()
     {
         var logger = new ListLogger();
-        var activity = new ActivityLog(new TypedLogger(logger));
+        var activity = new ActivityLog(TimeProvider.System, new TypedLogger(logger));
 
         activity.Add(ActivityLevel.Info, "Profile \"Byzantium\" created.", "Profile \"" + ActivityPlaceholders.Name + "\" created.");
         activity.Add(ActivityLevel.Warning, "Backup skipped.");

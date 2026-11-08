@@ -1,4 +1,5 @@
 using Avalonia.Headless.XUnit;
+using Avalonia.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
 using TMConcept.Core.Chat;
@@ -310,6 +311,125 @@ public sealed class ConceptPageTests
 
         page.TopicStatus.ShouldContain("broken pipe");
         page.Suggesting.ShouldBeFalse();
+    }
+
+    /// <summary>Reports a step of a fake call and waits until the interface thread has handled it (as a real stream gives it time to).</summary>
+    private static async Task ShownAsync(ChatRequest request, ChatProgress step)
+    {
+        request.Progress!.Report(step);
+        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.ContextIdle);
+    }
+
+    [AvaloniaFact]
+    public async Task SuggestTopicsShowsItsStepsAndItsResultInACardAndLocksTheProfileMeanwhile()
+    {
+        static async Task<ChatResponse> Steps(ChatRequest request, string answer)
+        {
+            await ShownAsync(request, new ChatProgress(ChatPhase.Sent, TimeSpan.Zero, 0, string.Empty));
+            await ShownAsync(request, new ChatProgress(ChatPhase.Thinking, TimeSpan.FromSeconds(3), 0, string.Empty));
+            await ShownAsync(request, new ChatProgress(ChatPhase.Writing, TimeSpan.FromSeconds(4), 300, "{\"topics\": [\"The"));
+            await ShownAsync(request, new ChatProgress(ChatPhase.Done, TimeSpan.FromSeconds(5), 320, answer));
+            return new ChatResponse(answer, new ChatUsage(600, 0, 0, 120), null, "end_turn", "r");
+        }
+
+        var fake = new FakeChat()
+            .AnswerAsync(r => Steps(r, "{\"topics\": [\"The fall of Trebizond\", \"Greek fire\"]}"))
+            .AnswerAsync(r => Steps(r, "{\"topics\": []}"))
+            .Answer(_ => throw new ProviderException("cut") { Code = "truncated", ChargedUsage = new ChatUsage(600, 0, 0, 16_000), StopReason = "max_tokens" });
+        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
+        await PrepareAsync(h);
+        var page = await PageAsync(h);
+        var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
+        var topicsRow = page.Picker.Row(TMConcept.Core.Pipeline.PipelineSteps.Topics)!;
+        topicsRow.Selected = topicsRow.Options.First(o => o.Model?.Id == "claude-haiku-5-5");
+        var haiku = topicsRow.Selected!.Model!.Name;
+        page.TopicCardShown.ShouldBeFalse("nothing to show before the first press");
+
+        var shown = new List<string>();
+        var working = new List<bool>();
+        var strip = new List<string>();
+        page.TopicCall.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(CallStatusViewModel.Text) && page.TopicCall.Text.Length > 0)
+            {
+                shown.Add(page.TopicCall.Text);
+                working.Add(page.Working);
+            }
+        };
+        var work = h.Get<TMConcept.Desktop.Work.WorkStatus>();
+        work.Changed += (_, _) => strip.Add(work.Text);
+
+        await page.SuggestTopicsAsync();
+
+        shown.ShouldBe([text["call.preparing"], text.Format("call.sent", haiku, 0), text.Format("call.thinking", haiku, 0),
+            text.Format("call.writing", haiku, 300.ToString("N0", text.Culture)), text.Format("call.done", 5)]);
+        working.ShouldAllBe(w => w, "the profile cannot be switched while topics are asked for");
+        strip.ShouldContain(text.Format("work.topics", text.Format("call.thinking", haiku, 0)));
+        work.Active.ShouldBeFalse("the strip's step is cleared at the end");
+        page.Working.ShouldBeFalse();
+        page.TopicCardShown.ShouldBeTrue();
+        page.HasTopics.ShouldBeTrue();
+        page.TopicsHeader.ShouldBe(text.Format("topics.title", 2));
+        page.TopicFailed.ShouldBeFalse();
+
+        // None came: the card says so and why, in red.
+        await page.SuggestTopicsAsync();
+        page.HasTopics.ShouldBeFalse();
+        page.TopicCardShown.ShouldBeTrue();
+        page.TopicFailed.ShouldBeTrue();
+        page.TopicStatus.ShouldStartWith(text.Format("topics.none", string.Empty).Split('·')[0].Trim());
+
+        // A failure is red, says what was paid, and the activity line says it too.
+        await page.SuggestTopicsAsync();
+        page.TopicFailed.ShouldBeTrue();
+        page.TopicStatus.ShouldContain(text.Format("cost.exact", string.Empty).Trim());
+        var last = h.Get<TMConcept.Core.Activity.IActivityFeed>().Recent()[^1];
+        last.IsError.ShouldBeTrue();
+        last.Text.ShouldBe(page.TopicStatus);
+    }
+
+    [AvaloniaFact]
+    public async Task AConceptRunShowsTheCallsStepsAndHowManyConceptsAreReadySoFar()
+    {
+        var titles = FakeChat.Distinct(3);
+        var answer = FakeChat.Json(titles);
+        var fake = new FakeChat().AnswerAsync(async request =>
+        {
+            var twoDone = answer[..(answer.IndexOf(titles[2], StringComparison.Ordinal) - 12)];
+            await ShownAsync(request, new ChatProgress(ChatPhase.Sent, TimeSpan.Zero, 0, string.Empty));
+            await ShownAsync(request, new ChatProgress(ChatPhase.Thinking, TimeSpan.FromSeconds(1), 0, string.Empty));
+            await ShownAsync(request, new ChatProgress(ChatPhase.Writing, TimeSpan.FromSeconds(9), 2100, twoDone));
+            await ShownAsync(request, new ChatProgress(ChatPhase.Done, TimeSpan.FromSeconds(12), 3000, answer));
+            return new ChatResponse(answer, new ChatUsage(1000, 0, 0, 3000), null, "end_turn", "r");
+        });
+        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
+        await PrepareAsync(h);
+        var page = await PageAsync(h);
+        var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
+        var sonnet = page.Picker.Model(TMConcept.Core.Pipeline.PipelineSteps.Concepts)!.Name;
+        page.Count = 3;
+        var progress = new List<string>();
+        page.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ConceptsViewModel.Progress) && page.Progress.Length > 0)
+            {
+                progress.Add(page.Progress);
+            }
+        };
+        var work = h.Get<TMConcept.Desktop.Work.WorkStatus>();
+        var strip = new List<string>();
+        work.Changed += (_, _) => strip.Add(work.Text);
+
+        await page.GenerateAsync();
+
+        progress.ShouldContain(text.Format("call.thinking", sonnet, 0), "not \"batch 0 / 1\": what the call does now");
+        progress.ShouldContain(text.Format("call.writing", sonnet, 2100.ToString("N0", text.Culture)) + " · " + text.Format("concepts.ready", 2, 3));
+        progress.ShouldContain(text.Format("call.done", 12) + " · " + text["concepts.saving"]);
+        progress.ShouldNotContain(p => p.Contains(text.Format("concepts.progress", 1, 1), StringComparison.Ordinal), "one batch: no batch counter");
+        strip.ShouldContain(text.Format("work.concepts", text.Format("call.thinking", sonnet, 0)));
+        work.Active.ShouldBeFalse();
+        page.Progress.ShouldBeEmpty();
+        page.NewConcepts.Count.ShouldBe(3);
     }
 
     [AvaloniaFact]

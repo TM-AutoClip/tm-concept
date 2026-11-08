@@ -6,13 +6,20 @@ namespace TMConcept.Tests.Providers;
 /// <summary>A fake model: answers from a script and records every request. No network.</summary>
 internal sealed class FakeChat : IChatClientFactory
 {
-    private readonly Queue<Func<ChatRequest, ChatResponse>> _answers = new();
+    private readonly Queue<Func<ChatRequest, Task<ChatResponse>>> _answers = new();
 
     public List<ChatRequest> Requests { get; } = [];
 
     public List<string> KeysUsed { get; } = [];
 
     public FakeChat Answer(Func<ChatRequest, ChatResponse> answer)
+    {
+        _answers.Enqueue(r => Task.FromResult(answer(r)));
+        return this;
+    }
+
+    /// <summary>An answer that takes its time (it can report progress and let the screen show it before it ends).</summary>
+    public FakeChat AnswerAsync(Func<ChatRequest, Task<ChatResponse>> answer)
     {
         _answers.Enqueue(answer);
         return this;
@@ -48,7 +55,7 @@ internal sealed class FakeChat : IChatClientFactory
                 throw new InvalidOperationException("The fake model has no answer left.");
             }
 
-            return Task.FromResult(owner._answers.Dequeue()(request));
+            return owner._answers.Dequeue()(request);
         }
     }
 }

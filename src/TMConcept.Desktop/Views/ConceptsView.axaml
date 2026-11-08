@@ -18,19 +18,32 @@
         <WrapPanel>
           <Button Content="{DynamicResource topics.button}" Command="{Binding SuggestTopicsCommand}" IsEnabled="{Binding CanSuggest}"
                   ToolTip.Tip="{DynamicResource topics.hint}" Margin="0,0,8,4" />
-          <Button Content="{DynamicResource common.cancel}" Command="{Binding CancelTopicsCommand}" IsVisible="{Binding Suggesting}" Margin="0,0,8,4" />
           <TextBlock Text="{Binding TopicEstimate}" Classes="small" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="240" />
         </WrapPanel>
-        <TextBlock Text="{Binding TopicStatus}" Classes="small" TextWrapping="Wrap"
-                   IsVisible="{Binding TopicStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-        <ItemsControl ItemsSource="{Binding Topics}">
-          <ItemsControl.ItemTemplate>
-            <DataTemplate x:DataType="sys:String">
-              <Button Classes="link" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Content="{Binding}"
-                      Command="{Binding $parent[ItemsControl].((vm:ConceptsViewModel)DataContext).AddTopicCommand}" CommandParameter="{Binding}" />
-            </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
+        <!-- The result of "Suggest topics" right below the extra request: the running call's steps, the topics to click, why none came. -->
+        <Border Name="TopicCard" Classes="card" Padding="10" IsVisible="{Binding TopicCardShown}">
+          <StackPanel Spacing="6">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" IsVisible="{Binding Suggesting}">
+              <StackPanel Spacing="4" VerticalAlignment="Center">
+                <TextBlock Text="{Binding TopicCall.Text}" TextWrapping="Wrap" />
+                <ProgressBar IsIndeterminate="True" />
+              </StackPanel>
+              <Button Grid.Column="1" Content="{DynamicResource common.cancel}" Command="{Binding CancelTopicsCommand}" VerticalAlignment="Center" />
+            </Grid>
+            <TextBlock Text="{Binding TopicsHeader}" FontWeight="SemiBold" IsVisible="{Binding HasTopics}" />
+            <TextBlock Text="{DynamicResource topics.card.hint}" Classes="small" TextWrapping="Wrap" IsVisible="{Binding HasTopics}" />
+            <ItemsControl ItemsSource="{Binding Topics}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="sys:String">
+                  <Button Classes="link" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Content="{Binding}"
+                          Command="{Binding $parent[ItemsControl].((vm:ConceptsViewModel)DataContext).AddTopicCommand}" CommandParameter="{Binding}" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Name="TopicStatusLine" Text="{Binding TopicStatus}" Classes="small" Classes.error="{Binding TopicFailed}" TextWrapping="Wrap"
+                       IsVisible="{Binding TopicStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+          </StackPanel>
+        </Border>
         <TextBlock Text="{DynamicResource focus.title}" FontWeight="SemiBold" Margin="0,8,0,0" />
         <Grid ColumnDefinitions="120,*" ColumnSpacing="8">
           <TextBlock Text="{DynamicResource focus.category}" VerticalAlignment="Center" />
@@ -81,8 +94,12 @@
         <StackPanel Orientation="Horizontal" Spacing="8">
           <Button Classes="accent big" Content="{DynamicResource concepts.generate}" Command="{Binding GenerateCommand}" IsEnabled="{Binding Idle}" />
           <Button Content="{DynamicResource common.cancel}" Command="{Binding CancelCommand}" IsVisible="{Binding Busy}" />
-          <TextBlock Text="{Binding Progress}" VerticalAlignment="Center" Classes="muted" />
           <Button Content="{Binding FillMissingText}" Command="{Binding FillMissingCommand}" IsVisible="{Binding HasMissing}" />
+        </StackPanel>
+        <!-- The running call step by step (sent, thinking with the seconds, writing, concepts ready), so a long wait does not look like a hang. -->
+        <StackPanel Spacing="4" IsVisible="{Binding Busy}">
+          <TextBlock Name="ProgressLine" Text="{Binding Progress}" Classes="muted" TextWrapping="Wrap" />
+          <ProgressBar IsIndeterminate="True" />
         </StackPanel>
         <TextBlock Text="{Binding NewHeader}" Classes="h2" Margin="0,8,0,0" />
         <TextBlock Text="{DynamicResource concepts.keys}" Classes="small" />

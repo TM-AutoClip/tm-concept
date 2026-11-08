@@ -90,8 +90,12 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
     /// <summary>Tokens of one concept's title and summary in English (other languages: <see cref="Profiles.OutputLanguage.EmbeddingTokenFactor"/>; Turkish about twice).</summary>
     public const int EmbeddingTokensPerConcept = 80;
 
-    /// <summary>Generates in batches; <paramref name="progress"/> gets every saved batch.</summary>
-    public async Task<ConceptRunResult> GenerateAsync(ConceptRequest request, IProgress<ConceptBatch>? progress, CancellationToken cancellationToken)
+    /// <summary>
+    /// Generates in batches; <paramref name="progress"/> gets every saved batch, <paramref name="live"/> the steps of each batch's model call
+    /// (sent, thinking, writing with the complete concepts so far, done).
+    /// </summary>
+    public async Task<ConceptRunResult> GenerateAsync(ConceptRequest request, IProgress<ConceptBatch>? progress, IProgress<ConceptCallProgress>? live,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         var profile = request.Profile;
@@ -137,11 +141,17 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
                     profile.TargetSeconds, profile.ContentLanguage);
                 string answer;
                 ProviderException? cut = null;
+                var batchNumber = index + 1;
+                var batchSize = sizes[index];
+                IProgress<ChatProgress>? call = live is null
+                    ? null
+                    : new ForwardProgress<ChatProgress>(p => live.Report(new ConceptCallProgress(batchNumber, sizes.Count, batchSize, p,
+                        Math.Min(batchSize, ConceptResponseParser.CompleteCount(p.Text)))));
                 try
                 {
                     var response = await client.SendAsync(new ChatRequest(prompt.System, prompt.User, CacheSystem: true, Schema: prompt.Schema,
                         MaxOutputTokens: maxTokens,
-                        Effort: request.Model.Effort, Stream: true), cancellationToken).ConfigureAwait(false);
+                        Effort: request.Model.Effort, Stream: true, Progress: call), cancellationToken).ConfigureAwait(false);
                     Charge(run, request, response.Usage, response.ReportedCostUsd);
                     answer = response.Text;
                 }
