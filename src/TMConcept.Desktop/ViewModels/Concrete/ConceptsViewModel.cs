@@ -21,15 +21,17 @@ namespace TMConcept.Desktop.ViewModels;
 /// word-similarity check (a different check: it compares the words of title and summary, no model). The estimate is recalculated when an input or a model changes; after "Generate" the same box shows the exact cost.
 /// Generate first makes the choices ready (license, an API key asked for in a dialog when the provider has none, installs of a local model)
 /// and saves them for the profile; anything missing stops it before anything is paid for. Concepts arrive batch by batch; a card shows
-/// title and summary, opening it shows the full text; ✓ (A) approves, ✗ (D) moves to the trash. Thrown-away duplicates are not replaced
-/// automatically: a "Fill the missing" button appears.
+/// title and summary, opening it shows the full text; ✓ (A) approves, ✗ (D) moves to the trash. Thrown-away duplicates and the concepts a
+/// cut-off answer did not reach are not replaced automatically: a "Fill the missing" button appears, and it asks first with the estimate
+/// (nothing more is paid for without a yes). A cut-off answer is a warning, not a failure: the complete concepts before the cut are kept.
 /// </summary>
 public sealed partial class ConceptsViewModel(AppSession session, IConceptStore concepts, ConceptGenerator generator, StepModelResolver resolver,
     IModelCatalog catalog, ConceptEvents events, INotifier notifier, IActivityLog activity, Localizer text, StepPickerViewModel picker,
-    IFocusSource focus, TopicSuggester topics, ILogger<ConceptsViewModel> logger) : PageViewModelBase
+    IFocusSource focus, TopicSuggester topics, Dialogs.IConfirmDialog confirm, ILogger<ConceptsViewModel> logger) : PageViewModelBase
 {
     private readonly List<ConceptCardViewModel> _approved = [];
     private CancellationTokenSource? _cancel;
+    private CancellationTokenSource? _topicCancel;
     private bool _attached;
     private bool _loading;
     private bool _pickerAttached;
@@ -201,13 +203,42 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
     [RelayCommand]
     public Task GenerateAsync() => RunAsync((int)Math.Clamp(Count ?? 0, ConceptLimits.CountMin, ConceptLimits.CountMax));
 
-    /// <summary>Generates as many as are missing.</summary>
+    /// <summary>
+    /// Generates as many as are missing, after a confirmation that shows the estimate (the developer's rule: no money is spent again without
+    /// asking). Without a concept model the run itself says what is missing, before anything is paid for.
+    /// </summary>
     [RelayCommand]
-    public Task FillMissingAsync() => RunAsync(Missing);
+    public async Task FillMissingAsync()
+    {
+        var missing = Missing;
+        if (Busy || missing < 1)
+        {
+            return;
+        }
 
-    /// <summary>Stops after the running batch (finished batches stay).</summary>
+        if (session.Profile is { } profile && Picker.Model(PipelineSteps.Concepts) is { } model)
+        {
+            var estimate = await generator.EstimateAsync(profile, missing, ExtraPrompt, Focus(profile.ContentLanguage), model, ConceptEffort(),
+                CancellationToken.None).ConfigureAwait(true);
+            var answer = await confirm.AskAsync(text["concepts.fill_missing.title"],
+                text.Format("concepts.fill_missing.message", missing, model.Name, text.Usd(estimate.MinUsd), text.Usd(estimate.MaxUsd)),
+                text.Format("concepts.fill_missing", missing), danger: false).ConfigureAwait(true);
+            if (!answer.Confirmed)
+            {
+                return;
+            }
+        }
+
+        await RunAsync(missing).ConfigureAwait(true);
+    }
+
+    /// <summary>Stops the running request at once (the answer stream is closed); the batches saved before stay.</summary>
     [RelayCommand]
     public void Cancel() => _cancel?.Cancel();
+
+    /// <summary>Stops a running "Suggest topics" request.</summary>
+    [RelayCommand]
+    public void CancelTopics() => _topicCancel?.Cancel();
 
     /// <summary>Approves a concept (✓, key A).</summary>
     [RelayCommand]
@@ -376,6 +407,14 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
             case "canceled":
                 activity.Add(ActivityLevel.Warning, text.Format("concepts.canceled", result.Accepted.Count, cost));
                 break;
+            case "truncated":
+                // The model reached its answer limit: the complete concepts before the cut were saved; a warning, not a failure (and only a
+                // failure when none was saved).
+                var cut = text.Format("concepts.cut", result.Accepted.Count, result.Missing, cost);
+                activity.Add(result.Accepted.Count > 0 ? ActivityLevel.Warning : ActivityLevel.Error, cut);
+                Status = cut;
+                notifier.Notify(new AppNotification(result.Accepted.Count > 0 ? NotificationKind.Warning : NotificationKind.Failed, text["concepts.cut.title"], cut));
+                break;
             default:
                 var reason = result.ErrorCode == "parse" ? text["concepts.parse_failed"] : ProviderErrors.Text(text, result.ErrorCode);
                 activity.Add(ActivityLevel.Error, text.Format("concepts.error", reason, result.Accepted.Count, cost));
@@ -455,7 +494,8 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         }
 
         var count = (int)Math.Clamp(Count ?? 0, ConceptLimits.CountMin, ConceptLimits.CountMax);
-        var estimate = await generator.EstimateAsync(profile, count, ExtraPrompt, Focus(profile.ContentLanguage), model, CancellationToken.None).ConfigureAwait(true);
+        var estimate = await generator.EstimateAsync(profile, count, ExtraPrompt, Focus(profile.ContentLanguage), model, ConceptEffort(), CancellationToken.None)
+            .ConfigureAwait(true);
         var backfill = 0;
         if (Picker.Model(PipelineSteps.Embedding) is { } embedding)
         {
@@ -471,7 +511,8 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
 
     /// <summary>
     /// "Suggest topics": the topics step's model is made ready like any process (key, saved for the profile), then ONE call brings about ten
-    /// topics in the interface language. The cost is shown here and counted in the month's spending.
+    /// topics in the interface language. While it runs the status says so and it can be canceled; the cost is shown here and counted in the
+    /// month's spending; any failure is shown and logged (a cut-off answer still shows the complete topics before the cut).
     /// </summary>
     [RelayCommand]
     public async Task SuggestTopicsAsync()
@@ -488,6 +529,8 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         }
 
         Suggesting = true;
+        using var cancel = new CancellationTokenSource();
+        _topicCancel = cancel;
         try
         {
             if (!await Picker.PrepareAsync([PipelineSteps.Topics], "install.purpose.topics", CancellationToken.None).ConfigureAwait(true))
@@ -497,7 +540,8 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
             }
 
             var model = await resolver.ResolveAsync(PipelineSteps.Topics, Picker.Choice(PipelineSteps.Topics), CancellationToken.None).ConfigureAwait(true);
-            var result = await topics.SuggestAsync(profile, model, CategoryName(), Focus(text.Language), ExtraPrompt, text.Language, CancellationToken.None)
+            TopicStatus = text.Format("topics.asking", model.Model.Name);
+            var result = await topics.SuggestAsync(profile, model, CategoryName(), Focus(text.Language), ExtraPrompt, text.Language, cancel.Token)
                 .ConfigureAwait(true);
             Topics.Clear();
             foreach (var topic in result.Topics)
@@ -507,8 +551,8 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
 
             TopicStatus = result.Topics.Count == 0
                 ? text.Format("topics.none", text.Usd(result.CostUsd))
-                : text.Format("topics.done", result.Topics.Count, text.Usd(result.CostUsd));
-            activity.Add(ActivityLevel.Info, TopicStatus);
+                : text.Format(result.Cut ? "topics.done_cut" : "topics.done", result.Topics.Count, text.Usd(result.CostUsd));
+            activity.Add(result.Cut || result.Topics.Count == 0 ? ActivityLevel.Warning : ActivityLevel.Info, TopicStatus);
         }
         catch (ModelNotReadyException ex)
         {
@@ -520,8 +564,20 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
             TopicStatus = text.Format("topics.failed", ProviderErrors.Text(text, ex.Code));
             activity.Add(ActivityLevel.Error, TopicStatus);
         }
+        catch (OperationCanceledException)
+        {
+            logger.LogInformation("Topic suggestions canceled");
+            TopicStatus = text["topics.canceled"];
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Topic suggestions failed");
+            TopicStatus = text.Format("topics.failed", ex.Message);
+            activity.Add(ActivityLevel.Error, TopicStatus);
+        }
         finally
         {
+            _topicCancel = null;
             Suggesting = false;
         }
     }
@@ -583,6 +639,9 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
     /// <summary>The chosen focus as the prompt's line in <paramref name="language"/> (empty when nothing is chosen).</summary>
     private string Focus(string language) =>
         FocusText.Build(language, FocusRows.Where(r => r.Chosen is not null).Select(r => (r.Dimension, r.Chosen!)));
+
+    /// <summary>The effort chosen for the concept model now (empty = automatic).</summary>
+    private string ConceptEffort() => Picker.Row(PipelineSteps.Concepts)?.Effort?.Value ?? string.Empty;
 
     private string CategoryName() => FocusCategory is { Value: not FocusCatalogFile.GeneralId } category ? category.Label : string.Empty;
 

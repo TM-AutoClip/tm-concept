@@ -10,12 +10,14 @@ namespace TMConcept.Core.Concepts;
 
 /// <summary>
 /// Concept generation. Estimate (no network): prompt tokens from the text; output = count × the profile's measured average ± 15 % (the
-/// measured tokens already include thinking), or before the first run count × the size expected from the target length × 1.1–1.5 for
-/// thinking. Generate: batches of 20; before every batch the history is read again (so a batch also avoids the concepts of the previous
+/// measured tokens already include thinking), or before the first run count × the size expected from the target length × the thinking
+/// share of the chosen effort (<see cref="ConceptOutputBudget.ThinkingShare"/>); a batch never costs more output than its max_tokens.
+/// Generate: batches of 20; before every batch the history is read again (so a batch also avoids the concepts of the previous
 /// batches; the history is in the user part, so the cached system part stays the same for the whole run), the answer is parsed, the local
 /// duplicate check throws away duplicates and marks similar ones, the batch is saved at once and the run row is updated with the exact
-/// cost. A batch cut off at max_tokens keeps every complete concept before the cut (they were paid for) and then ends the run with
-/// "truncated". Cancel or an error keeps the finished batches. No automatic extra batch is made for thrown-away duplicates: the result
+/// cost. Every batch asks for <see cref="ConceptOutputBudget.MaxOutputTokens"/> (the model's limit, at most 64 000) and logs it. A batch
+/// cut off at max_tokens keeps every complete concept before the cut (they were paid for) and then ends the run with "truncated"; no
+/// extra batch is started on its own (the page asks the user, with the estimate, before paying again). Cancel or an error keeps the finished batches. No automatic extra batch is made for thrown-away duplicates: the result
 /// tells how many are missing.
 /// </summary>
 public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profiles, IRunStore runs, IChatClientFactory chats, ICostCalculator costs,
@@ -23,14 +25,14 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
 {
     private readonly List<ConceptEmbedding> _pendingEmbeddings = [];
 
-    /// <summary>Thinking share on top of the first-guess output (low and high end of the range).</summary>
-    public static readonly (double Low, double High) ThinkingShare = (1.1, 1.5);
-
     /// <summary>Band around a measured per-concept output (it already contains the thinking tokens).</summary>
     public static readonly (double Low, double High) MeasuredBand = (0.85, 1.15);
 
-    /// <summary>The estimate of a press (<paramref name="focus"/>: the chosen focus line, empty = none).</summary>
-    public async Task<CostEstimate> EstimateAsync(Profile profile, int count, string extraPrompt, string focus, Models.CatalogModel model,
+    /// <summary>
+    /// The estimate of a press (<paramref name="focus"/>: the chosen focus line, empty = none; <paramref name="effort"/>: the chosen effort,
+    /// empty = automatic).
+    /// </summary>
+    public async Task<CostEstimate> EstimateAsync(Profile profile, int count, string extraPrompt, string focus, Models.CatalogModel model, string effort,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(profile);
@@ -41,7 +43,8 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
         var average = await runs.AverageConceptOutputTokensAsync(profile.Id, cancellationToken).ConfigureAwait(false);
         var (perConcept, band) = average > 0
             ? (average, MeasuredBand)
-            : (ConceptOutputBudget.TokensPerConcept(profile.ContentLanguage, profile.TargetSeconds), ThinkingShare);
+            : (ConceptOutputBudget.TokensPerConcept(profile.ContentLanguage, profile.TargetSeconds), ConceptOutputBudget.ThinkingShare(model, effort ?? string.Empty));
+        var roof = ConceptOutputBudget.MaxOutputTokens(model);
         var total = CostEstimate.Zero;
         var first = true;
         foreach (var size in Batches(count))
@@ -50,7 +53,8 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
             var system = costs.Tokens(prompt.System, profile.ContentLanguage);
             var user = costs.Tokens(prompt.User, profile.ContentLanguage);
             var output = size * perConcept;
-            total = total.Plus(costs.EstimateChat(model, system + user, first ? 0 : system, (long)(output * band.Low), (long)(output * band.High)));
+            total = total.Plus(costs.EstimateChat(model, system + user, first ? 0 : system, (long)Math.Min(output * band.Low, roof),
+                (long)Math.Min(output * band.High, roof)));
             first = false;
         }
 
@@ -92,7 +96,8 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
         ArgumentNullException.ThrowIfNull(request);
         var profile = request.Profile;
         var count = Math.Clamp(request.Count, ConceptLimits.CountMin, ConceptLimits.CountMax);
-        var estimate = await EstimateAsync(profile, count, request.ExtraPrompt, request.Focus, request.Model.Model, cancellationToken).ConfigureAwait(false);
+        var estimate = await EstimateAsync(profile, count, request.ExtraPrompt, request.Focus, request.Model.Model, request.Model.Effort,
+            cancellationToken).ConfigureAwait(false);
         var run = new Run
         {
             ProfileId = profile.Id,
@@ -126,12 +131,16 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
                 cancellationToken.ThrowIfCancellationRequested();
                 var subjects = await concepts.HistoryAsync(profile.Id, cancellationToken).ConfigureAwait(false);
                 var prompt = ConceptPromptBuilder.Build(new ConceptPromptInput(profile, images, Titles(subjects), request.ExtraPrompt, sizes[index], request.Focus));
+                var maxTokens = ConceptOutputBudget.MaxOutputTokens(request.Model.Model);
+                logger.LogInformation("Concept run {Run}: batch {Batch}/{Batches} of {Size} concepts, max_tokens {MaxTokens}, effort {Effort}, {Seconds} s {Language}",
+                    run.Id, index + 1, sizes.Count, sizes[index], maxTokens, request.Model.Effort.Length > 0 ? request.Model.Effort : "automatic",
+                    profile.TargetSeconds, profile.ContentLanguage);
                 string answer;
                 ProviderException? cut = null;
                 try
                 {
                     var response = await client.SendAsync(new ChatRequest(prompt.System, prompt.User, CacheSystem: true, Schema: prompt.Schema,
-                        MaxOutputTokens: ConceptOutputBudget.MaxOutputTokens(profile.ContentLanguage, profile.TargetSeconds, sizes[index]),
+                        MaxOutputTokens: maxTokens,
                         Effort: request.Model.Effort, Stream: true), cancellationToken).ConfigureAwait(false);
                     Charge(run, request, response.Usage, response.ReportedCostUsd);
                     answer = response.Text;
@@ -145,8 +154,8 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
                     }
 
                     // The cut-off answer was paid for: keep the complete concepts before the cut, then stop the run.
-                    logger.LogWarning("Concept run {Run}: batch {Batch} was cut off ({Code}); keeping the complete concepts before the cut", run.Id,
-                        index + 1, ex.Code);
+                    logger.LogWarning("Concept run {Run}: batch {Batch} was cut off ({Code}, stop reason {StopReason}, max_tokens {MaxTokens}, {Output} output tokens); keeping the complete concepts before the cut",
+                        run.Id, index + 1, ex.Code, ex.StopReason.Length > 0 ? ex.StopReason : "-", maxTokens, charged.Output);
                     cut = ex;
                     answer = ex.PartialText;
                 }

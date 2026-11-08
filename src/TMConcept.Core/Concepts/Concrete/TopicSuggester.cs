@@ -18,7 +18,9 @@ namespace TMConcept.Core.Concepts;
 /// chosen category and focus, the extra request so far and the latest concept titles (not to repeat them); the answer is about
 /// <see cref="Count"/> short topic requests in the language the user writes prompts in (the interface language: they go into the extra
 /// request, which the user writes). The call is a run of its own (<see cref="RunKind.Topics"/>), so the month's spending counts it, also
-/// when it fails after being billed.
+/// when it fails after being billed. It is meant to be cheap and quick: effort low (none for a model without effort levels; the user's
+/// effort choice is not used), streamed, cancelable, with room for thinking (0.1.7 gave it 1 500 tokens and Haiku 5.5 at effort high was
+/// cut before writing a topic, 8 Nov 2026). A cut-off answer still gives the complete topics before the cut.
 /// </summary>
 public sealed class TopicSuggester(IConceptStore concepts, IRunStore runs, IChatClientFactory chats, ICostCalculator costs, TimeProvider clock,
     ILogger<TopicSuggester> logger)
@@ -32,11 +34,27 @@ public sealed class TopicSuggester(IConceptStore concepts, IRunStore runs, IChat
     /// <summary>Most earlier titles sent along (the newest).</summary>
     public const int HistoryMax = 60;
 
-    /// <summary>Output budget of the call (ten short lines; room for a little thinking).</summary>
-    public const int OutputMax = 1500;
+    /// <summary>
+    /// max_tokens of the call (thinking included), lowered to the model's limit when that is smaller. Only what is produced is paid for, so
+    /// this is a roof, not what the call costs.
+    /// </summary>
+    public const int OutputMax = 16_000;
 
     /// <summary>Fewest output tokens of an answer (ten short topics).</summary>
     public const int OutputMin = 250;
+
+    /// <summary>Output tokens of a usual answer at effort low (ten short topics and a little thinking): the high end of the estimate.</summary>
+    public const int OutputExpected = 3_000;
+
+    /// <summary>The effort sent: low when the model has effort levels, otherwise none.</summary>
+    public const string Effort = "low";
+
+    /// <summary>max_tokens for <paramref name="model"/>: <see cref="OutputMax"/>, or the model's limit when it is smaller.</summary>
+    public static int OutputFor(CatalogModel model)
+    {
+        ArgumentNullException.ThrowIfNull(model);
+        return model.MaxOutputTokens > 0 ? Math.Min(OutputMax, model.MaxOutputTokens) : OutputMax;
+    }
 
     /// <summary>The estimate of one press with <paramref name="model"/>.</summary>
     public async Task<CostEstimate> EstimateAsync(Profile profile, CatalogModel model, string category, string focus, string extraPrompt, string language,
@@ -44,7 +62,7 @@ public sealed class TopicSuggester(IConceptStore concepts, IRunStore runs, IChat
     {
         ArgumentNullException.ThrowIfNull(model);
         var (system, user) = await PromptAsync(profile, category, focus, extraPrompt, language, cancellationToken).ConfigureAwait(false);
-        return costs.EstimateChat(model, costs.Tokens(system + user, language), 0, OutputMin, OutputMax);
+        return costs.EstimateChat(model, costs.Tokens(system + user, language), 0, OutputMin, Math.Min(OutputExpected, OutputFor(model)));
     }
 
     /// <summary>Asks for the topics.</summary>
@@ -65,11 +83,27 @@ public sealed class TopicSuggester(IConceptStore concepts, IRunStore runs, IChat
             Requested = Count,
             StartedAtUtc = started,
         };
-        ChatResponse answer;
+        string text;
+        ChatUsage usage;
+        decimal? reported = null;
+        var cut = false;
         try
         {
-            answer = await chats.Create(model.Model, model.Key.Secret).SendAsync(new ChatRequest(system, user, Schema: Schema(), MaxOutputTokens: OutputMax,
-                Effort: model.Effort), cancellationToken).ConfigureAwait(false);
+            var effort = model.Model.Efforts.Contains(Effort) ? Effort : string.Empty;
+            var answer = await chats.Create(model.Model, model.Key.Secret).SendAsync(new ChatRequest(system, user, Schema: Schema(),
+                MaxOutputTokens: OutputFor(model.Model), Effort: effort, Stream: true), cancellationToken).ConfigureAwait(false);
+            text = answer.Text;
+            usage = answer.Usage;
+            reported = answer.ReportedCostUsd;
+        }
+        catch (ProviderException ex) when (ex.Code is "truncated" or "incomplete" && ex.ChargedUsage is { } charged && ParsePartial(ex.PartialText).Count > 0)
+        {
+            // Cut off after some topics were written: they were paid for, so the complete ones are shown.
+            logger.LogWarning("Topic suggestions were cut off ({Code}, stop reason {StopReason}, {Output} output tokens); keeping the complete topics before the cut",
+                ex.Code, ex.StopReason.Length > 0 ? ex.StopReason : "-", charged.Output);
+            text = ex.PartialText;
+            usage = charged;
+            cut = true;
         }
         catch (ProviderException ex)
         {
@@ -80,23 +114,98 @@ public sealed class TopicSuggester(IConceptStore concepts, IRunStore runs, IChat
             run.Error = ex.Code;
             run.FinishedAtUtc = clock.GetUtcNow();
             await KeepAsync(run).ConfigureAwait(false);
-            logger.LogWarning("Topic suggestions failed ({Code}) after {Usd} USD", ex.Code, run.ActualUsd);
+            logger.LogWarning("Topic suggestions failed ({Code}, stop reason {StopReason}, request {RequestId}, {Output} output tokens) after {Usd} USD", ex.Code,
+                ex.StopReason.Length > 0 ? ex.StopReason : "-", ex.RequestId.Length > 0 ? ex.RequestId : "-", ex.ChargedUsage?.Output ?? 0, run.ActualUsd);
             throw;
         }
 
-        var topics = Parse(answer.Text);
-        run.ActualUsd = costs.Exact(model.Model, answer.Usage, answer.ReportedCostUsd);
+        var topics = cut ? ParsePartial(text) : Parse(text);
+        run.ActualUsd = costs.Exact(model.Model, usage, reported);
         run.CostExact = true;
-        run.InputTokens = answer.Usage.Input;
-        run.OutputTokens = answer.Usage.Output;
+        run.InputTokens = usage.Input;
+        run.OutputTokens = usage.Output;
         run.Accepted = topics.Count;
         run.Status = topics.Count > 0 ? RunStatus.Succeeded : RunStatus.Failed;
         run.Error = topics.Count > 0 ? string.Empty : "parse";
         run.FinishedAtUtc = clock.GetUtcNow();
         await KeepAsync(run).ConfigureAwait(false);
-        logger.LogInformation("Topic suggestions: {Count} topics from {Provider}/{Model} for {Usd} USD", topics.Count, model.Model.Provider, model.Model.Id,
-            run.ActualUsd);
-        return new TopicSuggestions(topics, run.ActualUsd, run.CostExact);
+        logger.LogInformation("Topic suggestions: {Count} topics from {Provider}/{Model} for {Usd} USD{Cut}", topics.Count, model.Model.Provider, model.Model.Id,
+            run.ActualUsd, cut ? " (cut off)" : string.Empty);
+        return new TopicSuggestions(topics, run.ActualUsd, run.CostExact, cut);
+    }
+
+    /// <summary>
+    /// The complete topics of an answer that was cut off: every string item of the <c>"topics"</c> array whose closing quote arrived (the
+    /// last, unfinished one is dropped); cleaned like <see cref="Parse"/>. A complete answer gives the same as <see cref="Parse"/>.
+    /// </summary>
+    public static IReadOnlyList<string> ParsePartial(string answer)
+    {
+        var text = answer ?? string.Empty;
+        var key = text.IndexOf("\"topics\"", StringComparison.Ordinal);
+        var start = key < 0 ? -1 : text.IndexOf('[', key);
+        if (start < 0)
+        {
+            return [];
+        }
+
+        var found = new List<string>();
+        var at = start + 1;
+        while (at < text.Length)
+        {
+            while (at < text.Length && (char.IsWhiteSpace(text[at]) || text[at] == ','))
+            {
+                at++;
+            }
+
+            if (at >= text.Length || text[at] != '"')
+            {
+                break;
+            }
+
+            var end = ClosingQuote(text, at + 1);
+            if (end < 0)
+            {
+                break;
+            }
+
+            try
+            {
+                if (JsonNode.Parse(text[at..(end + 1)]) is JsonValue value && value.TryGetValue<string>(out var topic))
+                {
+                    found.Add(topic);
+                }
+            }
+            catch (JsonException)
+            {
+                break;
+            }
+
+            at = end + 1;
+        }
+
+        return found.Select(t => TextClean.OneLine(t, TopicMax))
+            .Where(t => t.Length > 0)
+            .DistinctBy(TurkishFold.Fold)
+            .Take(Count)
+            .ToList();
+    }
+
+    /// <summary>Index of the quote that ends a JSON string starting at <paramref name="from"/> (escapes skipped); -1 when it never ends.</summary>
+    private static int ClosingQuote(string text, int from)
+    {
+        for (var i = from; i < text.Length; i++)
+        {
+            if (text[i] == '\\')
+            {
+                i++;
+            }
+            else if (text[i] == '"')
+            {
+                return i;
+            }
+        }
+
+        return -1;
     }
 
     /// <summary>The topics of an answer (<c>{"topics": […]}</c>, also inside a code block); short, one line each, no repeats.</summary>

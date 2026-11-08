@@ -18,6 +18,7 @@
         <WrapPanel>
           <Button Content="{DynamicResource topics.button}" Command="{Binding SuggestTopicsCommand}" IsEnabled="{Binding CanSuggest}"
                   ToolTip.Tip="{DynamicResource topics.hint}" Margin="0,0,8,4" />
+          <Button Content="{DynamicResource common.cancel}" Command="{Binding CancelTopicsCommand}" IsVisible="{Binding Suggesting}" Margin="0,0,8,4" />
           <TextBlock Text="{Binding TopicEstimate}" Classes="small" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="240" />
         </WrapPanel>
         <TextBlock Text="{Binding TopicStatus}" Classes="small" TextWrapping="Wrap"

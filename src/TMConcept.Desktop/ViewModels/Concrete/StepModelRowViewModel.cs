@@ -6,7 +6,7 @@ namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
 /// One step of a page's model pickers: what it is for, its picker (none / off first, the sample images for the images step, then the
-/// models: local first), the effort (only for a model that takes one; first entry "Automatic" sends no effort), the
+/// models: local first), the effort (only for a model that takes one, never in the topics step; first entry "Automatic" sends no effort), the
 /// engine (video code step), voice and speed (narration step), a note (license, cost, graphics card memory) and the install progress.
 /// </summary>
 public sealed partial class StepModelRowViewModel(PipelineStep step, string title, string purpose, string recommended, string automatic) : ObservableObject
@@ -93,7 +93,10 @@ public sealed partial class StepModelRowViewModel(PipelineStep step, string titl
     partial void OnSelectedChanged(StepOption? value)
     {
         var keep = Effort?.Value ?? string.Empty;
-        Efforts = value?.Model is { Efforts.Count: > 0 } model ? [new ChoiceOption(string.Empty, automatic), .. model.Efforts.Select(e => new ChoiceOption(e, e))] : [];
+        // The topics step always asks at effort low (a cheap, quick call): no effort picker there.
+        Efforts = value?.Model is { Efforts.Count: > 0 } model && Step.Code != PipelineSteps.Topics
+            ? [new ChoiceOption(string.Empty, automatic), .. model.Efforts.Select(e => new ChoiceOption(e, e))]
+            : [];
         Effort = Efforts.FirstOrDefault(e => e.Value == keep) ?? Efforts.FirstOrDefault();
     }
 }
