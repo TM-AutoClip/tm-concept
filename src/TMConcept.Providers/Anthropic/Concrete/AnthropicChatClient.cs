@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
@@ -12,7 +13,9 @@ namespace TMConcept.Providers.Anthropic;
 /// Claude through <c>POST v1/messages</c>, streamed (a long answer must not hit a timeout). The stable system text carries a cache marker
 /// when asked; a schema goes in <c>output_config.format</c> and an effort level in <c>output_config.effort</c>. No sampling parameters and no
 /// thinking settings are sent (the model's defaults apply). The stop reason is checked before the text: <c>refusal</c>, <c>max_tokens</c>,
-/// a context overflow and a stream that never finished are errors (with the tokens already billed and, for a cut, the text that arrived).
+/// a context overflow and a stream that never finished are errors (with the tokens already billed, the raw stop reason and, for a cut, the
+/// text that arrived). Every answer writes one log line: model, raw stop reason, the max_tokens and effort sent, the tokens, the request id
+/// and the time (a warning when it ended badly; never the prompt or the key).
 /// </summary>
 public sealed class AnthropicChatClient(AnthropicProvider provider, ProviderHttp http, CatalogModel model, string apiKey, ILogger logger) : IChatClient
 {
@@ -45,7 +48,7 @@ public sealed class AnthropicChatClient(AnthropicProvider provider, ProviderHttp
         var body = new JsonObject
         {
             ["model"] = Model.Id,
-            ["max_tokens"] = Math.Min(request.MaxOutputTokens, Model.MaxOutputTokens > 0 ? Model.MaxOutputTokens : request.MaxOutputTokens),
+            ["max_tokens"] = MaxTokens(request),
             ["system"] = new JsonArray(system),
             ["messages"] = new JsonArray(new JsonObject { ["role"] = "user", ["content"] = content }),
             ["stream"] = true,
@@ -72,7 +75,9 @@ public sealed class AnthropicChatClient(AnthropicProvider provider, ProviderHttp
     /// <inheritdoc />
     public async Task<ChatResponse> SendAsync(ChatRequest request, CancellationToken cancellationToken)
     {
-        var json = Body(request).ToJsonString();
+        var body = Body(request);
+        var json = body.ToJsonString();
+        var watch = Stopwatch.StartNew();
 
         // Read while it streams: a long answer (a video code of 64 000 tokens takes about 11 minutes) has no single time limit then.
         var reader = new AnthropicStreamReader();
@@ -108,6 +113,12 @@ public sealed class AnthropicChatClient(AnthropicProvider provider, ProviderHttp
             throw http.Failure(provider.Name, StatusOf(error.Type), error.Raw, reply.RequestId, apiKey);
         }
 
+        var bad = answer.StopReason is "refusal" or "max_tokens" or "model_context_window_exceeded" || (answer.StopReason.Length == 0 && answer.Streamed);
+        logger.Log(bad ? LogLevel.Warning : LogLevel.Information,
+            "{Provider} {Model}: stop reason {StopReason}, max_tokens {MaxTokens}, effort {Effort}, tokens in {Input} / out {Output} / cache read {CacheRead} / cache write {CacheWrite}, request {RequestId}, {Ms} ms",
+            provider.Name, Model.Id, answer.StopReason.Length > 0 ? answer.StopReason : "-", MaxTokens(request),
+            JsonRead.Text(body["output_config"]?["effort"]) is { Length: > 0 } effort ? effort : "automatic", answer.Usage.Input, answer.Usage.Output, answer.Usage.CacheRead,
+            answer.Usage.CacheWrite, reply.RequestId.Length > 0 ? reply.RequestId : "-", watch.ElapsedMilliseconds);
         return answer.StopReason switch
         {
             "refusal" => throw Charged("refusal", answer, reply.RequestId),
@@ -117,6 +128,9 @@ public sealed class AnthropicChatClient(AnthropicProvider provider, ProviderHttp
         };
     }
 
+    /// <summary>The max_tokens sent: the request's, lowered to the model's limit.</summary>
+    private int MaxTokens(ChatRequest request) => Math.Min(request.MaxOutputTokens, Model.MaxOutputTokens > 0 ? Model.MaxOutputTokens : request.MaxOutputTokens);
+
     private ProviderException Charged(string code, AnthropicAnswer answer, string requestId) =>
         new($"{provider.Name}: the answer was not complete ({code}).")
         {
@@ -124,6 +138,7 @@ public sealed class AnthropicChatClient(AnthropicProvider provider, ProviderHttp
             ChargedUsage = answer.Usage,
             RequestId = requestId,
             PartialText = code == "refusal" ? string.Empty : answer.Text,
+            StopReason = answer.StopReason,
         };
 
     private static int StatusOf(string type) => type switch

@@ -12,6 +12,12 @@ public static class LogRules
     /// <summary>Largest size of one day's file; after it one warning line is written and nothing more until the next day.</summary>
     public const long MaxFileBytes = 20L * 1024 * 1024;
 
+    /// <summary>
+    /// Longest time an entry waits before it is written through to the disk (a warning or an error goes at once). Flushing every line
+    /// through would cost a disk write each time; without it Explorer shows the open file as 0 bytes and a crash could lose the last lines.
+    /// </summary>
+    public static readonly TimeSpan DiskFlushEvery = TimeSpan.FromSeconds(3);
+
     /// <summary>The window process.</summary>
     public const string AppKind = "app";
 

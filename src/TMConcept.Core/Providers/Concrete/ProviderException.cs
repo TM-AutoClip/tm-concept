@@ -41,4 +41,10 @@ public sealed class ProviderException : Exception
     /// a partial answer (the concept parser keeps every complete item before the cut) reads it from here.
     /// </summary>
     public string PartialText { get; init; } = string.Empty;
+
+    /// <summary>
+    /// The provider's own stop reason when the answer ended badly (<c>max_tokens</c>, <c>model_context_window_exceeded</c>, <c>length</c>,
+    /// <c>refusal</c>…; empty when there was none). Several of them share one <see cref="Code"/>; the log writes this one.
+    /// </summary>
+    public string StopReason { get; init; } = string.Empty;
 }

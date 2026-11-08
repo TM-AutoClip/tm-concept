@@ -53,6 +53,26 @@ public sealed class LoggingTests : IDisposable
     }
 
     [Fact]
+    public void AWarningIsWrittenThroughToTheDiskAtOnceOtherLinesWithinAFewSeconds()
+    {
+        var clock = Clock(new DateTimeOffset(2026, 11, 8, 13, 0, 0, TimeSpan.Zero));
+        using var file = new DailyLogFile(_folder, LogRules.AppKind, clock);
+        var start = file.DiskFlushes;
+
+        file.Write("an information line", Microsoft.Extensions.Logging.LogLevel.Information);
+        file.DiskFlushes.ShouldBe(start, "not every line costs a disk write");
+        clock.Advance(LogRules.DiskFlushEvery);
+        file.DiskFlushes.ShouldBe(start + 1, "a waiting line reaches the disk within a few seconds");
+        clock.Advance(LogRules.DiskFlushEvery);
+        file.DiskFlushes.ShouldBe(start + 1, "nothing waits: no write");
+
+        file.Write("a warning line", Microsoft.Extensions.Logging.LogLevel.Warning);
+        file.DiskFlushes.ShouldBe(start + 2, "a warning goes to the disk at once");
+        new FileInfo(file.CurrentFile).Length.ShouldBeGreaterThan(0);
+        Lines(LogFileName.For(LogRules.AppKind, new DateOnly(2026, 11, 8))).ShouldContain("a warning line");
+    }
+
+    [Fact]
     public void FileNamesCarryKindAndLocalDate()
     {
         LogFileName.For(LogRules.AppKind, new DateOnly(2026, 11, 6)).ShouldBe("app-2026-11-06.log");

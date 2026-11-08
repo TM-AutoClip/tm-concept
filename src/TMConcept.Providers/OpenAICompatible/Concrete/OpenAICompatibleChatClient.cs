@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
@@ -14,7 +15,9 @@ namespace TMConcept.Providers.OpenAICompatible;
 /// line by line (<see cref="OpenAICompatibleStreamReader"/>). When the provider rejects one of the optional fields with 400 or 422, the
 /// request is sent once more without them (the parser tolerates a loose answer). No sampling parameters. <c>finish_reason: length</c> (with
 /// the partial text), a refusal, an <c>error</c> object or <c>finish_reason: error</c> inside a 200 answer, an answer without choices and a
-/// stream that ended without a finish reason are errors with the billed usage.
+/// stream that ended without a finish reason are errors with the billed usage (and the raw finish reason). Every answer writes one log
+/// line: model, raw finish reason, the max_tokens and effort sent (most of these providers get neither: "-"), the tokens, the request id and
+/// the time (a warning when it ended badly; never the prompt or the key).
 /// </summary>
 public sealed class OpenAICompatibleChatClient(OpenAICompatibleProviderBase provider, ProviderHttp http, CatalogModel model, string apiKey, ILogger logger)
     : IChatClient
@@ -71,6 +74,7 @@ public sealed class OpenAICompatibleChatClient(OpenAICompatibleProviderBase prov
     {
         ArgumentNullException.ThrowIfNull(request);
         var body = Body(request);
+        var watch = Stopwatch.StartNew();
         JsonNode? node;
         string requestId;
         bool streamed;
@@ -105,6 +109,11 @@ public sealed class OpenAICompatibleChatClient(OpenAICompatibleProviderBase prov
         // or with finish_reason "error" and a partial message. Both are failures, never an empty success.
         var choice = (node?["choices"] as JsonArray) is { Count: > 0 } choices ? choices[0] : null;
         var finish = JsonRead.Text(choice?["finish_reason"]);
+        var bad = node?["error"] is not null || choice is null || finish is "error" or "length" or "content_filter" || (streamed && finish.Length == 0);
+        logger.Log(bad ? LogLevel.Warning : LogLevel.Information,
+            "{Provider} {Model}: finish reason {FinishReason}, max_tokens {MaxTokens}, effort {Effort}, tokens in {Input} / out {Output} / cache read {CacheRead}, request {RequestId}, {Ms} ms",
+            provider.Name, Model.Id, finish.Length > 0 ? finish : "-", MaxTokens(body), Effort(body), usage.Input, usage.Output,
+            usage.CacheRead, requestId.Length > 0 ? requestId : "-", watch.ElapsedMilliseconds);
         if (node?["error"] is not null || finish == "error")
         {
             var status = ErrorStatus(node?["error"] ?? choice?["error"]);
@@ -138,7 +147,7 @@ public sealed class OpenAICompatibleChatClient(OpenAICompatibleProviderBase prov
 
         if (text.Length == 0 && JsonRead.Text(choice["message"]?["refusal"]).Length > 0)
         {
-            throw new ProviderException($"{provider.Name}: the model refused.") { Code = "refusal", ChargedUsage = usage, RequestId = requestId };
+            throw new ProviderException($"{provider.Name}: the model refused.") { Code = "refusal", ChargedUsage = usage, RequestId = requestId, StopReason = finish };
         }
 
         return finish == "length"
@@ -148,9 +157,17 @@ public sealed class OpenAICompatibleChatClient(OpenAICompatibleProviderBase prov
                 ChargedUsage = usage,
                 RequestId = requestId,
                 PartialText = text,
+                StopReason = finish,
             }
             : new ChatResponse(text, usage, reported, finish, requestId);
     }
+
+    /// <summary>The output limit the body sends (<c>max_completion_tokens</c> or <c>max_tokens</c>), as text; "-" when none is sent.</summary>
+    private static string MaxTokens(JsonObject body) => (body["max_completion_tokens"] ?? body["max_tokens"])?.ToJsonString() ?? "-";
+
+    /// <summary>The effort the body sends (<c>reasoning_effort</c>, or <c>reasoning.effort</c> on OpenRouter); "-" when none.</summary>
+    private static string Effort(JsonObject body) =>
+        JsonRead.Text(body["reasoning_effort"]) is { Length: > 0 } effort ? effort : JsonRead.Text(body["reasoning"]?["effort"]) is { Length: > 0 } nested ? nested : "-";
 
     /// <summary>HTTP status of an error object inside a 200 body: a numeric <c>code</c> when it is one (OpenRouter), otherwise 502 (busy).</summary>
     private static int ErrorStatus(JsonNode? error)

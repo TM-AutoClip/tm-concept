@@ -42,5 +42,5 @@ public sealed class FileLoggerProvider : ILoggerProvider
 
     /// <summary>Formats, scrubs and appends one entry.</summary>
     internal void Write(LogLevel level, string category, EventId eventId, string message, Exception? exception) =>
-        _file.Write(_scrubber.Scrub(LogLine.Format(_clock.GetLocalNow(), level, category, eventId, message, exception)));
+        _file.Write(_scrubber.Scrub(LogLine.Format(_clock.GetLocalNow(), level, category, eventId, message, exception)), level);
 }

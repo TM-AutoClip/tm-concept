@@ -8,9 +8,11 @@ namespace TMConcept.Desktop.Logging;
 /// <summary>
 /// The log file of one process kind: <c>&lt;kind&gt;-yyyy-MM-dd.log</c> by the local date, a new file at midnight while the program runs. Each
 /// start and each new file begins with <see cref="AppIdentity.Header"/>. The file is opened for appending and shared (another process of the
-/// same kind, or a problem report reading it, can use it at the same time); every entry is flushed. Processes of the same kind take a named
-/// lock around "go to the end and write", so a second start or a second worker never overwrites lines of the other. After the daily size
-/// limit one warning line is written and nothing more until the next day. Old files are swept (<see cref="LogRetention"/>) at start and
+/// same kind, or a problem report reading it, can use it at the same time); every entry is handed to the system at once and written
+/// through to the disk (<c>Flush(true)</c>) right after a warning or worse, otherwise at most <see cref="LogRules.DiskFlushEvery"/> later
+/// (so Explorer shows the real size of the open file and the lines survive a crash). Processes of the same kind take a named lock around
+/// "go to the end and write", so a second start or a second worker never overwrites lines of the other. After the daily size limit one
+/// warning line is written and nothing more until the next day. Old files are swept (<see cref="LogRetention"/>) at start and
 /// at every day change; a file that cannot be deleted is written as a warning line. When a day's file cannot be opened at first, the
 /// header and the sweep come with the first entry that opens it.
 /// </summary>
@@ -27,8 +29,11 @@ public sealed class DailyLogFile : IDisposable
     private FileStream? _stream;
     private DateOnly _day = DateOnly.MinValue;
     private DateOnly _headerDay = DateOnly.MinValue;
+    private readonly ITimer _flusher;
     private bool _full;
     private bool _disposed;
+    private bool _dirty;
+    private long _flushedAt;
 
     /// <summary>Opens today's file of <paramref name="kind"/> in <paramref name="directory"/> (created if missing) and writes the header.</summary>
     public DailyLogFile(string directory, string kind, TimeProvider clock, long maxBytes = LogRules.MaxFileBytes, LogScrubber? scrubber = null)
@@ -46,8 +51,14 @@ public sealed class DailyLogFile : IDisposable
         lock (_gate)
         {
             Open(Today());
+            ToDisk();
         }
+
+        _flusher = clock.CreateTimer(_ => FlushPending(), null, LogRules.DiskFlushEvery, LogRules.DiskFlushEvery);
     }
+
+    /// <summary>How many times the file was written through to the disk (tests read it).</summary>
+    internal int DiskFlushes { get; private set; }
 
     /// <summary>The log folder.</summary>
     public string Folder { get; }
@@ -55,8 +66,14 @@ public sealed class DailyLogFile : IDisposable
     /// <summary>The file written now.</summary>
     public string CurrentFile => Path.Combine(Folder, LogFileName.For(_kind, _day));
 
-    /// <summary>Appends one entry (thread-safe; a new day opens a new file first).</summary>
-    public void Write(string entry)
+    /// <summary>Appends one Information entry (thread-safe; a new day opens a new file first).</summary>
+    public void Write(string entry) => Write(entry, LogLevel.Information);
+
+    /// <summary>
+    /// Appends one entry of <paramref name="level"/> (thread-safe; a new day opens a new file first). A warning or worse is written through to
+    /// the disk at once, any other entry within <see cref="LogRules.DiskFlushEvery"/>.
+    /// </summary>
+    public void Write(string entry, LogLevel level)
     {
         lock (_gate)
         {
@@ -72,14 +89,25 @@ public sealed class DailyLogFile : IDisposable
             }
 
             Append(entry, warnWhenFull: true);
+            _dirty = true;
+            if (level >= LogLevel.Warning || _clock.GetElapsedTime(_flushedAt) >= LogRules.DiskFlushEvery)
+            {
+                ToDisk();
+            }
         }
     }
 
     /// <inheritdoc />
     public void Dispose()
     {
+        _flusher.Dispose();
         lock (_gate)
         {
+            if (!_disposed)
+            {
+                ToDisk();
+            }
+
             _disposed = true;
             _stream?.Dispose();
             _stream = null;
@@ -110,6 +138,39 @@ public sealed class DailyLogFile : IDisposable
     }
 
     private DateOnly Today() => DateOnly.FromDateTime(_clock.GetLocalNow().DateTime);
+
+    /// <summary>The timer: writes through what is still waiting.</summary>
+    private void FlushPending()
+    {
+        lock (_gate)
+        {
+            if (_dirty && !_disposed)
+            {
+                ToDisk();
+            }
+        }
+    }
+
+    /// <summary>Writes the system's buffer of the file through to the disk (inside the gate); a failure only loses this write-through.</summary>
+    private void ToDisk()
+    {
+        _dirty = false;
+        _flushedAt = _clock.GetTimestamp();
+        if (_stream is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _stream.Flush(flushToDisk: true);
+            DiskFlushes++;
+        }
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException or UnauthorizedAccessException)
+        {
+            System.Diagnostics.Debug.WriteLine("Log file flush failed: " + ex.Message);
+        }
+    }
 
     private void Open(DateOnly today)
     {

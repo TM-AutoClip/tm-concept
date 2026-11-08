@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using TMConcept.Core.Chat;
@@ -88,6 +89,53 @@ public sealed class StreamTests
 
         // 900 × 4 $ + 4 000 × 5 $ (cache write) + 64 000 × 20 $ per million tokens.
         new CostCalculator().Exact(model, cut.ChargedUsage!).ShouldBe(0.0036m + 0.02m + 1.28m);
+    }
+
+    [Fact]
+    public async Task EveryAnthropicAnswerWritesOneLineWithTheRawStopReasonTheBudgetAndTheTokensButNeverThePromptOrTheKey()
+    {
+        var fake = new FakeHttp()
+            .Answer(HttpStatusCode.OK, Start + Ending("end_turn", 5000), "text/event-stream")
+            .Answer(HttpStatusCode.OK, Start + Ending("model_context_window_exceeded", 7000), "text/event-stream");
+        var logger = new ListLogger<AnthropicProvider>();
+        var client = new AnthropicProvider(Http(fake.Transport), logger).CreateChat(Catalog.Find("anthropic", "claude-sonnet-5-5")!, Key);
+
+        await client.SendAsync(new ChatRequest("SYSTEM-PROMPT-TEXT", "USER-PROMPT-TEXT", MaxOutputTokens: 64_000, Effort: "high"), CancellationToken.None);
+        var cut = await Should.ThrowAsync<ProviderException>(() => client.SendAsync(new ChatRequest("SYSTEM-PROMPT-TEXT", "USER-PROMPT-TEXT",
+            MaxOutputTokens: 64_000), CancellationToken.None));
+
+        cut.Code.ShouldBe("truncated");
+        cut.StopReason.ShouldBe("model_context_window_exceeded", "the raw stop reason is kept: two of them share the code");
+        var lines = logger.Entries.Where(e => e.Message.Contains("stop reason", StringComparison.Ordinal)).ToList();
+        lines.Count.ShouldBe(2);
+        lines[0].Level.ShouldBe(LogLevel.Information);
+        lines[0].Message.ShouldContain("claude-sonnet-5-5: stop reason end_turn, max_tokens 64000, effort high, tokens in 900 / out 5000 / cache read 0 / cache write 4000");
+        lines[1].Level.ShouldBe(LogLevel.Warning, "a cut is a warning");
+        lines[1].Message.ShouldContain("stop reason model_context_window_exceeded, max_tokens 64000, effort automatic");
+        logger.Entries.ShouldAllBe(e => !e.Message.Contains("PROMPT-TEXT", StringComparison.Ordinal) && !e.Message.Contains(Key, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task AnOpenAICompatibleAnswerCutAtLengthWritesAWarningLineWithTheFinishReason()
+    {
+        var fake = new FakeHttp().Answer(HttpStatusCode.OK, """
+            data: {"choices":[{"index":0,"delta":{"content":"[{"},"finish_reason":"length"}],"usage":{"prompt_tokens":10,"completion_tokens":9}}
+
+            data: [DONE]
+
+            """, "text/event-stream");
+        var logger = new ListLogger<DeepSeekProvider>();
+        var client = new DeepSeekProvider(Http(fake.Transport), logger)
+            .CreateChat(Catalog.All.First(m => m.Provider == "deepseek" && m.Capabilities.HasFlag(ModelCapability.Chat)), Key);
+
+        var cut = await Should.ThrowAsync<ProviderException>(() => client.SendAsync(new ChatRequest("SYSTEM-PROMPT-TEXT", "USER-PROMPT-TEXT", Stream: true),
+            CancellationToken.None));
+
+        cut.StopReason.ShouldBe("length");
+        var line = logger.Entries.Single(e => e.Message.Contains("finish reason", StringComparison.Ordinal));
+        line.Level.ShouldBe(LogLevel.Warning);
+        line.Message.ShouldContain("finish reason length, max_tokens -, effort -, tokens in 10 / out 9 / cache read 0");
+        logger.Entries.ShouldAllBe(e => !e.Message.Contains("PROMPT-TEXT", StringComparison.Ordinal) && !e.Message.Contains(Key, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -241,5 +289,22 @@ public sealed class StreamTests
 
         failed.Code.ShouldBe("busy");
         failed.Message.ShouldContain("upstream died");
+    }
+
+    /// <summary>Keeps every entry.</summary>
+    private sealed class ListLogger<T> : ILogger<T>
+    {
+        public List<(LogLevel Level, string Message)> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            ArgumentNullException.ThrowIfNull(formatter);
+            Entries.Add((logLevel, formatter(state, exception)));
+        }
     }
 }
