@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Avalonia.Input.Platform;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -15,10 +16,10 @@ namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
 /// The main window: profile selector (every page is filtered by it), the sidebar of pages with "Report a problem" at its bottom, the
-/// current page and a thin strip at the bottom: on the left the last activity line (time and text; a warning yellow, an error red; lines
-/// about money say what was paid), a click opens the last <see cref="ListMax"/> lines in a small list that is closed by default; on the
-/// right the step of the running work (a concept call, "Suggest topics", a video, an install) with a spinner. The developer asked for it
-/// on 8 Nov 2026 ("what was done must be shown somewhere, at worst at the bottom of the screen"); it is not the old activity panel.
+/// current page and the activity log panel at the bottom: its header has the toggle, the last line while the panel is folded, the step of
+/// the running work (a concept call, "Suggest topics", a video, an install) with a spinner, Copy and Clear; open, it lists the last
+/// <see cref="ListMax"/> lines newest first (time and text; a warning yellow, an error red; lines about money say what was paid). Open by
+/// default. Taken out on 8 Nov 2026 night, back on 8 Nov 2026 afternoon at the developer's request.
 /// </summary>
 public sealed partial class ShellViewModel : ObservableObject
 {
@@ -29,15 +30,17 @@ public sealed partial class ShellViewModel : ObservableObject
     private readonly ILogger<ShellViewModel> _logger;
     private readonly IReportDialog _report;
     private readonly WorkStatus _work;
+    private readonly WindowHost _host;
     private bool _loadingProfiles;
 
-    /// <summary>Lines the strip's list shows.</summary>
+    /// <summary>Lines the panel shows.</summary>
     public const int ListMax = 100;
 
     /// <summary>Builds the sidebar from every registered page.</summary>
     public ShellViewModel(IEnumerable<PageViewModelBase> pages, Localizer text, AppSession session, IProfileStore profiles, INotifier notifier,
-        IReportDialog report, IActivityFeed feed, WorkStatus work, ILogger<ShellViewModel> logger)
+        IReportDialog report, IActivityFeed feed, WorkStatus work, WindowHost host, ILogger<ShellViewModel> logger)
     {
+        ArgumentNullException.ThrowIfNull(host);
         ArgumentNullException.ThrowIfNull(feed);
         ArgumentNullException.ThrowIfNull(work);
         ArgumentNullException.ThrowIfNull(text);
@@ -47,6 +50,7 @@ public sealed partial class ShellViewModel : ObservableObject
         _notifier = notifier;
         _logger = logger;
         _report = report;
+        _host = host;
         Items = new ObservableCollection<NavItemViewModel>(pages.OrderBy(p => p.Order).Select(p => new NavItemViewModel(this, p)));
         foreach (var item in Items)
         {
@@ -103,10 +107,14 @@ public sealed partial class ShellViewModel : ObservableObject
     [ObservableProperty]
     public partial Profile? SelectedProfile { get; set; }
 
+    /// <summary>Whether the activity log panel is open (open by default).</summary>
+    [ObservableProperty]
+    public partial bool LogOpen { get; set; } = true;
+
     /// <summary>Whether a page runs work (a generation, a video queue).</summary>
     public bool AnyWorking => Items.Any(i => i.Page.Working);
 
-    /// <summary>The strip's list: the last activity lines, newest first.</summary>
+    /// <summary>The panel's list: the last activity lines, newest first.</summary>
     public ObservableCollection<ActivityLineViewModel> Lines { get; } = [];
 
     /// <summary>The newest activity line (null before the first).</summary>
@@ -114,13 +122,13 @@ public sealed partial class ShellViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(LastLine))]
     public partial ActivityLineViewModel? Last { get; private set; }
 
-    /// <summary>The strip's left side: "14:23 · Concepts ready: 5 · exact 0.14 $", or that nothing was done yet.</summary>
+    /// <summary>The newest line, in the header while the panel is folded: "14:23 · Concepts ready: 5 · exact 0.14 $", or that nothing was done yet.</summary>
     public string LastLine => Last?.Line ?? _text["strip.empty"];
 
     /// <summary>The step of the running work (the newest one); empty when nothing runs.</summary>
     public string CurrentStep => _work.Text;
 
-    /// <summary>Whether the strip's spinner turns (a page works or a work shows a step).</summary>
+    /// <summary>Whether the panel's spinner turns (a page works or a work shows a step).</summary>
     public bool Spinning => AnyWorking || _work.Active;
 
     /// <summary>The profile can be switched only while no page works for the selected one.</summary>
@@ -274,6 +282,33 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>Opens "Report a problem" (nothing is sent from there by itself).</summary>
     [RelayCommand]
     private Task ReportProblemAsync() => _report.ShowAsync();
+
+    [RelayCommand]
+    private void ToggleLog() => LogOpen = !LogOpen;
+
+    /// <summary>Empties the panel; the log file keeps every line.</summary>
+    [RelayCommand]
+    private void ClearLog()
+    {
+        Lines.Clear();
+        Last = null;
+    }
+
+    /// <summary>Copies the panel's lines, oldest first, to the clipboard.</summary>
+    [RelayCommand]
+    private async Task CopyLogAsync()
+    {
+        var text = string.Join(Environment.NewLine,
+            Lines.Reverse().Select(l => l.Entry.At.ToString("HH:mm:ss", _text.Culture) + " " + l.Entry.Text));
+        if (_host.Active?.Clipboard is { } clipboard)
+        {
+            await clipboard.SetTextAsync(text).ConfigureAwait(true);
+        }
+        else
+        {
+            _logger.LogWarning("No window to copy the activity lines to the clipboard from");
+        }
+    }
 
     private void Show(ActivityEntry entry)
     {

@@ -52,36 +52,32 @@
       <ContentControl Grid.Column="1" Content="{Binding Current}" />
     </Grid>
 
-    <!-- The activity strip: the last line on the left (a click opens the last lines, closed by default), the running work's step on the right. -->
+    <!-- The activity log panel: header (toggle, the last line while folded, the running work's step, Copy, Clear), open by default. -->
     <Border Grid.Row="1" Background="{DynamicResource tm-strip-bg}" BorderBrush="{DynamicResource tm-border}" BorderThickness="0,1,0,0">
-      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" Margin="8,2">
-        <Button Name="ActivityStrip" Classes="link" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="4,2"
-                ToolTip.Tip="{DynamicResource strip.tooltip}">
-          <TextBlock Name="LastLine" Text="{Binding LastLine}" FontSize="12" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
+      <DockPanel>
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="8" Margin="8,3">
+          <Button Name="LogToggle" Classes="link" Command="{Binding ToggleLogCommand}" Content="{DynamicResource log.title}" VerticalAlignment="Center" />
+          <TextBlock Grid.Column="1" Name="LastLine" Text="{Binding LastLine}" FontSize="12" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
+                     VerticalAlignment="Center" Margin="8,0" IsVisible="{Binding !LogOpen}"
                      Classes.warning="{Binding Last.IsWarning, FallbackValue=False}" Classes.error="{Binding Last.IsError, FallbackValue=False}" />
-          <Button.Flyout>
-            <Flyout Placement="TopEdgeAlignedLeft">
-              <StackPanel Spacing="6" Width="640">
-                <TextBlock Text="{DynamicResource strip.title}" FontWeight="SemiBold" />
-                <ScrollViewer MaxHeight="320">
-                  <ItemsControl ItemsSource="{Binding Lines}">
-                    <ItemsControl.ItemTemplate>
-                      <DataTemplate x:DataType="vm:ActivityLineViewModel">
-                        <TextBlock Text="{Binding Line}" FontSize="12" TextWrapping="Wrap" Margin="0,1"
-                                   Classes.warning="{Binding IsWarning}" Classes.error="{Binding IsError}" />
-                      </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                  </ItemsControl>
-                </ScrollViewer>
-              </StackPanel>
-            </Flyout>
-          </Button.Flyout>
-        </Button>
-        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" IsVisible="{Binding Spinning}">
-          <TextBlock Name="CurrentStep" Text="{Binding CurrentStep}" FontSize="12" MaxWidth="560" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-          <ProgressBar IsIndeterminate="True" Width="80" MinWidth="80" VerticalAlignment="Center" />
-        </StackPanel>
-      </Grid>
+          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" IsVisible="{Binding Spinning}">
+            <TextBlock Name="CurrentStep" Text="{Binding CurrentStep}" FontSize="12" MaxWidth="560" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+            <ProgressBar IsIndeterminate="True" Width="80" MinWidth="80" VerticalAlignment="Center" />
+          </StackPanel>
+          <Button Grid.Column="3" Content="{DynamicResource log.copy}" Command="{Binding CopyLogCommand}" />
+          <Button Grid.Column="4" Content="{DynamicResource log.clear}" Command="{Binding ClearLogCommand}" />
+        </Grid>
+        <ScrollViewer Name="LogScroll" Height="130" IsVisible="{Binding LogOpen}" Margin="8,0,8,6">
+          <ItemsControl ItemsSource="{Binding Lines}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:ActivityLineViewModel">
+                <TextBlock Text="{Binding Line}" FontSize="12" TextWrapping="Wrap" Margin="0,1"
+                           Classes.warning="{Binding IsWarning}" Classes.error="{Binding IsError}" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+      </DockPanel>
     </Border>
   </Grid>
 </Window>

@@ -2,7 +2,7 @@ using TMConcept.Core.Activity;
 
 namespace TMConcept.Desktop.ViewModels;
 
-/// <summary>An activity line on the strip at the bottom of the main window: the line with its time, and its level for the colour.</summary>
+/// <summary>An activity line in the activity log panel at the bottom of the main window: the line with its time, and its level for the colour.</summary>
 public sealed class ActivityLineViewModel(ActivityEntry entry, string line)
 {
     /// <summary>The entry.</summary>

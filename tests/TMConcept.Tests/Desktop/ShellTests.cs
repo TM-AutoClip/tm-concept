@@ -15,7 +15,7 @@ namespace TMConcept.Tests.Desktop;
 public sealed class ShellTests
 {
     [AvaloniaFact]
-    public async Task MainWindowOpensWithSidebarAndAOneLineActivityStrip()
+    public async Task MainWindowOpensWithSidebarAndTheActivityLogPanel()
     {
         using var h = new DesktopHarness();
         await FirstRunTests.CreateAsync(h);
@@ -26,8 +26,8 @@ public sealed class ShellTests
         await shell.StartAsync();
         shell.Items.ShouldNotBeEmpty();
         shell.Current.ShouldNotBeNull();
-        window.GetVisualDescendants().OfType<ScrollViewer>().ShouldNotContain(s => s.Name == "LogScroll", "not the old panel: one line, a list only on a click");
-        window.GetVisualDescendants().OfType<TextBlock>().ShouldContain(t => t.Name == "LastLine");
+        shell.LogOpen.ShouldBeTrue("the panel is open by default");
+        window.GetVisualDescendants().OfType<ScrollViewer>().ShouldContain(s => s.Name == "LogScroll" && s.IsVisible);
 
         // The newest line is on the strip with its time; a warning is yellow, an error red; the list is newest first.
         h.Get<ActivityLog>().Add(ActivityLevel.Warning, "narration off");
@@ -37,11 +37,20 @@ public sealed class ShellTests
         shell.Last!.IsError.ShouldBeTrue();
         shell.Lines[0].ShouldBeSameAs(shell.Last);
         shell.Lines[1].Line.ShouldEndWith("narration off");
+
+        // Folded: the list hides and the header shows the last line; Clear empties the panel only.
+        shell.ToggleLogCommand.Execute(null);
+        shell.LogOpen.ShouldBeFalse();
+        window.GetVisualDescendants().OfType<TextBlock>().ShouldContain(t => t.Name == "LastLine" && t.IsVisible);
+        shell.ClearLogCommand.Execute(null);
+        shell.Lines.ShouldBeEmpty();
+        shell.Last.ShouldBeNull();
+        h.Get<ActivityLog>().Recent().ShouldNotBeEmpty("the memory and the log file keep the lines");
         window.Close();
     }
 
     [AvaloniaFact]
-    public async Task TheStripKeepsTheLastHundredLinesAndShowsTheRunningWorksStep()
+    public async Task ThePanelKeepsTheLastHundredLinesAndShowsTheRunningWorksStep()
     {
         using var h = new DesktopHarness();
         await FirstRunTests.CreateAsync(h);
