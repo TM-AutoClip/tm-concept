@@ -71,6 +71,7 @@ public static class DesktopServices
         services.AddSingleton<Core.Media.IMediaTools, Engines.Media.FfmpegMedia>();
         services.AddSingleton<Core.Videos.VideoAssembler>();
         services.AddSingleton<Core.Videos.VideoPipeline>();
+        services.AddSingleton<Core.Videos.SceneNarrator>();
         services.AddSingleton<Core.Videos.VideoRemaker>();
         services.AddSingleton<Core.Videos.VideoCostEstimator>();
         services.AddSingleton<Speech.Speech.SpeechModelInstaller>();

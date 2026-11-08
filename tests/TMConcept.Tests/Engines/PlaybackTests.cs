@@ -223,7 +223,8 @@ public sealed class PlaybackTests
         return (ffmpeg, clip);
     }
 
-    private static string? Ffmpeg()
+    /// <summary>ffmpeg from TMCONCEPT_TEST_FFMPEG or PATH; null without one (the real-ffmpeg tests are skipped).</summary>
+    internal static string? Ffmpeg()
     {
         var configured = Environment.GetEnvironmentVariable("TMCONCEPT_TEST_FFMPEG");
         if (!string.IsNullOrEmpty(configured) && File.Exists(configured))

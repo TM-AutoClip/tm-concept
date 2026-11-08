@@ -1,17 +1,17 @@
 namespace TMConcept.Core.Markers;
 
-/// <summary>Where a marker is offered (new values are added at the end).</summary>
+/// <summary>What a placeholder does; every kind is applied by the program itself, whatever the models write (new values are added at the end).</summary>
 public enum MarkerKind
 {
     /// <summary>
-    /// In a prompt (the profile's channel concept, the extra request): a style request the model reads with the meaning the prompt gives it
-    /// (transitions, pauses, emphasis…; the video code later draws what the concept's scene lines say).
+    /// Applied to the narration on this computer: a pause is silence between two spoken parts (and lengthens its scene), a speed marker
+    /// changes the voice's speed for the parts after it. Never spoken, never in the subtitles.
     /// </summary>
-    Prompt = 0,
+    Narration = 0,
 
     /// <summary>
-    /// In a narration text edited for a new version: applied on this computer without a model (a pause is silence between two spoken parts,
-    /// a speed marker changes the voice's speed for the parts after it). Never spoken, never in the subtitles.
+    /// The transition into a scene: a hard cut (also told to the video code) or a short fade through black that ffmpeg adds after the render.
+    /// Never spoken, never in the subtitles.
     /// </summary>
-    Narration = 1,
+    Transition = 1,
 }

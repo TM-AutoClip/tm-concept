@@ -13,8 +13,11 @@ namespace TMConcept.Core.Videos;
 /// </summary>
 public static class VideoCodePrompt
 {
-    /// <summary>Version of the prompts, kept on every video (2: subtitle rule and the names the safety check refuses; 3: the video's language).</summary>
-    public const string Version = "3";
+    /// <summary>
+    /// Version of the prompts, kept on every video (2: subtitle rule and the names the safety check refuses; 3: the video's language; 4: the
+    /// scene transitions).
+    /// </summary>
+    public const string Version = "4";
 
     /// <summary>The system text of an engine; <paramref name="subtitles"/>: subtitles are burned in after the render.</summary>
     public static string System(IVideoEngine engine, bool subtitles)
@@ -33,6 +36,8 @@ public static class VideoCodePrompt
             (theme.background), text colour theme.text. Each scene shows its "visual" idea as shapes, icons drawn with simple elements, maps,
             timelines, numbers or the given image.
             {caption}
+            A scene marked "hard cut" begins with a hard cut: no cross-fade, slide or other animated transition into it. A scene marked "fade"
+            gets a short fade through black at its start from the program after the render: do not animate a transition into it yourself.
             The code passes an automatic safety check. Write plain drawing code only, and also avoid these harmless forms the check refuses:
             no variable, parameter or property named location, top, parent, opener or process; no escape sequences for ASCII characters
             (write the character itself; "—" or "·" may be written directly); no web addresses; no words "from" or "import" followed by a
@@ -57,7 +62,13 @@ public static class VideoCodePrompt
         foreach (var scene in input.Scenes)
         {
             text.Append(c, $"Scene {scene.Number}: {scene.StartSeconds:0.##}–{scene.StartSeconds + scene.DurationSeconds:0.##} s; visual «{Clean(scene.Visual)}»; ")
-                .Append(c, $"caption «{Clean(scene.Caption)}»").Append(scene.Image.Length > 0 ? $"; image \"{scene.Image}\"" : string.Empty).Append('\n');
+                .Append(c, $"caption «{Clean(scene.Caption)}»").Append(scene.Image.Length > 0 ? $"; image \"{scene.Image}\"" : string.Empty)
+                .Append(scene.Transition switch
+                {
+                    Scenes.SceneTransitions.Cut => "; hard cut",
+                    Scenes.SceneTransitions.Fade => "; fade",
+                    _ => string.Empty,
+                }).Append('\n');
         }
 
         return text.Append("Write the file now.").ToString();

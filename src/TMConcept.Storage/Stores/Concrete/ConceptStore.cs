@@ -86,6 +86,15 @@ public sealed class ConceptStore(ConceptDatabase database) : IConceptStore
     }
 
     /// <inheritdoc />
+    public async Task UpdateContentAsync(Guid id, string content, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+        var text = content.Replace("\0", string.Empty, StringComparison.Ordinal);
+        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await db.Concepts.Where(c => c.Id == id).ExecuteUpdateAsync(s => s.SetProperty(c => c.Content, text), cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public async Task SetStatusAsync(IReadOnlyCollection<Guid> ids, ConceptStatus status, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(ids);

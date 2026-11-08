@@ -62,6 +62,7 @@ public static class RenderInputBuilder
                 Visual = source.Visual,
                 Caption = source.Caption,
                 Image = source.Image,
+                Transition = i == 0 ? Scenes.SceneTransitions.None : source.Transition,
             });
             frame += count;
         }

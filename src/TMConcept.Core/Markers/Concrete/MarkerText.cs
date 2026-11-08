@@ -1,34 +1,15 @@
 using System.Text;
 using System.Text.RegularExpressions;
-using TMConcept.Core.Profiles;
 using TMConcept.Core.Text;
 
 namespace TMConcept.Core.Markers;
 
 /// <summary>
-/// Markers in a text: which ones a text uses (both languages' spellings, any letter case, "0,5" or "0.5"), the legend a prompt gets for
-/// them, inserting one at the caret, and a narration text split into spoken parts with their pauses and speeds.
+/// Markers in a text (both languages' spellings, any letter case, "0,5" or "0.5"): the transition a text asks for, the silence its pauses
+/// add, inserting one at the caret, and a narration text split into spoken parts with their pauses and speeds.
 /// </summary>
 public static partial class MarkerText
 {
-    /// <summary>The markers of <paramref name="kind"/> that the texts use, in catalog order.</summary>
-    public static IReadOnlyList<Marker> Used(MarkerKind kind, params string?[] texts)
-    {
-        var found = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var text in texts)
-        {
-            foreach (Match match in Bracket().Matches(text ?? string.Empty))
-            {
-                if (Find(match.Value) is { } marker && marker.Kind == kind)
-                {
-                    found.Add(marker.Id);
-                }
-            }
-        }
-
-        return MarkerCatalog.All.Where(m => found.Contains(m.Id)).ToList();
-    }
-
     /// <summary>The marker a bracket text stands for ("[Sert geçiş]", "[hard cut]"); null when it is none of them.</summary>
     public static Marker? Find(string bracket)
     {
@@ -37,20 +18,27 @@ public static partial class MarkerText
     }
 
     /// <summary>
-    /// The legend of the prompt markers a prompt's user texts use, in <paramref name="language"/> (the prompt's own language): each marker in
-    /// both spellings with what it means; null when none is used (the prompt line is left out).
+    /// The transition a text asks for (<see cref="Scenes.SceneTransitions"/>): the last transition marker in it wins; empty when it has none.
     /// </summary>
-    public static string? Legend(string language, params string?[] texts)
+    public static string Transition(string? text)
     {
-        var used = Used(MarkerKind.Prompt, texts);
-        if (used.Count == 0)
+        var transition = Scenes.SceneTransitions.None;
+        foreach (Match match in Bracket().Matches(text ?? string.Empty))
         {
-            return null;
+            if (Find(match.Value) is { Kind: MarkerKind.Transition } marker)
+            {
+                transition = marker.Transition;
+            }
         }
 
-        var turkish = OutputLanguages.Of(language).PromptLanguage == ContentLanguages.Turkish;
-        return string.Join("; ", used.Select(m => m.Token.Tr + " / " + m.Token.En + " = " + (turkish ? m.Meaning.Tr : m.Meaning.En)));
+        return transition;
     }
+
+    /// <summary>The silence the pause markers of a text add, in milliseconds.</summary>
+    public static int Silence(string? text) => Bracket().Matches(text ?? string.Empty).Sum(m => Find(m.Value)?.PauseMs ?? 0);
+
+    /// <summary>Whether a text has a marker of the catalog (a bracket text that is no marker does not count).</summary>
+    public static bool HasMarker(string? text) => Bracket().Matches(text ?? string.Empty).Any(m => Find(m.Value) is not null);
 
     /// <summary>
     /// <paramref name="token"/> put into <paramref name="text"/> at the caret (replacing the selected text, when there is a selection), with a
@@ -75,8 +63,8 @@ public static partial class MarkerText
     /// <summary>
     /// A scene's edited narration as spoken parts: the text between markers, each with the speed in force (<see cref="MarkerCatalog.Slow"/>
     /// and the others multiply the voice's own speed until the next speed marker) and the silence of the pause markers after it (a pause
-    /// at the start is a silent part). Bracket text that is no narration marker is not spoken; it is returned in
-    /// <paramref name="ignored"/> so the caller can say so.
+    /// at the start is a silent part). A transition marker is left out (it belongs to the scene, not to the voice). Bracket text that is no
+    /// marker is not spoken either; it is returned in <paramref name="ignored"/> so the caller can say so.
     /// </summary>
     public static IReadOnlyList<NarrationPart> Parts(string? text, out IReadOnlyList<string> ignored)
     {
@@ -101,6 +89,12 @@ public static partial class MarkerText
             pending.Append(value, at, match.Index - at);
             at = match.Index + match.Length;
             var marker = Find(match.Value);
+            if (marker is { Kind: MarkerKind.Transition })
+            {
+                pending.Append(' ');
+                continue;
+            }
+
             if (marker is not { Kind: MarkerKind.Narration })
             {
                 skipped.Add(match.Value);

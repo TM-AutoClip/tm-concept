@@ -38,7 +38,7 @@ public sealed class HyperFramesEngine(IAppPaths paths, ToolInstaller tools, Chro
         Engine: HyperFrames (HTML + GSAP 3, captured frame by frame).
         Write ONE plain JavaScript file (scene.js) that runs in the page. GSAP is already loaded as the global `gsap`.
         Read everything from `window.INPUT` (width, height, fps, durationSeconds, title, theme {background, accent, text},
-        scenes [{number, startSeconds, durationSeconds, visual, caption, image}]). Never hard-code texts or durations.
+        scenes [{number, startSeconds, durationSeconds, visual, caption, image, transition}]). Never hard-code texts or durations.
         Build the DOM inside `document.getElementById("root")` with createElement / createElementNS and textContent (never innerHTML).
         Images: only `scene.image` (a relative file name) when it is not empty.
         Create ONE paused timeline: `const tl = gsap.timeline({ paused: true });` place every animation at the scene's startSeconds, and register

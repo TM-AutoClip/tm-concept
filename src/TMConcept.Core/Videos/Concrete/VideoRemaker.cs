@@ -1,12 +1,10 @@
 using System.Diagnostics;
-using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using TMConcept.Core.Engines;
 using TMConcept.Core.Markers;
 using TMConcept.Core.Paths;
 using TMConcept.Core.Pipeline;
-using TMConcept.Core.Profiles;
 using TMConcept.Core.Render;
 using TMConcept.Core.Speech;
 
@@ -16,15 +14,16 @@ namespace TMConcept.Core.Videos;
 /// New versions of a made video (KURALLAR 12): every one is a new version folder next to the old ones (v2/, v3/…) with its own record;
 /// older versions are never changed.
 /// <list type="bullet">
-/// <item><see cref="RevoiceAsync"/>: the narration text edited per scene (narration markers: pauses become silence, speed markers change the
-/// voice's speed) and a voice chosen; the voice is made again on this computer (an online voice is paid, nothing else), each scene lasts
-/// as long as its new clip, <c>input.json</c> gets the new timing and texts, and the SAME kept code is rendered again — no model call. The
-/// subtitles follow the new text.</item>
+/// <item><see cref="RevoiceAsync"/>: the narration text edited per scene (placeholders: pauses become silence, speed markers change the
+/// voice's speed, a transition placeholder sets how the scene begins) and a voice chosen; the voice is made again on this computer (an online
+/// voice is paid, nothing else; <see cref="SceneNarrator"/>, the same as the first video), each scene lasts as long as its new clip (a silent
+/// one as long as its text takes to say, pauses included), <c>input.json</c> gets the new timing, texts and transitions, and the SAME kept
+/// code is rendered again — no model call. The subtitles follow the new text; a fade is added by ffmpeg at the mux.</item>
 /// <item><see cref="RecodeAsync"/>: another engine (HyperFrames ↔ Remotion ↔ Revideo) needs its own code: the code model writes it for the
 /// same input (paid, with the usual one repair), and the kept scene images, clips and texts are used again.</item>
 /// </list>
 /// </summary>
-public sealed class VideoRemaker(IEnumerable<IVideoEngine> engines, SpeechService speech, VideoAssembler assembler, IAppPaths paths,
+public sealed class VideoRemaker(IEnumerable<IVideoEngine> engines, SceneNarrator narrator, VideoAssembler assembler, IAppPaths paths,
     ILogger<VideoRemaker> logger)
 {
     private static readonly (string Step, double Weight)[] RevoiceWeights = [("prepare", 2), ("speech", 30), ("timing", 1), ("render", 55), ("mux", 10), ("save", 2)];
@@ -114,8 +113,9 @@ public sealed class VideoRemaker(IEnumerable<IVideoEngine> engines, SpeechServic
             // C. timing: each scene lasts as long as its new clip (pauses included); a silent scene as long as its text takes to say.
             var sources = input.Scenes.Select((s, i) =>
             {
-                var spoken = MarkerText.Spoken(job.SceneTexts[i]);
-                return new RenderSceneSource(s.Visual, spoken, s.Image, clips[i]?.DurationMs ?? VideoCostEstimator.Milliseconds(spoken, input.Language));
+                var script = job.SceneTexts[i];
+                var spoken = MarkerText.Spoken(script);
+                return new RenderSceneSource(s.Visual, spoken, s.Image, clips[i]?.DurationMs ?? SilentMs(script, input.Language), MarkerText.Transition(script));
             }).ToList();
             var timed = RenderInputBuilder.Build(input.Title, input.Language, sources, input.Width, input.Height, input.Fps, input.Theme);
             steps.Finish("timing");
@@ -183,7 +183,17 @@ public sealed class VideoRemaker(IEnumerable<IVideoEngine> engines, SpeechServic
         }).ConfigureAwait(false);
     }
 
-    /// <summary>The edited texts kept with a version (markers included) when there are as many as scenes; otherwise the spoken captions.</summary>
+    /// <summary>
+    /// How long a scene without a voice lasts: as long as its text takes to say, with the silence of its pauses (the first video and every new
+    /// version time it the same way).
+    /// </summary>
+    public static long SilentMs(string? script, string language) =>
+        VideoCostEstimator.Milliseconds(MarkerText.Spoken(script), language) + MarkerText.Silence(script);
+
+    /// <summary>
+    /// A scene's text to edit as kept in a version: its placeholders and the transition into it. The texts kept with a version (placeholders
+    /// included) when there are as many as scenes; otherwise the spoken captions, each after its scene's transition placeholder.
+    /// </summary>
     private IReadOnlyList<string> Texts(string folder, RenderInput input)
     {
         var file = Path.Combine(folder, VideoFolders.ScriptFile);
@@ -202,7 +212,7 @@ public sealed class VideoRemaker(IEnumerable<IVideoEngine> engines, SpeechServic
             }
         }
 
-        return input.Scenes.Select(s => s.Caption).ToList();
+        return input.Scenes.Select(s => WithTransition(s.Transition, s.Caption, input.Language)).ToList();
     }
 
     /// <summary>The settings a version was made with (a fresh copy each time).</summary>
@@ -220,47 +230,24 @@ public sealed class VideoRemaker(IEnumerable<IVideoEngine> engines, SpeechServic
     }
 
     /// <summary>
-    /// One scene's new clip: its spoken parts (between markers) each with its speed, joined with the pauses into <c>audio/&lt;n&gt;.wav</c>.
-    /// A scene with no text and no pause has no clip. Returns the clip and how many words the voice left out.
+    /// <paramref name="text"/> after the placeholder of <paramref name="transition"/> in <paramref name="language"/> (a scene's edit text starts
+    /// with how the scene begins); the text alone when there is no transition.
     /// </summary>
+    public static string WithTransition(string transition, string text, string language)
+    {
+        var marker = MarkerCatalog.Of(MarkerKind.Transition).FirstOrDefault(m => m.Transition == transition);
+        return marker is null || transition.Length == 0 ? text : (marker.TokenOf(language) + " " + text).TrimEnd();
+    }
+
+    /// <summary>One scene's new clip (<see cref="SceneNarrator"/>), with what it cost in <paramref name="spent"/>; a voice that fails stops the version.</summary>
     private async Task<(SpeechClip? Clip, int Skipped)> SceneVoiceAsync(SpeechSetup voice, string language, int number, string text, string work,
         List<VideoCost> spent, Guid id, CancellationToken cancellationToken)
     {
-        var parts = MarkerText.Parts(text, out var ignored);
-        if (ignored.Count > 0)
-        {
-            // Only the count: the text is the user's.
-            logger.LogInformation("Scene {Number}: {Count} bracket text(s) that are no narration marker are not spoken", number, ignored.Count);
-        }
-
-        if (parts.Count == 0)
-        {
-            return (null, 0);
-        }
-
-        var pieces = new List<(string? File, int SilenceAfterMs)>();
         decimal cost = 0;
-        var characters = 0;
-        var skipped = new HashSet<string>(StringComparer.Ordinal);
         try
         {
-            for (var k = 0; k < parts.Count; k++)
-            {
-                var part = parts[k];
-                if (part.Text.Length == 0)
-                {
-                    pieces.Add((null, part.PauseAfterMs));
-                    continue;
-                }
-
-                var setup = voice with { Speed = Math.Clamp(voice.Speed * part.Speed, ProfileLimits.SpeedMin, ProfileLimits.SpeedMax) };
-                var file = Path.Combine(work, VideoFolders.Audio, "parts", string.Create(CultureInfo.InvariantCulture, $"{number}-{k + 1}.wav"));
-                var clip = await speech.SynthesizeAsync(setup, language, part.Text, file, cancellationToken).ConfigureAwait(false);
-                cost += clip.CostUsd;
-                characters += clip.Characters;
-                skipped.UnionWith(clip.SkippedWords);
-                pieces.Add((clip.File, part.PauseAfterMs));
-            }
+            var clip = await narrator.VoiceAsync(voice, language, number, text, work, usd => cost += usd, cancellationToken).ConfigureAwait(false);
+            return (clip, clip?.SkippedWords.Count ?? 0);
         }
         catch (Exception ex) when (ex is SpeechException or InvalidDataException)
         {
@@ -275,19 +262,6 @@ public sealed class VideoRemaker(IEnumerable<IVideoEngine> engines, SpeechServic
                 spent.Add(new VideoCost { VideoId = id, Step = PipelineSteps.Speech, Usd = cost, Exact = false });
             }
         }
-
-        var joined = Path.Combine(work, VideoFolders.Audio, number.ToString(CultureInfo.InvariantCulture) + ".wav");
-        long length;
-        try
-        {
-            length = WaveFile.Join(pieces, joined);
-        }
-        catch (InvalidDataException ex)
-        {
-            throw new VideoException("The parts of the narration could not be joined: " + ex.Message, ex) { Code = "speech" };
-        }
-
-        return (new SpeechClip(joined, length, characters, cost, voice.Engine.Code), skipped.Count);
     }
 
     /// <summary>The kept scene images go where the engine looks for them (the project's public/ folder and its root), nothing of the old engine.</summary>

@@ -19,8 +19,9 @@ namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
 /// "New version" of a produced video (KURALLAR 12): starts from the chosen version. (a) The narration of each scene can be edited and
-/// extended, with narration markers (pauses, speed; only what this computer can apply), and a voice chosen: the voice is made again here,
-/// the scenes are timed to the new clips and the kept code is rendered again — no AI cost; an online voice's cost is shown first.
+/// extended, with placeholders (pauses, speed, the transition into the scene; all applied by this computer), and a voice chosen: the voice
+/// is made again here, the scenes are timed to the new clips, the kept code is rendered again and a fade is added by ffmpeg — no AI cost; an
+/// online voice's cost is shown first.
 /// (b) Another engine needs new code: the estimate of the code call is shown and confirmed first; images, clips and texts are used again.
 /// Both make a new version folder; older versions stay. The models come from the profile's choices (video code with its engine, voice) and
 /// are made ready like any process (keys, licenses, the install window); the choices are saved for the profile.
@@ -46,8 +47,11 @@ public sealed partial class VersionEditorViewModel(StepPickerViewModel picker, V
     /// <summary>The scenes with their narration to edit.</summary>
     public ObservableCollection<SceneEditViewModel> Scenes { get; } = [];
 
-    /// <summary>The narration markers of the drop-downs (only what is applied on this computer: pauses and speed).</summary>
-    public IReadOnlyList<MarkerOption> NarrationMarkers => MarkerOptions.For(MarkerKind.Narration, text);
+    /// <summary>
+    /// The placeholders of the drop-downs: pauses and speed for the voice, the transition into the scene; all applied on this computer (a new
+    /// version is voiced and rendered again here, no AI cost).
+    /// </summary>
+    public IReadOnlyList<MarkerOption> Placeholders => MarkerOptions.For(text);
 
     /// <summary>Whether the chosen version can be the start of a new one (its project and input were kept).</summary>
     [ObservableProperty]

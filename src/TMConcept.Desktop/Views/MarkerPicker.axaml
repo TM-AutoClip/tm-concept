@@ -1,12 +1,17 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:TMConcept.Desktop.ViewModels"
+             xmlns:views="using:TMConcept.Desktop.Views"
              x:Class="TMConcept.Desktop.Views.MarkerPicker">
-  <ComboBox Name="List" PlaceholderText="{DynamicResource markers.insert}" MinWidth="220" ToolTip.Tip="{DynamicResource markers.insert.tip}">
-    <ComboBox.ItemTemplate>
-      <DataTemplate x:DataType="vm:MarkerOption">
-        <TextBlock Text="{Binding Label}" />
-      </DataTemplate>
-    </ComboBox.ItemTemplate>
-  </ComboBox>
+  <!-- Short names in the list, what each one does in its tooltip, the whole idea in the "?" next to it. -->
+  <StackPanel Orientation="Horizontal">
+    <ComboBox Name="List" PlaceholderText="{DynamicResource markers.insert}" MinWidth="180" ToolTip.Tip="{DynamicResource markers.insert.tip}">
+      <ComboBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:MarkerOption">
+          <TextBlock Text="{Binding Token}" ToolTip.Tip="{Binding Hint}" />
+        </DataTemplate>
+      </ComboBox.ItemTemplate>
+    </ComboBox>
+    <views:HelpTip Text="{DynamicResource markers.help}" />
+  </StackPanel>
 </UserControl>

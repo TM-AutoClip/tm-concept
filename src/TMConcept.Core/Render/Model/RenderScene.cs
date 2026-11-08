@@ -26,4 +26,10 @@ public sealed class RenderScene
 
     /// <summary>Image of the scene, relative to the work folder (<c>images/3.png</c>); empty when none.</summary>
     public string Image { get; set; } = string.Empty;
+
+    /// <summary>
+    /// How the scene begins (<see cref="Scenes.SceneTransitions"/>): empty, <c>cut</c> (a hard cut: the code animates no transition into it)
+    /// or <c>fade</c> (ffmpeg fades through black at its start after the render).
+    /// </summary>
+    public string Transition { get; set; } = string.Empty;
 }

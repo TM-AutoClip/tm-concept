@@ -47,7 +47,7 @@ public sealed class VersionTests
     });
 
     /// <summary>A profile, a concept and its first video (v1, voiced by the fake voice).</summary>
-    private static async Task<(Profile Profile, VideoRecord First, ResolvedModel Model)> FirstAsync(DesktopHarness h, FakeVoice voice)
+    private static async Task<(Profile Profile, VideoRecord First, ResolvedModel Model)> FirstAsync(DesktopHarness h, FakeVoice voice, string content = Content)
     {
         await FirstRunTests.CreateAsync(h);
         var profile = new Profile { Name = "Byzantium", ContentLanguage = ContentLanguages.English, ConceptText = "x" };
@@ -59,7 +59,7 @@ public sealed class VersionTests
             Model = "claude-sonnet-5-5" }, CancellationToken.None);
         await h.Get<IStepModelStore>().SaveAsync(new StepModelChoice { Step = PipelineSteps.Speech, ProfileId = profile.Id, Provider = ModelProviders.Local,
             Model = voice.Code }, CancellationToken.None);
-        var concept = new Concept { ProfileId = profile.Id, Title = "Greek fire", Summary = "s", Content = Content, Language = "en", Status = ConceptStatus.Queued };
+        var concept = new Concept { ProfileId = profile.Id, Title = "Greek fire", Summary = "s", Content = content, Language = "en", Status = ConceptStatus.Queued };
         await h.Get<IConceptStore>().AddAsync([concept], CancellationToken.None);
         var model = new ResolvedModel(h.Get<IModelCatalog>().Find("anthropic", "claude-sonnet-5-5")!, key, string.Empty);
         var stored = (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!;
@@ -98,7 +98,7 @@ public sealed class VersionTests
         File.Exists(Path.Combine(v1, VideoFolders.VideoFile)).ShouldBeTrue("the old version stays");
         File.ReadAllText(Path.Combine(v2, VideoFolders.Source, engine.CodeFile)).Trim().ShouldBe(engine.SampleCode, "the same code");
 
-        // The voice read the parts between the markers; [slow] slowed the second scene; [hard cut] is not spoken.
+        // The voice read the parts between the markers; [slow] slowed the second scene; [hard cut] is not spoken, it is how the scene begins.
         voice.Requests.Select(r => r.Text).ShouldBe(["In 672 the city was besieged.", "The walls held for months.", "A strange fire burned on the water."]);
         voice.Requests[2].Speed.ShouldBe(setup.Speed * TMConcept.Core.Markers.MarkerCatalog.SlowSpeed, 0.001);
 
@@ -107,6 +107,7 @@ public sealed class VersionTests
         input.Scenes[0].Caption.ShouldBe("In 672 the city was besieged. The walls held for months.");
         input.Scenes[1].Caption.ShouldBe("A strange fire burned on the water.");
         input.Scenes[0].DurationSeconds.ShouldBeGreaterThanOrEqualTo(2.2);
+        input.Scenes[1].Transition.ShouldBe(TMConcept.Core.Scenes.SceneTransitions.Cut);
         engine.Input!.Scenes[0].Caption.ShouldBe(input.Scenes[0].Caption, "the render got the new input");
         File.ReadAllText(Path.Combine(v2, VideoFolders.SubtitlesFile)).ShouldContain("The walls held for months.");
         File.ReadAllText(Path.Combine(v2, VideoFolders.ScriptFile)).ShouldContain("[pause 2 s]", Case.Sensitive, "the next edit starts with the markers");
@@ -115,6 +116,54 @@ public sealed class VersionTests
         remaker.Load(second).Texts[0].ShouldContain("[pause 2 s]");
         second.ConceptId.ShouldBe(first.ConceptId);
         second.Warnings.ShouldContain(VideoWarnings.AiVoice);
+    }
+
+    [AvaloniaFact]
+    public async Task TheFirstVideoAppliesThePlaceholdersOfTheConceptTextExactly()
+    {
+        const string marked = "[on screen: a map]\nIn 672 the city was under siege. [pause 1 s] The walls held.\n[soft transition]\n"
+            + "[on screen: burning ships]\n[slow] A strange fire burned on the water.";
+        var engine = new FakeEngine();
+        var voice = new FakeVoice();
+        var chat = new FakeChat().Answer(_ => Code(engine.SampleCode));
+        using var h = Harness(chat, voice, engine);
+
+        var (_, first, _) = await FirstAsync(h, voice, marked);
+
+        // The voice: the parts between the placeholders, the slow one slower; nothing in brackets is spoken.
+        voice.Requests.Select(r => r.Text).ShouldBe(["In 672 the city was under siege.", "The walls held.", "A strange fire burned on the water."]);
+        voice.Requests[2].Speed.ShouldBe(Math.Clamp(voice.Requests[0].Speed * TMConcept.Core.Markers.MarkerCatalog.SlowSpeed, ProfileLimits.SpeedMin,
+            ProfileLimits.SpeedMax), 0.001);
+        var v1 = Folder(h, first);
+        WaveFile.DurationMs(Path.Combine(v1, VideoFolders.Audio, "1.wav")).ShouldBe(1200, "two parts of 100 ms and the 1 s pause");
+
+        // The scenes: the pause is in the first scene's length, the second begins with a fade; captions and subtitles have no placeholder.
+        var input = RenderInputBuilder.FromJson(File.ReadAllText(Path.Combine(v1, VideoFolders.Source, VideoFolders.InputFile)))!;
+        input.Scenes.Count.ShouldBe(2, "the placeholder line is no scene");
+        input.Scenes[0].Caption.ShouldBe("In 672 the city was under siege. The walls held.");
+        input.Scenes[0].DurationSeconds.ShouldBeGreaterThanOrEqualTo(1.2);
+        input.Scenes[1].Transition.ShouldBe(TMConcept.Core.Scenes.SceneTransitions.Fade);
+        File.ReadAllText(Path.Combine(v1, VideoFolders.SubtitlesFile)).ShouldNotContain("[");
+        chat.Requests[0].User.ShouldContain("caption «A strange fire burned on the water.»; fade", Case.Sensitive, "the code is told not to animate one");
+
+        // ffmpeg fades through black at the second scene's start, whatever the code drew.
+        var media = (FakeMedia)h.Get<IMediaTools>();
+        media.Fades.Single().ShouldBe([(long)Math.Round(input.Scenes[1].StartSeconds * 1000)]);
+
+        // A new version starts from the text with its placeholders, the transition at the start of its scene.
+        var texts = h.Get<VideoRemaker>().Load(first).Texts;
+        texts[0].ShouldBe("In 672 the city was under siege. [pause 1 s] The walls held.");
+        texts[1].ShouldBe("[soft transition] [slow] A strange fire burned on the water.");
+    }
+
+    [Fact]
+    public void ASceneWithoutAVoiceLastsAsLongAsItsTextAndItsPauses()
+    {
+        var plain = VideoCostEstimator.Milliseconds("The walls held for months.", ContentLanguages.English);
+
+        VideoRemaker.SilentMs("The walls held [pause 2 s] for months. [soft transition]", ContentLanguages.English).ShouldBe(plain + 2000);
+        VideoRemaker.WithTransition(TMConcept.Core.Scenes.SceneTransitions.Fade, "Text.", ContentLanguages.Turkish).ShouldBe("[yumuşak geçiş] Text.");
+        VideoRemaker.WithTransition(TMConcept.Core.Scenes.SceneTransitions.None, "Text.", ContentLanguages.Turkish).ShouldBe("Text.");
     }
 
     [AvaloniaFact]
@@ -160,9 +209,9 @@ public sealed class VersionTests
         }
 
         editor.Scenes.Count.ShouldBe(2);
-        editor.NarrationMarkers.ShouldNotBeEmpty();
-        editor.NarrationMarkers.ShouldAllBe(m => TMConcept.Core.Markers.MarkerText.Find(m.Token)!.Kind == TMConcept.Core.Markers.MarkerKind.Narration,
-            "only what this computer can apply");
+        editor.Placeholders.Select(m => TMConcept.Core.Markers.MarkerText.Find(m.Token)!.Id).ShouldBe(TMConcept.Core.Markers.MarkerCatalog.All.Select(m => m.Id),
+            "pauses, speed and transitions: all applied by this computer");
+        editor.Placeholders.ShouldAllBe(m => m.Hint.Length > 0);
         editor.RecodeEstimate.ShouldNotBeEmpty();
 
         // A silent new version (voice off) with an edited text: nothing to install, nothing paid.

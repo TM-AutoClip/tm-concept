@@ -563,9 +563,13 @@ public sealed class VideoPageTests
     {
         public IReadOnlyList<string> RequiredComponents { get; } = [];
 
-        public Task MuxAsync(string folder, string silentVideo, IReadOnlyList<(string Wav, long StartMs)> clips, string? assFile, string output,
-            CancellationToken cancellationToken)
+        /// <summary>The fades of every mux, in order.</summary>
+        public List<IReadOnlyList<long>> Fades { get; } = [];
+
+        public Task MuxAsync(string folder, string silentVideo, IReadOnlyList<(string Wav, long StartMs)> clips, string? assFile, IReadOnlyList<long> fadesMs,
+            string output, CancellationToken cancellationToken)
         {
+            Fades.Add(fadesMs);
             File.Copy(silentVideo, output, overwrite: true);
             return Task.CompletedTask;
         }

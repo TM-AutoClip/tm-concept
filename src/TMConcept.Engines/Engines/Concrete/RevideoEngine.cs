@@ -39,7 +39,7 @@ public sealed class RevideoEngine(IAppPaths paths, ToolInstaller tools, ChromeLo
         Allowed imports only: '@revideo/2d', '@revideo/core' and `import type {ConceptInput} from './input';`.
         Read the input with `const input = useScene().variables.get<ConceptInput>('input', {} as ConceptInput)();`
         (fields: width, height, fps, durationSeconds, title, theme {background, accent, text},
-        scenes [{number, startSeconds, durationSeconds, visual, caption, image}]).
+        scenes [{number, startSeconds, durationSeconds, visual, caption, image, transition}]).
         Play the scenes in order with yield* animations and waitFor so each scene lasts exactly its durationSeconds.
         Never hard-code texts or durations. No network, no external fonts.
         """;

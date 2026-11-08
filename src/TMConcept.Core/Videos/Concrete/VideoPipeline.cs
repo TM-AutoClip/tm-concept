@@ -21,7 +21,9 @@ namespace TMConcept.Core.Videos;
 
 /// <summary>
 /// Concept → video (plan §6.1): 0 the engine and ffmpeg must be installed (checked before anything is paid for) · A prepare (scenes, no
-/// model) · B narration per scene with the profile's narration step (cached; off or failed = silent video with a warning) · C timing in C#
+/// model; the placeholders of the concept text are read: pauses and speed for the voice, transitions for the scenes) · B narration per scene
+/// with the profile's narration step (<see cref="SceneNarrator"/>, the same as a new version; cached; off or failed = silent video with a
+/// warning) · C timing in C# (a pause lengthens its scene)
 /// · D images (samples, or the profile's images step: off = no image call at all; the prompts are written by the video code model; generated
 /// images and their prompts are kept per concept until the video is made, so a retry does not pay for them again) · E
 /// video code from the model, safety check, one repair · F render (processor only), one repair with the error text · H mux into the work
@@ -33,7 +35,7 @@ namespace TMConcept.Core.Videos;
 /// reading); what it paid is kept as a <see cref="RunKind.FailedVideo"/> run, so the month's spending counts it. The code, render, mux and
 /// version steps are <see cref="VideoAssembler"/>'s, shared with the later versions (<see cref="VideoRemaker"/>).
 /// </summary>
-public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechService speech, IEnumerable<IImageEngine> images, StepModelResolver resolver,
+public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechService speech, SceneNarrator narrator, IEnumerable<IImageEngine> images, StepModelResolver resolver,
     IChatClientFactory chats, ICostCalculator costs, VideoAssembler assembler, IConceptStore concepts, IProfileStore profiles, IRunStore runs,
     IAppPaths paths, TimeProvider clock, ILogger<VideoPipeline> logger)
 {
@@ -138,10 +140,9 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                 {
                     for (var i = 0; i < split.Scenes.Count; i++)
                     {
-                        var narration = split.Scenes[i].Narration;
-                        var clip = narration.Length == 0 ? null : await speech.SynthesizeAsync(voice!, profile.ContentLanguage, narration,
-                            Path.Combine(work, "audio", (i + 1).ToString(CultureInfo.InvariantCulture) + ".wav"), cancellationToken).ConfigureAwait(false);
-                        speechCost += clip?.CostUsd ?? 0;
+                        // The scene's script: its pauses and speed placeholders are applied exactly as in a new version.
+                        var clip = await narrator.VoiceAsync(voice!, profile.ContentLanguage, i + 1, split.Scenes[i].Script, work, usd => speechCost += usd,
+                            cancellationToken).ConfigureAwait(false);
                         clips.Add(clip);
                         Report("speech", (i + 1.0) / split.Scenes.Count);
                     }
@@ -178,7 +179,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
             var sceneImages = !imagesOn ? [] : await ImagesAsync(job, imageModel, split.Scenes, work, warnings, spent, id, width, height, p => Report("images", p),
                 cancellationToken).ConfigureAwait(false);
             var sources = split.Scenes.Select((s, i) => new RenderSceneSource(s.Visual, s.Narration, sceneImages.ElementAtOrDefault(i) ?? string.Empty,
-                clips.ElementAtOrDefault(i)?.DurationMs ?? VideoCostEstimator.Milliseconds(s.Narration, profile.ContentLanguage))).ToList();
+                clips.ElementAtOrDefault(i)?.DurationMs ?? VideoRemaker.SilentMs(s.Script, profile.ContentLanguage), s.Transition)).ToList();
             var input = RenderInputBuilder.Build(job.Concept.Title, profile.ContentLanguage, sources, width, height, 30);
             Finish("timing");
             if (imagesOn)
@@ -200,7 +201,11 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                 engine.Name, job.CodeModel.Model.Provider + "/" + job.CodeModel.Model.Id,
                 speechOn && !warnings.Contains(VideoWarnings.SpeechFailed) ? voice!.Model.Provider + "/" + voice.Model.Id + ":" + voice.Voice : string.Empty,
                 imageModel is not null ? imageModel.Model.Provider + "/" + imageModel.Model.Id : imagesOn ? options.Images : string.Empty,
-                VideoCodePrompt.Version, warnings, spent, await ConceptShareAsync(job.Concept, id).ConfigureAwait(false), watch), steps,
+                VideoCodePrompt.Version, warnings, spent, await ConceptShareAsync(job.Concept, id).ConfigureAwait(false), watch)
+            {
+                // Each scene's text with its placeholders and the transition into it: a new version is edited from this.
+                Script = split.Scenes.Select(s => VideoRemaker.WithTransition(s.Transition, s.Script, profile.ContentLanguage)).ToList(),
+            }, steps,
                 cancellationToken).ConfigureAwait(false);
             await concepts.SetStatusAsync([job.Concept.Id], ConceptStatus.Produced, CancellationToken.None).ConfigureAwait(false);
             logger.LogInformation("Video {Id} made in {Seconds:0} s ({Engine}, {Usd} USD)", id, watch.Elapsed.TotalSeconds, engine.Name, record.TotalUsd);

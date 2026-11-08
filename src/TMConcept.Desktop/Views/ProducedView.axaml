@@ -93,8 +93,10 @@
                            IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                 <StackPanel Spacing="10" IsVisible="{Binding CanEdit}">
                   <v:StepPickerView DataContext="{Binding Picker}" />
-                  <TextBlock Text="{DynamicResource version.narration}" FontWeight="SemiBold" />
-                  <TextBlock Text="{DynamicResource version.markers.hint}" Classes="small" TextWrapping="Wrap" />
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{DynamicResource version.narration}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    <v:HelpTip Text="{DynamicResource version.markers.hint}" />
+                  </StackPanel>
                   <ItemsControl ItemsSource="{Binding Scenes}" IsEnabled="{Binding !Busy}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:SceneEditViewModel">
@@ -104,7 +106,7 @@
                           <TextBox Name="SceneBox" Text="{Binding Text}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="60" />
                           <StackPanel Orientation="Horizontal" Spacing="8">
                             <v:MarkerPicker Target="{Binding #SceneBox}"
-                                            Markers="{Binding $parent[ItemsControl].((vm:VersionEditorViewModel)DataContext).NarrationMarkers}" />
+                                            Markers="{Binding $parent[ItemsControl].((vm:VersionEditorViewModel)DataContext).Placeholders}" />
                             <Button Content="{DynamicResource version.reset}" Command="{Binding ResetCommand}" IsVisible="{Binding Changed}" />
                           </StackPanel>
                         </StackPanel>

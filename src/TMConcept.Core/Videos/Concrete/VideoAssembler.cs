@@ -134,7 +134,8 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
     }
 
     /// <summary>
-    /// H + I: subtitles from the input's captions (burned in when chosen), the clips joined with the silent video into the work folder, then
+    /// H + I: subtitles from the input's captions (burned in when chosen), the clips joined with the silent video into the work folder (with a
+    /// fade through black at the start of each scene with a soft transition, see <see cref="Fades"/>), then
     /// the version folder gets only finished files — subtitles, the narration text, the engine project as it rendered and the clips, the
     /// video, the thumbnail — and the record with its cost lines is saved.
     /// </summary>
@@ -161,7 +162,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         steps.Report("mux", 0.1);
         try
         {
-            await media.MuxAsync(save.Work, save.Render.Request.Output, audio, ass, muxed, cancellationToken).ConfigureAwait(false);
+            await media.MuxAsync(save.Work, save.Render.Request.Output, audio, ass, Fades(input), muxed, cancellationToken).ConfigureAwait(false);
         }
         catch (InvalidOperationException ex)
         {
@@ -218,6 +219,13 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         await videos.AddAsync(record, [.. save.ExtraCosts, .. save.Spent], CancellationToken.None).ConfigureAwait(false);
         steps.Finish("save");
         return record;
+    }
+
+    /// <summary>The starts of the scenes that begin with a soft transition (ffmpeg fades through black there at the mux).</summary>
+    public static IReadOnlyList<long> Fades(RenderInput input)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        return input.Scenes.Where(s => s.Number > 1 && s.Transition == Scenes.SceneTransitions.Fade).Select(s => (long)Math.Round(s.StartSeconds * 1000)).ToList();
     }
 
     /// <summary>

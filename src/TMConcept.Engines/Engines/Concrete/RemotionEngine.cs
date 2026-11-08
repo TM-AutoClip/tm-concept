@@ -41,7 +41,7 @@ public sealed class RemotionEngine(IAppPaths paths, ToolInstaller tools, ChromeL
         Write ONE file (src/Scene.tsx) that exports `export const Scene: React.FC<ConceptInput> = (input) => …`.
         Allowed imports only: 'react', 'remotion' and `import type {ConceptInput, ConceptScene} from './input';`.
         The input type: {width, height, fps, totalFrames, durationSeconds, language, title, theme {background, accent, text},
-        scenes [{number, startFrame, frameCount, startSeconds, durationSeconds, visual, caption, image}]}.
+        scenes [{number, startFrame, frameCount, startSeconds, durationSeconds, visual, caption, image, transition}]}.
         Put each scene in `<Sequence from={scene.startFrame} durationInFrames={scene.frameCount}>`; animate with useCurrentFrame,
         interpolate and spring. Images: `<Img src={staticFile(scene.image)} />` only when scene.image is not empty.
         Never hard-code texts or durations. No network, no external fonts, no randomness that changes between frames.
@@ -92,6 +92,7 @@ public sealed class RemotionEngine(IAppPaths paths, ToolInstaller tools, ChromeL
           visual: string;
           caption: string;
           image: string;
+          transition: string;
         };
         export type ConceptTheme = {background: string; accent: string; text: string};
         export type ConceptInput = {

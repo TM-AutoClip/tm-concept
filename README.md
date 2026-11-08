@@ -41,7 +41,7 @@ needed) and narrates it with a **free local voice**. It runs on Windows and Linu
 - **Produced videos.** Thumbnail, a built-in player (play/pause, seek bar, time, volume, full screen; nothing starts by itself), the whole
   narration scene by scene and the whole concept text, details (engine, models, cost per step, voice notes), open in the system player,
   open the folder, produce again, delete a version and, if you want, move its files to the recycle bin.
-- **Versions.** Edit the narration of each scene (more sentences, pause and speed markers) and choose a voice: the voice is made again on
+- **Versions.** Edit the narration of each scene (more sentences, placeholders for pauses, speed and transitions) and choose a voice: the voice is made again on
   your computer and the same video code is rendered again — no AI cost (an online voice is paid). Or have new code written for another
   engine (the estimate is shown and confirmed first); images, voice clips and texts are used again. Every new version is a folder of its
   own (v2, v3…); the older ones stay.
@@ -199,9 +199,10 @@ Then choose the models on the pages that use them (see above). Nothing paid is c
 
 ## Make your first video
 
-1. **Generate concepts:** choose the model, the count and an optional extra request (markers, an optional fine-tuning of tone, audience and structure,
+1. **Generate concepts:** choose the model, the count and an optional extra request (an optional fine-tuning of tone, audience and structure,
    and **Suggest topics** help with it); check the estimate; press **Generate**.
-2. Open cards, approve the good ones (A), delete the rest (D).
+2. Open cards, approve the good ones (A), delete the rest (D). ✎ (or a click on an approved concept) edits the text; placeholders such as
+   `[pause 1 s]` or `[soft transition]` go in at the cursor and the program applies them in the video.
 3. **Concept to video:** click approved concepts to queue them, check the settings, press **Produce the queue in order**.
 4. **Produced videos:** watch in the app (sound on Linux through PulseAudio or PipeWire), open the folder. Each video is a version folder (`v1/` inside the concept's folder) with `video.mp4`, `subtitles.srt`, `narration.txt` (always written) and `thumbnail.jpg`, plus `source/` (the engine project as it rendered: the model's code, `input.json`, the scene images) and `audio/` (the narration clip of each scene), kept for a later re-render.
 

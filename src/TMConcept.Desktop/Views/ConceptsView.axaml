@@ -31,7 +31,6 @@
         </Grid>
         <TextBox Name="ExtraBox" Text="{Binding ExtraPrompt}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="90" MaxLength="1000"
                  PlaceholderText="{DynamicResource concepts.extra.placeholder}" />
-        <views:MarkerPicker Target="{Binding #ExtraBox}" Markers="{Binding PromptMarkers}" ToolTip.Tip="{DynamicResource markers.prompt.hint}" />
         <!-- The result of "Suggest topics" right below the extra request: the running call's steps, the topics to click, why none came. -->
         <Border Name="TopicCard" Classes="card" Padding="10" IsVisible="{Binding TopicCardShown}">
           <StackPanel Spacing="6">
@@ -137,16 +136,39 @@
           <views:HelpTip Text="{DynamicResource concepts.keys}" />
         </StackPanel>
       </StackPanel>
-      <ListBox x:Name="NewList" ItemsSource="{Binding NewConcepts}" SelectedItem="{Binding Selected}" KeyDown="OnListKeyDown" Background="Transparent">
+      <Panel>
+      <!-- The text editor takes the list's place: the text, the placeholders at the cursor, save or cancel. -->
+      <Border Name="Editor" Classes="card" Padding="12" IsVisible="{Binding Editing}">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock Text="{Binding EditTitle}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="520" />
+            <views:HelpTip Text="{DynamicResource concepts.edit.hint}" />
+          </StackPanel>
+          <StackPanel DockPanel.Dock="Bottom" Spacing="6" Margin="0,8,0,0">
+            <TextBlock Text="{Binding EditStatus}" Classes="error" TextWrapping="Wrap"
+                       IsVisible="{Binding EditStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+              <views:MarkerPicker Target="{Binding #EditBox}" Markers="{Binding Placeholders}" />
+              <Button Grid.Column="1" Classes="accent" Content="{DynamicResource common.save}" Command="{Binding SaveEditCommand}" />
+              <Button Grid.Column="2" Content="{DynamicResource common.cancel}" Command="{Binding CancelEditCommand}" />
+            </Grid>
+          </StackPanel>
+          <TextBox Name="EditBox" Text="{Binding EditText}" AcceptsReturn="True" TextWrapping="Wrap" MaxLength="{Binding EditMax}" />
+        </DockPanel>
+      </Border>
+      <ListBox x:Name="NewList" ItemsSource="{Binding NewConcepts}" SelectedItem="{Binding Selected}" KeyDown="OnListKeyDown" Background="Transparent"
+               IsVisible="{Binding Listing}">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:ConceptCardViewModel">
             <Border Classes="card" Padding="12">
               <StackPanel Spacing="4">
-                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+                <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="6">
                   <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                  <Button Grid.Column="1" Classes="accent" Content="✓" IsVisible="{Binding Expanded}" ToolTip.Tip="A"
+                  <Button Grid.Column="1" Content="✎" IsVisible="{Binding Expanded}" ToolTip.Tip="{DynamicResource concepts.edit.tip}"
+                          Command="{Binding $parent[ListBox].((vm:ConceptsViewModel)DataContext).EditCommand}" CommandParameter="{Binding}" />
+                  <Button Grid.Column="2" Classes="accent" Content="✓" IsVisible="{Binding Expanded}" ToolTip.Tip="A"
                           Command="{Binding $parent[ListBox].((vm:ConceptsViewModel)DataContext).ApproveCommand}" CommandParameter="{Binding}" />
-                  <Button Grid.Column="2" Classes="danger" Content="✗" IsVisible="{Binding Expanded}" ToolTip.Tip="D"
+                  <Button Grid.Column="3" Classes="danger" Content="✗" IsVisible="{Binding Expanded}" ToolTip.Tip="D"
                           Command="{Binding $parent[ListBox].((vm:ConceptsViewModel)DataContext).TrashCommand}" CommandParameter="{Binding}" />
                 </Grid>
                 <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" Classes="muted" IsVisible="{Binding !Expanded}" />
@@ -163,6 +185,7 @@
           </DataTemplate>
         </ListBox.ItemTemplate>
       </ListBox>
+      </Panel>
     </DockPanel>
 
     <DockPanel Grid.Column="2">
@@ -173,7 +196,11 @@
       <ListBox ItemsSource="{Binding Approved}" Background="Transparent" Margin="0,8,0,0">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:ConceptCardViewModel">
-            <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Summary}" />
+            <!-- A click opens the text in the editor (fix it, add placeholders). -->
+            <Button Classes="link" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                    Command="{Binding $parent[ListBox].((vm:ConceptsViewModel)DataContext).EditCommand}" CommandParameter="{Binding}">
+              <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Summary}" />
+            </Button>
           </DataTemplate>
         </ListBox.ItemTemplate>
       </ListBox>

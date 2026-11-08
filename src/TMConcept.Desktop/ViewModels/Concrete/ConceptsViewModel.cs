@@ -14,7 +14,7 @@ using TMConcept.Desktop.Startup;
 namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
-/// 💡 Generate concepts. The left panel, top to bottom: count (1–100); extra request (with a marker drop-down) and a small "Suggest topics"
+/// 💡 Generate concepts. The left panel, top to bottom: count (1–100); extra request (plain text) and a small "Suggest topics"
 /// next to its title (a cheap chat model of the topics step brings about ten topics from the channel concept and the extra request so far;
 /// a click adds one to the extra request); a folded "Fine-tuning (optional)" with only tone, audience and structure (nothing that asks the
 /// user to know the subject: period, region or field come from the extra request; "any" by default; the choices go into the prompt as its
@@ -31,6 +31,9 @@ namespace TMConcept.Desktop.ViewModels;
 /// concepts are complete, answer received), on the page and on the strip at the bottom of the window, so a long wait does not look like a
 /// hang; Cancel stays next to it. "Suggest topics" shows the same steps under its button, a spinner and Cancel, and its result in a card
 /// right below the extra request (the topics to click, why none came, a failure in red); the profile cannot be switched meanwhile.
+/// A new card (✎ when open) or an approved concept (a click in its list) opens its text in an editor in place of the list: the text can be
+/// fixed and placeholders put in at the cursor from a drop-down (pauses, speed, transitions; the program applies them in the video, no
+/// model sees them); saving needs a text with something to narrate.
 /// </summary>
 public sealed partial class ConceptsViewModel(AppSession session, IConceptStore concepts, ConceptGenerator generator, StepModelResolver resolver,
     IModelCatalog catalog, ConceptEvents events, INotifier notifier, IActivityLog activity, Localizer text, StepPickerViewModel picker,
@@ -66,9 +69,6 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
     /// <summary>Extra request.</summary>
     [ObservableProperty]
     public partial string ExtraPrompt { get; set; } = string.Empty;
-
-    /// <summary>The markers of the extra request's drop-down (sent to the concept model with their meaning).</summary>
-    public IReadOnlyList<MarkerOption> PromptMarkers => MarkerOptions.For(Core.Markers.MarkerKind.Prompt, text);
 
     /// <summary>The fine-tuning drop-downs (tone, audience, structure), "any" until the user picks one.</summary>
     public ObservableCollection<FocusRowViewModel> FocusRows { get; } = [];
@@ -198,6 +198,78 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
     /// <summary>Search in the approved list.</summary>
     [ObservableProperty]
     public partial string ApprovedSearch { get; set; } = string.Empty;
+
+    /// <summary>The concept whose text is being edited (null = the new concepts are listed).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Editing))]
+    [NotifyPropertyChangedFor(nameof(Listing))]
+    public partial ConceptCardViewModel? EditCard { get; set; }
+
+    /// <summary>Whether the editor is shown.</summary>
+    public bool Editing => EditCard is not null;
+
+    /// <summary>Whether the new concepts are listed (no editor).</summary>
+    public bool Listing => EditCard is null;
+
+    /// <summary>"Edit text · #12 Greek fire".</summary>
+    [ObservableProperty]
+    public partial string EditTitle { get; set; } = string.Empty;
+
+    /// <summary>The text in the editor.</summary>
+    [ObservableProperty]
+    public partial string EditText { get; set; } = string.Empty;
+
+    /// <summary>Why the text was not saved.</summary>
+    [ObservableProperty]
+    public partial string EditStatus { get; set; } = string.Empty;
+
+    /// <summary>Longest concept text.</summary>
+    public int EditMax => ConceptLimits.ContentMax;
+
+    /// <summary>The placeholders of the editor's drop-down.</summary>
+    public IReadOnlyList<MarkerOption> Placeholders => MarkerOptions.For(text);
+
+    /// <summary>Opens the text of a concept (an open new card, or an approved one) in the editor.</summary>
+    [RelayCommand]
+    public async Task EditAsync(ConceptCardViewModel? card)
+    {
+        card ??= Selected;
+        if (card is null || await concepts.GetAsync(card.Id, CancellationToken.None).ConfigureAwait(true) is not { } full)
+        {
+            return;
+        }
+
+        EditTitle = text.Format("concepts.edit.title", card.Title);
+        EditText = full.Content;
+        EditStatus = string.Empty;
+        EditCard = card;
+    }
+
+    /// <summary>Saves the edited text (it must still have something to narrate); the card shows it at once.</summary>
+    [RelayCommand]
+    public async Task SaveEditAsync()
+    {
+        if (EditCard is not { } card)
+        {
+            return;
+        }
+
+        var content = (EditText ?? string.Empty).Replace("\r\n", "\n", StringComparison.Ordinal).Trim();
+        if (!Core.Scenes.SceneSplitter.Split(content).IsValid)
+        {
+            EditStatus = text["concepts.edit.invalid"];
+            return;
+        }
+
+        await concepts.UpdateContentAsync(card.Id, content, CancellationToken.None).ConfigureAwait(true);
+        card.ShowContent(content);
+        activity.Add(ActivityLevel.Info, text.Format("concepts.edit.saved", card.Title));
+        EditCard = null;
+    }
+
+    /// <summary>Closes the editor without saving.</summary>
+    [RelayCommand]
+    public void CancelEdit() => EditCard = null;
 
     /// <inheritdoc />
     public override async Task ActivateAsync()

@@ -58,10 +58,6 @@
         <views:HelpTip Text="{DynamicResource profile.concept.hint}" />
       </StackPanel>
       <TextBox Name="ConceptBox" Text="{Binding ConceptText}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="180" MaxLength="6000" />
-      <StackPanel Orientation="Horizontal" Spacing="8">
-        <views:MarkerPicker Target="{Binding #ConceptBox}" Markers="{Binding PromptMarkers}" />
-        <TextBlock Text="{DynamicResource markers.prompt.hint}" Classes="small" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="560" />
-      </StackPanel>
 
       <Border Classes="card">
         <StackPanel Spacing="8">

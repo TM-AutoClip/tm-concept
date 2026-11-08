@@ -609,6 +609,62 @@ public sealed class ConceptPageTests
     }
 
     [AvaloniaFact]
+    public async Task AConceptsTextIsEditedWithPlaceholdersAtTheCursorAndNoPickerIsLeftForTheModel()
+    {
+        using var h = new DesktopHarness();
+        var profile = await PrepareAsync(h);
+        var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
+        const string content = "[on screen: walls]\nThe walls held.\n[on screen: ships]\nThe fleet came.";
+        var approved = new Concept { ProfileId = profile.Id, Title = "Walls", Summary = "s", Content = content, Language = "en", Status = ConceptStatus.Approved };
+        var fresh = new Concept { ProfileId = profile.Id, Title = "Fleet", Summary = "s", Content = content, Language = "en" };
+        await h.Get<IConceptStore>().AddAsync([approved, fresh], CancellationToken.None);
+        var page = h.Get<ConceptsViewModel>();
+        await page.ActivateAsync();
+
+        var view = new TMConcept.Desktop.Views.ConceptsView { DataContext = page };
+        var window = new Avalonia.Controls.Window { Content = view, Width = 1280, Height = 820 };
+        h.Get<TMConcept.Desktop.Localization.LanguageResources>().Attach(window.Resources.MergedDictionaries);
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(view).OfType<TMConcept.Desktop.Views.MarkerPicker>().Where(p => p.IsEffectivelyVisible)
+            .ShouldBeEmpty("the extra request is plain text: no placeholder goes to the concept model");
+
+        // An approved concept opens in the editor in place of the list; a placeholder goes in at the cursor.
+        await page.EditAsync(page.Approved.Single());
+        page.Editing.ShouldBeTrue();
+        page.EditText.ShouldBe(content);
+        Dispatcher.UIThread.RunJobs();
+        var all = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(view).ToList();
+        var box = all.OfType<Avalonia.Controls.TextBox>().Single(b => b.Name == "EditBox");
+        box.IsEffectivelyVisible.ShouldBeTrue();
+        all.OfType<Avalonia.Controls.ListBox>().Single(l => l.Name == "NewList").IsEffectivelyVisible.ShouldBeFalse();
+        var picker = all.OfType<TMConcept.Desktop.Views.MarkerPicker>().Single();
+        picker.Markers!.Select(m => m.Token).ShouldContain("[soft transition]");
+        box.CaretIndex = content.IndexOf("The fleet", StringComparison.Ordinal);
+        picker.Insert(picker.Markers!.Single(m => m.Token == "[soft transition]"));
+        Dispatcher.UIThread.RunJobs();
+        await page.SaveEditAsync();
+
+        page.Editing.ShouldBeFalse();
+        var saved = (await h.Get<IConceptStore>().GetAsync(approved.Id, CancellationToken.None))!;
+        saved.Content.ShouldBe("[on screen: walls]\nThe walls held.\n[on screen: ships]\n[soft transition] The fleet came.");
+        saved.Status.ShouldBe(ConceptStatus.Approved);
+        TMConcept.Core.Scenes.SceneSplitter.Split(saved.Content).Scenes[1].Transition.ShouldBe(TMConcept.Core.Scenes.SceneTransitions.Fade);
+
+        // A text with nothing to narrate is not saved; Cancel leaves the stored text as it was.
+        var card = page.NewConcepts.Single();
+        await page.EditAsync(card);
+        page.EditText = "[on screen: only a picture]";
+        await page.SaveEditAsync();
+        page.EditStatus.ShouldBe(text["concepts.edit.invalid"]);
+        page.Editing.ShouldBeTrue();
+        page.CancelEdit();
+        page.Editing.ShouldBeFalse();
+        (await h.Get<IConceptStore>().GetAsync(fresh.Id, CancellationToken.None))!.Content.ShouldBe(content);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public async Task TheMeaningCheckEstimateCountsTheEarlierConceptsItEmbedsFirst()
     {
         using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(new FakeChat()));

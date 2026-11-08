@@ -37,7 +37,7 @@ veritabanını şifreli tutar.
   Revideo), kod modeli, görsel modeli ve ses profilden (ya da genel ayardan) gelir.
   Model tek bir kod dosyası yazar; hiçbir şey çalıştırılmadan önce güvenlik denetimi yapılır; denetim ya da render hatasında tek onarım
   istenir. Videolar en çok 3 dakikadır.
-- **Sürümler.** Her sahnenin seslendirme metnini düzenle (yeni cümleler, duraklama ve hız işaretleri) ve bir ses seç: ses bilgisayarında yeniden
+- **Sürümler.** Her sahnenin seslendirme metnini düzenle (yeni cümleler; duraklama, hız ve geçiş yer tutucuları) ve bir ses seç: ses bilgisayarında yeniden
   üretilir, aynı video kodu yeniden render edilir — yapay zekâ masrafı yok (online ses ücretli). Ya da başka bir motor için yeni kod yazdır
   (tahmin önce gösterilir ve onaylatılır); görseller, ses klipleri ve metinler yeniden kullanılır. Her yeni sürüm ayrı bir klasör (v2, v3…);
   eskiler kalır.
@@ -195,9 +195,10 @@ Sonra modelleri onları kullanan sayfalarda seç (yukarıya bak). Ücretli hiçb
 
 ## İlk videonu üret
 
-1. **Konsept Üret:** modeli, adedi ve isteğe bağlı ek istemi seç (işaretler, ton, izleyici ve anlatım biçimi ince ayarı ve
+1. **Konsept Üret:** modeli, adedi ve isteğe bağlı ek istemi seç (ton, izleyici ve anlatım biçimi ince ayarı ve
    **Konu öner** yardım eder); tahmini gör; **Üret**'e bas.
-2. Kartları aç, iyileri onayla (A), kalanı sil (D).
+2. Kartları aç, iyileri onayla (A), kalanı sil (D). ✎ (ya da onaylı bir konsepte tıklamak) metni düzenler; `[duraklama 1 sn]`,
+   `[yumuşak geçiş]` gibi yer tutucular imlecin olduğu yere eklenir, program videoda kendisi uygular.
 3. **Konseptten Video:** onaylı konseptlere tıklayıp sıraya al, ayarlara bak, **Sıradakileri sırayla üret**'e bas.
 4. **Üretilen Videolar:** program içinde izle (Linux'ta ses PulseAudio ya da PipeWire ile), klasörü aç. Her video, konseptin klasöründe bir sürüm klasörüdür (`v1/`): `video.mp4`, `subtitles.srt`, `narration.txt` (her zaman yazılır) ve `thumbnail.jpg`; ayrıca sonraki bir yeniden render için `source/` (render edildiği hâliyle motor projesi: modelin kodu, `input.json`, sahne görselleri) ve `audio/` (her sahnenin seslendirme klibi).
 

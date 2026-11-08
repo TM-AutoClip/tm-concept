@@ -16,8 +16,8 @@ public sealed class FfmpegMedia(FfmpegMuxer muxer, ToolInstaller tools, IProcess
     public IReadOnlyList<string> RequiredComponents { get; } = [Core.Components.ComponentCodes.Ffmpeg];
 
     /// <inheritdoc />
-    public Task MuxAsync(string folder, string silentVideo, IReadOnlyList<(string Wav, long StartMs)> clips, string? assFile, string output,
-        CancellationToken cancellationToken) => muxer.MuxAsync(folder, silentVideo, clips, assFile, output, cancellationToken);
+    public Task MuxAsync(string folder, string silentVideo, IReadOnlyList<(string Wav, long StartMs)> clips, string? assFile, IReadOnlyList<long> fadesMs,
+        string output, CancellationToken cancellationToken) => muxer.MuxAsync(folder, silentVideo, clips, assFile, fadesMs, output, cancellationToken);
 
     /// <summary>
     /// ffmpeg's error lines without the user's folders (they name the files it read and wrote): the paths are replaced first and the text is

@@ -20,6 +20,9 @@ public interface IConceptStore
     /// <summary>Adds new concepts; each gets the next number of its profile (numbers are never reused).</summary>
     Task AddAsync(IReadOnlyList<Concept> concepts, CancellationToken cancellationToken);
 
+    /// <summary>Replaces the text of a concept (edited by the user: a fix, placeholders); title, summary and status stay.</summary>
+    Task UpdateContentAsync(Guid id, string content, CancellationToken cancellationToken);
+
     /// <summary>Changes the status (approve, reject, restore, queue, produced).</summary>
     Task SetStatusAsync(IReadOnlyCollection<Guid> ids, ConceptStatus status, CancellationToken cancellationToken);
 
