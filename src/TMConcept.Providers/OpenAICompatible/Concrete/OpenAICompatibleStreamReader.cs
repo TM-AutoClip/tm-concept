@@ -30,6 +30,12 @@ public sealed class OpenAICompatibleStreamReader
     /// <summary>Whether the answer was an event stream.</summary>
     public bool Streamed => _events && !_plainBody;
 
+    /// <summary>Characters of visible text read so far (0 while the model only reasons; the progress tells thinking from writing by it).</summary>
+    public int TextLength => _content.Length;
+
+    /// <summary>The visible text read so far.</summary>
+    public string Text => _content.ToString();
+
     /// <summary>Adds one line of the body.</summary>
     public void Add(string line)
     {

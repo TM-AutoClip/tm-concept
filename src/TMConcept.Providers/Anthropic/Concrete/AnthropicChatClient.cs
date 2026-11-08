@@ -15,7 +15,8 @@ namespace TMConcept.Providers.Anthropic;
 /// thinking settings are sent (the model's defaults apply). The stop reason is checked before the text: <c>refusal</c>, <c>max_tokens</c>,
 /// a context overflow and a stream that never finished are errors (with the tokens already billed, the raw stop reason and, for a cut, the
 /// text that arrived). Every answer writes one log line: model, raw stop reason, the max_tokens and effort sent, the tokens, the request id
-/// and the time (a warning when it ended badly; never the prompt or the key).
+/// and the time (a warning when it ended badly; never the prompt or the key). The request's progress gets sent → thinking (lines but no text
+/// yet: thinking blocks, pings) → writing → done (<see cref="ChatProgressReporter"/>).
 /// </summary>
 public sealed class AnthropicChatClient(AnthropicProvider provider, ProviderHttp http, CatalogModel model, string apiKey, ILogger logger) : IChatClient
 {
@@ -81,6 +82,8 @@ public sealed class AnthropicChatClient(AnthropicProvider provider, ProviderHttp
 
         // Read while it streams: a long answer (a video code of 64 000 tokens takes about 11 minutes) has no single time limit then.
         var reader = new AnthropicStreamReader();
+        var progress = new ChatProgressReporter(request.Progress, TimeProvider.System);
+        progress.Sent();
         StreamReply reply;
         try
         {
@@ -92,7 +95,11 @@ public sealed class AnthropicChatClient(AnthropicProvider provider, ProviderHttp
                 };
                 provider.Authorize(message, apiKey);
                 return message;
-            }, provider.Name, apiKey, reader.Add, cancellationToken).ConfigureAwait(false);
+            }, provider.Name, apiKey, line =>
+            {
+                reader.Add(line);
+                progress.Line(reader.TextLength, () => reader.Text);
+            }, cancellationToken).ConfigureAwait(false);
         }
         catch (ProviderException ex) when (ex.Code is "timeout" or "network" && reader.Answer() is { Streamed: true } partial
             && (partial.Usage.Prompt > 0 || partial.Usage.Output > 0))
@@ -102,6 +109,7 @@ public sealed class AnthropicChatClient(AnthropicProvider provider, ProviderHttp
         }
 
         var answer = reader.Answer();
+        progress.Done(answer.Text);
         if (answer.SkippedEvents > 0)
         {
             logger.LogWarning("{Provider} {Model}: {Count} stream event(s) could not be read and were skipped (request {RequestId})", provider.Name, Model.Id,

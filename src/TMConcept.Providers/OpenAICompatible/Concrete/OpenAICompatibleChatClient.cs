@@ -17,7 +17,8 @@ namespace TMConcept.Providers.OpenAICompatible;
 /// the partial text), a refusal, an <c>error</c> object or <c>finish_reason: error</c> inside a 200 answer, an answer without choices and a
 /// stream that ended without a finish reason are errors with the billed usage (and the raw finish reason). Every answer writes one log
 /// line: model, raw finish reason, the max_tokens and effort sent (most of these providers get neither: "-"), the tokens, the request id and
-/// the time (a warning when it ended badly; never the prompt or the key).
+/// the time (a warning when it ended badly; never the prompt or the key). The request's progress gets sent → thinking → writing (a streamed
+/// call; reasoning chunks carry no visible text) → done (<see cref="ChatProgressReporter"/>).
 /// </summary>
 public sealed class OpenAICompatibleChatClient(OpenAICompatibleProviderBase provider, ProviderHttp http, CatalogModel model, string apiKey, ILogger logger)
     : IChatClient
@@ -75,12 +76,13 @@ public sealed class OpenAICompatibleChatClient(OpenAICompatibleProviderBase prov
         ArgumentNullException.ThrowIfNull(request);
         var body = Body(request);
         var watch = Stopwatch.StartNew();
+        var progress = new ChatProgressReporter(request.Progress, TimeProvider.System);
         JsonNode? node;
         string requestId;
         bool streamed;
         try
         {
-            (node, requestId, streamed) = await AnswerAsync(body, request.Stream, cancellationToken).ConfigureAwait(false);
+            (node, requestId, streamed) = await AnswerAsync(body, request.Stream, progress, cancellationToken).ConfigureAwait(false);
         }
         catch (ProviderException ex) when (ex.Status is 400 or 422 && Optional.Any(body.ContainsKey))
         {
@@ -91,7 +93,7 @@ public sealed class OpenAICompatibleChatClient(OpenAICompatibleProviderBase prov
                 body.Remove(field);
             }
 
-            (node, requestId, streamed) = await AnswerAsync(body, request.Stream, cancellationToken).ConfigureAwait(false);
+            (node, requestId, streamed) = await AnswerAsync(body, request.Stream, progress, cancellationToken).ConfigureAwait(false);
         }
 
         if (streamed && node?["usage"] is null)
@@ -109,6 +111,7 @@ public sealed class OpenAICompatibleChatClient(OpenAICompatibleProviderBase prov
         // or with finish_reason "error" and a partial message. Both are failures, never an empty success.
         var choice = (node?["choices"] as JsonArray) is { Count: > 0 } choices ? choices[0] : null;
         var finish = JsonRead.Text(choice?["finish_reason"]);
+        progress.Done(JsonRead.Text(choice?["message"]?["content"]));
         var bad = node?["error"] is not null || choice is null || finish is "error" or "length" or "content_filter" || (streamed && finish.Length == 0);
         logger.Log(bad ? LogLevel.Warning : LogLevel.Information,
             "{Provider} {Model}: finish reason {FinishReason}, max_tokens {MaxTokens}, effort {Effort}, tokens in {Input} / out {Output} / cache read {CacheRead}, request {RequestId}, {Ms} ms",
@@ -188,7 +191,8 @@ public sealed class OpenAICompatibleChatClient(OpenAICompatibleProviderBase prov
     }
 
     /// <summary>The answer as a plain <c>chat/completions</c> body (a streamed one is put into that shape), its request id and whether it streamed.</summary>
-    private async Task<(JsonNode? Node, string RequestId, bool Streamed)> AnswerAsync(JsonObject body, bool stream, CancellationToken cancellationToken)
+    private async Task<(JsonNode? Node, string RequestId, bool Streamed)> AnswerAsync(JsonObject body, bool stream, ChatProgressReporter progress,
+        CancellationToken cancellationToken)
     {
         var json = body.ToJsonString();
         HttpRequestMessage Create()
@@ -201,6 +205,7 @@ public sealed class OpenAICompatibleChatClient(OpenAICompatibleProviderBase prov
             return message;
         }
 
+        progress.Sent();
         if (!stream)
         {
             var reply = await http.SendAsync(Create, provider.Name, apiKey, cancellationToken).ConfigureAwait(false);
@@ -208,7 +213,11 @@ public sealed class OpenAICompatibleChatClient(OpenAICompatibleProviderBase prov
         }
 
         var reader = new OpenAICompatibleStreamReader();
-        var streamed = await http.StreamAsync(Create, provider.Name, apiKey, reader.Add, cancellationToken).ConfigureAwait(false);
+        var streamed = await http.StreamAsync(Create, provider.Name, apiKey, line =>
+        {
+            reader.Add(line);
+            progress.Line(reader.TextLength, () => reader.Text);
+        }, cancellationToken).ConfigureAwait(false);
         if (reader.Skipped > 0)
         {
             logger.LogWarning("{Provider} {Model}: {Count} stream chunk(s) could not be read and were skipped (request {RequestId})", provider.Name, Model.Id,

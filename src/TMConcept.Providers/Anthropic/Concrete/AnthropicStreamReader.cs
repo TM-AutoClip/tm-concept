@@ -24,6 +24,12 @@ public sealed class AnthropicStreamReader
     private bool _events;
     private bool _plainBody;
 
+    /// <summary>Characters of visible text read so far (0 while the model only thinks; the progress tells thinking from writing by it).</summary>
+    public int TextLength => _text.Length;
+
+    /// <summary>The visible text read so far.</summary>
+    public string Text => _text.ToString();
+
     /// <summary>Adds one line of the body.</summary>
     public void Add(string line)
     {

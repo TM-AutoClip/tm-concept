@@ -61,6 +61,17 @@ public static class ConceptResponseParser
         return new ConceptParseResult(concepts, problems, !complete);
     }
 
+    /// <summary>
+    /// How many items of the list are complete so far in an answer that is still arriving (their closing brace came; not checked further).
+    /// For the progress on the screen ("2 of 5 ready"); <see cref="Parse"/> decides what is kept.
+    /// </summary>
+    public static int CompleteCount(string? answer)
+    {
+        var text = answer ?? string.Empty;
+        var start = ArrayStart(text);
+        return start < 0 ? 0 : TopLevelObjects(text, start).Objects.Count;
+    }
+
     private static string TextClean(string? value, int max, bool oneLine) =>
         oneLine ? Text.TextClean.OneLine(value, max) : Text.TextClean.Clean(value, max);
 
