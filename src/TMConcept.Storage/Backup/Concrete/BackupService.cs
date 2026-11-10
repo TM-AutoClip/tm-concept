@@ -404,8 +404,8 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
             await db.Videos.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
             await db.Embeddings.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
             await db.Concepts.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
-            await db.HistoryDigests.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
             await db.TopicSuggestions.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+            await db.ConceptWishes.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
             await db.Runs.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
         }
 
@@ -650,7 +650,6 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
         await db.ProfileImages.AsNoTracking().Take(1).ToListAsync(cancellationToken).ConfigureAwait(false);
         await db.Concepts.AsNoTracking().Take(1).ToListAsync(cancellationToken).ConfigureAwait(false);
         await db.Embeddings.AsNoTracking().Take(1).ToListAsync(cancellationToken).ConfigureAwait(false);
-        await db.HistoryDigests.AsNoTracking().Take(1).ToListAsync(cancellationToken).ConfigureAwait(false);
         await db.Runs.AsNoTracking().Take(1).ToListAsync(cancellationToken).ConfigureAwait(false);
         await db.QueueItems.AsNoTracking().Take(1).ToListAsync(cancellationToken).ConfigureAwait(false);
         await db.Videos.AsNoTracking().Take(1).ToListAsync(cancellationToken).ConfigureAwait(false);
@@ -661,6 +660,7 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
         await db.Pronunciations.AsNoTracking().Take(1).ToListAsync(cancellationToken).ConfigureAwait(false);
         await db.VoiceSamples.AsNoTracking().Take(1).ToListAsync(cancellationToken).ConfigureAwait(false);
         await db.TopicSuggestions.AsNoTracking().Take(1).ToListAsync(cancellationToken).ConfigureAwait(false);
+        await db.ConceptWishes.AsNoTracking().Take(1).ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static RestoreReport Report(BackupHeader header) => new(header.CreatedAtUtc, header.Contents, header.KeyCount,

@@ -29,8 +29,11 @@ public interface IConceptStore
     /// </summary>
     Task UpdateTextAsync(Guid id, string title, string summary, string content, CancellationToken cancellationToken);
 
-    /// <summary>Changes the status (approve, reject, restore, queue, produced).</summary>
+    /// <summary>Changes the status (approve, reject, restore, queue, produced); the trash reason is cleared (a reason is given only by <see cref="TrashAsync"/>).</summary>
     Task SetStatusAsync(IReadOnlyCollection<Guid> ids, ConceptStatus status, CancellationToken cancellationToken);
+
+    /// <summary>Moves concepts to the trash with a reason (🗑 on a card: topic, telling or none).</summary>
+    Task TrashAsync(IReadOnlyCollection<Guid> ids, TrashReason reason, CancellationToken cancellationToken);
 
     /// <summary>
     /// Deletes trashed concepts for good (a real DELETE; their embeddings go with them, videos keep their record). Concepts that are not in

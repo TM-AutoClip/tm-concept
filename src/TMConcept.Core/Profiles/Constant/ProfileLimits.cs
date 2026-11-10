@@ -6,8 +6,14 @@ public static class ProfileLimits
     /// <summary>Longest channel name.</summary>
     public const int NameMax = 80;
 
-    /// <summary>Longest channel concept text.</summary>
+    /// <summary>Longest channel content text.</summary>
     public const int ConceptTextMax = 6000;
+
+    /// <summary>
+    /// Below this many characters the profile editor warns that the channel content is short: it drives every concept and topic, and a
+    /// line like "history channel" lets the model wander (the developer, 10 Nov 2026: "please write the channel content properly").
+    /// </summary>
+    public const int ConceptTextAdvised = 80;
 
     /// <summary>Shortest target video length (seconds).</summary>
     public const int SecondsMin = 15;

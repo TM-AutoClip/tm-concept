@@ -215,8 +215,9 @@
                           Command="{Binding $parent[ListBox].((vm:ConceptsViewModel)DataContext).EditCommand}" CommandParameter="{Binding}" />
                   <Button Grid.Column="3" Classes="small accent" Content="✓" ToolTip.Tip="{DynamicResource concepts.approve.tip}" VerticalAlignment="Top"
                           Command="{Binding $parent[ListBox].((vm:ConceptsViewModel)DataContext).ApproveCommand}" CommandParameter="{Binding}" />
+                  <!-- 🗑 asks why (topic / telling / just delete): the prompts send the reason as a dislike. The key D or Delete = just delete. -->
                   <Button Grid.Column="4" Classes="small danger" Content="🗑" ToolTip.Tip="{DynamicResource concepts.trash.tip}" VerticalAlignment="Top"
-                          Command="{Binding $parent[ListBox].((vm:ConceptsViewModel)DataContext).TrashCommand}" CommandParameter="{Binding}" />
+                          Click="OnTrashClick" />
                 </Grid>
                 <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" Classes="muted" IsVisible="{Binding !Expanded}" />
                 <TextBlock Text="{Binding Note}" Classes="warning" IsVisible="{Binding HasNote}" TextWrapping="Wrap" />

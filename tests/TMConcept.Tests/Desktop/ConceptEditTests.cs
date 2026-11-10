@@ -93,10 +93,20 @@ public sealed class ConceptEditTests
         var text = h.Get<Localizer>();
         text["concepts.keys"].ShouldContain("🗑");
 
-        // 🗑 = to the trash: the trash keeps it and the duplicate check still counts it.
-        buttons.Single(b => (b.Content as string) == "🗑").Command!.Execute(card);
+        // 🗑 asks why: topic, telling or just delete. The trash keeps it and the duplicate check still counts it.
+        var trash = buttons.Single(b => (b.Content as string) == "🗑");
+        trash.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
+        Dispatcher.UIThread.RunJobs();
+        var menu = Avalonia.Controls.Primitives.FlyoutBase.GetAttachedFlyout(trash).ShouldBeOfType<Avalonia.Controls.MenuFlyout>();
+        var items = menu.Items.Cast<Avalonia.Controls.MenuItem>().ToList();
+        items.Select(i => i.Header as string).ShouldBe([text["concepts.trash.topic"], text["concepts.trash.telling"], text["concepts.trash.just"]]);
+        items.ShouldAllBe(i => ReferenceEquals(i.CommandParameter, card));
+        menu.Hide();
+        items[1].Command!.Execute(card);
         await Until(() => page.NewConcepts.Count == 0);
-        (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!.Status.ShouldBe(ConceptStatus.Trashed);
+        var trashed = (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!;
+        trashed.Status.ShouldBe(ConceptStatus.Trashed);
+        trashed.TrashReason.ShouldBe(TrashReason.Telling, "the reason is kept: the next prompts avoid that kind of telling");
         (await h.Get<IConceptStore>().HistoryAsync(profile.Id, CancellationToken.None)).ShouldContain(s => s.Id == concept.Id);
         window.Close();
     }
@@ -155,8 +165,10 @@ public sealed class ConceptEditTests
         request.User.ShouldContain("CHANGE: «Also tell the journey on the road there.»");
         request.User.ShouldContain("TITLE: «Ship graffiti on the marble of Hagia Sophia»");
         request.User.ShouldContain("[pause 1 s] Sailors carved their ships into it.", Case.Sensitive, "the user's placeholders go along");
-        request.System.ShouldContain("CHANNEL: «Byzantium»");
-        request.System.ShouldContain("Keep every one of them exactly as written");
+        request.System.ShouldContain("CHANNEL CONTENT: «Byzantine history.»");
+        (request.System + request.User).ShouldNotContain("Byzantium", Case.Sensitive, "the channel name is only the user's label");
+        (await h.Get<IConceptWishStore>().ListAsync(profile.Id, 10, CancellationToken.None)).ShouldBeEmpty("the wish is kept only when the result is saved");
+        request.System.ShouldContain("exactly as written and in the same place");
         request.Stream.ShouldBeTrue();
         request.Progress.ShouldNotBeNull();
         request.Effort.ShouldBe(page.Picker.Row(TMConcept.Core.Pipeline.PipelineSteps.Concepts)!.Effort?.Value ?? string.Empty);
@@ -185,8 +197,33 @@ public sealed class ConceptEditTests
         saved.Number.ShouldBe(1);
         (await h.Get<IEmbeddingStore>().ListAsync(profile.Id, "m", CancellationToken.None)).ShouldBeEmpty("the vectors of the old title and summary are dropped");
         card.Title.ShouldBe("#1 " + other.Title);
+        (await h.Get<IConceptWishStore>().ListAsync(profile.Id, 10, CancellationToken.None)).Single().Text
+            .ShouldBe("Also tell the journey on the road there.", "a saved edit's wish is kept for the next concepts");
         page.Editing.ShouldBeFalse();
         page.Notice.ShouldContain("#2", Case.Sensitive);
+    }
+
+    [AvaloniaFact]
+    public async Task AnAiEditThrownAwayInTheEditorLeavesNoWish()
+    {
+        var fake = new FakeChat().Answer(_ => One("A funnier Hagia Sophia", "Jokes on the marble. Slang included.", "[on screen: dome]\nYo, the dome."));
+        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
+        var (profile, concept) = await PrepareAsync(h);
+        var page = await PageAsync(h);
+        await page.AiEditAsync(page.NewConcepts.Single());
+        page.AiInstruction = "Make it funnier, use slang.";
+
+        await page.SendAiEditAsync();
+        page.Editing.ShouldBeTrue("the result is in the editor");
+        page.CancelEdit();
+
+        (await h.Get<IConceptWishStore>().ListAsync(profile.Id, 10, CancellationToken.None)).ShouldBeEmpty("a result the user threw away is no wish");
+        (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!.Title.ShouldBe(concept.Title);
+
+        // A plain edit of the same concept saved later does not bring the thrown-away wish back.
+        await page.EditAsync(page.NewConcepts.Single());
+        await page.SaveEditAsync();
+        (await h.Get<IConceptWishStore>().ListAsync(profile.Id, 10, CancellationToken.None)).ShouldBeEmpty();
     }
 
     [AvaloniaFact]

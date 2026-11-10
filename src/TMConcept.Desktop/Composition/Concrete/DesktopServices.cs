@@ -147,6 +147,8 @@ public static class DesktopServices
         services.AddSingleton<Core.Pronunciation.IPronunciationStore, PronunciationStore>();
         services.AddSingleton<Core.Speech.IVoiceSampleStore, VoiceSampleStore>();
         services.AddSingleton<ITopicSuggestionStore, TopicSuggestionStore>();
+        services.AddSingleton<IConceptWishStore, ConceptWishStore>();
+        services.AddSingleton<Core.Concepts.IPromptMemorySource, Core.Concepts.PromptMemorySource>();
         services.AddSingleton<IEmbeddingStore, EmbeddingStore>();
     }
 

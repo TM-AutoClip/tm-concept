@@ -5,6 +5,7 @@ using TMConcept.Core.Models;
 using TMConcept.Core.Profiles;
 using TMConcept.Core.Providers;
 using TMConcept.Core.Runs;
+using TMConcept.Core.Text;
 
 namespace TMConcept.Core.Concepts;
 
@@ -15,10 +16,13 @@ namespace TMConcept.Core.Concepts;
 /// user's wish), streamed and cancelable. The answer has the format of concept generation, so <see cref="ConceptResponseParser"/> reads
 /// it; the first complete concept is the result. Nothing is saved here: the page shows the result in the editor and the user saves it.
 /// The call is a run of its own (<see cref="RunKind.ConceptEdit"/>), so the month's spending counts it, also when it fails after being
-/// billed. A cut-off answer (max_tokens) or one without a readable concept changes nothing: a half concept is no edit.
+/// billed. A cut-off answer (max_tokens) or one without a readable concept changes nothing: a half concept is no edit. The instruction is
+/// kept as one of the profile's wishes (<see cref="KeepWishAsync"/>; <see cref="IConceptWishStore"/>, the newest
+/// <see cref="PromptMemoryLimits.WishesKept"/>) only when the page saves the edited text: new concepts apply it from the start (the
+/// developer, 10 Nov 2026), and an edit the user cancels or throws away leaves no wish behind.
 /// </summary>
-public sealed class ConceptEditor(IProfileStore profiles, IRunStore runs, IChatClientFactory chats, ICostCalculator costs, TimeProvider clock,
-    ILogger<ConceptEditor> logger)
+public sealed class ConceptEditor(IProfileStore profiles, IRunStore runs, IConceptWishStore wishes, IChatClientFactory chats, ICostCalculator costs,
+    TimeProvider clock, ILogger<ConceptEditor> logger)
 {
     /// <summary>The estimate of one edit of <paramref name="concept"/> (its content read) with <paramref name="model"/> at <paramref name="effort"/>.</summary>
     public async Task<CostEstimate> EstimateAsync(Profile profile, Concept concept, string instruction, CatalogModel model, string effort,
@@ -136,6 +140,29 @@ public sealed class ConceptEditor(IProfileStore profiles, IRunStore runs, IChatC
         ArgumentNullException.ThrowIfNull(concept);
         var images = await profiles.ImagesAsync(profile.Id, cancellationToken).ConfigureAwait(false);
         return ConceptPromptBuilder.BuildEdit(new ConceptEditPromptInput(profile, images, concept.Title, concept.Summary, concept.Content, instruction ?? string.Empty));
+    }
+
+    /// <summary>
+    /// Keeps the instruction of an AI edit whose result the user saved as one of the profile's wishes; a failure is only logged (the save
+    /// itself went through).
+    /// </summary>
+    public async Task KeepWishAsync(Guid profileId, string instruction)
+    {
+        var text = TextClean.OneLine(instruction, ConceptLimits.ExtraPromptMax);
+        if (text.Length == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            await wishes.AddAsync(new ConceptWish { ProfileId = profileId, Text = text, CreatedAtUtc = clock.GetUtcNow() }, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The edit is shown anyway; only the next concepts would not know this wish.
+            logger.LogError(ex, "The AI edit's wish could not be kept");
+        }
     }
 
     private async Task KeepAsync(Run run)

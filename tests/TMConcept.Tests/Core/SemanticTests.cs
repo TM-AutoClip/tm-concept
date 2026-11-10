@@ -36,19 +36,6 @@ public sealed class SemanticTests
     }
 
     [Fact]
-    public void ALongHistoryIsCompressedToAFixedSize()
-    {
-        var titles = Enumerable.Range(1, 2000).Select(i => i % 4 == 0 ? $"Nika Riot — Part {i / 4}" : $"Topic {i} of the walls").ToList();
-
-        var lines = HistoryCompressor.Lines(titles);
-
-        lines.Count.ShouldBeLessThan(titles.Count / 4);
-        lines.ShouldContain(l => l.StartsWith("Nika Riot: parts 1–", StringComparison.Ordinal));
-        lines.TakeLast(HistoryCompressor.NewestFull).ShouldBe(titles.TakeLast(HistoryCompressor.NewestFull));
-        HistoryCompressor.Lines(titles.Take(50).ToList()).ShouldBe(titles.Take(50));
-    }
-
-    [Fact]
     public async Task OpenAIEmbeddingsKeepTheOrderAndCountTheTokens()
     {
         var fake = new FakeHttp().Answer(HttpStatusCode.OK, """

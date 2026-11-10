@@ -13,8 +13,8 @@ namespace TMConcept.Core.Concepts;
 /// measured tokens already include thinking), or before the first run count × the size expected from the target length × the thinking
 /// share of the chosen effort (<see cref="ConceptOutputBudget.ThinkingShare"/>); a batch never costs more output than its max_tokens.
 /// Generate: batches as large as fit the batch's max_tokens at the high end of that output (<see cref="BatchSizeAsync"/>, 20 at most; 0.1.7
-/// sent 20 whatever the length and effort, so a long Turkish profile at effort high was cut off after about eight); before every batch the history is read again (so a batch also avoids the concepts of the previous
-/// batches; the history is in the user part, so the cached system part stays the same for the whole run), the answer is parsed, the local
+/// sent 20 whatever the length and effort, so a long Turkish profile at effort high was cut off after about eight); before every batch the profile's past is read again (<see cref="IPromptMemorySource"/>; so a batch also avoids the
+/// concepts of the previous batches; it is in the user part, so the cached system part stays the same for the whole run), the answer is parsed, the local
 /// duplicate check throws away duplicates and marks similar ones, the batch is saved at once and the run row is updated with the exact
 /// cost. Every batch asks for <see cref="ConceptOutputBudget.MaxOutputTokens"/> (the model's limit, at most 64 000) and logs it. A batch
 /// cut off at max_tokens keeps every complete concept before the cut (they were paid for) and then ends the run with "truncated"; no
@@ -22,7 +22,7 @@ namespace TMConcept.Core.Concepts;
 /// tells how many are missing.
 /// </summary>
 public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profiles, IRunStore runs, IChatClientFactory chats, ICostCalculator costs,
-    IEmbeddingStore embeddings, IEmbeddingService embedder, TimeProvider clock, ILogger<ConceptGenerator> logger)
+    IPromptMemorySource memory, IEmbeddingStore embeddings, IEmbeddingService embedder, TimeProvider clock, ILogger<ConceptGenerator> logger)
 {
     private readonly List<ConceptEmbedding> _pendingEmbeddings = [];
 
@@ -40,14 +40,14 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
         ArgumentNullException.ThrowIfNull(model);
         count = Math.Clamp(count, ConceptLimits.CountMin, ConceptLimits.CountMax);
         var images = await profiles.ImagesAsync(profile.Id, cancellationToken).ConfigureAwait(false);
-        var history = await HistoryTitlesAsync(profile.Id, cancellationToken).ConfigureAwait(false);
+        var past = await memory.ReadAsync(profile, cancellationToken).ConfigureAwait(false);
         var (perConcept, band) = await OutputPerConceptAsync(profile, model, effort, cancellationToken).ConfigureAwait(false);
         var roof = ConceptOutputBudget.MaxOutputTokens(model);
         var total = CostEstimate.Zero;
         var first = true;
         foreach (var size in Batches(count, ConceptOutputBudget.BatchSize(roof, perConcept * band.High)))
         {
-            var prompt = ConceptPromptBuilder.Build(new ConceptPromptInput(profile, images, history, extraPrompt, size, focus));
+            var prompt = ConceptPromptBuilder.Build(new ConceptPromptInput(profile, images, past, extraPrompt, size, focus));
             var system = costs.Tokens(prompt.System, profile.ContentLanguage);
             var user = costs.Tokens(prompt.User, profile.ContentLanguage);
             var output = size * perConcept;
@@ -144,7 +144,8 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var subjects = await concepts.HistoryAsync(profile.Id, cancellationToken).ConfigureAwait(false);
-                var prompt = ConceptPromptBuilder.Build(new ConceptPromptInput(profile, images, Titles(subjects), request.ExtraPrompt, sizes[index], request.Focus));
+                var past = await memory.ReadAsync(profile, cancellationToken).ConfigureAwait(false);
+                var prompt = ConceptPromptBuilder.Build(new ConceptPromptInput(profile, images, past, request.ExtraPrompt, sizes[index], request.Focus));
                 var maxTokens = ConceptOutputBudget.MaxOutputTokens(request.Model.Model);
                 logger.LogInformation("Concept run {Run}: batch {Batch}/{Batches} of {Size} concepts, max_tokens {MaxTokens}, effort {Effort}, {Seconds} s {Language}",
                     run.Id, index + 1, sizes.Count, sizes[index], maxTokens, request.Model.Effort.Length > 0 ? request.Model.Effort : "automatic",
@@ -413,12 +414,6 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
 
     /// <summary>Earlier concepts embedded per batch at most when the meaning check is turned on or its model changes.</summary>
     public const int BackfillLimit = 300;
-
-    private static IReadOnlyList<string> Titles(IReadOnlyList<DuplicateSubject> subjects) =>
-        HistoryCompressor.Lines(subjects.OrderBy(s => s.Number).Select(s => s.Title).ToList());
-
-    private async Task<IReadOnlyList<string>> HistoryTitlesAsync(Guid profileId, CancellationToken cancellationToken) =>
-        Titles(await concepts.HistoryAsync(profileId, cancellationToken).ConfigureAwait(false));
 
     private void Charge(Run run, ConceptRequest request, ChatUsage usage, decimal? reported)
     {

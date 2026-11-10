@@ -25,15 +25,15 @@ public sealed class OutputLanguageTests
     public void AGermanVideoGetsTheEnglishPromptThatNamesGermanAndAllowsTurkishNotes()
     {
         var prompt = ConceptPromptBuilder.Build(new ConceptPromptInput(Profile(ContentLanguages.German, "Bizans tarihi, sakin bir anlatım."), [],
-            ["Der Nika-Aufstand"], "Vikingler hakkında olsun", 5));
+            PromptMemoryBuilder.Build([new Concept { Number = 1, Title = "Der Nika-Aufstand" }], [], ContentLanguages.German), "Vikingler hakkında olsun", 5));
 
-        prompt.System.ShouldStartWith("You write content for a video channel.");
+        prompt.System.ShouldStartWith("You write factually grounded video concepts for a video channel");
         prompt.System.ShouldContain("every [on screen: …] line in German");
         prompt.System.ShouldContain("may be written in another language, for example Turkish");
         prompt.System.ShouldContain("answer only in German");
         prompt.System.ShouldContain("(\"… — Teil 3\")");
         prompt.System.ShouldContain("≈ 132 words of narration in German", Case.Sensitive, "German is read at 2.2 words a second");
-        prompt.System.ShouldContain("CHANNEL CONCEPT: «Bizans tarihi, sakin bir anlatım.»", Case.Sensitive, "the user's Turkish notes go in unchanged");
+        prompt.System.ShouldContain("CHANNEL CONTENT: «Bizans tarihi, sakin bir anlatım.»", Case.Sensitive, "the user's Turkish notes go in unchanged");
         prompt.System.ShouldNotContain("{");
         prompt.User.ShouldContain("EXTRA REQUEST: «Vikingler hakkında olsun»");
     }
@@ -41,9 +41,9 @@ public sealed class OutputLanguageTests
     [Fact]
     public void ATurkishVideoKeepsTheTurkishPromptAndSaysTheNotesMayBeInAnotherLanguage()
     {
-        var prompt = ConceptPromptBuilder.Build(new ConceptPromptInput(Profile(ContentLanguages.Turkish, "Calm Byzantine history."), [], [], string.Empty, 5));
+        var prompt = ConceptPromptBuilder.Build(new ConceptPromptInput(Profile(ContentLanguages.Turkish, "Calm Byzantine history."), [], PromptMemory.Empty, string.Empty, 5));
 
-        prompt.System.ShouldStartWith("Sen bir video kanalının içerik yazarısın.");
+        prompt.System.ShouldStartWith("Bir video kanalı için doğru bilgiye dayanan");
         prompt.System.ShouldContain("satırının metnini Türkçe yaz");
         prompt.System.ShouldContain("yanıtı yalnız Türkçe yaz");
         prompt.System.ShouldContain("≈ 138 kelime Türkçe seslendirme");

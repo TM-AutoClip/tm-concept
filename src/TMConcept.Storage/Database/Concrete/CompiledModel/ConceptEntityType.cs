@@ -20,7 +20,7 @@ namespace TMConcept.Storage.Database
                 "TMConcept.Core.Concepts.Concept",
                 typeof(Concept),
                 baseEntityType,
-                propertyCount: 14,
+                propertyCount: 15,
                 foreignKeyCount: 1,
                 unnamedIndexCount: 2,
                 keyCount: 1);
@@ -124,6 +124,13 @@ namespace TMConcept.Storage.Database
                 typeof(string),
                 propertyInfo: typeof(Concept).GetProperty("Title", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
                 fieldInfo: typeof(Concept).GetField("<Title>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly));
+
+            var trashReason = runtimeEntityType.AddProperty(
+                "TrashReason",
+                typeof(TrashReason),
+                propertyInfo: typeof(Concept).GetProperty("TrashReason", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(Concept).GetField("<TrashReason>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly));
+            trashReason.SetSentinelFromProviderValue(0);
 
             var key = runtimeEntityType.AddKey(
                 new[] { id });

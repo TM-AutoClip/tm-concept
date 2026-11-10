@@ -82,9 +82,13 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
     [ObservableProperty]
     public partial decimal? TargetSeconds { get; set; } = 75;
 
-    /// <summary>The channel's concept.</summary>
+    /// <summary>The channel's content (what the channel covers; the most important input of every concept and topic prompt).</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ConceptTextShort))]
     public partial string ConceptText { get; set; } = string.Empty;
+
+    /// <summary>The channel content is written but very short: a one-line warning under the box.</summary>
+    public bool ConceptTextShort => ConceptText.Trim().Length is > 0 and < ProfileLimits.ConceptTextAdvised;
 
 
     /// <summary>Sample images.</summary>

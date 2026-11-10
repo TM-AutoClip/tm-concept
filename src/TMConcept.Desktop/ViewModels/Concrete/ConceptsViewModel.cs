@@ -58,6 +58,12 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
     private string _editOpenedSummary = string.Empty;
     private string _editOpenedContent = string.Empty;
     private bool _editFromAi;
+
+    /// <summary>
+    /// The instructions of the AI edits whose results the open editor holds (edits can follow each other before one Save): kept as the
+    /// profile's wishes only when the editor is saved, forgotten when it is canceled.
+    /// </summary>
+    private readonly List<string> _aiWishes = [];
     private bool _aiFromEditor;
     private bool _aiEditorWasAi;
     private CancellationTokenSource? _aiCancel;
@@ -346,6 +352,7 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         AiEditCard = null;
         _aiBase = null;
         _aiFromEditor = false;
+        _aiWishes.Clear();
         OpenEditor(card, full.Title, full.Summary, full.Content, string.Empty, string.Empty, fromAi: false);
     }
 
@@ -408,6 +415,13 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         }
 
         activity.Add(ActivityLevel.Info, text.Format("concepts.edit.saved", card.Title), text.Format("concepts.edit.saved", ActivityPlaceholders.Title));
+        // The AI edits behind the saved text: their instructions become the profile's wishes for the next concepts.
+        foreach (var wish in _aiWishes)
+        {
+            await editor.KeepWishAsync(card.Concept.ProfileId, wish).ConfigureAwait(true);
+        }
+
+        _aiWishes.Clear();
         CloseEditor();
         if (retitled)
         {
@@ -440,6 +454,11 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         // From the open editor: its unsaved title, summary and text are what the model edits, and Cancel in the box goes back to them.
         _aiFromEditor = ReferenceEquals(EditCard, card);
         _aiEditorWasAi = _aiFromEditor && _editFromAi;
+        if (!_aiFromEditor)
+        {
+            _aiWishes.Clear();
+        }
+
         if (_aiFromEditor)
         {
             full.Title = TextClean.OneLine(EditHeadline, ConceptLimits.TitleHardMax);
@@ -528,6 +547,7 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
                 AiEditCard = null;
                 _aiBase = null;
                 _aiFromEditor = false;
+                _aiWishes.Add(instruction);
                 OpenEditor(card, edited.Title, edited.Summary, edited.Content, ready, lookAlike, fromAi: true);
                 return;
             }
@@ -599,7 +619,11 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
 
     /// <summary>Closes the editor without saving.</summary>
     [RelayCommand]
-    public void CancelEdit() => CloseEditor();
+    public void CancelEdit()
+    {
+        _aiWishes.Clear();
+        CloseEditor();
+    }
 
     /// <summary>Whether the open editor holds something not saved (an AI result always counts as unsaved).</summary>
     public bool EditUnsaved => EditCard is not null
@@ -745,6 +769,7 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         AiEditCard = null;
         _aiBase = null;
         _aiFromEditor = false;
+        _aiWishes.Clear();
         CloseEditor();
         Topics.Clear();
         TopicStatus = string.Empty;
@@ -828,9 +853,19 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         events.Raise(this);
     }
 
-    /// <summary>Moves a concept to the trash (✗, key D).</summary>
+    /// <summary>Moves a concept to the trash without a reason ("Just delete" under 🗑, key D or Delete): it only counts as covered.</summary>
     [RelayCommand]
-    public async Task TrashAsync(ConceptCardViewModel? card)
+    public Task TrashAsync(ConceptCardViewModel? card) => TrashWithAsync(card, TrashReason.None);
+
+    /// <summary>Moves a concept to the trash because its topic was not liked: new concepts and topics stay away from it.</summary>
+    [RelayCommand]
+    public Task TrashTopicAsync(ConceptCardViewModel? card) => TrashWithAsync(card, TrashReason.Topic);
+
+    /// <summary>Moves a concept to the trash because its telling was not liked: new concepts avoid that kind of telling.</summary>
+    [RelayCommand]
+    public Task TrashTellingAsync(ConceptCardViewModel? card) => TrashWithAsync(card, TrashReason.Telling);
+
+    private async Task TrashWithAsync(ConceptCardViewModel? card, TrashReason reason)
     {
         card ??= Selected;
         if (card is null)
@@ -838,7 +873,7 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
             return;
         }
 
-        await concepts.SetStatusAsync([card.Id], ConceptStatus.Trashed, CancellationToken.None).ConfigureAwait(true);
+        await concepts.TrashAsync([card.Id], reason, CancellationToken.None).ConfigureAwait(true);
         Remove(card);
         events.Raise(this);
     }

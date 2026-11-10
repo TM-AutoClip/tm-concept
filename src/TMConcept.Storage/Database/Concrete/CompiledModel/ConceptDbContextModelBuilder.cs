@@ -11,16 +11,16 @@ namespace TMConcept.Storage.Database
     public partial class ConceptDbContextModel
     {
         private ConceptDbContextModel()
-            : base(skipDetectChanges: false, modelId: new Guid("21d05b87-8680-46d7-a836-f7551a8bc468"), entityTypeCount: 17)
+            : base(skipDetectChanges: false, modelId: new Guid("6c21d64d-9636-4536-8e24-cbf6ae33cf8a"), entityTypeCount: 17)
         {
         }
 
         partial void Initialize()
         {
             var concept = ConceptEntityType.Create(this);
+            var conceptWish = ConceptWishEntityType.Create(this);
             var topicSuggestion = TopicSuggestionEntityType.Create(this);
             var conceptEmbedding = ConceptEmbeddingEntityType.Create(this);
-            var historyDigest = HistoryDigestEntityType.Create(this);
             var apiKey = ApiKeyEntityType.Create(this);
             var stepModelChoice = StepModelChoiceEntityType.Create(this);
             var profile = ProfileEntityType.Create(this);
@@ -36,9 +36,9 @@ namespace TMConcept.Storage.Database
             var settingRow = SettingRowEntityType.Create(this);
 
             ConceptEntityType.CreateForeignKey1(concept, profile);
+            ConceptWishEntityType.CreateForeignKey1(conceptWish, profile);
             TopicSuggestionEntityType.CreateForeignKey1(topicSuggestion, profile);
             ConceptEmbeddingEntityType.CreateForeignKey1(conceptEmbedding, concept);
-            HistoryDigestEntityType.CreateForeignKey1(historyDigest, profile);
             StepModelChoiceEntityType.CreateForeignKey1(stepModelChoice, profile);
             ProfileImageEntityType.CreateForeignKey1(profileImage, profile);
             QueueItemEntityType.CreateForeignKey1(queueItem, concept);
@@ -48,9 +48,9 @@ namespace TMConcept.Storage.Database
             VideoRecordEntityType.CreateForeignKey2(videoRecord, profile);
 
             ConceptEntityType.CreateAnnotations(concept);
+            ConceptWishEntityType.CreateAnnotations(conceptWish);
             TopicSuggestionEntityType.CreateAnnotations(topicSuggestion);
             ConceptEmbeddingEntityType.CreateAnnotations(conceptEmbedding);
-            HistoryDigestEntityType.CreateAnnotations(historyDigest);
             ApiKeyEntityType.CreateAnnotations(apiKey);
             StepModelChoiceEntityType.CreateAnnotations(stepModelChoice);
             ProfileEntityType.CreateAnnotations(profile);

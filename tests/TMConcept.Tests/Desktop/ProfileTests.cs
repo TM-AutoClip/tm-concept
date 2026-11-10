@@ -41,6 +41,39 @@ public sealed class ProfileTests
     }
 
     [AvaloniaFact]
+    public async Task TheChannelContentBoxSaysItDrivesEveryConceptAndWarnsWhenItIsVeryShort()
+    {
+        using var h = new DesktopHarness();
+        await FirstRunTests.CreateAsync(h);
+        var page = h.Get<ProfileViewModel>();
+        page.StartNew();
+        var view = new TMConcept.Desktop.Views.ProfileView { DataContext = page };
+        var window = new Avalonia.Controls.Window { Content = view, Width = 1100, Height = 900 };
+        h.Get<TMConcept.Desktop.Localization.LanguageResources>().Attach(window.Resources.MergedDictionaries);
+        window.Show();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
+
+        var box = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(view).OfType<Avalonia.Controls.TextBox>().Single(b => b.Name == "ConceptBox");
+        box.PlaceholderText.ShouldBe(text["profile.concept.placeholder"]);
+        var tips = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(view).OfType<TMConcept.Desktop.Views.HelpTip>().Select(t => t.Text).ToList();
+        tips.ShouldContain(text["profile.concept.hint"]);
+        tips.ShouldContain(text["profile.name.hint"], "the name's \"?\" says it is not sent to the model");
+        var warning = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(view).OfType<Avalonia.Controls.TextBlock>().Single(b => b.Name == "ConceptShort");
+
+        page.ConceptText = string.Empty;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        warning.IsVisible.ShouldBeFalse("nothing written yet: the save check says so");
+        page.ConceptText = "History channel.";
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        warning.IsVisible.ShouldBeTrue();
+        page.ConceptText = new string('x', ProfileLimits.ConceptTextAdvised);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        warning.IsVisible.ShouldBeFalse();
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public async Task SampleImagesAreCopiedAndDeletingTheProfileKeepsFiles()
     {
         var confirm = new FakeConfirm();

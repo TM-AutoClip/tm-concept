@@ -26,20 +26,4 @@ public sealed class EmbeddingStore(ConceptDatabase database) : IEmbeddingStore
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
-
-    /// <inheritdoc />
-    public async Task<HistoryDigest?> DigestAsync(Guid profileId, CancellationToken cancellationToken)
-    {
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        return await db.HistoryDigests.FirstOrDefaultAsync(d => d.ProfileId == profileId, cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <inheritdoc />
-    public async Task SaveDigestAsync(HistoryDigest digest, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(digest);
-        digest.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        await db.UpsertAsync(digest, d => d.ProfileId == digest.ProfileId, cancellationToken).ConfigureAwait(false);
-    }
 }

@@ -35,6 +35,7 @@ public sealed class ConceptStore(ConceptDatabase database) : IConceptStore
                 DuplicateNote = c.DuplicateNote,
                 CreatedAtUtc = c.CreatedAtUtc,
                 DecidedAtUtc = c.DecidedAtUtc,
+                TrashReason = c.TrashReason,
             }).ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -126,6 +127,7 @@ public sealed class ConceptStore(ConceptDatabase database) : IConceptStore
         await db.Concepts.Where(c => ids.Contains(c.Id)).ExecuteUpdateAsync(s =>
         {
             s.SetProperty(c => c.Status, status);
+            s.SetProperty(c => c.TrashReason, TrashReason.None);
             if (status is ConceptStatus.Approved or ConceptStatus.Trashed)
             {
                 s.SetProperty(c => c.DecidedAtUtc, now);
@@ -135,6 +137,18 @@ public sealed class ConceptStore(ConceptDatabase database) : IConceptStore
                 s.SetProperty(c => c.DecidedAtUtc, (DateTimeOffset?)null);
             }
         }, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task TrashAsync(IReadOnlyCollection<Guid> ids, TrashReason reason, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
+        DateTimeOffset? now = DateTimeOffset.UtcNow;
+        await db.Concepts.Where(c => ids.Contains(c.Id)).ExecuteUpdateAsync(s => s
+            .SetProperty(c => c.Status, ConceptStatus.Trashed)
+            .SetProperty(c => c.DecidedAtUtc, now)
+            .SetProperty(c => c.TrashReason, reason), cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />

@@ -30,7 +30,10 @@
       </Border>
 
       <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="10" ColumnSpacing="12">
-        <TextBlock Text="{DynamicResource profile.name}" VerticalAlignment="Center" />
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+          <TextBlock Text="{DynamicResource profile.name}" VerticalAlignment="Center" />
+          <views:HelpTip Text="{DynamicResource profile.name.hint}" />
+        </StackPanel>
         <TextBox Grid.Column="1" Text="{Binding Name}" MaxLength="80" />
         <StackPanel Grid.Row="1" Orientation="Horizontal" VerticalAlignment="Center">
           <TextBlock Text="{DynamicResource profile.language}" VerticalAlignment="Center" />
@@ -57,7 +60,9 @@
         <TextBlock Text="{DynamicResource profile.concept}" FontWeight="SemiBold" VerticalAlignment="Center" />
         <views:HelpTip Text="{DynamicResource profile.concept.hint}" />
       </StackPanel>
-      <TextBox Name="ConceptBox" Text="{Binding ConceptText}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="180" MaxLength="6000" />
+      <TextBox Name="ConceptBox" Text="{Binding ConceptText}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="180" MaxLength="6000"
+               PlaceholderText="{DynamicResource profile.concept.placeholder}" />
+      <TextBlock Name="ConceptShort" Text="{DynamicResource profile.concept.short}" Classes="warning" TextWrapping="Wrap" IsVisible="{Binding ConceptTextShort}" />
 
       <Border Classes="card">
         <StackPanel Spacing="8">

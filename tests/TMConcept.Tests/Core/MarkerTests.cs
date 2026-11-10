@@ -36,12 +36,12 @@ public sealed class MarkerTests
     {
         var profile = new Profile { Name = "Byzantium", ContentLanguage = ContentLanguages.English, ConceptText = "Calm documentary [soft transition]" };
 
-        var prompt = ConceptPromptBuilder.Build(new ConceptPromptInput(profile, [], [], "only empresses [pause 1 s]", 5));
+        var prompt = ConceptPromptBuilder.Build(new ConceptPromptInput(profile, [], PromptMemory.Empty, "only empresses [pause 1 s]", 5));
 
         (prompt.System + prompt.User).ShouldNotContain("MARKERS");
         (prompt.System + prompt.User).ShouldNotContain("[hard cut]");
         var turkish = ConceptPromptBuilder.Build(new ConceptPromptInput(new Profile { Name = "B", ContentLanguage = ContentLanguages.Turkish, ConceptText = "x" },
-            [], [], "y", 5));
+            [], PromptMemory.Empty, "y", 5));
         (turkish.System + turkish.User).ShouldNotContain("İŞARET");
     }
 

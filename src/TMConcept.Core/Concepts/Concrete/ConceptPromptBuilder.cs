@@ -1,21 +1,25 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using TMConcept.Core.Profiles;
-using TMConcept.Core.Text;
 
 namespace TMConcept.Core.Concepts;
 
 /// <summary>
-/// Builds the concept prompt from the embedded template of the prompt language (Prompts/&lt;lang&gt;/concepts.txt: Turkish for Turkish videos,
-/// English for every other output language, which the prompt names; the user's texts may be written in the interface language). The order follows the
-/// cache: the fixed part (rules + channel + concept + format + sample images) comes first and carries the cache mark; the changing part
-/// (history, extra request, count) comes last. The history grows after every batch, so inside the cached part it made every call write a
-/// new cache entry (1.25× input price) and never read one. User text is put inside « » (rule 10) with the guillemets themselves removed from it, so it cannot close the block.
-/// A line whose value is empty is left out (no images, no history, no extra request). No placeholder goes to the model: the placeholders
-/// ([pause 1 s], [soft transition]…) are put into a concept's text afterwards and applied by the program itself.
+/// Builds the prompts of concepts, AI edit and topic suggestions from the embedded templates (Prompts/&lt;lang&gt;/*.txt). Concepts and AI
+/// edit: Turkish for Turkish videos, English for every other output language, which the prompt names (the user's texts may be in the
+/// interface language). Topics: the interface language, since the topics go into the extra request the user writes. The order follows the
+/// cache: the fixed part (rules + channel content + format + sample images) comes first and carries the cache mark; the changing part (the
+/// profile's past, see <see cref="PromptMemoryBuilder"/>, the wishes, the extra request, the count) comes last, so a new concept never
+/// changes the cached part (inside it the growing history made every call write a new cache entry at 1.25× and never read one). The
+/// channel's NAME is not sent (10 Nov 2026, the developer: "the name does not matter, the channel content does"): it is only the user's
+/// label; the channel content is the most important input and every concept and topic must stay inside it. User text is put inside « »
+/// with the guillemets themselves removed from it, so it cannot close the block (<see cref="PromptText"/>). A line whose value is empty is
+/// left out (no images, no history, no extra request). No placeholder ([pause 1 s], [soft transition]…) goes to the concept model: they are
+/// put into a concept's text afterwards and applied by the program itself. The prompts are not shown to the user and cannot be edited.
 /// </summary>
-public static class ConceptPromptBuilder
+public static partial class ConceptPromptBuilder
 {
     private const string Separator = "=====";
 
@@ -23,17 +27,16 @@ public static class ConceptPromptBuilder
     public static ConceptPrompt Build(ConceptPromptInput input)
     {
         ArgumentNullException.ThrowIfNull(input);
-        var history = input.HistoryTitles.Count == 0 ? null : string.Join("\n", input.HistoryTitles.Select(t => "- " + Data(t, ConceptLimits.TitleHardMax)));
-        return Make("concepts", input.Profile, input.Images, new Dictionary<string, string?>(StringComparer.Ordinal)
-        {
-            ["history_count"] = history is null ? null : input.HistoryTitles.Count.ToString(CultureInfo.InvariantCulture),
-            ["history"] = history,
-            ["extra"] = string.IsNullOrWhiteSpace(input.ExtraPrompt) ? null : Data(input.ExtraPrompt, ConceptLimits.ExtraPromptMax),
+        var (words, template) = Template(OutputLanguages.Of(input.Profile.ContentLanguage).PromptLanguage, "concepts");
+        var values = Channel(input.Profile, input.Images, words);
+        Memory(values, input.Memory);
+        values["wishes"] = input.Memory.Wishes;
+        values["extra"] = string.IsNullOrWhiteSpace(input.ExtraPrompt) ? null : PromptText.Data(input.ExtraPrompt, ConceptLimits.ExtraPromptMax);
 
-            // Names from the app's own focus lists (not free text), in the prompt's language.
-            ["focus"] = string.IsNullOrWhiteSpace(input.Focus) ? null : Data(input.Focus, ConceptLimits.ExtraPromptMax),
-            ["count"] = input.Count.ToString(CultureInfo.InvariantCulture),
-        });
+        // Names from the app's own focus lists (not free text), in the prompt's language.
+        values["focus"] = string.IsNullOrWhiteSpace(input.Focus) ? null : PromptText.Data(input.Focus, ConceptLimits.ExtraPromptMax);
+        values["count"] = input.Count.ToString(CultureInfo.InvariantCulture);
+        return Make(template, values, Schema());
     }
 
     /// <summary>
@@ -44,27 +47,51 @@ public static class ConceptPromptBuilder
     public static ConceptPrompt BuildEdit(ConceptEditPromptInput input)
     {
         ArgumentNullException.ThrowIfNull(input);
+        var (words, template) = Template(OutputLanguages.Of(input.Profile.ContentLanguage).PromptLanguage, "concept-edit");
 
-        // The user's texts are filled after the channel's values: a "{channel}" typed into the content stays as typed.
-        return Make("concept-edit", input.Profile, input.Images, new Dictionary<string, string?>(StringComparer.Ordinal)
-        {
-            ["title"] = Data(input.Title, ConceptLimits.TitleHardMax),
-            ["summary"] = Data(input.Summary, ConceptLimits.SummaryMax),
-            ["instruction"] = Data(input.Instruction, ConceptLimits.ExtraPromptMax),
-            ["content"] = Data(input.Content, ConceptLimits.ContentMax),
-        });
+        // A "{concept}" typed into the content stays as typed (Fill does not search a value again).
+        var values = Channel(input.Profile, input.Images, words);
+        values["title"] = PromptText.Data(input.Title, ConceptLimits.TitleHardMax);
+        values["summary"] = PromptText.Data(input.Summary, ConceptLimits.SummaryMax);
+        values["instruction"] = PromptText.Data(input.Instruction, ConceptLimits.ExtraPromptMax);
+        values["content"] = PromptText.Data(input.Content, ConceptLimits.ContentMax);
+        return Make(template, values, Schema());
     }
 
-    /// <summary>Fills a template: the channel's values first, then <paramref name="own"/> (the values of this kind of prompt).</summary>
-    private static ConceptPrompt Make(string file, Profile profile, IReadOnlyList<ProfileImage> images, Dictionary<string, string?> own)
+    /// <summary>
+    /// Builds the "Suggest topics" prompt (Prompts/&lt;interface lang&gt;/topics.txt; a language other than Turkish gets the English one): the
+    /// channel content, the video language, the profile's covered concepts and topic dislikes, the newest earlier suggestions, the focus and
+    /// the extra request so far.
+    /// </summary>
+    public static ConceptPrompt BuildTopics(TopicPromptInput input)
     {
-        var language = OutputLanguages.Of(profile.ContentLanguage);
-        var (words, template) = Template(language.PromptLanguage, file);
+        ArgumentNullException.ThrowIfNull(input);
+        var code = input.Language == ContentLanguages.Turkish ? ContentLanguages.Turkish : ContentLanguages.English;
+        var (_, template) = Template(code, "topics");
+        var video = OutputLanguages.Of(input.Profile.ContentLanguage);
         var values = new Dictionary<string, string?>(StringComparer.Ordinal)
         {
-            ["channel"] = Data(profile.Name, ProfileLimits.NameMax),
-            ["concept"] = Data(profile.ConceptText, ProfileLimits.ConceptTextMax),
-            // The output language by name in the prompt's language; the user's « » texts may be in another one (rule 12 of the prompt).
+            ["concept"] = PromptText.Data(input.Profile.ConceptText, ProfileLimits.ConceptTextMax),
+            ["video_language"] = code == ContentLanguages.Turkish ? video.Turkish : video.English,
+        };
+        Memory(values, input.Memory);
+        values["suggested"] = input.EarlierSuggestions.Count == 0
+            ? null
+            : string.Concat(input.EarlierSuggestions.Select(s => "\n- " + PromptText.Line(s, TopicSuggester.TopicMax)));
+        values["focus"] = string.IsNullOrWhiteSpace(input.Focus) ? null : PromptText.Data(input.Focus, ConceptLimits.ExtraPromptMax);
+        values["extra"] = string.IsNullOrWhiteSpace(input.ExtraPrompt) ? null : PromptText.Data(input.ExtraPrompt, ConceptLimits.ExtraPromptMax);
+        values["count"] = input.Count.ToString(CultureInfo.InvariantCulture);
+        return Make(template, values, TopicSchema());
+    }
+
+    /// <summary>The channel part of the concept and edit prompts (no name: see the class summary).</summary>
+    private static Dictionary<string, string?> Channel(Profile profile, IReadOnlyList<ProfileImage> images, Dictionary<string, string> words)
+    {
+        var language = OutputLanguages.Of(profile.ContentLanguage);
+        return new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["concept"] = PromptText.Data(profile.ConceptText, ProfileLimits.ConceptTextMax),
+            // The output language by name in the prompt's language; the user's « » texts may be in another one (the language rule).
             ["language"] = language.PromptLanguage == ContentLanguages.Turkish ? language.Turkish : language.English,
             ["part"] = language.PartWord,
             ["format"] = profile.Format == VideoFormat.Vertical ? words["vertical"] : words["horizontal"],
@@ -72,15 +99,24 @@ public static class ConceptPromptBuilder
             ["words"] = Words(profile.ContentLanguage, profile.TargetSeconds).ToString(CultureInfo.InvariantCulture),
             ["images"] = images.Count == 0
                 ? null
-                : string.Join("; ", images.Select((image, i) => string.Create(CultureInfo.InvariantCulture, $"{i + 1}: «{Data(image.Caption, ProfileLimits.CaptionMax)}»"))),
+                : string.Join("; ", images.Select((image, i) => string.Create(CultureInfo.InvariantCulture, $"{i + 1}: «{PromptText.Data(image.Caption, ProfileLimits.CaptionMax)}»"))),
         };
-        foreach (var (key, value) in own)
-        {
-            values[key] = value;
-        }
+    }
 
+    /// <summary>The profile's past: covered (with its count), topic and telling dislikes.</summary>
+    private static void Memory(Dictionary<string, string?> values, PromptMemory memory)
+    {
+        ArgumentNullException.ThrowIfNull(memory);
+        values["covered_count"] = memory.Covered is null ? null : memory.CoveredCount.ToString(CultureInfo.InvariantCulture);
+        values["covered"] = memory.Covered;
+        values["disliked_topics"] = memory.DislikedTopics;
+        values["disliked_telling"] = memory.DislikedTelling;
+    }
+
+    private static ConceptPrompt Make(string template, Dictionary<string, string?> values, JsonObject schema)
+    {
         var split = template.IndexOf(Separator, StringComparison.Ordinal);
-        return new ConceptPrompt(Fill(template[..split], values), Fill(template[(split + Separator.Length)..], values), Schema());
+        return new ConceptPrompt(Fill(template[..split], values), Fill(template[(split + Separator.Length)..], values), schema);
     }
 
     /// <summary>Narration words for a target length (estimated speaking rate of the output language).</summary>
@@ -110,40 +146,37 @@ public static class ConceptPromptBuilder
         };
     }
 
-    private static string Data(string? text, int max) => TextClean.Clean(text, max).Replace("«", "\"", StringComparison.Ordinal).Replace("»", "\"", StringComparison.Ordinal);
+    /// <summary>The answer schema of the topic suggestions: <c>{"topics": ["…"]}</c>.</summary>
+    public static JsonObject TopicSchema() => new()
+    {
+        ["type"] = "object",
+        ["properties"] = new JsonObject { ["topics"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string" } } },
+        ["required"] = new JsonArray("topics"),
+        ["additionalProperties"] = false,
+    };
 
+    /// <summary>
+    /// Fills one part of a template line by line, in one pass over the template's own placeholders: a value is never searched again, so a
+    /// "{count}" typed into a user's text or a title stays as typed. A line holding a placeholder without a value is left out.
+    /// </summary>
     private static string Fill(string part, Dictionary<string, string?> values)
     {
         var output = new StringBuilder();
         foreach (var line in part.Trim('\n').Split('\n'))
         {
-            var text = line;
-            var drop = false;
-            foreach (var (key, value) in values)
-            {
-                var mark = "{" + key + "}";
-                if (!text.Contains(mark, StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                if (value is null)
-                {
-                    drop = true;
-                    break;
-                }
-
-                text = text.Replace(mark, value, StringComparison.Ordinal);
-            }
-
+            var drop = Placeholder().Matches(line).Any(m => values.TryGetValue(m.Groups["key"].Value, out var value) && value is null);
             if (!drop)
             {
-                output.Append(text).Append('\n');
+                output.Append(Placeholder().Replace(line, m => values.TryGetValue(m.Groups["key"].Value, out var value) && value is not null ? value : m.Value))
+                    .Append('\n');
             }
         }
 
         return output.ToString().TrimEnd('\n');
     }
+
+    [GeneratedRegex(@"\{(?<key>[a-z_]+)\}", RegexOptions.CultureInvariant)]
+    private static partial Regex Placeholder();
 
     private static (Dictionary<string, string> Words, string Template) Template(string code, string file)
     {

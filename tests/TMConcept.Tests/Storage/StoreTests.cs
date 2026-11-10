@@ -109,6 +109,7 @@ public sealed class StoreTests
         await new VideoStore(h.Database).AddAsync(new VideoRecord { ConceptId = c.Id, ProfileId = p.Id, Title = "A" }, [], None);
         await new ProfileStore(h.Database).SaveImageAsync(new ProfileImage { ProfileId = p.Id, FileName = "a.png" }, None);
         await new TopicSuggestionStore(h.Database).AddAsync([new TopicSuggestion { ProfileId = p.Id, Text = "Greek fire" }], None);
+        await new ConceptWishStore(h.Database).AddAsync(new ConceptWish { ProfileId = p.Id, Text = "Shorter sentences" }, None);
 
         await new ProfileStore(h.Database).DeleteAsync(p.Id, None);
 
@@ -117,6 +118,52 @@ public sealed class StoreTests
         (await h.QueryAsync(db => db.Videos.CountAsync())).ShouldBe(0);
         (await h.QueryAsync(db => db.ProfileImages.CountAsync())).ShouldBe(0);
         (await h.QueryAsync(db => db.TopicSuggestions.CountAsync())).ShouldBe(0);
+        (await h.QueryAsync(db => db.ConceptWishes.CountAsync())).ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task OnlyTheNewestWishesOfAProfileAreKeptAndARepeatMovesToTheFront()
+    {
+        var (h, p) = await WithProfileAsync();
+        using var _ = h;
+        var store = new ConceptWishStore(h.Database);
+        var at = DateTimeOffset.UtcNow;
+        for (var i = 1; i <= PromptMemoryLimits.WishesKept + 3; i++)
+        {
+            await store.AddAsync(new ConceptWish { ProfileId = p.Id, Text = "Wish " + i, CreatedAtUtc = at.AddMinutes(i) }, None);
+        }
+
+        var kept = await store.ListAsync(p.Id, 100, None);
+        kept.Count.ShouldBe(PromptMemoryLimits.WishesKept);
+        kept[0].Text.ShouldBe("Wish 11");
+        kept[^1].Text.ShouldBe("Wish 4");
+
+        await store.AddAsync(new ConceptWish { ProfileId = p.Id, Text = "Wish 5", CreatedAtUtc = at.AddMinutes(20) }, None);
+        kept = await store.ListAsync(p.Id, 100, None);
+        kept.Count.ShouldBe(PromptMemoryLimits.WishesKept, "the same wish again is one wish");
+        kept[0].Text.ShouldBe("Wish 5");
+        kept.Count(w => w.Text == "Wish 5").ShouldBe(1);
+        (await store.ListAsync(Guid.NewGuid(), 100, None)).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task ATrashReasonIsKeptAndClearedWhenTheConceptLeavesTheTrash()
+    {
+        var (h, p) = await WithProfileAsync();
+        using var _ = h;
+        var concepts = new ConceptStore(h.Database);
+        var c = New(p, "A");
+        await concepts.AddAsync([c], None);
+
+        await concepts.TrashAsync([c.Id], TrashReason.Topic, None);
+        var trashed = (await concepts.ListAsync(p.Id, [ConceptStatus.Trashed], false, None)).Single();
+        (trashed.TrashReason, trashed.DecidedAtUtc.HasValue).ShouldBe((TrashReason.Topic, true));
+
+        await concepts.SetStatusAsync([c.Id], ConceptStatus.New, None);
+        (await concepts.GetAsync(c.Id, None))!.TrashReason.ShouldBe(TrashReason.None, "restored: no dislike any more");
+
+        await concepts.SetStatusAsync([c.Id], ConceptStatus.Trashed, None);
+        (await concepts.GetAsync(c.Id, None))!.TrashReason.ShouldBe(TrashReason.None, "trashed without a reason (the Delete key)");
     }
 
     [Fact]

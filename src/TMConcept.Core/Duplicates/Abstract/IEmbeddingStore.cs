@@ -1,6 +1,6 @@
 namespace TMConcept.Core.Duplicates;
 
-/// <summary>Concept embeddings and history digests.</summary>
+/// <summary>Concept embeddings (the meaning check).</summary>
 public interface IEmbeddingStore
 {
     /// <summary>Vectors of a profile made by a model.</summary>
@@ -8,10 +8,4 @@ public interface IEmbeddingStore
 
     /// <summary>Adds or replaces vectors.</summary>
     Task SaveAsync(IReadOnlyList<ConceptEmbedding> embeddings, CancellationToken cancellationToken);
-
-    /// <summary>The digest of a profile; <c>null</c> when none.</summary>
-    Task<HistoryDigest?> DigestAsync(Guid profileId, CancellationToken cancellationToken);
-
-    /// <summary>Saves the digest.</summary>
-    Task SaveDigestAsync(HistoryDigest digest, CancellationToken cancellationToken);
 }

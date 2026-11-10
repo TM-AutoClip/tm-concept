@@ -44,4 +44,7 @@ public sealed class Concept
 
     /// <summary>When it was approved or rejected (UTC).</summary>
     public DateTimeOffset? DecidedAtUtc { get; set; }
+
+    /// <summary>Why it is in the trash (<see cref="TrashReason.None"/> when it is not, or no reason was given).</summary>
+    public TrashReason TrashReason { get; set; }
 }

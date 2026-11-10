@@ -188,6 +188,7 @@ public sealed class BackupTests
         using var __ = source;
         var profile = (await new ProfileStore(source.Database).ListAsync(None)).Single();
         await new TopicSuggestionStore(source.Database).AddAsync([new TopicSuggestion { ProfileId = profile.Id, Text = "Greek fire", Used = true }], None);
+        await new ConceptWishStore(source.Database).AddAsync(new ConceptWish { ProfileId = profile.Id, Text = "Shorter sentences" }, None);
         var service = Service(source);
         var all = Path.Combine(source.Paths.DataDirectory, "all" + BackupRules.Extension);
         var noConcepts = Path.Combine(source.Paths.DataDirectory, "no-concepts" + BackupRules.Extension);
@@ -199,6 +200,7 @@ public sealed class BackupTests
             await Service(target).RestoreAsync(all, Password, target.Protector, None);
             var back = (await new TopicSuggestionStore(target.Database).ListAsync(profile.Id, 10, None)).Single();
             (back.Text, back.Used).ShouldBe(("Greek fire", true));
+            (await new ConceptWishStore(target.Database).ListAsync(profile.Id, 10, None)).Single().Text.ShouldBe("Shorter sentences");
         }
 
         using (var target = new StorageHarness())
@@ -206,6 +208,7 @@ public sealed class BackupTests
             await Service(target).RestoreAsync(noConcepts, Password, target.Protector, None);
             (await new ProfileStore(target.Database).ListAsync(None)).ShouldNotBeEmpty();
             (await new TopicSuggestionStore(target.Database).ListAsync(profile.Id, 10, None)).ShouldBeEmpty();
+            (await new ConceptWishStore(target.Database).ListAsync(profile.Id, 10, None)).ShouldBeEmpty();
         }
     }
 
