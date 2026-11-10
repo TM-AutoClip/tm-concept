@@ -74,4 +74,21 @@ public sealed class EngineCodeCheckTests
     [Fact]
     public void ExtractCodeTakesTheFirstFence() =>
         EngineCodeCheck.ExtractCode("Sure:\n```js\nconst a = 1;\n```\nmore").ShouldBe("const a = 1;\n");
+    // 0.1.10: a model that only read "no web addresses" built the namespace from pieces, then used DOMParser; both are refused,
+    // so the prompt (system and repair) names the one whole literal that passes.
+    [Fact]
+    public void PiecedSvgNamespaceAndMarkupParsingAreRefused()
+    {
+        EngineCodeCheck.Check(EngineKind.HyperFrames, HyperFramesOk + "var NS = [\"http:\", \"\", \"www.w3.org\", \"2000\", \"svg\"].join(\"/\");").ShouldNotBeEmpty();
+        EngineCodeCheck.Check(EngineKind.HyperFrames, HyperFramesOk + "var d = new DOMParser().parseFromString(\"<svg></svg>\", \"text/html\");").ShouldNotBeEmpty();
+    }
+
+    [Fact]
+    public void RepairPromptNamesTheWholeSvgNamespace()
+    {
+        var text = TMConcept.Core.Videos.VideoCodePrompt.Repair("x", "line 1: address");
+        text.ShouldContain("createElementNS(\"" + EngineCodeCheck.SvgNamespace + "\"");
+        text.ShouldContain("DOMParser");
+        TMConcept.Core.Videos.VideoCodePrompt.Version.ShouldBe("6");
+    }
 }
