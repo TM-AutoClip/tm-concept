@@ -32,4 +32,7 @@ public enum RunKind
 
     /// <summary>"Suggest topics" on the concept page (one cheap chat call).</summary>
     Topics = 8,
+
+    /// <summary>An AI edit of one concept on the concept page (one chat call with the concept step's model).</summary>
+    ConceptEdit = 9,
 }

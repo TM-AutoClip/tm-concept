@@ -63,8 +63,8 @@ public sealed class StorageFormatTests
             sql.ShouldNotBeNull().ShouldContain("CONSTRAINT \"FK_concepts_profiles_ProfileId\" FOREIGN KEY (\"ProfileId\") REFERENCES \"profiles\" (\"Id\") ON DELETE CASCADE");
         }
 
-        (await h.QueryAsync(db => db.SchemaObjects.CountAsync(o => o.Type == "index" && o.Name.StartsWith("IX_")))).ShouldBe(12, "11 and the language index of the pronunciations");
-        (await h.QueryAsync(db => db.SchemaObjects.CountAsync(o => o.Type == ConceptSchema.TableType))).ShouldBe(14);
+        (await h.QueryAsync(db => db.SchemaObjects.CountAsync(o => o.Type == "index" && o.Name.StartsWith("IX_")))).ShouldBe(13, "11, the language index of the pronunciations and the profile index of the topic suggestions");
+        (await h.QueryAsync(db => db.SchemaObjects.CountAsync(o => o.Type == ConceptSchema.TableType))).ShouldBe(15);
 
         // Opening again leaves an existing schema alone.
         await h.QueryAsync(async db =>
@@ -72,7 +72,7 @@ public sealed class StorageFormatTests
             await ConceptDatabase.EnsureSchemaAsync(db, CancellationToken.None);
             return 0;
         });
-        (await h.QueryAsync(db => db.SchemaObjects.CountAsync(o => o.Type == ConceptSchema.TableType))).ShouldBe(14);
+        (await h.QueryAsync(db => db.SchemaObjects.CountAsync(o => o.Type == ConceptSchema.TableType))).ShouldBe(15);
         (await h.QueryAsync(db => db.Settings.CountAsync())).ShouldBe(0, "no schema version or any other row is written for a new file");
     }
 }

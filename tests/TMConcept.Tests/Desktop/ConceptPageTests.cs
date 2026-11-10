@@ -214,9 +214,68 @@ public sealed class ConceptPageTests
         run.ActualUsd.ShouldBeGreaterThan(0);
         page.TopicStatus.ShouldContain(h.Get<TMConcept.Desktop.Localization.Localizer>().Usd(run.ActualUsd));
 
-        page.AddTopic("Greek fire");
+        await page.AddTopicAsync("Greek fire");
         page.ExtraPrompt.ShouldBe("only sieges\nGreek fire");
         page.Topics.ShouldBe(["The fall of Trebizond"]);
+    }
+
+    [AvaloniaFact]
+    public async Task SuggestTopicsKnowsEveryConceptAndEveryEarlierSuggestionAndDropsRepeats()
+    {
+        static ChatResponse Answer(string json) => new(json, new ChatUsage(600, 0, 0, 120), null, "end_turn", "r");
+        var fake = new FakeChat()
+            .Answer(_ => Answer("{\"topics\": [\"The fall of Trebizond\", \"Greek fire\"]}"))
+            .Answer(_ => Answer("{\"topics\": [\"greek FIRE\", \"Hagia  Sophia\", \"The Varangian Guard\", \"Theodora's riot\"]}"))
+            .Answer(_ => Answer("{\"topics\": [\"The Varangian guard\", \"Greek Fire\"]}"));
+        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
+        var profile = await PrepareAsync(h);
+        var store = h.Get<IConceptStore>();
+        Concept Of(string title) => new() { ProfileId = profile.Id, Title = title, Summary = "s", Content = "c", Language = "en" };
+        Concept produced = Of("Hagia Sophia"), trashed = Of("Theodora's riot"), fresh = Of("The Nika riot");
+        await store.AddAsync([produced, trashed, fresh], CancellationToken.None);
+        await store.SetStatusAsync([produced.Id], ConceptStatus.Produced, CancellationToken.None);
+        await store.SetStatusAsync([trashed.Id], ConceptStatus.Trashed, CancellationToken.None);
+        var page = await PageAsync(h);
+        var topicsRow = page.Picker.Row(TMConcept.Core.Pipeline.PipelineSteps.Topics)!;
+        topicsRow.Selected = topicsRow.Options.First(o => o.Model?.Id == "claude-haiku-5-5");
+        await Until(() => page.TopicEstimate.Contains("Claude Haiku", StringComparison.Ordinal));
+
+        await page.SuggestTopicsAsync();
+        page.Topics.ShouldBe(["The fall of Trebizond", "Greek fire"]);
+        var first = fake.Requests.Single().User;
+        first.ShouldContain("- [video] Hagia Sophia", Case.Sensitive, "a concept made into a video is marked");
+        first.ShouldContain("- Theodora's riot", Case.Sensitive, "a trashed concept is no new topic either");
+        first.ShouldContain("- The Nika riot", Case.Sensitive);
+        first.ShouldNotContain("ALREADY SUGGESTED");
+        page.TopicRepeats.ShouldBeEmpty();
+        var suggestions = h.Get<ITopicSuggestionStore>();
+        (await suggestions.ListAsync(profile.Id, 100, CancellationToken.None)).Select(s => s.Text).ShouldBe(["The fall of Trebizond", "Greek fire"],
+            ignoreOrder: true);
+
+        await page.AddTopicAsync("Greek fire");
+        (await suggestions.ListAsync(profile.Id, 100, CancellationToken.None)).Single(s => s.Used).Text.ShouldBe("Greek fire");
+
+        await page.SuggestTopicsAsync();
+        var second = fake.Requests[1].User;
+        second.ShouldContain("ALREADY SUGGESTED");
+        second.ShouldContain("- The fall of Trebizond", Case.Sensitive);
+        second.ShouldContain("- Greek fire", Case.Sensitive);
+        page.Topics.ShouldBe(["The Varangian Guard"], "an earlier suggestion and two concept titles (folded) are left out");
+        var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
+        page.TopicRepeats.ShouldBe(text.Format("topics.repeats", 3));
+        (await suggestions.ListAsync(profile.Id, 100, CancellationToken.None)).Count.ShouldBe(3, "only the kept ones are saved");
+        var run = (await h.Get<IRunStore>().ListAsync(DateTimeOffset.UtcNow.AddHours(-1), CancellationToken.None))
+            .Where(r => r.Kind == RunKind.Topics).OrderBy(r => r.StartedAtUtc).Last();
+        run.Accepted.ShouldBe(1);
+
+        await page.SuggestTopicsAsync();
+        page.Topics.ShouldBeEmpty();
+        page.TopicStatus.ShouldStartWith(text.Format("topics.all_repeats", string.Empty).TrimEnd(' ', '·'));
+        var repeated = (await h.Get<IRunStore>().ListAsync(DateTimeOffset.UtcNow.AddHours(-1), CancellationToken.None))
+            .Where(r => r.Kind == RunKind.Topics).OrderBy(r => r.StartedAtUtc).Last();
+        repeated.Status.ShouldBe(RunStatus.Succeeded, "the answer was read; every topic was only a repeat");
+        repeated.Error.ShouldBeEmpty();
+        repeated.Accepted.ShouldBe(0);
     }
 
     [Fact]

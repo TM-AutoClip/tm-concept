@@ -51,6 +51,8 @@
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
+            <TextBlock Name="TopicRepeatsLine" Text="{Binding TopicRepeats}" Classes="small" TextWrapping="Wrap"
+                       IsVisible="{Binding TopicRepeats, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
             <TextBlock Name="TopicStatusLine" Text="{Binding TopicStatus}" Classes="small" Classes.error="{Binding TopicFailed}" TextWrapping="Wrap"
                        IsVisible="{Binding TopicStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
           </StackPanel>
@@ -141,24 +143,62 @@
         </StackPanel>
       </StackPanel>
       <Panel>
-      <!-- The text editor takes the list's place: the text, the placeholders at the cursor, save or cancel. -->
+      <!-- The text editor takes the list's place: title, summary, the text, the placeholders at the cursor, save or cancel. An AI edit's
+           result opens here too (with its cost), so it is checked before it is saved. -->
       <Border Name="Editor" Classes="card" Padding="12" IsVisible="{Binding Editing}">
         <DockPanel>
-          <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
-            <TextBlock Text="{Binding EditTitle}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="520" />
-            <views:HelpTip Text="{DynamicResource concepts.edit.hint}" />
+          <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,8">
+            <StackPanel Orientation="Horizontal">
+              <TextBlock Text="{Binding EditTitle}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="520" />
+              <views:HelpTip Text="{DynamicResource concepts.edit.hint}" />
+            </StackPanel>
+            <TextBlock Name="EditInfoLine" Text="{Binding EditInfo}" Classes="ok" TextWrapping="Wrap"
+                       IsVisible="{Binding EditInfo, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            <TextBlock Name="EditNoticeLine" Text="{Binding EditNotice}" Classes="warning" TextWrapping="Wrap"
+                       IsVisible="{Binding EditNotice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="6">
+              <TextBlock Text="{DynamicResource concepts.edit.headline}" VerticalAlignment="Center" />
+              <TextBox Name="EditHeadlineBox" Grid.Column="1" Text="{Binding EditHeadline}" MaxLength="{Binding EditHeadlineMax}" />
+              <TextBlock Grid.Row="1" Text="{DynamicResource concepts.edit.summary}" VerticalAlignment="Center" />
+              <TextBox Name="EditSummaryBox" Grid.Row="1" Grid.Column="1" Text="{Binding EditSummary}" TextWrapping="Wrap" MaxLength="{Binding EditSummaryMax}" />
+            </Grid>
           </StackPanel>
           <StackPanel DockPanel.Dock="Bottom" Spacing="6" Margin="0,8,0,0">
             <TextBlock Text="{Binding EditStatus}" Classes="error" TextWrapping="Wrap"
                        IsVisible="{Binding EditStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
               <views:MarkerPicker Target="{Binding #EditBox}" Markers="{Binding Placeholders}" />
-              <Button Grid.Column="1" Classes="accent" Content="{DynamicResource common.save}" Command="{Binding SaveEditCommand}" />
-              <Button Grid.Column="2" Content="{DynamicResource common.cancel}" Command="{Binding CancelEditCommand}" />
+              <Button Grid.Column="1" Content="{DynamicResource concepts.ai.button}" ToolTip.Tip="{DynamicResource concepts.ai.tip}"
+                      Command="{Binding AiEditCommand}" CommandParameter="{Binding EditCard}" />
+              <Button Grid.Column="2" Classes="accent" Content="{DynamicResource common.save}" Command="{Binding SaveEditCommand}" />
+              <Button Grid.Column="3" Content="{DynamicResource common.cancel}" Command="{Binding CancelEditCommand}" />
             </Grid>
           </StackPanel>
           <TextBox Name="EditBox" Text="{Binding EditText}" AcceptsReturn="True" TextWrapping="Wrap" MaxLength="{Binding EditMax}" />
         </DockPanel>
+      </Border>
+      <!-- AI edit takes the list's place too: what should change, the estimate, the running call's steps, Send and Cancel. -->
+      <Border Name="AiEditor" Classes="card" Padding="12" IsVisible="{Binding AiEditing}" VerticalAlignment="Top">
+        <StackPanel Spacing="8">
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Text="{Binding AiEditTitle}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="520" />
+            <views:HelpTip Text="{DynamicResource concepts.ai.hint}" />
+          </StackPanel>
+          <TextBlock Text="{DynamicResource concepts.ai.instruction}" />
+          <TextBox Name="AiInstructionBox" Text="{Binding AiInstruction}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="90"
+                   MaxLength="{Binding AiInstructionMax}" PlaceholderText="{DynamicResource concepts.ai.placeholder}" IsEnabled="{Binding AiEditIdle}" />
+          <TextBlock Text="{Binding AiEditPrice}" Classes="small" TextWrapping="Wrap" />
+          <StackPanel Spacing="4" IsVisible="{Binding AiEditRunning}">
+            <TextBlock Text="{Binding AiEditCall.Text}" TextWrapping="Wrap" />
+            <ProgressBar IsIndeterminate="True" />
+          </StackPanel>
+          <TextBlock Name="AiEditStatusLine" Text="{Binding AiEditStatus}" Classes="small" Classes.error="{Binding AiEditFailed}" TextWrapping="Wrap"
+                     IsVisible="{Binding AiEditStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Classes="accent" Content="{DynamicResource concepts.ai.send}" Command="{Binding SendAiEditCommand}" IsEnabled="{Binding AiEditIdle}" />
+            <Button Content="{DynamicResource common.cancel}" Command="{Binding CancelAiEditCommand}" />
+          </StackPanel>
+        </StackPanel>
       </Border>
       <ListBox x:Name="NewList" ItemsSource="{Binding NewConcepts}" SelectedItem="{Binding Selected}" KeyDown="OnListKeyDown" Background="Transparent"
                IsVisible="{Binding Listing}">
@@ -166,13 +206,16 @@
           <DataTemplate x:DataType="vm:ConceptCardViewModel">
             <Border Classes="card" Padding="12">
               <StackPanel Spacing="4">
-                <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="6">
+                <!-- The actions are always shown (0.1.8 showed them only on the opened card, and the developer did not find them). -->
+                <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="6">
                   <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                  <Button Grid.Column="1" Content="✎" IsVisible="{Binding Expanded}" ToolTip.Tip="{DynamicResource concepts.edit.tip}"
+                  <Button Grid.Column="1" Classes="small" Content="✨" ToolTip.Tip="{DynamicResource concepts.ai.tip}" VerticalAlignment="Top"
+                          Command="{Binding $parent[ListBox].((vm:ConceptsViewModel)DataContext).AiEditCommand}" CommandParameter="{Binding}" />
+                  <Button Grid.Column="2" Classes="small" Content="✎" ToolTip.Tip="{DynamicResource concepts.edit.tip}" VerticalAlignment="Top"
                           Command="{Binding $parent[ListBox].((vm:ConceptsViewModel)DataContext).EditCommand}" CommandParameter="{Binding}" />
-                  <Button Grid.Column="2" Classes="accent" Content="✓" IsVisible="{Binding Expanded}" ToolTip.Tip="{DynamicResource concepts.approve.tip}"
+                  <Button Grid.Column="3" Classes="small accent" Content="✓" ToolTip.Tip="{DynamicResource concepts.approve.tip}" VerticalAlignment="Top"
                           Command="{Binding $parent[ListBox].((vm:ConceptsViewModel)DataContext).ApproveCommand}" CommandParameter="{Binding}" />
-                  <Button Grid.Column="3" Classes="danger" Content="✗" IsVisible="{Binding Expanded}" ToolTip.Tip="{DynamicResource concepts.trash.tip}"
+                  <Button Grid.Column="4" Classes="small danger" Content="🗑" ToolTip.Tip="{DynamicResource concepts.trash.tip}" VerticalAlignment="Top"
                           Command="{Binding $parent[ListBox].((vm:ConceptsViewModel)DataContext).TrashCommand}" CommandParameter="{Binding}" />
                 </Grid>
                 <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" Classes="muted" IsVisible="{Binding !Expanded}" />
@@ -200,18 +243,22 @@
       <ListBox ItemsSource="{Binding Approved}" Background="Transparent" Margin="0,8,0,0">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:ConceptCardViewModel">
-            <!-- A click opens the text in the editor (fix it, add placeholders). -->
-            <Button Classes="link" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                    Command="{Binding $parent[ListBox].((vm:ConceptsViewModel)DataContext).EditCommand}" CommandParameter="{Binding}">
-              <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis">
-                <ToolTip.Tip>
-                  <StackPanel Spacing="4" MaxWidth="320">
-                    <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" />
-                    <TextBlock Text="{DynamicResource concepts.approved.tip}" FontWeight="SemiBold" />
-                  </StackPanel>
-                </ToolTip.Tip>
-              </TextBlock>
-            </Button>
+            <!-- A click on the title opens the text in the editor (fix it, add placeholders); ✨ opens the AI edit. -->
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+              <Button Classes="link" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                      Command="{Binding $parent[ListBox].((vm:ConceptsViewModel)DataContext).EditCommand}" CommandParameter="{Binding}">
+                <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis">
+                  <ToolTip.Tip>
+                    <StackPanel Spacing="4" MaxWidth="320">
+                      <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" />
+                      <TextBlock Text="{DynamicResource concepts.approved.tip}" FontWeight="SemiBold" />
+                    </StackPanel>
+                  </ToolTip.Tip>
+                </TextBlock>
+              </Button>
+              <Button Grid.Column="1" Classes="small" Content="✨" ToolTip.Tip="{DynamicResource concepts.approved.ai.tip}" VerticalAlignment="Center"
+                      Command="{Binding $parent[ListBox].((vm:ConceptsViewModel)DataContext).AiEditCommand}" CommandParameter="{Binding}" />
+            </Grid>
           </DataTemplate>
         </ListBox.ItemTemplate>
       </ListBox>

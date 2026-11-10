@@ -23,13 +23,43 @@ public static class ConceptPromptBuilder
     public static ConceptPrompt Build(ConceptPromptInput input)
     {
         ArgumentNullException.ThrowIfNull(input);
-        var profile = input.Profile;
-        var language = OutputLanguages.Of(profile.ContentLanguage);
-        var (words, template) = Template(language.PromptLanguage);
-        var images = input.Images.Count == 0
-            ? null
-            : string.Join("; ", input.Images.Select((image, i) => string.Create(CultureInfo.InvariantCulture, $"{i + 1}: «{Data(image.Caption, ProfileLimits.CaptionMax)}»")));
         var history = input.HistoryTitles.Count == 0 ? null : string.Join("\n", input.HistoryTitles.Select(t => "- " + Data(t, ConceptLimits.TitleHardMax)));
+        return Make("concepts", input.Profile, input.Images, new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["history_count"] = history is null ? null : input.HistoryTitles.Count.ToString(CultureInfo.InvariantCulture),
+            ["history"] = history,
+            ["extra"] = string.IsNullOrWhiteSpace(input.ExtraPrompt) ? null : Data(input.ExtraPrompt, ConceptLimits.ExtraPromptMax),
+
+            // Names from the app's own focus lists (not free text), in the prompt's language.
+            ["focus"] = string.IsNullOrWhiteSpace(input.Focus) ? null : Data(input.Focus, ConceptLimits.ExtraPromptMax),
+            ["count"] = input.Count.ToString(CultureInfo.InvariantCulture),
+        });
+    }
+
+    /// <summary>
+    /// Builds the prompt of an AI edit of one concept (Prompts/&lt;lang&gt;/concept-edit.txt): the same channel part, rules and answer format
+    /// as <see cref="Build"/> (so <see cref="ConceptResponseParser"/> reads its answer), then the current title, summary and content and the
+    /// user's wish. The placeholders the user already put in the text go along and the prompt says to keep them where they are.
+    /// </summary>
+    public static ConceptPrompt BuildEdit(ConceptEditPromptInput input)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+
+        // The user's texts are filled after the channel's values: a "{channel}" typed into the content stays as typed.
+        return Make("concept-edit", input.Profile, input.Images, new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["title"] = Data(input.Title, ConceptLimits.TitleHardMax),
+            ["summary"] = Data(input.Summary, ConceptLimits.SummaryMax),
+            ["instruction"] = Data(input.Instruction, ConceptLimits.ExtraPromptMax),
+            ["content"] = Data(input.Content, ConceptLimits.ContentMax),
+        });
+    }
+
+    /// <summary>Fills a template: the channel's values first, then <paramref name="own"/> (the values of this kind of prompt).</summary>
+    private static ConceptPrompt Make(string file, Profile profile, IReadOnlyList<ProfileImage> images, Dictionary<string, string?> own)
+    {
+        var language = OutputLanguages.Of(profile.ContentLanguage);
+        var (words, template) = Template(language.PromptLanguage, file);
         var values = new Dictionary<string, string?>(StringComparer.Ordinal)
         {
             ["channel"] = Data(profile.Name, ProfileLimits.NameMax),
@@ -40,15 +70,15 @@ public static class ConceptPromptBuilder
             ["format"] = profile.Format == VideoFormat.Vertical ? words["vertical"] : words["horizontal"],
             ["seconds"] = profile.TargetSeconds.ToString(CultureInfo.InvariantCulture),
             ["words"] = Words(profile.ContentLanguage, profile.TargetSeconds).ToString(CultureInfo.InvariantCulture),
-            ["images"] = images,
-            ["history_count"] = history is null ? null : input.HistoryTitles.Count.ToString(CultureInfo.InvariantCulture),
-            ["history"] = history,
-            ["extra"] = string.IsNullOrWhiteSpace(input.ExtraPrompt) ? null : Data(input.ExtraPrompt, ConceptLimits.ExtraPromptMax),
-
-            // Names from the app's own focus lists (not free text), in the prompt's language.
-            ["focus"] = string.IsNullOrWhiteSpace(input.Focus) ? null : Data(input.Focus, ConceptLimits.ExtraPromptMax),
-            ["count"] = input.Count.ToString(CultureInfo.InvariantCulture),
+            ["images"] = images.Count == 0
+                ? null
+                : string.Join("; ", images.Select((image, i) => string.Create(CultureInfo.InvariantCulture, $"{i + 1}: «{Data(image.Caption, ProfileLimits.CaptionMax)}»"))),
         };
+        foreach (var (key, value) in own)
+        {
+            values[key] = value;
+        }
+
         var split = template.IndexOf(Separator, StringComparison.Ordinal);
         return new ConceptPrompt(Fill(template[..split], values), Fill(template[(split + Separator.Length)..], values), Schema());
     }
@@ -115,10 +145,10 @@ public static class ConceptPromptBuilder
         return output.ToString().TrimEnd('\n');
     }
 
-    private static (Dictionary<string, string> Words, string Template) Template(string code)
+    private static (Dictionary<string, string> Words, string Template) Template(string code, string file)
     {
-        using var stream = typeof(ConceptPromptBuilder).Assembly.GetManifestResourceStream($"TMConcept.Prompts.{code}.concepts.txt")
-            ?? throw new InvalidOperationException($"The concept prompt for '{code}' is missing from the build.");
+        using var stream = typeof(ConceptPromptBuilder).Assembly.GetManifestResourceStream($"TMConcept.Prompts.{code}.{file}.txt")
+            ?? throw new InvalidOperationException($"The {file} prompt for '{code}' is missing from the build.");
         using var reader = new StreamReader(stream, Encoding.UTF8);
         var words = new Dictionary<string, string>(StringComparer.Ordinal);
         var body = new StringBuilder();

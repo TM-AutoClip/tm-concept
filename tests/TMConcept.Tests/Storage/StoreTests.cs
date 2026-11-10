@@ -108,6 +108,7 @@ public sealed class StoreTests
         await new QueueStore(h.Database).AddAsync(new QueueItem { ProfileId = p.Id, ConceptId = c.Id }, None);
         await new VideoStore(h.Database).AddAsync(new VideoRecord { ConceptId = c.Id, ProfileId = p.Id, Title = "A" }, [], None);
         await new ProfileStore(h.Database).SaveImageAsync(new ProfileImage { ProfileId = p.Id, FileName = "a.png" }, None);
+        await new TopicSuggestionStore(h.Database).AddAsync([new TopicSuggestion { ProfileId = p.Id, Text = "Greek fire" }], None);
 
         await new ProfileStore(h.Database).DeleteAsync(p.Id, None);
 
@@ -115,6 +116,27 @@ public sealed class StoreTests
         (await h.QueryAsync(db => db.QueueItems.CountAsync())).ShouldBe(0);
         (await h.QueryAsync(db => db.Videos.CountAsync())).ShouldBe(0);
         (await h.QueryAsync(db => db.ProfileImages.CountAsync())).ShouldBe(0);
+        (await h.QueryAsync(db => db.TopicSuggestions.CountAsync())).ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task TopicSuggestionsAreListedNewestFirstAndMarkedUsedByTheirText()
+    {
+        var (h, p) = await WithProfileAsync();
+        using var _ = h;
+        var store = new TopicSuggestionStore(h.Database);
+        var at = DateTimeOffset.UtcNow;
+        await store.AddAsync([
+            new TopicSuggestion { ProfileId = p.Id, Text = "Old", CreatedAtUtc = at.AddMinutes(-2) },
+            new TopicSuggestion { ProfileId = p.Id, Text = "New", CreatedAtUtc = at },
+        ], None);
+
+        (await store.ListAsync(p.Id, 10, None)).Select(s => s.Text).ShouldBe(["New", "Old"]);
+        (await store.ListAsync(p.Id, 1, None)).Select(s => s.Text).ShouldBe(["New"]);
+        (await store.ListAsync(Guid.NewGuid(), 10, None)).ShouldBeEmpty();
+
+        await store.MarkUsedAsync(p.Id, "Old", None);
+        (await store.ListAsync(p.Id, 10, None)).Select(s => (s.Text, s.Used)).ShouldBe([("New", false), ("Old", true)]);
     }
 
     [Fact]

@@ -34,17 +34,33 @@ namespace TMConcept.Desktop.ViewModels;
 /// A new card (✎ when open) or an approved concept (a click in its list) opens its text in an editor in place of the list: the text can be
 /// fixed and placeholders put in at the cursor from a drop-down (pauses, speed, transitions; the program applies them in the video, no
 /// model sees them); saving needs a text with something to narrate.
+/// Every new card shows its actions at once (10 Nov 2026: the developer did not find them on the opened card only): ✨ AI edit, ✎ edit the
+/// text yourself, ✓ approve, 🗑 delete (to the trash, which still counts it for the duplicate check). ✨ (on a new card, next to an
+/// approved title, or in the open editor) opens a box in place of the list: "What should change?", the estimate, Send and Cancel. Send is
+/// ONE call with the concept step's model and effort (<see cref="ConceptEditor"/>), followed step by step like Suggest topics; its result
+/// opens in the text editor with title and summary, so the user checks it before Save (nothing changes before). A failed, cut-off or
+/// canceled call changes nothing and says why and what it cost. Saving a new title or summary drops the concept's meaning-check vectors
+/// and runs the word check against the profile's other concepts: a look-alike is a yellow note, not a block.
 /// </summary>
 public sealed partial class ConceptsViewModel(AppSession session, IConceptStore concepts, ConceptGenerator generator, StepModelResolver resolver,
     IModelCatalog catalog, ConceptEvents events, INotifier notifier, IActivityLog activity, Localizer text, StepPickerViewModel picker,
-    IFocusSource focus, TopicSuggester topics, Dialogs.IConfirmDialog confirm, Core.Costs.ICostCalculator costs, Work.WorkStatus work,
-    ILogger<ConceptsViewModel> logger) : PageViewModelBase
+    IFocusSource focus, TopicSuggester topics, ITopicSuggestionStore suggestions, Dialogs.IConfirmDialog confirm, Core.Costs.ICostCalculator costs, Work.WorkStatus work,
+    ConceptEditor editor, ILogger<ConceptsViewModel> logger) : PageViewModelBase
 {
     /// <summary>The steps of the page that are not model cards: the meaning check stands next to the word check.</summary>
     private static readonly string[] InlineSteps = [PipelineSteps.Embedding];
 
     private readonly List<ConceptCardViewModel> _approved = [];
     private readonly object _topicWork = new();
+    private readonly object _aiWork = new();
+    private Concept? _aiBase;
+    private string _editOpenedTitle = string.Empty;
+    private string _editOpenedSummary = string.Empty;
+    private string _editOpenedContent = string.Empty;
+    private bool _editFromAi;
+    private bool _aiFromEditor;
+    private bool _aiEditorWasAi;
+    private CancellationTokenSource? _aiCancel;
     private ConceptCallProgress? _live;
     private bool _callAttached;
     private CancellationTokenSource? _cancel;
@@ -103,6 +119,10 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(TopicCardShown))]
     public partial string TopicStatus { get; set; } = string.Empty;
+
+    /// <summary>How many topics of the last answer repeated an earlier suggestion or a concept and were left out (empty when none).</summary>
+    [ObservableProperty]
+    public partial string TopicRepeats { get; set; } = string.Empty;
 
     /// <summary>The last "Suggest topics" failed or brought nothing (its line is red).</summary>
     [ObservableProperty]
@@ -215,8 +235,73 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
     /// <summary>Whether the editor is shown.</summary>
     public bool Editing => EditCard is not null;
 
-    /// <summary>Whether the new concepts are listed (no editor).</summary>
-    public bool Listing => EditCard is null;
+    /// <summary>Whether the new concepts are listed (no editor, no AI edit box).</summary>
+    public bool Listing => EditCard is null && AiEditCard is null;
+
+    /// <summary>The title in the editor.</summary>
+    [ObservableProperty]
+    public partial string EditHeadline { get; set; } = string.Empty;
+
+    /// <summary>The summary in the editor.</summary>
+    [ObservableProperty]
+    public partial string EditSummary { get; set; } = string.Empty;
+
+    /// <summary>A warning in the editor (yellow): the new title looks like another concept.</summary>
+    [ObservableProperty]
+    public partial string EditNotice { get; set; } = string.Empty;
+
+    /// <summary>A plain line in the editor: an AI result is ready (with its cost).</summary>
+    [ObservableProperty]
+    public partial string EditInfo { get; set; } = string.Empty;
+
+    /// <summary>Longest title in the editor.</summary>
+    public int EditHeadlineMax => ConceptLimits.TitleHardMax;
+
+    /// <summary>Longest summary in the editor.</summary>
+    public int EditSummaryMax => ConceptLimits.SummaryMax;
+
+    /// <summary>The concept being edited with AI (null = no AI edit box).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AiEditing))]
+    [NotifyPropertyChangedFor(nameof(Listing))]
+    public partial ConceptCardViewModel? AiEditCard { get; set; }
+
+    /// <summary>Whether the AI edit box is shown.</summary>
+    public bool AiEditing => AiEditCard is not null;
+
+    /// <summary>"AI edit · #12 Greek fire".</summary>
+    [ObservableProperty]
+    public partial string AiEditTitle { get; set; } = string.Empty;
+
+    /// <summary>What should change (the user's wish).</summary>
+    [ObservableProperty]
+    public partial string AiInstruction { get; set; } = string.Empty;
+
+    /// <summary>Longest wish.</summary>
+    public int AiInstructionMax => ConceptLimits.ExtraPromptMax;
+
+    /// <summary>The estimate of one AI edit with the concept model (or why there is none).</summary>
+    [ObservableProperty]
+    public partial string AiEditPrice { get; set; } = string.Empty;
+
+    /// <summary>What the last AI edit did when it brought nothing (why, and what it cost).</summary>
+    [ObservableProperty]
+    public partial string AiEditStatus { get; set; } = string.Empty;
+
+    /// <summary>The last AI edit failed (its line is red; a cancel is not a failure).</summary>
+    [ObservableProperty]
+    public partial bool AiEditFailed { get; set; }
+
+    /// <summary>The AI edit call runs.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AiEditIdle))]
+    public partial bool AiEditRunning { get; set; }
+
+    /// <summary>The AI edit call does not run (Send can be pressed).</summary>
+    public bool AiEditIdle => !AiEditRunning;
+
+    /// <summary>The steps of the running AI edit call.</summary>
+    public CallStatusViewModel AiEditCall { get; } = new(text);
 
     /// <summary>"Edit text · #12 Greek fire".</summary>
     [ObservableProperty]
@@ -241,15 +326,27 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
     public async Task EditAsync(ConceptCardViewModel? card)
     {
         card ??= Selected;
-        if (card is null || await concepts.GetAsync(card.Id, CancellationToken.None).ConfigureAwait(true) is not { } full)
+        if (card is null || ReferenceEquals(EditCard, card) || Held(card))
         {
             return;
         }
 
-        EditTitle = text.Format("concepts.edit.title", card.Title);
-        EditText = full.Content;
-        EditStatus = string.Empty;
-        EditCard = card;
+        if (ReferenceEquals(AiEditCard, card) && _aiFromEditor)
+        {
+            // The AI box was opened from this concept's editor: back to the editor with its unsaved text.
+            CancelAiEdit();
+            return;
+        }
+
+        if (await concepts.GetAsync(card.Id, CancellationToken.None).ConfigureAwait(true) is not { } full)
+        {
+            return;
+        }
+
+        AiEditCard = null;
+        _aiBase = null;
+        _aiFromEditor = false;
+        OpenEditor(card, full.Title, full.Summary, full.Content, string.Empty, string.Empty, fromAi: false);
     }
 
     /// <summary>Saves the edited text (it must still have something to narrate); the card shows it at once.</summary>
@@ -262,15 +359,33 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         }
 
         var content = (EditText ?? string.Empty).Replace("\r\n", "\n", StringComparison.Ordinal).Trim();
+        var title = TextClean.OneLine(EditHeadline, ConceptLimits.TitleHardMax);
+        var summary = TextClean.OneLine(EditSummary, ConceptLimits.SummaryMax);
+        if (title.Length == 0)
+        {
+            EditStatus = text["concepts.edit.no_title"];
+            return;
+        }
+
         if (!Core.Scenes.SceneSplitter.Split(content).IsValid)
         {
             EditStatus = text["concepts.edit.invalid"];
             return;
         }
 
+        // A new title or summary: the meaning check's vectors (made from them) are dropped with the save, and the word check looks for a
+        // look-alike among the profile's other concepts (only a note).
+        var retitled = !string.Equals(title, card.Concept.Title, StringComparison.Ordinal) || !string.Equals(summary, card.Concept.Summary, StringComparison.Ordinal);
         try
         {
-            await concepts.UpdateContentAsync(card.Id, content, CancellationToken.None).ConfigureAwait(true);
+            if (retitled)
+            {
+                await concepts.UpdateTextAsync(card.Id, title, summary, content, CancellationToken.None).ConfigureAwait(true);
+            }
+            else
+            {
+                await concepts.UpdateContentAsync(card.Id, content, CancellationToken.None).ConfigureAwait(true);
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -281,13 +396,304 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         }
 
         card.ShowContent(content);
+        if (retitled)
+        {
+            card.Retitle(title, summary);
+            var lookAlike = session.Profile is { } owner ? await LookAlikeAsync(owner, card, title, summary).ConfigureAwait(true) : string.Empty;
+            if (lookAlike.Length > 0)
+            {
+                Notice = lookAlike;
+                activity.Add(ActivityLevel.Warning, lookAlike);
+            }
+        }
+
         activity.Add(ActivityLevel.Info, text.Format("concepts.edit.saved", card.Title), text.Format("concepts.edit.saved", ActivityPlaceholders.Title));
-        EditCard = null;
+        CloseEditor();
+        if (retitled)
+        {
+            // Other pages (trash, video) list titles too.
+            events.Raise(this);
+        }
+    }
+
+    /// <summary>
+    /// Opens the AI edit box for a new or approved concept in place of the list (from the open editor: the editor's unsaved title, summary and
+    /// text are what the model edits, so edits can follow each other before one Save).
+    /// </summary>
+    [RelayCommand]
+    public async Task AiEditAsync(ConceptCardViewModel? card)
+    {
+        card ??= Selected;
+        if (card is null || session.Profile is null || ReferenceEquals(AiEditCard, card) || Held(card))
+        {
+            return;
+        }
+
+        if (await concepts.GetAsync(card.Id, CancellationToken.None).ConfigureAwait(true) is not { } full
+            || full.Status is not (ConceptStatus.New or ConceptStatus.Approved))
+        {
+            // Only new and approved concepts are edited (a queued or made one already went on to its video).
+            Status = text["concepts.ai.not_editable"];
+            return;
+        }
+
+        // From the open editor: its unsaved title, summary and text are what the model edits, and Cancel in the box goes back to them.
+        _aiFromEditor = ReferenceEquals(EditCard, card);
+        _aiEditorWasAi = _aiFromEditor && _editFromAi;
+        if (_aiFromEditor)
+        {
+            full.Title = TextClean.OneLine(EditHeadline, ConceptLimits.TitleHardMax);
+            full.Summary = TextClean.OneLine(EditSummary, ConceptLimits.SummaryMax);
+            full.Content = (EditText ?? string.Empty).Replace("\r\n", "\n", StringComparison.Ordinal).Trim();
+        }
+
+        _aiBase = full;
+        CloseEditor();
+        AiEditTitle = text.Format("concepts.ai.title", card.Title);
+        AiInstruction = string.Empty;
+        AiEditStatus = string.Empty;
+        AiEditFailed = false;
+        AiEditCard = card;
+        await AiEstimateAsync().ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Sends the AI edit: the concept model is made ready like for Generate (key, saved for the profile), then ONE call. Its result opens in
+    /// the editor (nothing is saved yet); a failure, a cut-off answer or a cancel keep the box open with the reason and the cost.
+    /// </summary>
+    [RelayCommand]
+    public async Task SendAiEditAsync()
+    {
+        if (AiEditRunning || AiEditCard is not { } card || _aiBase is not { } concept || session.Profile is not { } profile)
+        {
+            return;
+        }
+
+        var instruction = TextClean.Clean(AiInstruction, ConceptLimits.ExtraPromptMax).Trim();
+        if (instruction.Length == 0)
+        {
+            AiEditFailed = true;
+            AiEditStatus = text["concepts.ai.empty"];
+            return;
+        }
+
+        if (Picker.Model(PipelineSteps.Concepts) is null)
+        {
+            AiEditFailed = true;
+            AiEditStatus = text["concepts.no_model"];
+            ModelsOpen = true;
+            return;
+        }
+
+        AttachCalls();
+        AiEditFailed = false;
+        AiEditStatus = string.Empty;
+        AiEditRunning = true;
+        AiEditCall.Preparing();
+        using var cancel = new CancellationTokenSource();
+        _aiCancel = cancel;
+        try
+        {
+            if (!await Picker.PrepareAsync([PipelineSteps.Concepts], "install.purpose.concepts", CancellationToken.None).ConfigureAwait(true))
+            {
+                AiEditFailed = true;
+                AiEditStatus = Picker.Status;
+                return;
+            }
+
+            cancel.Token.ThrowIfCancellationRequested();
+            var model = await resolver.ResolveAsync(PipelineSteps.Concepts, Picker.Choice(PipelineSteps.Concepts), CancellationToken.None).ConfigureAwait(true);
+            AiEditCall.Begin(model.Model.Name);
+            var result = await editor.EditAsync(profile, concept, instruction, model, new Progress<Core.Chat.ChatProgress>(AiEditCall.Report), cancel.Token)
+                .ConfigureAwait(true);
+            var cost = text.Usd(result.CostUsd);
+            if (cancel.IsCancellationRequested || session.Profile?.Id != profile.Id || !ReferenceEquals(AiEditCard, card))
+            {
+                // Canceled, closed or another profile while the answer was coming: it is not opened (the run and its cost are kept).
+                AiEditStatus = text.Format("concepts.ai.canceled", cost);
+                activity.Add(ActivityLevel.Warning, AiEditStatus);
+                return;
+            }
+
+            if (result.Concept is { } edited)
+            {
+                var ready = text.Format("concepts.ai.ready", cost);
+                activity.Add(ActivityLevel.Info, text.Format("concepts.ai.done", card.Title, cost));
+                var lookAlike = await LookAlikeAsync(profile, card, edited.Title, edited.Summary).ConfigureAwait(true);
+                if (session.Profile?.Id != profile.Id || !ReferenceEquals(AiEditCard, card))
+                {
+                    return;
+                }
+
+                AiEditCard = null;
+                _aiBase = null;
+                _aiFromEditor = false;
+                OpenEditor(card, edited.Title, edited.Summary, edited.Content, ready, lookAlike, fromAi: true);
+                return;
+            }
+
+            if (result.ErrorCode == "canceled")
+            {
+                AiEditStatus = text.Format("concepts.ai.canceled", cost);
+                activity.Add(ActivityLevel.Warning, AiEditStatus);
+                return;
+            }
+
+            var reason = result.ErrorCode == "parse" ? text["concepts.parse_failed"] : ProviderErrors.Text(text, result.ErrorCode);
+            AiEditFailed = true;
+            AiEditStatus = text.Format("concepts.ai.failed", reason, cost);
+            activity.Add(ActivityLevel.Error, AiEditStatus);
+        }
+        catch (ModelNotReadyException ex)
+        {
+            logger.LogWarning("AI edit not started: the {Step} step has no {Missing}", ex.Step, ex.Missing);
+            AiEditFailed = true;
+            AiEditStatus = text["concepts.no_model"];
+            ModelsOpen = true;
+        }
+        catch (OperationCanceledException)
+        {
+            // Canceled before anything was sent: nothing was paid.
+            AiEditStatus = text.Format("concepts.ai.canceled", text.Usd(0));
+            activity.Add(ActivityLevel.Warning, AiEditStatus);
+        }
+        catch (Exception ex)
+        {
+            // A locked database or an unexpected answer: the box stays open with the reason; the concept did not change.
+            logger.LogError(ex, "AI edit failed");
+            AiEditFailed = true;
+            AiEditStatus = text.Format("error.generic", ex.Message);
+            activity.Add(ActivityLevel.Error, AiEditStatus);
+        }
+        finally
+        {
+            _aiCancel = null;
+            AiEditCall.Stop();
+            work.Clear(_aiWork);
+            AiEditRunning = false;
+        }
+    }
+
+    /// <summary>Cancel in the AI edit box: stops a running call (the box stays with what it cost), otherwise closes the box.</summary>
+    [RelayCommand]
+    public void CancelAiEdit()
+    {
+        if (_aiCancel is { } running)
+        {
+            running.Cancel();
+            return;
+        }
+
+        var back = AiEditCard;
+        var unsaved = _aiBase;
+        var fromEditor = _aiFromEditor;
+        AiEditCard = null;
+        _aiBase = null;
+        _aiFromEditor = false;
+        if (fromEditor && back is not null && unsaved is not null)
+        {
+            // Opened from the editor: back to it with its unsaved title, summary and text (nothing typed there is lost).
+            OpenEditor(back, unsaved.Title, unsaved.Summary, unsaved.Content, string.Empty, string.Empty, _aiEditorWasAi);
+        }
     }
 
     /// <summary>Closes the editor without saving.</summary>
     [RelayCommand]
-    public void CancelEdit() => EditCard = null;
+    public void CancelEdit() => CloseEditor();
+
+    /// <summary>Whether the open editor holds something not saved (an AI result always counts as unsaved).</summary>
+    public bool EditUnsaved => EditCard is not null
+        && (_editFromAi || !string.Equals(EditHeadline, _editOpenedTitle, StringComparison.Ordinal)
+            || !string.Equals(EditSummary, _editOpenedSummary, StringComparison.Ordinal)
+            || !string.Equals(EditText, _editOpenedContent, StringComparison.Ordinal));
+
+    /// <summary>
+    /// Whether opening <paramref name="card"/> (in the editor or the AI box) must wait, with the reason shown where the user looks: an AI
+    /// edit runs, the AI box holds a typed wish or the editor's unsaved text for another concept, or the editor holds unsaved changes of
+    /// another concept. Nothing typed is thrown away without the user's Save or Cancel.
+    /// </summary>
+    private bool Held(ConceptCardViewModel card)
+    {
+        if (AiEditRunning)
+        {
+            AiEditFailed = false;
+            AiEditStatus = text["concepts.ai.busy"];
+            return true;
+        }
+
+        if (AiEditCard is { } box && !ReferenceEquals(box, card) && (!string.IsNullOrWhiteSpace(AiInstruction) || _aiFromEditor))
+        {
+            AiEditFailed = false;
+            AiEditStatus = text["concepts.unsaved"];
+            return true;
+        }
+
+        if (EditCard is { } open && !ReferenceEquals(open, card) && EditUnsaved)
+        {
+            EditStatus = text["concepts.unsaved"];
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>Closes the editor (nothing is saved).</summary>
+    private void CloseEditor()
+    {
+        EditCard = null;
+        EditNotice = string.Empty;
+        EditInfo = string.Empty;
+        _editFromAi = false;
+    }
+
+    /// <summary>Fills the editor (title, summary, text) for <paramref name="card"/> and shows it in place of the list.</summary>
+    private void OpenEditor(ConceptCardViewModel card, string title, string summary, string content, string info, string notice, bool fromAi)
+    {
+        EditTitle = text.Format("concepts.edit.title", card.Title);
+        EditHeadline = title;
+        EditSummary = summary;
+        EditText = content;
+        _editOpenedTitle = title;
+        _editOpenedSummary = summary;
+        _editOpenedContent = content;
+        _editFromAi = fromAi;
+        EditStatus = string.Empty;
+        EditInfo = info;
+        EditNotice = notice;
+        EditCard = card;
+    }
+
+    /// <summary>
+    /// The word check of an edited title and summary against the profile's other concepts (every status, the concept itself left out): the
+    /// note of a look-alike, or empty.
+    /// </summary>
+    private async Task<string> LookAlikeAsync(Core.Profiles.Profile profile, ConceptCardViewModel card, string title, string summary)
+    {
+        var history = (await concepts.HistoryAsync(profile.Id, CancellationToken.None).ConfigureAwait(true)).Where(h => h.Id != card.Id).ToList();
+        var result = Core.Duplicates.DuplicateCheck.Sift([new Core.Duplicates.DuplicateSubject(card.Id, card.Concept.Number, title, summary)], history,
+            profile.ContentLanguage)[0].Result;
+        return result.Kind is Core.Duplicates.DuplicateKind.Duplicate or Core.Duplicates.DuplicateKind.Similar
+            ? "⚠ " + text.Format("concepts.ai.lookalike", result.OtherNumber, result.OtherTitle, Math.Round(result.Similarity * 100))
+            : string.Empty;
+    }
+
+    /// <summary>The estimate of one AI edit with the concept model now chosen.</summary>
+    private async Task AiEstimateAsync()
+    {
+        if (_aiBase is not { } concept || session.Profile is not { } profile)
+        {
+            return;
+        }
+
+        if (Picker.Model(PipelineSteps.Concepts) is not { } model)
+        {
+            AiEditPrice = text["concepts.estimate.none"];
+            return;
+        }
+
+        var estimate = await editor.EstimateAsync(profile, concept, AiInstruction, model, ConceptEffort(), CancellationToken.None).ConfigureAwait(true);
+        AiEditPrice = text.Format("concepts.ai.estimate", model.Name, text.Usd(estimate.MinUsd), text.Usd(estimate.MaxUsd));
+    }
 
     /// <inheritdoc />
     public override async Task ActivateAsync()
@@ -334,8 +740,15 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         Notice = string.Empty;
         Missing = 0;
         LastCost = string.Empty;
+        // An editor or an AI edit box shows a concept of the old profile: closed (a running AI edit is canceled).
+        _aiCancel?.Cancel();
+        AiEditCard = null;
+        _aiBase = null;
+        _aiFromEditor = false;
+        CloseEditor();
         Topics.Clear();
         TopicStatus = string.Empty;
+        TopicRepeats = string.Empty;
         TopicFailed = false;
         OnPropertyChanged(nameof(TopicCardShown));
         OnPropertyChanged(nameof(HasTopics));
@@ -444,18 +857,26 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
 
     partial void OnExtraPromptChanged(string value) => _ = SafeAsync(EstimateAsync);
 
+    partial void OnAiInstructionChanged(string value) => _ = SafeAsync(AiEstimateAsync);
+
+    partial void OnAiEditRunningChanged(bool value) => Working = value || Busy || Suggesting;
+
     partial void OnApprovedSearchChanged(string value) => Filter();
 
     partial void OnBusyChanged(bool value)
     {
-        Working = value || Suggesting;
+        Working = value || Suggesting || AiEditRunning;
         OnPropertyChanged(nameof(HasMissing));
     }
 
-    partial void OnSuggestingChanged(bool value) => Working = value || Busy;
+    partial void OnSuggestingChanged(bool value) => Working = value || Busy || AiEditRunning;
 
     /// <inheritdoc />
-    public override void CancelWork() => Cancel();
+    public override void CancelWork()
+    {
+        Cancel();
+        _aiCancel?.Cancel();
+    }
 
     private async Task RunAsync(int count)
     {
@@ -561,6 +982,13 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
             if (e.PropertyName == nameof(CallStatusViewModel.Text) && TopicCall.Active)
             {
                 work.Show(_topicWork, text.Format("work.topics", TopicCall.Text));
+            }
+        };
+        AiEditCall.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(CallStatusViewModel.Text) && AiEditCall.Active)
+            {
+                work.Show(_aiWork, text.Format("work.ai_edit", AiEditCall.Text));
             }
         };
     }
@@ -746,6 +1174,7 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         }
 
         await TopicEstimateAsync(profile).ConfigureAwait(true);
+        await AiEstimateAsync().ConfigureAwait(true);
         if (Picker.Model(PipelineSteps.Concepts) is not { } model)
         {
             Estimate = text["concepts.estimate.none"];
@@ -793,6 +1222,7 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         AttachCalls();
         TopicFailed = false;
         TopicStatus = string.Empty;
+        TopicRepeats = string.Empty;
         Suggesting = true;
         TopicCall.Preparing();
         using var cancel = new CancellationTokenSource();
@@ -819,9 +1249,10 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
                 Topics.Add(topic);
             }
 
+            TopicRepeats = result.Repeats > 0 ? text.Format("topics.repeats", result.Repeats) : string.Empty;
             TopicFailed = result.Topics.Count == 0;
             TopicStatus = result.Topics.Count == 0
-                ? text.Format("topics.none", text.Usd(result.CostUsd))
+                ? text.Format(result.Repeats > 0 ? "topics.all_repeats" : "topics.none", text.Usd(result.CostUsd))
                 : text.Format(result.Cut ? "topics.done_cut" : "topics.done", result.Topics.Count, text.Usd(result.CostUsd));
             activity.Add(result.Cut || result.Topics.Count == 0 ? ActivityLevel.Warning : ActivityLevel.Info, TopicStatus);
         }
@@ -865,9 +1296,12 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         }
     }
 
-    /// <summary>Adds a suggested topic to the extra request (on a line of its own) and takes it off the list.</summary>
+    /// <summary>
+    /// Adds a suggested topic to the extra request (on a line of its own), takes it off the list and marks the kept suggestion used (a
+    /// failure to mark it is only logged: the topic is in the extra request anyway).
+    /// </summary>
     [RelayCommand]
-    public void AddTopic(string? topic)
+    public async Task AddTopicAsync(string? topic)
     {
         if (string.IsNullOrWhiteSpace(topic))
         {
@@ -880,6 +1314,19 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         TopicsHeader = text.Format("topics.title", Topics.Count);
         OnPropertyChanged(nameof(TopicCardShown));
         OnPropertyChanged(nameof(HasTopics));
+        if (session.Profile is not { } profile)
+        {
+            return;
+        }
+
+        try
+        {
+            await suggestions.MarkUsedAsync(profile.Id, topic, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "A clicked topic suggestion could not be marked used");
+        }
     }
 
     /// <summary>The fine-tuning drop-downs, every one on "any" (another profile starts without a leftover choice).</summary>

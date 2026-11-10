@@ -42,6 +42,15 @@ public sealed partial class ConceptCardViewModel(Concept concept, Localizer text
     [ObservableProperty]
     public partial bool IsChecked { get; set; }
 
+    /// <summary>Shows a new title and summary (an edit was saved).</summary>
+    public void Retitle(string title, string summary)
+    {
+        Concept.Title = title ?? string.Empty;
+        Concept.Summary = summary ?? string.Empty;
+        OnPropertyChanged(nameof(Title));
+        OnPropertyChanged(nameof(Summary));
+    }
+
     /// <summary>Shows the full text.</summary>
     public void ShowContent(string content)
     {

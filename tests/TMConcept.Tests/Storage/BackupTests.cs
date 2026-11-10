@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
+using TMConcept.Core.Concepts;
 using TMConcept.Core.Keys;
 using TMConcept.Core.Profiles;
 using TMConcept.Storage.Backup;
@@ -177,6 +178,34 @@ public sealed class BackupTests
             (report.Keys, report.Profiles, report.Images).ShouldBe((1, 0, 0));
             (await new ProfileStore(target.Database).ListAsync(None)).ShouldBeEmpty();
             File.Exists(Path.Combine(target.Paths.LibraryDirectory, "Kept channel", "images", "a.png")).ShouldBeFalse();
+        }
+    }
+
+    [Fact]
+    public async Task TopicSuggestionsGoWithTheConceptsIntoABackupAndComeBack()
+    {
+        var (source, _) = await BackupAsync();
+        using var __ = source;
+        var profile = (await new ProfileStore(source.Database).ListAsync(None)).Single();
+        await new TopicSuggestionStore(source.Database).AddAsync([new TopicSuggestion { ProfileId = profile.Id, Text = "Greek fire", Used = true }], None);
+        var service = Service(source);
+        var all = Path.Combine(source.Paths.DataDirectory, "all" + BackupRules.Extension);
+        var noConcepts = Path.Combine(source.Paths.DataDirectory, "no-concepts" + BackupRules.Extension);
+        await service.CreateAsync(all, BackupContents.Automatic, None);
+        await service.CreateAsync(noConcepts, new BackupContents { Concepts = false }, None);
+
+        using (var target = new StorageHarness())
+        {
+            await Service(target).RestoreAsync(all, Password, target.Protector, None);
+            var back = (await new TopicSuggestionStore(target.Database).ListAsync(profile.Id, 10, None)).Single();
+            (back.Text, back.Used).ShouldBe(("Greek fire", true));
+        }
+
+        using (var target = new StorageHarness())
+        {
+            await Service(target).RestoreAsync(noConcepts, Password, target.Protector, None);
+            (await new ProfileStore(target.Database).ListAsync(None)).ShouldNotBeEmpty();
+            (await new TopicSuggestionStore(target.Database).ListAsync(profile.Id, 10, None)).ShouldBeEmpty();
         }
     }
 

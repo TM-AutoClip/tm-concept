@@ -146,6 +146,7 @@ public static class DesktopServices
         services.AddSingleton<IStepModelStore, StepModelStore>();
         services.AddSingleton<Core.Pronunciation.IPronunciationStore, PronunciationStore>();
         services.AddSingleton<Core.Speech.IVoiceSampleStore, VoiceSampleStore>();
+        services.AddSingleton<ITopicSuggestionStore, TopicSuggestionStore>();
         services.AddSingleton<IEmbeddingStore, EmbeddingStore>();
     }
 
@@ -156,6 +157,7 @@ public static class DesktopServices
         services.AddSingleton<Core.Concepts.ConceptGenerator>();
         services.AddSingleton<Core.Concepts.IFocusSource, Core.Concepts.EmbeddedFocusSource>();
         services.AddSingleton<Core.Concepts.TopicSuggester>();
+        services.AddSingleton<Core.Concepts.ConceptEditor>();
         services.AddSingleton<ShellLauncher>();
         services.AddSingleton<IShellLauncher>(s => s.GetRequiredService<ShellLauncher>());
         services.AddSingleton<WindowHost>();

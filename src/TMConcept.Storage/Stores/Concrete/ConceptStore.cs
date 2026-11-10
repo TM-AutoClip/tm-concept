@@ -95,6 +95,27 @@ public sealed class ConceptStore(ConceptDatabase database) : IConceptStore
     }
 
     /// <inheritdoc />
+    public async Task UpdateTextAsync(Guid id, string title, string summary, string content, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(title);
+        ArgumentNullException.ThrowIfNull(summary);
+        ArgumentNullException.ThrowIfNull(content);
+        var newTitle = title.Replace("\0", string.Empty, StringComparison.Ordinal);
+        var newSummary = summary.Replace("\0", string.Empty, StringComparison.Ordinal);
+        var text = content.Replace("\0", string.Empty, StringComparison.Ordinal);
+        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await db.Concepts.Where(c => c.Id == id).ExecuteUpdateAsync(s => s
+            .SetProperty(c => c.Title, newTitle)
+            .SetProperty(c => c.Summary, newSummary)
+            .SetProperty(c => c.Content, text), cancellationToken).ConfigureAwait(false);
+
+        // The vectors were made from the old title and summary: a stale one would compare the new concept as the old one.
+        await db.Embeddings.Where(e => e.ConceptId == id).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public async Task SetStatusAsync(IReadOnlyCollection<Guid> ids, ConceptStatus status, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(ids);

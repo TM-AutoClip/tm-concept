@@ -6,20 +6,30 @@ namespace TMConcept.Tests.Providers;
 /// <summary>A fake model: answers from a script and records every request. No network.</summary>
 internal sealed class FakeChat : IChatClientFactory
 {
-    private readonly Queue<Func<ChatRequest, Task<ChatResponse>>> _answers = new();
+    private readonly Queue<Func<ChatRequest, CancellationToken, Task<ChatResponse>>> _answers = new();
 
     public List<ChatRequest> Requests { get; } = [];
 
     public List<string> KeysUsed { get; } = [];
 
+    /// <summary>The model of every client made (in order).</summary>
+    public List<CatalogModel> Models { get; } = [];
+
     public FakeChat Answer(Func<ChatRequest, ChatResponse> answer)
     {
-        _answers.Enqueue(r => Task.FromResult(answer(r)));
+        _answers.Enqueue((r, _) => Task.FromResult(answer(r)));
         return this;
     }
 
     /// <summary>An answer that takes its time (it can report progress and let the screen show it before it ends).</summary>
     public FakeChat AnswerAsync(Func<ChatRequest, Task<ChatResponse>> answer)
+    {
+        _answers.Enqueue((r, _) => answer(r));
+        return this;
+    }
+
+    /// <summary>An answer that takes its time and sees the call's cancellation (it ends the way a real stream does when canceled).</summary>
+    public FakeChat AnswerAsync(Func<ChatRequest, CancellationToken, Task<ChatResponse>> answer)
     {
         _answers.Enqueue(answer);
         return this;
@@ -39,6 +49,7 @@ internal sealed class FakeChat : IChatClientFactory
     public IChatClient Create(CatalogModel model, string apiKey)
     {
         KeysUsed.Add(apiKey);
+        Models.Add(model);
         return new Client(this, model);
     }
 
@@ -55,7 +66,7 @@ internal sealed class FakeChat : IChatClientFactory
                 throw new InvalidOperationException("The fake model has no answer left.");
             }
 
-            return owner._answers.Dequeue()(request);
+            return owner._answers.Dequeue()(request, cancellationToken);
         }
     }
 }

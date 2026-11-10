@@ -4,7 +4,7 @@ using TMConcept.Desktop.ViewModels;
 
 namespace TMConcept.Desktop.Views;
 
-/// <summary>Generate concepts page. Keys on the list: A approves, D deletes, ↑↓ move.</summary>
+/// <summary>Generate concepts page. Keys on the list: A approves, D (or Delete) moves to the trash, ↑↓ move.</summary>
 public sealed partial class ConceptsView : UserControl
 {
     /// <summary>Creates.</summary>
@@ -22,7 +22,7 @@ public sealed partial class ConceptsView : UserControl
             page.ApproveCommand.Execute(card);
             e.Handled = true;
         }
-        else if (e.Key == Key.D)
+        else if (e.Key is Key.D or Key.Delete)
         {
             page.TrashCommand.Execute(card);
             e.Handled = true;

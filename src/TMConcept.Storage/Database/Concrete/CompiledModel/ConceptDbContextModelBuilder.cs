@@ -11,13 +11,14 @@ namespace TMConcept.Storage.Database
     public partial class ConceptDbContextModel
     {
         private ConceptDbContextModel()
-            : base(skipDetectChanges: false, modelId: new Guid("2454fca8-d5a8-41cb-9497-fc732c345697"), entityTypeCount: 16)
+            : base(skipDetectChanges: false, modelId: new Guid("21d05b87-8680-46d7-a836-f7551a8bc468"), entityTypeCount: 17)
         {
         }
 
         partial void Initialize()
         {
             var concept = ConceptEntityType.Create(this);
+            var topicSuggestion = TopicSuggestionEntityType.Create(this);
             var conceptEmbedding = ConceptEmbeddingEntityType.Create(this);
             var historyDigest = HistoryDigestEntityType.Create(this);
             var apiKey = ApiKeyEntityType.Create(this);
@@ -35,6 +36,7 @@ namespace TMConcept.Storage.Database
             var settingRow = SettingRowEntityType.Create(this);
 
             ConceptEntityType.CreateForeignKey1(concept, profile);
+            TopicSuggestionEntityType.CreateForeignKey1(topicSuggestion, profile);
             ConceptEmbeddingEntityType.CreateForeignKey1(conceptEmbedding, concept);
             HistoryDigestEntityType.CreateForeignKey1(historyDigest, profile);
             StepModelChoiceEntityType.CreateForeignKey1(stepModelChoice, profile);
@@ -46,6 +48,7 @@ namespace TMConcept.Storage.Database
             VideoRecordEntityType.CreateForeignKey2(videoRecord, profile);
 
             ConceptEntityType.CreateAnnotations(concept);
+            TopicSuggestionEntityType.CreateAnnotations(topicSuggestion);
             ConceptEmbeddingEntityType.CreateAnnotations(conceptEmbedding);
             HistoryDigestEntityType.CreateAnnotations(historyDigest);
             ApiKeyEntityType.CreateAnnotations(apiKey);
