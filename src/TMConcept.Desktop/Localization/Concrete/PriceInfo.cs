@@ -7,7 +7,8 @@ namespace TMConcept.Desktop.Localization;
 
 /// <summary>
 /// Price lines shown next to the estimates (since 0.1.6 Settings has nothing about models): where the prices come from and their date, and
-/// this month's spending (concept runs per provider, the videos, and what failed videos paid; no limits or balances).
+/// this month's spending (concept runs per provider, the videos, and what failed videos paid; no limits or balances), which the spending
+/// pill of the main window shows (<see cref="Work.SpendingMeter"/>).
 /// </summary>
 public static class PriceInfo
 {
@@ -16,10 +17,9 @@ public static class PriceInfo
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(text);
-        var tables = catalog.Prices;
-        var main = tables.LastOrDefault(t => t.Source != PriceSources.OpenRouter) ?? tables[0];
-        var line = text.Format("models.prices", main.PricedOn.Length > 0 ? main.PricedOn : "-", text["models.prices." + main.Source]);
-        if (tables.FirstOrDefault(t => t.Source == PriceSources.OpenRouter) is { } openRouter)
+        var main = MainTable(catalog);
+        var line = text.Format("models.prices", Date(catalog), text["models.prices." + main.Source]);
+        if (catalog.Prices.FirstOrDefault(t => t.Source == PriceSources.OpenRouter) is { } openRouter)
         {
             line += " · " + text.Format("models.prices.openrouter_date", openRouter.PricedOn);
         }
@@ -27,8 +27,16 @@ public static class PriceInfo
         return line;
     }
 
-    /// <summary>"This month: $1.20 (anthropic $0.80 · videos $0.40)".</summary>
-    public static async Task<string> SpendingAsync(IRunStore runs, IProfileStore profiles, IVideoStore videos, TimeProvider clock, Localizer text,
+    /// <summary>The date of the main price table (the built-in one or the repository's newer file); "-" when it has none.</summary>
+    public static string Date(IModelCatalog catalog)
+    {
+        ArgumentNullException.ThrowIfNull(catalog);
+        var main = MainTable(catalog);
+        return main.PricedOn.Length > 0 ? main.PricedOn : "-";
+    }
+
+    /// <summary>This month's spending of every profile: the total and its parts per provider, the made videos and the failed videos.</summary>
+    public static async Task<Spending> SpendingAsync(IRunStore runs, IProfileStore profiles, IVideoStore videos, TimeProvider clock, Localizer text,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(runs);
@@ -59,7 +67,9 @@ public static class PriceInfo
             parts.Add(text.Format("models.spending.failed", text.Usd(lost)));
         }
 
-        var total = text.Usd(list.Sum(r => r.ActualUsd) + made);
-        return parts.Count == 0 ? text.Format("models.spending.total", total) : text.Format("models.spending", total, string.Join(" · ", parts));
+        return new Spending(list.Sum(r => r.ActualUsd) + made, string.Join(" · ", parts));
     }
+
+    private static PriceTable MainTable(IModelCatalog catalog) =>
+        catalog.Prices.LastOrDefault(t => t.Source != PriceSources.OpenRouter) ?? catalog.Prices[0];
 }

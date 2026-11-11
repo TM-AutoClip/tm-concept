@@ -5,21 +5,26 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using TMConcept.Core.Activity;
+using TMConcept.Core.Models;
 using TMConcept.Core.Notifications;
 using TMConcept.Core.Profiles;
 using TMConcept.Desktop.Dialogs;
 using TMConcept.Desktop.Localization;
+using TMConcept.Desktop.Paths;
 using TMConcept.Desktop.Startup;
 using TMConcept.Desktop.Work;
 
 namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
-/// The main window: profile selector (every page is filtered by it), the sidebar of pages with "Report a problem" at its bottom, the
-/// current page and the activity log panel at the bottom: its header has the toggle, the last line while the panel is folded, the step of
-/// the running work (a concept call, "Suggest topics", a video, an install) with a spinner, Copy and Clear; open, it lists the last
-/// <see cref="ListMax"/> lines newest first (time and text; a warning yellow, an error red; lines about money say what was paid). Open by
-/// default. Taken out on 8 Nov 2026 night, back on 8 Nov 2026 afternoon at the developer's request.
+/// The main window (0.1.13: the left sidebar became top tabs, at the developer's request). The app bar holds the spending pill (this month's
+/// total and, while paid work runs, what it has spent so far; <see cref="SpendingMeter"/>), the page tabs (<see cref="Tabs"/>), and on the
+/// right the profile selector (every page is filtered by it), "Report a problem" and Settings (<see cref="SettingsItem"/>, a page drawn as a
+/// separate tab button). Below: the current page and the activity log. The log's header has the toggle, the last line while it is folded,
+/// the step of the running work (a concept call, "Suggest topics", a video, an install) with a spinner, Copy and Clear; open, it lists the
+/// last <see cref="ListMax"/> lines newest first (time and text; a warning yellow, an error red; lines about money say what was paid).
+/// Folded by default since 0.1.13 (at 720 pixels the open log took a quarter of the window); the last choice is remembered
+/// (<see cref="UiPreferences.LogOpen"/>).
 /// </summary>
 public sealed partial class ShellViewModel : ObservableObject
 {
@@ -31,20 +36,34 @@ public sealed partial class ShellViewModel : ObservableObject
     private readonly IReportDialog _report;
     private readonly WorkStatus _work;
     private readonly WindowHost _host;
+    private readonly SpendingMeter _spending;
+    private readonly IModelCatalog _catalog;
+    private readonly UiPreferencesFile _preferences;
     private bool _loadingProfiles;
 
     /// <summary>Lines the panel shows.</summary>
     public const int ListMax = 100;
 
-    /// <summary>Builds the sidebar from every registered page.</summary>
+    /// <summary>Pages from this order on are not main tabs (Settings is drawn on the right of the app bar).</summary>
+    public const int TabOrderMax = 90;
+
+    /// <summary>Builds the tabs from every registered page.</summary>
     public ShellViewModel(IEnumerable<PageViewModelBase> pages, Localizer text, AppSession session, IProfileStore profiles, INotifier notifier,
-        IReportDialog report, IActivityFeed feed, WorkStatus work, WindowHost host, ILogger<ShellViewModel> logger)
+        IReportDialog report, IActivityFeed feed, WorkStatus work, WindowHost host, SpendingMeter spending, ConceptEvents events, IModelCatalog catalog,
+        UiPreferencesFile preferences, ILogger<ShellViewModel> logger)
     {
         ArgumentNullException.ThrowIfNull(host);
         ArgumentNullException.ThrowIfNull(feed);
         ArgumentNullException.ThrowIfNull(work);
         ArgumentNullException.ThrowIfNull(text);
+        ArgumentNullException.ThrowIfNull(spending);
+        ArgumentNullException.ThrowIfNull(events);
+        ArgumentNullException.ThrowIfNull(preferences);
         _text = text;
+        _spending = spending;
+        _catalog = catalog;
+        _preferences = preferences;
+        LogOpen = preferences.Read().LogOpen;
         _session = session;
         _profiles = profiles;
         _notifier = notifier;
@@ -52,6 +71,8 @@ public sealed partial class ShellViewModel : ObservableObject
         _report = report;
         _host = host;
         Items = new ObservableCollection<NavItemViewModel>(pages.OrderBy(p => p.Order).Select(p => new NavItemViewModel(this, p)));
+        Tabs = new ObservableCollection<NavItemViewModel>(Items.Where(i => i.Page.Order < TabOrderMax));
+        SettingsItem = Items.FirstOrDefault(i => i.Page is SettingsViewModel);
         foreach (var item in Items)
         {
             item.Page.PropertyChanged += (_, e) =>
@@ -89,12 +110,38 @@ public sealed partial class ShellViewModel : ObservableObject
             }
         };
 
+        spending.Changed += (_, _) => RefreshSpending();
+        // A concept run, an edit, a made or failed video: the month is read again (a running work's own part is shown live meanwhile).
+        events.Changed += (_, _) => _ = spending.RefreshAsync();
         RefreshTitles();
-        _text.LanguageChanged += (_, _) => RefreshTitles();
+        RefreshSpending();
+        _text.LanguageChanged += (_, _) =>
+        {
+            RefreshTitles();
+            _ = spending.RefreshAsync();
+        };
     }
 
-    /// <summary>Sidebar.</summary>
+    /// <summary>Every page, in order (the tabs and Settings).</summary>
     public ObservableCollection<NavItemViewModel> Items { get; }
+
+    /// <summary>The main tabs of the app bar (every page before <see cref="TabOrderMax"/>).</summary>
+    public ObservableCollection<NavItemViewModel> Tabs { get; }
+
+    /// <summary>The Settings page, drawn as its own tab button on the right of the app bar (null when not registered).</summary>
+    public NavItemViewModel? SettingsItem { get; }
+
+    /// <summary>The spending pill: "This month 1.24 $".</summary>
+    [ObservableProperty]
+    public partial string SpendingText { get; private set; } = string.Empty;
+
+    /// <summary>What the running paid works have spent so far ("now +0.031 $"); empty when nothing paid runs.</summary>
+    [ObservableProperty]
+    public partial string SpendingLive { get; private set; } = string.Empty;
+
+    /// <summary>The pill's tooltip: the month's parts and the date of the prices.</summary>
+    [ObservableProperty]
+    public partial string SpendingTip { get; private set; } = string.Empty;
 
     /// <summary>Profiles (channels).</summary>
     public ObservableCollection<Profile> Profiles { get; } = [];
@@ -107,9 +154,9 @@ public sealed partial class ShellViewModel : ObservableObject
     [ObservableProperty]
     public partial Profile? SelectedProfile { get; set; }
 
-    /// <summary>Whether the activity log panel is open (open by default).</summary>
+    /// <summary>Whether the activity log panel is open (folded by default; the last choice is remembered).</summary>
     [ObservableProperty]
-    public partial bool LogOpen { get; set; } = true;
+    public partial bool LogOpen { get; set; }
 
     /// <summary>Whether a page runs work (a generation, a video queue).</summary>
     public bool AnyWorking => Items.Any(i => i.Page.Working);
@@ -152,6 +199,7 @@ public sealed partial class ShellViewModel : ObservableObject
         }
 
         await RefreshProfilesAsync().ConfigureAwait(true);
+        await _spending.RefreshAsync().ConfigureAwait(true);
         if (Profiles.Count == 0)
         {
             // First start: the first profile is the last step of the setup.
@@ -220,6 +268,12 @@ public sealed partial class ShellViewModel : ObservableObject
     public async Task NavigateAsync(PageViewModelBase page)
     {
         ArgumentNullException.ThrowIfNull(page);
+        if (Current is { } shown && !ReferenceEquals(shown, page) && !await shown.CanLeaveAsync().ConfigureAwait(true))
+        {
+            // The shown page keeps unsaved changes the user did not let go.
+            return;
+        }
+
         foreach (var item in Items)
         {
             item.IsSelected = item.Page == page;
@@ -246,6 +300,22 @@ public sealed partial class ShellViewModel : ObservableObject
     {
         try
         {
+            if (Current is { } shown && profile?.Id != _session.Profile?.Id && !await shown.CanLeaveAsync().ConfigureAwait(true))
+            {
+                // The shown page keeps unsaved changes the user did not let go: the picker goes back to the profile in use.
+                _loadingProfiles = true;
+                try
+                {
+                    SelectedProfile = Profiles.FirstOrDefault(p => p.Id == _session.Profile?.Id);
+                }
+                finally
+                {
+                    _loadingProfiles = false;
+                }
+
+                return;
+            }
+
             await _session.SelectProfileAsync(profile, CancellationToken.None).ConfigureAwait(true);
             foreach (var item in Items)
             {
@@ -253,6 +323,7 @@ public sealed partial class ShellViewModel : ObservableObject
             }
 
             await ActivateCurrentAsync().ConfigureAwait(true);
+            await _spending.RefreshAsync().ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -285,6 +356,25 @@ public sealed partial class ShellViewModel : ObservableObject
 
     [RelayCommand]
     private void ToggleLog() => LogOpen = !LogOpen;
+
+    partial void OnLogOpenChanged(bool value)
+    {
+        // Saved at once (not at closing): the next start opens it the same way.
+        if (value != _preferences.Read().LogOpen)
+        {
+            _preferences.Change(p => p.LogOpen = value);
+        }
+    }
+
+    private void RefreshSpending()
+    {
+        SpendingText = _text.Format("shell.spending.month", _text.Usd(_spending.MonthUsd));
+        SpendingLive = _spending.LiveUsd > 0 ? _text.Format("shell.spending.live", _text.Usd(_spending.LiveUsd)) : string.Empty;
+        var month = _spending.Breakdown.Length > 0
+            ? _text.Usd(_spending.MonthUsd) + " (" + _spending.Breakdown + ")"
+            : _text.Usd(_spending.MonthUsd);
+        SpendingTip = _text.Format("shell.spending.tip", month, PriceInfo.Date(_catalog));
+    }
 
     /// <summary>Empties the panel; the log file keeps every line.</summary>
     [RelayCommand]

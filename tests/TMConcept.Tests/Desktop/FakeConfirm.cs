@@ -15,7 +15,7 @@ internal sealed class FakeConfirm : IConfirmDialog
 
     public List<string> Messages { get; } = [];
 
-    public Task<ConfirmResult> AskAsync(string title, string message, string confirmText, bool danger, string? checkbox = null)
+    public Task<ConfirmResult> AskAsync(string title, string message, string confirmText, bool danger, string? checkbox = null, string? cancelText = null)
     {
         Asked.Add(title);
         Messages.Add(message);

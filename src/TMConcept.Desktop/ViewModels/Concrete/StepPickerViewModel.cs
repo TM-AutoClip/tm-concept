@@ -40,21 +40,19 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
     private readonly IReadOnlyList<IVideoEngine> _engines = engines.OrderBy(e => e.Kind).ToList();
     private Guid? _profile;
     private string _language = ContentLanguages.English;
+    private bool _languageFollowed;
 
     /// <summary>Raised when a choice changes (the page updates its estimate).</summary>
     public event EventHandler? Changed;
 
-    /// <summary>The steps of the page.</summary>
+    /// <summary>The steps of the page, one card each.</summary>
     public ObservableCollection<StepModelRowViewModel> Rows { get; } = [];
 
-    /// <summary>The steps shown as cards: every row except the <see cref="Inline"/> ones.</summary>
-    public ObservableCollection<StepModelRowViewModel> Cards { get; } = [];
-
     /// <summary>
-    /// Steps the page shows on a line of its own instead of a card (the concept page puts the meaning check next to the word check); they
-    /// are prepared and saved like every row. Set before <see cref="LoadAsync"/>.
+    /// The choices on one line for the folded models bar (0.1.13, the developer: the pickers "take needless room"): "Code: Claude Sonnet
+    /// 5.5 (medium) · Engine: HyperFrames · Images: off · Voice: Kokoro af_heart". Read in the current language.
     /// </summary>
-    public IReadOnlyCollection<string> Inline { get; set; } = [];
+    public string Summary => string.Join(" · ", Rows.SelectMany(SummaryParts));
 
     /// <summary>The profile whose choices are shown.</summary>
     public Guid? ProfileId => _profile;
@@ -100,7 +98,10 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
     /// <summary>Most lines of a note (0 = all).</summary>
     public int NoteLines => Compact ? CompactNoteLines : 0;
 
-    /// <summary>Shows the steps <paramref name="stepCodes"/> with the saved choices of <paramref name="profileId"/>, voices of <paramref name="language"/>.</summary>
+    /// <summary>
+    /// Shows the steps <paramref name="stepCodes"/> in the page's order with the saved choices of <paramref name="profileId"/>, voices of
+    /// <paramref name="language"/>.
+    /// </summary>
     public async Task LoadAsync(Guid? profileId, string language, IReadOnlyList<string> stepCodes)
     {
         ArgumentNullException.ThrowIfNull(stepCodes);
@@ -118,10 +119,16 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
             old.PropertyChanged -= OnRowChanged;
         }
 
+        if (!_languageFollowed)
+        {
+            // The summary is read in the interface language: a language switch tells the bar to read it again.
+            _languageFollowed = true;
+            text.LanguageChanged += (_, _) => OnPropertyChanged(nameof(Summary));
+        }
+
         Rows.Clear();
-        Cards.Clear();
         Status = string.Empty;
-        foreach (var step in PipelineSteps.All.Where(s => stepCodes.Contains(s.Code)))
+        foreach (var step in stepCodes.Select(c => PipelineSteps.All.FirstOrDefault(s => s.Code == c)).OfType<PipelineStep>())
         {
             var row = Row(step);
             var choice = saved.FirstOrDefault(s => s.Step == step.Code);
@@ -144,13 +151,10 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
             row.Saved = stale ? StaleChoice : Key(row);
             row.PropertyChanged += OnRowChanged;
             Rows.Add(row);
-            if (!Inline.Contains(step.Code))
-            {
-                Cards.Add(row);
-            }
-
             await NoteAsync(row).ConfigureAwait(true);
         }
+
+        OnPropertyChanged(nameof(Summary));
     }
 
     /// <summary>The row of a step (null when the page does not show it).</summary>
@@ -518,6 +522,7 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
                 FillVoices(row, row.Voice?.Value ?? string.Empty);
             }
 
+            OnPropertyChanged(nameof(Summary));
             Changed?.Invoke(this, EventArgs.Empty);
             if (e.PropertyName != nameof(StepModelRowViewModel.Effort))
             {
@@ -686,6 +691,31 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
                 return choice;
             default:
                 return null;
+        }
+    }
+
+    /// <summary>
+    /// A row's parts of <see cref="Summary"/>: "{short label}: {model}{ (effort)}", "off" for an optional step without a model, then the
+    /// engine of the code step as a part of its own; the narration step names its voice after the model.
+    /// </summary>
+    private IEnumerable<string> SummaryParts(StepModelRowViewModel row)
+    {
+        var label = text["steps.short." + row.Step.Code];
+        var model = row.Selected switch
+        {
+            { Kind: StepOptionKind.Samples } => text["step.images.samples"],
+            { Model: { } m } => m.Name + (row.HasEfforts && row.Effort is { Value.Length: > 0 } effort ? " (" + effort.Label + ")" : string.Empty),
+            _ => text[row.Step.Optional ? "steps.off" : "steps.none"],
+        };
+        if (row.ShowVoice && row.Voice is { } voice)
+        {
+            model += " " + voice.Label;
+        }
+
+        yield return label + ": " + model;
+        if (row.IsEngineStep && _engines.FirstOrDefault(e => e.Kind == row.Engine?.Kind) is { } engine)
+        {
+            yield return text["steps.short.engine"] + ": " + engine.Name;
         }
     }
 

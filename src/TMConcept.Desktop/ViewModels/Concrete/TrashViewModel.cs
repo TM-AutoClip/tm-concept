@@ -29,9 +29,6 @@ public sealed partial class TrashViewModel(AppSession session, IConceptStore con
     public override string TitleKey => "nav.trash";
 
     /// <inheritdoc />
-    public override string Glyph => "🗑";
-
-    /// <inheritdoc />
     public override int Order => 40;
 
     /// <summary>Concepts in the trash (filtered).</summary>

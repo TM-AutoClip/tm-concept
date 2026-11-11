@@ -28,15 +28,18 @@ veritabanını şifreli tutar.
   Lehçe, Rusça, İsveççe ya da Endonezce; notların kendi dilinde kalabilir, video bu dilde yazılır), dikey kısa ya da yatay video, hedef süre (15–180 sn), kanalın
   konsepti, isteğe bağlı örnek görseller ve genel ayardan farklı olmasını istediğin her adım için kendi modelleri (ses, görseller, motor…). Dört hazır şablon alanları doldurur (tarih: Bizans, Osmanlı; teknoloji:
   antik, modern).
-- **Konsept üret.** Tek basışta 1–100 konsept, 20'şerlik turlarla. Basmadan önce tahmini ücret aralığı, sonra sağlayıcının bildirdiği
-  kullanımdan kesin ücret görünür. Tekrar dört katmanda önlenir: istemde bütün konseptlerin geçmişi (önbellekli), ücretsiz yerel benzerlik
-  denetimi, gömme modeliyle isteğe bağlı anlamsal denetim ve liste büyüyünce sıkıştırılmış geçmiş. ✓ (A tuşu) onaylar, ✗ (D tuşu) siler.
-  Silinenler **Silinenler** sayfasında süresiz durur (tekrar denetiminde sayılmaya devam eder); oradan kalıcı silinebilir.
-- **Konseptten video.** Onaylı konseptleri sıraya al, görselleri (profilin Görseller adımına göre, örnek görsellerin ya da yok),
-  seslendirmeyi, altyazıyı ve konuşma metni dosyasını seç, **Sıradakileri sırayla üret**'e bas. Motor (varsayılan HyperFrames, Remotion,
-  Revideo), kod modeli, görsel modeli ve ses profilden (ya da genel ayardan) gelir.
-  Model tek bir kod dosyası yazar; hiçbir şey çalıştırılmadan önce güvenlik denetimi yapılır; denetim ya da render hatasında tek onarım
-  istenir. Videolar en çok 3 dakikadır.
+- **Konsept üret.** İki ayrı bölüm. **Konu önererek üret**: 5–100 konu önert, beğendiklerini işaretle, **Seçilenleri üret**'e bas: her
+  işaretli konudan tam bir konsept. **Fikirden üret**: bir fikir yaz (ya da boş bırak), 1–100 konsept seç. Her basış listeye ekler. Her
+  düğmenin yanında küçük bir tahmini ücret görünür; sonra sağlayıcının bildirdiği kullanımdan kesin ücret gelir. Tekrar dört katmanda
+  önlenir: istemde bütün konseptlerin geçmişi (önbellekli), ücretsiz yerel benzerlik denetimi, gömme modeliyle isteğe bağlı anlamsal
+  denetim ve liste büyüyünce sıkıştırılmış geçmiş. Her satırda **Onayla** (A tuşu) ve **Sil** (D tuşu) var; tıklanan konsept listenin
+  yanındaki detay panelinde açılır. Silinenler **Silinenler** sayfasında süresiz durur (tekrar denetiminde sayılmaya devam eder); oradan
+  kalıcı silinebilir.
+- **Konseptten video.** Solda onaylı konseptler (tıklanan, listenin altında açılır; orada elle ya da yapay zekâyla düzenlenir), **Sıraya
+  ekle**, sonra **Sırayla üret**. Modeller (motoruyla kod, görseller, ses) üstte tek bir katlanmış satırdır. Video üretilirken her aşama
+  süresi ve ücretiyle, kod modelinin jetonları ve o ana kadar harcanan görünür. Üretilen videolar sağda: önizleme oynatıcısı,
+  **Oynatıcıda aç**, **Klasörü aç** ve **Konsepti düzelt, yeniden üret**. Model tek bir kod dosyası yazar; hiçbir şey çalıştırılmadan
+  önce güvenlik denetimi yapılır; denetim ya da render hatasında tek onarım istenir. Videolar en çok 3 dakikadır.
 - **Sürümler.** Her sahnenin seslendirme metnini düzenle (yeni cümleler; duraklama, hız ve geçiş yer tutucuları) ve bir ses seç: ses bilgisayarında yeniden
   üretilir, aynı video kodu yeniden render edilir — yapay zekâ masrafı yok (online ses ücretli). Ya da başka bir motor için yeni kod yazdır
   (tahmin önce gösterilir ve onaylatılır); görseller, ses klipleri ve metinler yeniden kullanılır. Her yeni sürüm ayrı bir klasör (v2, v3…);
@@ -44,6 +47,7 @@ veritabanını şifreli tutar.
 - **Üretilen videolar.** Küçük resim, program içi oynatıcı (oynat/duraklat, sarma çubuğu, süre, ses düzeyi, tam ekran; kendiliğinden
   başlamaz), ayrıntılar (motor, modeller, adım adım ücret, ses notları, konsept metni), sistem oynatıcısında aç, yeniden üret, klasörü aç, kaydı sil ve
   istersen dosyaları geri dönüşüm kutusuna taşı.
+- **Bu ayın harcaması** sol üstte durur; ücretli bir iş sürerken o an harcananı da gösterir.
 - **Bildirimler** sağ altta (konseptler hazır, video hazır, hata). Varsayılan 1 dakika; Ayarlar'dan süresi değişir ya da kapatılır.
   Bildirim hatayı ve harcananı da söyler; yapılan her şey eksiksiz olarak günlük dosyasına yazılır.
 - **Şifreli.** Veritabanı (API anahtarların dahil) SQLite3 Multiple Ciphers ile şifrelidir. Anahtarı Windows (DPAPI), Linux anahtarlığı ya
@@ -195,12 +199,11 @@ Sonra modelleri onları kullanan sayfalarda seç (yukarıya bak). Ücretli hiçb
 
 ## İlk videonu üret
 
-1. **Konsept Üret:** modeli, adedi ve isteğe bağlı ek istemi seç (ton, izleyici ve anlatım biçimi ince ayarı); tahmini gör; **Üret**'e
-   bas. **Konu öner** kanalın konusu içinde 5-100 konu önerir: beğendiklerini tikleyip seçilen konular listesine ekle, **Üret** her seçilen
-   konudan bir konsept yazar.
-2. Kartları aç, iyileri onayla (A), kalanı sil (D). ✎ (ya da onaylı bir konsepte tıklamak) metni düzenler; `[duraklama 1 sn]`,
-   `[yumuşak geçiş]` gibi yer tutucular imlecin olduğu yere eklenir, program videoda kendisi uygular.
-3. **Konseptten Video:** onaylı konseptlere tıklayıp sıraya al, ayarlara bak, **Sıradakileri sırayla üret**'e bas.
+1. **Konseptler:** modelleri seç (istersen ton, izleyici ve anlatım biçimi ince ayarını da). Ya **Konu öner**'e basıp beğendiklerini
+   işaretle ve **Seçilenleri üret**'e bas, ya da bir fikir yazıp **Üret**'e bas.
+2. Bir konsepte tıkla, detay panelinde oku; iyileri onayla (A), kalanı sil (D). **Düzenle** (ya da **Yapay zekâyla düzenle**) metni
+   değiştirir; `[duraklama 1 sn]`, `[yumuşak geçiş]` gibi yer tutucular imlecin olduğu yere eklenir, program videoda kendisi uygular.
+3. **Konseptten video:** onaylı konseptlerde **Sıraya ekle**'ye bas, üstteki modellere bak, **Sırayla üret**'e bas.
 4. **Üretilen Videolar:** program içinde izle (Linux'ta ses PulseAudio ya da PipeWire ile), klasörü aç. Her video, konseptin klasöründe bir sürüm klasörüdür (`v1/`): `video.mp4`, `subtitles.srt`, `narration.txt` (her zaman yazılır) ve `thumbnail.jpg`; ayrıca sonraki bir yeniden render için `source/` (render edildiği hâliyle motor projesi: modelin kodu, `input.json`, sahne görselleri) ve `audio/` (her sahnenin seslendirme klibi).
 
 ## Güncelleme
@@ -244,7 +247,7 @@ Ayrıntı: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 TM Concept kendiliğinden hiçbir şey göndermez: telemetri yok, çökme raporu yüklemesi yok. Bir sorun olursa:
 
-1. Sol menünün altındaki **Hata bildir**'e tıkla.
+1. Sağ üstteki **Hata bildir**'e tıkla.
 2. **Günlükleri hazırla**, veri klasörünün `reports` klasöründe `tm-concept-logs-<tarih>-<saat>.zip` oluşturur ve onu gösterir. İçinde
    son 7 günün günlük dosyaları ve `system.txt` (sürüm, işletim sistemi, mimari, .NET, arayüz dili, çizim kipi, hangi araçların kurulu
    olduğu) vardır. Ev klasörün, programın klasörleri (kitaplık, veri, belgeler), e-posta adresleri ve anahtarlar gizlenir; program kilidi

@@ -1,0 +1,33 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:TMConcept.Desktop.ViewModels"
+             xmlns:views="using:TMConcept.Desktop.Views"
+             x:Class="TMConcept.Desktop.Views.IdeaSectionView"
+             x:DataType="vm:IdeaSectionViewModel">
+  <!-- Section B: any idea or extra request and a count; every press adds to the new concepts. It never sends topics. The idea box grows
+       up to a few lines only and the count and the button follow right under it, so a tall window does not stretch a one-line idea. -->
+  <Border Classes="card" Padding="12,10">
+    <Grid>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="*" MinHeight="60" MaxHeight="150" />
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="Auto" />
+      </Grid.RowDefinitions>
+      <StackPanel Orientation="Horizontal" Margin="0,0,0,6" MinHeight="28">
+        <TextBlock Text="{DynamicResource concepts.idea.title}" Classes="h2" VerticalAlignment="Center" />
+        <views:HelpTip Text="{DynamicResource concepts.idea.tip}" />
+      </StackPanel>
+      <TextBox Name="IdeaBox" Grid.Row="1" Text="{Binding Idea}" AcceptsReturn="True" TextWrapping="Wrap" MaxLength="{Binding IdeaMax}"
+               VerticalContentAlignment="Top" PlaceholderText="{DynamicResource concepts.idea.hint}" />
+      <Grid Grid.Row="2" ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="8" Margin="0,6,0,0">
+        <TextBlock Text="{DynamicResource concepts.idea.count}" Classes="small" VerticalAlignment="Center" />
+        <NumericUpDown Name="IdeaCountBox" Grid.Column="1" Value="{Binding Count}" Minimum="1" Maximum="100" Increment="1" FormatString="0" Width="110"
+                       IsEnabled="{Binding !Running}" />
+        <Button Name="FillMissingButton" Grid.Column="3" Classes="small" Content="{Binding FillMissingText}" Command="{Binding FillMissingCommand}"
+                IsVisible="{Binding HasMissing}" />
+      </Grid>
+      <views:ConceptSectionFooter Name="IdeaFooter" Grid.Row="3" Margin="0,6,0,0" />
+    </Grid>
+  </Border>
+</UserControl>

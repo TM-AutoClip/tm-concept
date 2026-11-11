@@ -28,19 +28,22 @@ needed) and narrates it with a **free local voice**. It runs on Windows and Linu
   (15–180 s), the channel's concept in your words, optional sample images, and its own models for any step (voice, images, engine…)
   where it should differ from the general setting. Four ready templates fill the fields
   (history: Byzantine, Ottoman; technology: ancient, modern).
-- **Generate concepts.** 1–100 concepts per press, in batches of 20. Before you press, the app shows an estimated price range; afterwards
-  the exact price from the provider's usage. Duplicates are prevented in four layers: the history of every concept in the prompt (cached),
-  a free local similarity check, an optional semantic check with an embedding model, and a compressed history when the list grows.
-  Approve with ✓ (key A) or delete with ✗ (key D). Deleted concepts stay in **Trash** forever (they still count against duplicates) until
-  you delete them permanently.
-- **Concept to video.** Queue approved concepts, choose images (as set in the profile's Images step, your sample images, or none),
-  narration, subtitles and a narration text file, then press **Produce the queue in order**. The engine (HyperFrames by default, Remotion,
-  Revideo), the code model, the image model and the voice come from the profile (or the general setting).
-  The model writes one code file; a safety check runs before anything is executed; a failed check or render gets one repair request.
-  Videos are at most 3 minutes.
+- **Generate concepts.** Two separate sections. **Generate from suggested topics**: suggest 5–100 topics, tick the ones you like and
+  press **Generate selected**: exactly one concept per ticked topic. **Generate from an idea**: write an idea (or leave it empty) and
+  choose 1–100 concepts. Every press adds to the list. Each button shows a small estimated price; the exact price from the provider's
+  usage follows. Duplicates are prevented in four layers: the history of every concept in the prompt (cached), a free local similarity
+  check, an optional semantic check with an embedding model, and a compressed history when the list grows. Every row has **Approve**
+  (key A) and **Delete** (key D); a click opens the concept in the detail panel beside the list. Deleted concepts stay in **Trash**
+  forever (they still count against duplicates) until you delete them permanently.
+- **Concept to video.** Approved concepts on the left (a click opens one under the list, where it can be edited by hand or with AI),
+  **Add to queue**, then **Produce in order**. The models (code with its engine, images, voice) are one folded line on top. While a video
+  is made, every step shows with its time and cost, the code model's tokens and what was paid so far. The made videos are on the right
+  with a preview player, **Open in player**, **Open folder** and **Fix the concept, produce again**. The model writes one code file; a
+  safety check runs before anything is executed; a failed check or render gets one repair request. Videos are at most 3 minutes.
 - **Produced videos.** Thumbnail, a built-in player (play/pause, seek bar, time, volume, full screen; nothing starts by itself), the whole
   narration scene by scene and the whole concept text, details (engine, models, cost per step, voice notes), open in the system player,
   open the folder, produce again, delete a version and, if you want, move its files to the recycle bin.
+- **This month's spending** stays at the top left; while paid work runs it shows what is being spent now.
 - **Versions.** Edit the narration of each scene (more sentences, placeholders for pauses, speed and transitions) and choose a voice: the voice is made again on
   your computer and the same video code is rendered again — no AI cost (an online voice is paid). Or have new code written for another
   engine (the estimate is shown and confirmed first); images, voice clips and texts are used again. Every new version is a folder of its
@@ -199,12 +202,12 @@ Then choose the models on the pages that use them (see above). Nothing paid is c
 
 ## Make your first video
 
-1. **Generate concepts:** choose the model, the count and an optional extra request (an optional fine-tuning of tone, audience and structure);
-   check the estimate; press **Generate**. **Suggest topics** offers 5-100 topics within the channel's scope: tick the ones you like and add
-   them to the selected list, and **Generate** then writes one concept per selected topic.
-2. Open cards, approve the good ones (A), delete the rest (D). ✎ (or a click on an approved concept) edits the text; placeholders such as
-   `[pause 1 s]` or `[soft transition]` go in at the cursor and the program applies them in the video.
-3. **Concept to video:** click approved concepts to queue them, check the settings, press **Produce the queue in order**.
+1. **Concepts:** choose the models (and, if you like, the fine-tuning of tone, audience and structure). Either **Suggest topics**, tick
+   the ones you like and press **Generate selected**, or write an idea and press **Generate**.
+2. Click a concept to read it in the detail panel; approve the good ones (A), delete the rest (D). **Edit** (or **Edit with AI**)
+   changes the text; placeholders such as `[pause 1 s]` or `[soft transition]` go in at the cursor and the program applies them in the
+   video.
+3. **Concept to video:** press **Add to queue** on approved concepts, check the models on top, press **Produce in order**.
 4. **Produced videos:** watch in the app (sound on Linux through PulseAudio or PipeWire), open the folder. Each video is a version folder (`v1/` inside the concept's folder) with `video.mp4`, `subtitles.srt`, `narration.txt` (always written) and `thumbnail.jpg`, plus `source/` (the engine project as it rendered: the model's code, `input.json`, the scene images) and `audio/` (the narration clip of each scene), kept for a later re-render.
 
 ## Update
@@ -248,7 +251,7 @@ Details: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 TM Concept sends nothing by itself: no telemetry, no crash upload. If something goes wrong:
 
-1. Click **Report a problem** at the bottom of the left menu.
+1. Click **Report a problem** at the top right.
 2. **Prepare logs** makes `tm-concept-logs-<date>-<time>.zip` in the data folder's `reports` folder and shows it. It holds the log files
    of the last 7 days and `system.txt` (version, operating system, architecture, .NET, interface language, drawing mode, which tools are
    installed). Your home folder, the app's folders (library, data, documents), e-mail addresses and keys are masked, and while the app

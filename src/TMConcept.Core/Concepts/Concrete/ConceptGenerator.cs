@@ -19,9 +19,9 @@ namespace TMConcept.Core.Concepts;
 /// cost. Every batch asks for <see cref="ConceptOutputBudget.MaxOutputTokens"/> (the model's limit, at most 64 000) and logs it. A batch
 /// cut off at max_tokens keeps every complete concept before the cut (they were paid for) and then ends the run with "truncated"; no
 /// extra batch is started on its own (the page asks the user, with the estimate, before paying again). Cancel or an error keeps the finished batches. No automatic extra batch is made for thrown-away duplicates: the result
-/// tells how many are missing. Selected topics (0.1.12): one concept per topic, in order; the count is the number of topics (at most
-/// <see cref="ConceptLimits.CountMax"/>), each batch gets its own slice of them, and the result names the topics that got no concept
-/// (<see cref="ConceptRunResult.TopicsLeft"/>), so the page keeps them selected.
+/// tells how many are missing. What is written comes from the <see cref="ConceptBrief"/> alone (0.1.13): a <see cref="TopicBrief"/> gives
+/// one concept per ticked topic, in order, each batch its own slice and no extra request; an <see cref="IdeaBrief"/> gives its count and its
+/// idea as the extra request, never topics. Every batch reports the topics that got a concept (<see cref="ConceptBatch.TopicsMade"/>).
 /// </summary>
 public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profiles, IRunStore runs, IChatClientFactory chats, ICostCalculator costs,
     IPromptMemorySource memory, IEmbeddingStore embeddings, IEmbeddingService embedder, TimeProvider clock, ILogger<ConceptGenerator> logger)
@@ -32,17 +32,16 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
     public static readonly (double Low, double High) MeasuredBand = (0.85, 1.15);
 
     /// <summary>
-    /// The estimate of a press (<paramref name="focus"/>: the chosen focus line, empty = none; <paramref name="effort"/>: the chosen effort,
-    /// empty = automatic; <paramref name="topics"/>: the selected topics, one concept each; when there are any, <paramref name="count"/> is
-    /// ignored and every batch's prompt carries its slice of them, as <see cref="GenerateAsync"/> sends it).
+    /// The estimate of a run of <paramref name="brief"/> (<paramref name="focus"/>: the chosen focus line, empty = none;
+    /// <paramref name="effort"/>: the chosen effort, empty = automatic): every batch's prompt as <see cref="GenerateAsync"/> sends it.
     /// </summary>
-    public async Task<CostEstimate> EstimateAsync(Profile profile, int count, string extraPrompt, string focus, Models.CatalogModel model, string effort,
-        CancellationToken cancellationToken, IReadOnlyList<string>? topics = null)
+    public async Task<CostEstimate> EstimateAsync(Profile profile, ConceptBrief brief, string focus, Models.CatalogModel model, string effort,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(profile);
+        ArgumentNullException.ThrowIfNull(brief);
         ArgumentNullException.ThrowIfNull(model);
-        var used = Used(topics);
-        count = Count(count, used);
+        var count = brief.Count;
         var images = await profiles.ImagesAsync(profile.Id, cancellationToken).ConfigureAwait(false);
         var past = await memory.ReadAsync(profile, cancellationToken).ConfigureAwait(false);
         var (perConcept, band) = await OutputPerConceptAsync(profile, model, effort, cancellationToken).ConfigureAwait(false);
@@ -52,7 +51,7 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
         var offset = 0;
         foreach (var size in Batches(count, ConceptOutputBudget.BatchSize(roof, perConcept * band.High)))
         {
-            var prompt = ConceptPromptBuilder.Build(new ConceptPromptInput(profile, images, past, extraPrompt, size, focus, Slice(used, offset, size)));
+            var prompt = ConceptPromptBuilder.Build(new ConceptPromptInput(profile, images, past, brief.ExtraPrompt, size, focus, brief.Topics(offset, size)));
             offset += size;
             var system = costs.Tokens(prompt.System, profile.ContentLanguage);
             var user = costs.Tokens(prompt.User, profile.ContentLanguage);
@@ -115,10 +114,9 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
     {
         ArgumentNullException.ThrowIfNull(request);
         var profile = request.Profile;
-        var used = Used(request.Topics);
-        var count = Count(request.Count, used);
-        var estimate = await EstimateAsync(profile, count, request.ExtraPrompt, request.Focus, request.Model.Model, request.Model.Effort,
-            cancellationToken, used).ConfigureAwait(false);
+        var brief = request.Brief;
+        var count = brief.Count;
+        var estimate = await EstimateAsync(profile, brief, request.Focus, request.Model.Model, request.Model.Effort, cancellationToken).ConfigureAwait(false);
         var run = new Run
         {
             ProfileId = profile.Id,
@@ -127,7 +125,7 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
             Model = request.Model.Model.Id,
             KeyLabel = request.Model.Key.Label,
             Requested = count,
-            ExtraPrompt = request.ExtraPrompt,
+            ExtraPrompt = brief.ExtraPrompt,
             EstimateMinUsd = estimate.MinUsd,
             EstimateMaxUsd = estimate.MaxUsd,
             CostExact = true,
@@ -135,7 +133,7 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
         };
         await runs.AddAsync(run, CancellationToken.None).ConfigureAwait(false);
         logger.LogInformation("Concept run {Run}: {Count} concepts with {Provider}/{Model}{Topics}", run.Id, count, run.Provider, run.Model,
-            used.Count > 0 ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $", one per selected topic ({used.Count})") : string.Empty);
+            brief is TopicBrief ? ", one per ticked topic" : string.Empty);
 
         var images = await profiles.ImagesAsync(profile.Id, cancellationToken).ConfigureAwait(false);
         var client = chats.Create(request.Model.Model, request.Model.Key.Secret);
@@ -147,11 +145,9 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
         var errorDetail = string.Empty;
         var semanticSkipped = 0;
 
-        // Selected topics: the slice of every batch that ended (offset = the topics of those batches), and the ones of those slices that
-        // got no concept (a cut or short answer; concepts come back in topic order, so the last ones are missing). The topics of a batch
-        // that failed or never ran are added at the end. A concept thrown away as a duplicate still counts: its topic is among the concepts.
+        // The offset of the next batch's topic slice. Concepts come back in topic order, so of a cut or short answer the first ones of the
+        // slice got a concept; a concept thrown away as a duplicate still counts: its topic is among the concepts.
         var topicsDone = 0;
-        var topicsLeft = new List<string>();
         try
         {
             for (var index = 0; index < sizes.Count; index++)
@@ -159,8 +155,8 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
                 cancellationToken.ThrowIfCancellationRequested();
                 var subjects = await concepts.HistoryAsync(profile.Id, cancellationToken).ConfigureAwait(false);
                 var past = await memory.ReadAsync(profile, cancellationToken).ConfigureAwait(false);
-                var slice = Slice(used, topicsDone, sizes[index]);
-                var prompt = ConceptPromptBuilder.Build(new ConceptPromptInput(profile, images, past, request.ExtraPrompt, sizes[index], request.Focus, slice));
+                var slice = brief.Topics(topicsDone, sizes[index]);
+                var prompt = ConceptPromptBuilder.Build(new ConceptPromptInput(profile, images, past, brief.ExtraPrompt, sizes[index], request.Focus, slice));
                 var maxTokens = ConceptOutputBudget.MaxOutputTokens(request.Model.Model);
                 logger.LogInformation("Concept run {Run}: batch {Batch}/{Batches} of {Size} concepts with {Topics} topics, max_tokens {MaxTokens}, effort {Effort}, {Seconds} s {Language}",
                     run.Id, index + 1, sizes.Count, sizes[index], slice?.Count ?? 0, maxTokens, request.Model.Effort.Length > 0 ? request.Model.Effort : "automatic",
@@ -264,12 +260,7 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
                 run.Accepted = accepted.Count;
                 run.RejectedDuplicates = rejected;
                 await runs.UpdateAsync(run, CancellationToken.None).ConfigureAwait(false);
-                if (slice is not null)
-                {
-                    topicsLeft.AddRange(slice.Skip(batchCandidates.Count));
-                    topicsDone += slice.Count;
-                }
-
+                topicsDone += sizes[index];
                 progress?.Report(new ConceptBatch(index + 1, sizes.Count, batch, rejected, run.ActualUsd,
                     slice?.Take(batchCandidates.Count).ToList()));
                 if (cut is not null)
@@ -305,26 +296,8 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
             await runs.UpdateAsync(run, CancellationToken.None).ConfigureAwait(false);
         }
 
-        topicsLeft.AddRange(used.Skip(topicsDone));
-        if (topicsLeft.Count > 0)
-        {
-            logger.LogInformation("Concept run {Run}: {Left} of {Topics} selected topics got no concept", run.Id, topicsLeft.Count, used.Count);
-        }
-
-        return new ConceptRunResult(run, accepted, rejected, problems, errorCode, errorDetail, semanticSkipped, topicsLeft);
+        return new ConceptRunResult(run, accepted, rejected, problems, errorCode, errorDetail, semanticSkipped);
     }
-
-    /// <summary>The selected topics a run uses: the first <see cref="ConceptLimits.CountMax"/> (the page keeps the rest selected).</summary>
-    private static IReadOnlyList<string> Used(IReadOnlyList<string>? topics) =>
-        topics is { Count: > 0 } ? topics.Take(ConceptLimits.CountMax).ToList() : [];
-
-    /// <summary>The concepts of a run: one per used topic, or the asked count without topics (both within the limits).</summary>
-    private static int Count(int count, IReadOnlyList<string> used) =>
-        used.Count > 0 ? used.Count : Math.Clamp(count, ConceptLimits.CountMin, ConceptLimits.CountMax);
-
-    /// <summary>The topics of a batch of <paramref name="size"/> at <paramref name="offset"/>; null without topics (the prompt has no TOPICS line).</summary>
-    private static IReadOnlyList<string>? Slice(IReadOnlyList<string> used, int offset, int size) =>
-        used.Count == 0 ? null : used.Skip(offset).Take(size).ToList();
 
     /// <summary>Batch sizes of a count at the largest batch (20, 20, …, rest).</summary>
     public static IEnumerable<int> Batches(int count) => Batches(count, ConceptLimits.BatchSize);

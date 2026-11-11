@@ -20,9 +20,9 @@ namespace TMConcept.Storage.Database
                 "TMConcept.Core.Concepts.TopicSuggestion",
                 typeof(TopicSuggestion),
                 baseEntityType,
-                propertyCount: 5,
+                propertyCount: 4,
                 foreignKeyCount: 1,
-                unnamedIndexCount: 2,
+                unnamedIndexCount: 1,
                 keyCount: 1);
 
             var id = runtimeEntityType.AddProperty(
@@ -50,13 +50,6 @@ namespace TMConcept.Storage.Database
                 valueConverter: new StoredIdConverter());
             profileId.SetSentinelFromProviderValue("00000000-0000-0000-0000-000000000000");
 
-            var status = runtimeEntityType.AddProperty(
-                "Status",
-                typeof(TopicStatus),
-                propertyInfo: typeof(TopicSuggestion).GetProperty("Status", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
-                fieldInfo: typeof(TopicSuggestion).GetField("<Status>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly));
-            status.SetSentinelFromProviderValue(0);
-
             var text = runtimeEntityType.AddProperty(
                 "Text",
                 typeof(string),
@@ -69,9 +62,6 @@ namespace TMConcept.Storage.Database
 
             var index = runtimeEntityType.AddIndex(
                 new[] { profileId, createdAtUtc });
-
-            var index0 = runtimeEntityType.AddIndex(
-                new[] { profileId, status });
 
             return runtimeEntityType;
         }

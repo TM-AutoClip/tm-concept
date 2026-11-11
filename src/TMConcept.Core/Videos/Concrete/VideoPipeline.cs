@@ -23,9 +23,9 @@ namespace TMConcept.Core.Videos;
 /// Concept → video (plan §6.1): 0 the engine and ffmpeg must be installed (checked before anything is paid for) · A prepare (scenes, no
 /// model; the placeholders of the concept text are read: pauses and speed for the voice, transitions for the scenes) · B narration per scene
 /// with the profile's narration step (<see cref="SceneNarrator"/>, the same as a new version; cached; off or failed = silent video with a
-/// warning) · C timing in C# (a pause lengthens its scene)
-/// · D images (samples, or the profile's images step: off = no image call at all; the prompts are written by the video code model; generated
-/// images and their prompts are kept per concept until the video is made, so a retry does not pay for them again) · E
+/// warning) · D images (samples, or the profile's images step: off = no image call at all; the prompts are written by the video code model; generated
+/// images and their prompts are kept per concept until the video is made, so a retry does not pay for them again) · C timing in C# after the
+/// clips and images (a pause lengthens its scene) · E
 /// video code from the model, safety check, one repair · F render (processor only), one repair with the error text · H mux into the work
 /// folder, then the finished file is moved into the library's version folder (<see cref="VideoFolders"/>); subtitles (.srt always, burned
 /// ASS when chosen), the narration text (always), the engine project as it rendered and the scene clips (for a later re-render) ·
@@ -33,7 +33,8 @@ namespace TMConcept.Core.Videos;
 /// concept marked produced. Every paid call is counted in the cost, also when it fails (a cut-off code answer is billed). A failed or
 /// canceled run leaves nothing half-written in the library and removes its work files (a rejected code is kept there as text for
 /// reading); what it paid is kept as a <see cref="RunKind.FailedVideo"/> run, so the month's spending counts it. The code, render, mux and
-/// version steps are <see cref="VideoAssembler"/>'s, shared with the later versions (<see cref="VideoRemaker"/>).
+/// version steps are <see cref="VideoAssembler"/>'s, shared with the later versions (<see cref="VideoRemaker"/>). The progress names every step
+/// of the plan, the scenes done, the code call's tokens and what was paid so far (<see cref="VideoStepProgress"/>, the one list of the costs).
 /// </summary>
 public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechService speech, SceneNarrator narrator, IEnumerable<IImageEngine> images, StepModelResolver resolver,
     IChatClientFactory chats, ICostCalculator costs, VideoAssembler assembler, IConceptStore concepts, IProfileStore profiles, IRunStore runs,
@@ -42,8 +43,12 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
     /// <summary>Work folders of runs older than this are removed by <see cref="CleanWork"/>.</summary>
     public static readonly TimeSpan WorkKeep = TimeSpan.FromDays(7);
 
+    // In the order of the work (VideoSteps.All): the timing needs the clips and the images, so it comes after both.
     private static readonly (string Step, double Weight)[] Weights =
-        [("prepare", 2), ("speech", 20), ("timing", 1), ("images", 15), ("code", 15), ("render", 40), ("mux", 5), ("save", 2)];
+    [
+        (VideoSteps.Prepare, 2), (VideoSteps.Speech, 20), (VideoSteps.Images, 15), (VideoSteps.Timing, 1), (VideoSteps.Code, 15), (VideoSteps.Render, 40),
+        (VideoSteps.Mux, 5), (VideoSteps.Save, 2),
+    ];
 
     /// <summary>Makes the video.</summary>
     public async Task<VideoRecord> RunAsync(VideoJob job, IProgress<VideoProgress>? progress, CancellationToken cancellationToken)
@@ -65,7 +70,6 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
 
         var id = Guid.NewGuid();
         var warnings = new List<string>();
-        var spent = new List<VideoCost>();
 
         // The profile's narration and image models (its choices on the video page). A model that is not ready means a silent video or no
         // images, with a warning; an image step that is off makes no image call at all.
@@ -104,14 +108,13 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         var work = assembler.WorkFolder(id);
         var target = new VersionTarget();
         var speechOn = voice is not null;
-        var steps = new VideoStepProgress(Weights.Where(w => (w.Step != "speech" || speechOn) && (w.Step != "images" || imagesOn)).ToList(), progress);
-        void Report(string step, double inside, string detail = "") => steps.Report(step, inside, detail);
-        void Finish(string step) => steps.Finish(step);
+        var steps = new VideoStepProgress(
+            Weights.Where(w => (w.Step != VideoSteps.Speech || speechOn) && (w.Step != VideoSteps.Images || imagesOn)).ToList(), progress);
 
-        return await assembler.GuardAsync(profile.Id, job.CodeModel, work, target, spent, watch, async () =>
+        return await assembler.GuardAsync(profile.Id, job.CodeModel, work, target, steps, watch, async () =>
         {
             // A. prepare
-            Report("prepare", 0);
+            steps.Report(VideoSteps.Prepare, 0);
             var split = SceneSplitter.Split(job.Concept.Content);
             if (split.Scenes.Count == 0 || split.Scenes.All(s => s.Narration.Length == 0))
             {
@@ -119,7 +122,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
             }
 
             Directory.CreateDirectory(work);
-            Finish("prepare");
+            steps.Finish(VideoSteps.Prepare);
 
             // B. narration
             var clips = new List<SpeechClip?>();
@@ -135,16 +138,17 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
             }
             else
             {
-                decimal speechCost = 0;
                 try
                 {
-                    for (var i = 0; i < split.Scenes.Count; i++)
+                    var count = split.Scenes.Count;
+                    steps.Report(VideoSteps.Speech, 0, done: 0, total: count);
+                    for (var i = 0; i < count; i++)
                     {
                         // The scene's script: its pauses and speed placeholders are applied exactly as in a new version.
-                        var clip = await narrator.VoiceAsync(voice!, profile.ContentLanguage, i + 1, split.Scenes[i].Script, work, usd => speechCost += usd,
-                            cancellationToken).ConfigureAwait(false);
+                        var clip = await SceneVoiceAsync(voice!, profile.ContentLanguage, i + 1, split.Scenes[i].Script, work, steps, id, cancellationToken)
+                            .ConfigureAwait(false);
                         clips.Add(clip);
-                        Report("speech", (i + 1.0) / split.Scenes.Count);
+                        steps.Report(VideoSteps.Speech, (i + 1.0) / count, done: i + 1, total: count);
                     }
 
                     warnings.Add(VideoWarnings.AiVoice);
@@ -162,33 +166,28 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                     warnings.Add(VideoWarnings.SpeechFailed);
                     clips.Clear();
                 }
-                finally
-                {
-                    // Online clips made before a failure (or a cancel) were paid for: they are counted either way.
-                    if (speechCost > 0)
-                    {
-                        spent.Add(new VideoCost { VideoId = id, Step = PipelineSteps.Speech, Usd = speechCost, Exact = false });
-                    }
-                }
 
-                Finish("speech");
+                steps.Finish(VideoSteps.Speech);
             }
 
-            // C. timing
+            // D. images
             var (width, height) = RenderInputBuilder.Size(profile.Format);
-            var sceneImages = !imagesOn ? [] : await ImagesAsync(job, imageModel, split.Scenes, work, warnings, spent, id, width, height, p => Report("images", p),
-                cancellationToken).ConfigureAwait(false);
+            List<string> sceneImages = [];
+            if (imagesOn)
+            {
+                sceneImages = await ImagesAsync(job, imageModel, split.Scenes, work, warnings, steps, id, width, height, cancellationToken).ConfigureAwait(false);
+                steps.Finish(VideoSteps.Images);
+            }
+
+            // C. timing, after the images: a scene lasts as long as its clip (a silent one as long as its text takes to say).
+            steps.Report(VideoSteps.Timing, 0);
             var sources = split.Scenes.Select((s, i) => new RenderSceneSource(s.Visual, s.Narration, sceneImages.ElementAtOrDefault(i) ?? string.Empty,
                 clips.ElementAtOrDefault(i)?.DurationMs ?? VideoRemaker.SilentMs(s.Script, profile.ContentLanguage), s.Transition)).ToList();
             var input = RenderInputBuilder.Build(job.Concept.Title, profile.ContentLanguage, sources, width, height, 30);
-            Finish("timing");
-            if (imagesOn)
-            {
-                Finish("images");
-            }
+            steps.Finish(VideoSteps.Timing);
 
             // E + F. code (+ one repair after a rejected check), render (+ one repair with the error text)
-            var rendered = await assembler.CodeAndRenderAsync(engine, job.CodeModel, options.Subtitles, input, work, spent, id, steps, cancellationToken)
+            var rendered = await assembler.CodeAndRenderAsync(engine, job.CodeModel, options.Subtitles, input, work, id, steps, cancellationToken)
                 .ConfigureAwait(false);
             if (rendered.Repaired)
             {
@@ -201,7 +200,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                 engine.Name, job.CodeModel.Model.Provider + "/" + job.CodeModel.Model.Id,
                 speechOn && !warnings.Contains(VideoWarnings.SpeechFailed) ? voice!.Model.Provider + "/" + voice.Model.Id + ":" + voice.Voice : string.Empty,
                 imageModel is not null ? imageModel.Model.Provider + "/" + imageModel.Model.Id : imagesOn ? options.Images : string.Empty,
-                VideoCodePrompt.Version, warnings, spent, await ConceptShareAsync(job.Concept, id).ConfigureAwait(false), watch)
+                VideoCodePrompt.Version, warnings, steps.Spent, await ConceptShareAsync(job.Concept, id).ConfigureAwait(false), watch)
             {
                 // Each scene's text with its placeholders and the transition into it: a new version is edited from this.
                 Script = split.Scenes.Select(s => VideoRemaker.WithTransition(s.Transition, s.Script, profile.ContentLanguage)).ToList(),
@@ -264,8 +263,29 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         }
     }
 
+    /// <summary>
+    /// One scene's clip (<see cref="SceneNarrator"/>); what an online voice charged for it is spent at once, also when the clip fails or is
+    /// canceled halfway (the parts made before were paid for).
+    /// </summary>
+    private async Task<SpeechClip?> SceneVoiceAsync(SpeechSetup voice, string language, int number, string script, string work, VideoStepProgress steps,
+        Guid id, CancellationToken cancellationToken)
+    {
+        decimal cost = 0;
+        try
+        {
+            return await narrator.VoiceAsync(voice, language, number, script, work, usd => cost += usd, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (cost > 0)
+            {
+                steps.Spend(new VideoCost { VideoId = id, Step = PipelineSteps.Speech, Usd = cost, Exact = false });
+            }
+        }
+    }
+
     private async Task<List<string>> ImagesAsync(VideoJob job, ResolvedModel? imageModel, IReadOnlyList<Scene> scenes, string work, List<string> warnings,
-        List<VideoCost> spent, Guid id, int width, int height, Action<double> report, CancellationToken cancellationToken)
+        VideoStepProgress steps, Guid id, int width, int height, CancellationToken cancellationToken)
     {
         var names = new List<string>();
         var publicFolder = Path.Combine(work, "project", "public");
@@ -344,11 +364,11 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                     }
                     catch (Providers.ProviderException ex) when (ex.ChargedUsage is { } charged)
                     {
-                        spent.Add(new VideoCost { VideoId = id, Step = PipelineSteps.ImagePromptCost, Usd = costs.Exact(promptModel.Model, charged), Exact = true });
+                        steps.Spend(new VideoCost { VideoId = id, Step = PipelineSteps.ImagePromptCost, Usd = costs.Exact(promptModel.Model, charged), Exact = true });
                         throw;
                     }
 
-                    spent.Add(new VideoCost
+                    steps.Spend(new VideoCost
                     {
                         VideoId = id,
                         Step = PipelineSteps.ImagePromptCost,
@@ -360,6 +380,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                     await File.WriteAllLinesAsync(promptFile, prompts.Select(p => p.ReplaceLineEndings(" ")), cancellationToken).ConfigureAwait(false);
                 }
 
+                steps.Report(VideoSteps.Images, 0, done: 0, total: prompts.Count);
                 for (var i = 0; i < prompts.Count; i++)
                 {
                     var file = Path.Combine(cache, "scene-" + (i + 1).ToString(CultureInfo.InvariantCulture) + ".png");
@@ -368,12 +389,12 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                         var result = await engine.GenerateAsync(new ImageRequest(prompts[i], width, height, file, imageModel), cancellationToken).ConfigureAwait(false);
                         logger.LogInformation("Scene image {Number} of {Count} made with {Provider}/{Model}", i + 1, prompts.Count, imageModel.Model.Provider,
                             imageModel.Model.Id);
-                        spent.Add(new VideoCost { VideoId = id, Step = PipelineSteps.Images, Usd = result.CostUsd, Exact = result.CostUsd == 0 });
+                        steps.Spend(new VideoCost { VideoId = id, Step = PipelineSteps.Images, Usd = result.CostUsd, Exact = result.CostUsd == 0 });
                     }
 
                     Place(file, Path.GetFileName(file));
                     names.Add(Path.GetFileName(file));
-                    report((i + 1.0) / prompts.Count);
+                    steps.Report(VideoSteps.Images, (i + 1.0) / prompts.Count, done: i + 1, total: prompts.Count);
                 }
             }
         }

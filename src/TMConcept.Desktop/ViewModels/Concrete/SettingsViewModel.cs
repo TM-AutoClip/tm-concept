@@ -30,9 +30,6 @@ public sealed partial class SettingsViewModel : PageViewModelBase
     public override string TitleKey => "nav.settings";
 
     /// <inheritdoc />
-    public override string Glyph => "⚙";
-
-    /// <inheritdoc />
     public override int Order => 90;
 
     /// <summary>Tabs (built on first use; the first one is selected then).</summary>

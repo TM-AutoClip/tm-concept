@@ -28,10 +28,11 @@
   <SolidColorBrush x:Key="tm-danger" Color="#FFFF7F57" />
   <SolidColorBrush x:Key="tm-info" Color="#FF7FB2F0" />
   <SolidColorBrush x:Key="tm-focus" Color="#FFE3B341" />
+  <SolidColorBrush x:Key="tm-scrim" Color="#80070C16" />
   <BoxShadows x:Key="tm-shadow">0 1 2 0 #4D000000, 0 10 28 0 #52000000</BoxShadows>
-  <SolidColorBrush x:Key="tm-sidebar-bg" Color="#FF0E1727" />
-  <SolidColorBrush x:Key="tm-sidebar-text" Color="#FFC7D3E6" />
-  <SolidColorBrush x:Key="tm-selected-bg" Color="#FF233A5E" />
+  <!-- The app bar on top of the main window (the tabs, the spending pill) and the selected tab's underline. -->
+  <SolidColorBrush x:Key="tm-appbar-bg" Color="#FF0E1727" />
+  <SolidColorBrush x:Key="tm-tab-underline" Color="#FFE3B341" />
   <SolidColorBrush x:Key="tm-strip-bg" Color="#FF0F1828" />
   <FontFamily x:Key="tm-font-body">avares://TMConcept/Assets/Fonts#Manrope, Segoe UI, Noto Sans, DejaVu Sans</FontFamily>
   <FontFamily x:Key="tm-font-heading">avares://TMConcept/Assets/Fonts#Space Grotesk, Segoe UI, Noto Sans, DejaVu Sans</FontFamily>

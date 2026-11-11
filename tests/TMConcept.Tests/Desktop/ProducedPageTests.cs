@@ -169,6 +169,38 @@ public sealed class ProducedPageTests
         page.ScenesNote.ShouldBeEmpty();
     }
 
+    [AvaloniaFact]
+    public async Task ThePlayerIsSixteenByNineByItsWidth()
+    {
+        using var h = new DesktopHarness();
+        await FirstRunTests.CreateAsync(h);
+        var profile = new Profile { Name = "Byzantium", ContentLanguage = ContentLanguages.English, ConceptText = "x" };
+        await h.Get<IProfileStore>().SaveAsync(profile, CancellationToken.None);
+        await h.Get<AppSession>().SelectProfileAsync(profile, CancellationToken.None);
+        await h.Get<IVideoStore>().AddAsync(new VideoRecord { ProfileId = profile.Id, Title = "Greek fire", Folder = "Byzantium/gone", FileName = "video.mp4" }, [],
+            CancellationToken.None);
+        var page = h.Get<ProducedViewModel>();
+        await page.ActivateAsync();
+        page.Selected = page.Items.Single();
+
+        var view = new TMConcept.Desktop.Views.ProducedView { DataContext = page };
+        var window = new Avalonia.Controls.Window { Content = view, Width = 1024, Height = 720 };
+        h.Get<LanguageResources>().Attach(window.Resources.MergedDictionaries);
+        window.Show();
+        foreach (var width in new[] { 1024, 1280, 1920 })
+        {
+            window.Width = width;
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+            // The picture follows the width it gets (0.1.12 drew the player 400 px tall whatever the width).
+            var picture = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(view).OfType<TMConcept.Desktop.Controls.AspectBox>().Single();
+            picture.Bounds.Width.ShouldBeGreaterThan(200, $"at {width}");
+            picture.Bounds.Height.ShouldBe(picture.Bounds.Width * 9 / 16, 1.0, $"at {width}");
+        }
+
+        window.Close();
+    }
+
     private sealed class FakeBin : IRecycleBin
     {
         public List<string> Moved { get; } = [];

@@ -109,25 +109,113 @@
     <Setter Property="MinWidth" Value="200" />
     <Setter Property="HorizontalContentAlignment" Value="Center" />
   </Style>
+  <!-- Opaque, so it reads the same on a selected (blue) list row as on a card. -->
   <Style Selector="Button.danger">
     <Setter Property="Foreground" Value="{DynamicResource tm-danger}" />
+    <Setter Property="Background" Value="{DynamicResource tm-surface-2}" />
   </Style>
   <Style Selector="Button.link">
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="Foreground" Value="{DynamicResource tm-accent-2}" />
     <Setter Property="Padding" Value="0" />
   </Style>
-  <Style Selector="Button.nav">
+  <!-- A tab of the app bar: flat, the selected one underlined in the accent (a bottom border, so the text does not move). -->
+  <Style Selector="Button.tab">
     <Setter Property="Background" Value="Transparent" />
-    <Setter Property="Foreground" Value="{DynamicResource tm-sidebar-text}" />
-    <Setter Property="HorizontalAlignment" Value="Stretch" />
-    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-    <Setter Property="Padding" Value="14,9" />
+    <Setter Property="Foreground" Value="{DynamicResource tm-text-2}" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0,0,0,2" />
+    <Setter Property="CornerRadius" Value="0" />
+    <Setter Property="Padding" Value="12,10" />
+    <Setter Property="VerticalAlignment" Value="Stretch" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
   </Style>
-  <Style Selector="Button.nav.selected">
-    <Setter Property="Background" Value="{DynamicResource tm-selected-bg}" />
+  <Style Selector="Button.tab:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource tm-surface}" />
     <Setter Property="Foreground" Value="{DynamicResource tm-text}" />
-    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+  <Style Selector="Button.tab:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource tm-surface-2}" />
+    <Setter Property="Foreground" Value="{DynamicResource tm-text}" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+  <Style Selector="Button.tab.selected">
+    <Setter Property="Foreground" Value="{DynamicResource tm-text}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource tm-tab-underline}" />
+  </Style>
+  <Style Selector="Button.tab.selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="BorderBrush" Value="{DynamicResource tm-tab-underline}" />
+  </Style>
+  <Style Selector="Button.tab.selected:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="BorderBrush" Value="{DynamicResource tm-tab-underline}" />
+  </Style>
+  <!-- A small rounded label: the spending pill, a tab's badge. -->
+  <Style Selector="Border.pill">
+    <Setter Property="CornerRadius" Value="12" />
+    <Setter Property="Padding" Value="10,3" />
+    <Setter Property="Background" Value="{DynamicResource tm-surface-2}" />
+  </Style>
+  <!-- One tiny line next to a button (its estimate, "≈ 0.02 $"), so prices take no room of their own. -->
+  <Style Selector="TextBlock.tiny">
+    <Setter Property="FontSize" Value="11" />
+    <Setter Property="Foreground" Value="{DynamicResource tm-text-3}" />
+  </Style>
+  <!-- A page's bar on top (the folded models and fine-tuning lines). -->
+  <Style Selector="Border.bar">
+    <Setter Property="Background" Value="{DynamicResource tm-surface}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource tm-radius}" />
+    <Setter Property="Padding" Value="10,6" />
+  </Style>
+  <!-- A segmented switch ("New | Approved"): toggle buttons side by side, the checked one in the accent. -->
+  <Style Selector="ToggleButton.segment">
+    <Setter Property="Padding" Value="12,5" />
+    <Setter Property="CornerRadius" Value="0" />
+    <Setter Property="Background" Value="{DynamicResource tm-surface-2}" />
+    <Setter Property="Foreground" Value="{DynamicResource tm-text-2}" />
+  </Style>
+  <Style Selector="ToggleButton.segment:checked /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource tm-accent}" />
+    <Setter Property="Foreground" Value="{DynamicResource tm-on-accent}" />
+  </Style>
+  <Style Selector="ToggleButton.segment:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource tm-warning}" />
+    <Setter Property="Foreground" Value="{DynamicResource tm-on-accent}" />
+  </Style>
+  <Style Selector="ToggleButton.segment:nth-child(1)">
+    <Setter Property="CornerRadius" Value="6,0,0,6" />
+  </Style>
+  <Style Selector="ToggleButton.segment:nth-last-child(1)">
+    <Setter Property="CornerRadius" Value="0,6,6,0" />
+  </Style>
+  <!-- A folded line of a page's bar ("▸ Models: …"): flat, its text on the left; open, a quiet surface instead of the theme's accent. -->
+  <Style Selector="ToggleButton.fold">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource tm-text}" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="6,4" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+  <Style Selector="ToggleButton.fold:checked /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource tm-surface-2}" />
+    <Setter Property="Foreground" Value="{DynamicResource tm-text}" />
+  </Style>
+  <Style Selector="ToggleButton.fold:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource tm-surface-3}" />
+    <Setter Property="Foreground" Value="{DynamicResource tm-text}" />
+  </Style>
+  <!-- A concept row of a list: the title and one summary line, its buttons on the right. -->
+  <Style Selector="ListBox.rows ListBoxItem">
+    <Setter Property="Padding" Value="8,5" />
+    <Setter Property="Margin" Value="0,1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource tm-radius-sm}" />
+  </Style>
+  <Style Selector="GridSplitter">
+    <Setter Property="Background" Value="{DynamicResource tm-border}" />
+    <Setter Property="MinWidth" Value="4" />
+    <Setter Property="MinHeight" Value="4" />
   </Style>
   <Style Selector="TextBox">
     <Setter Property="CornerRadius" Value="{DynamicResource tm-radius-sm}" />
@@ -135,7 +223,7 @@
   <Style Selector="TextBox.secret">
     <Setter Property="PasswordChar" Value="●" />
   </Style>
-  <!-- Tabs inside a page (the produced video's details): the theme's 24 px headers were larger than the page title. -->
+  <!-- Tabs inside a page (the produced video's details, the settings sections): the theme's 24 px headers were larger than the page title. -->
   <Style Selector="TabControl.inner TabItem">
     <Setter Property="FontSize" Value="15" />
     <Setter Property="MinHeight" Value="34" />
@@ -145,5 +233,9 @@
   <Style Selector="Button.small">
     <Setter Property="Padding" Value="10,3" />
     <Setter Property="FontSize" Value="12" />
+  </Style>
+  <!-- A small link stays flush with the text around it (after "Button.small" so its padding wins). -->
+  <Style Selector="Button.link.small">
+    <Setter Property="Padding" Value="0" />
   </Style>
 </Styles>

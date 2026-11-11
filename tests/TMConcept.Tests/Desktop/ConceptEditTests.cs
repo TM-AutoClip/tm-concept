@@ -9,6 +9,7 @@ using TMConcept.Core.Keys;
 using TMConcept.Core.Profiles;
 using TMConcept.Core.Providers;
 using TMConcept.Core.Runs;
+using TMConcept.Desktop.Dialogs;
 using TMConcept.Desktop.Localization;
 using TMConcept.Desktop.Startup;
 using TMConcept.Desktop.ViewModels;
@@ -16,7 +17,7 @@ using TMConcept.Tests.Providers;
 
 namespace TMConcept.Tests.Desktop;
 
-/// <summary>Delete and edit on the generated concepts (10 Nov 2026): the card actions, the AI edit and its save.</summary>
+/// <summary>Delete and edit in the concept detail panel (0.1.13): its actions, the AI edit and its save.</summary>
 public sealed class ConceptEditTests
 {
     private const string Secret = "fake-test-key-0123456789abcdef";
@@ -47,7 +48,7 @@ public sealed class ConceptEditTests
     {
         var page = h.Get<ConceptsViewModel>();
         await page.ActivateAsync();
-        var row = page.Picker.Row(TMConcept.Core.Pipeline.PipelineSteps.Concepts)!;
+        var row = page.Settings.Picker.Row(TMConcept.Core.Pipeline.PipelineSteps.Concepts)!;
         row.Selected = row.Options.First(o => o.Model?.Id == "claude-sonnet-5-5");
         return page;
     }
@@ -71,65 +72,58 @@ public sealed class ConceptEditTests
         .OrderBy(r => r.StartedAtUtc).Last();
 
     [AvaloniaFact]
-    public async Task EveryNewCardShowsItsActionsWithoutOpeningAndDeleteMovesItToTheTrash()
+    public async Task EveryRowShowsApproveAndDeleteAndThePanelsDeleteAsksWhy()
     {
         using var h = new DesktopHarness();
         var (profile, concept) = await PrepareAsync(h);
         var page = await PageAsync(h);
         var view = new TMConcept.Desktop.Views.ConceptsView { DataContext = page };
-        var window = new Avalonia.Controls.Window { Content = view, Width = 1280, Height = 820 };
+        var window = new Avalonia.Controls.Window { Content = view, Width = 1280, Height = 646 };
         h.Get<LanguageResources>().Attach(window.Resources.MergedDictionaries);
         window.Show();
         Dispatcher.UIThread.RunJobs();
+        var text = h.Get<Localizer>();
 
         var card = page.NewConcepts.Single();
-        card.Expanded.ShouldBeFalse();
         var list = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(view).OfType<Avalonia.Controls.ListBox>().Single(l => l.Name == "NewList");
         var buttons = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(list).OfType<Avalonia.Controls.Button>().Where(b => b.IsEffectivelyVisible).ToList();
-        buttons.Select(b => b.Content as string).ShouldBe(["✨", "✎", "✓", "🗑"], "the actions are there without opening the card");
+        buttons.Select(b => b.Content as string).ShouldBe([text["concepts.approve"], text["concepts.delete"]], "words, not emoji: they render everywhere");
         buttons.ShouldAllBe(b => Avalonia.Controls.ToolTip.GetTip(b) != null);
 
-        // The "?" next to the list says what the icons do.
-        var text = h.Get<Localizer>();
-        text["concepts.keys"].ShouldContain("🗑");
-
-        // 🗑 asks why: topic, telling or just delete. The trash keeps it and the duplicate check still counts it.
-        var trash = buttons.Single(b => (b.Content as string) == "🗑");
+        // The panel's Delete asks why: topic, telling or just delete. The trash keeps it and the duplicate check still counts it.
+        await page.ChooseAsync(card);
+        Dispatcher.UIThread.RunJobs();
+        var detail = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(view).OfType<TMConcept.Desktop.Views.ConceptDetailView>().Single();
+        var trash = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(detail).OfType<Avalonia.Controls.Button>().Single(b => b.Name == "TrashButton");
+        trash.IsEffectivelyVisible.ShouldBeTrue();
         trash.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
         Dispatcher.UIThread.RunJobs();
         var menu = Avalonia.Controls.Primitives.FlyoutBase.GetAttachedFlyout(trash).ShouldBeOfType<Avalonia.Controls.MenuFlyout>();
         var items = menu.Items.Cast<Avalonia.Controls.MenuItem>().ToList();
         items.Select(i => i.Header as string).ShouldBe([text["concepts.trash.topic"], text["concepts.trash.telling"], text["concepts.trash.just"]]);
-        items.ShouldAllBe(i => ReferenceEquals(i.CommandParameter, card));
         menu.Hide();
-        items[1].Command!.Execute(card);
+        items[1].Command!.Execute(null);
         await Until(() => page.NewConcepts.Count == 0);
         var trashed = (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!;
         trashed.Status.ShouldBe(ConceptStatus.Trashed);
         trashed.TrashReason.ShouldBe(TrashReason.Telling, "the reason is kept: the next prompts avoid that kind of telling");
         (await h.Get<IConceptStore>().HistoryAsync(profile.Id, CancellationToken.None)).ShouldContain(s => s.Id == concept.Id);
+        page.Detail.IsEmpty.ShouldBeTrue("a deleted concept leaves the panel");
         window.Close();
     }
 
     [AvaloniaFact]
-    public async Task AnApprovedConceptHasTheAiEditNextToItsTitle()
+    public async Task AnApprovedConceptHasTheAiEditInThePanel()
     {
         using var h = new DesktopHarness();
         await PrepareAsync(h, ConceptStatus.Approved);
         var page = await PageAsync(h);
-        var view = new TMConcept.Desktop.Views.ConceptsView { DataContext = page };
-        var window = new Avalonia.Controls.Window { Content = view, Width = 1280, Height = 820 };
-        h.Get<LanguageResources>().Attach(window.Resources.MergedDictionaries);
-        window.Show();
-        Dispatcher.UIThread.RunJobs();
+        await page.ChooseAsync(page.Approved.Single());
 
-        var ai = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(view).OfType<Avalonia.Controls.Button>()
-            .Single(b => (b.Content as string) == "✨" && b.IsEffectivelyVisible);
-        ai.Command!.Execute(ai.CommandParameter);
-        await Until(() => page.AiEditing);
-        page.Listing.ShouldBeFalse("the AI edit box takes the list's place");
-        page.AiEditPrice.ShouldContain("Claude Sonnet 5.5");
-        window.Close();
+        await page.Detail.AiEditAsync();
+
+        page.Detail.IsAiEditing.ShouldBeTrue();
+        page.Detail.AiPrice.ShouldContain("Claude Sonnet 5.5");
     }
 
     [AvaloniaFact]
@@ -148,16 +142,18 @@ public sealed class ConceptEditTests
         var text = h.Get<Localizer>();
         var page = await PageAsync(h);
         var card = page.NewConcepts.Single();
+        await page.ChooseAsync(card);
+        var detail = page.Detail;
 
-        await page.AiEditAsync(card);
-        page.AiEditing.ShouldBeTrue();
-        page.AiEditPrice.ShouldContain("Claude Sonnet 5.5");
-        await page.SendAiEditAsync();
-        page.AiEditStatus.ShouldBe(text["concepts.ai.empty"], "nothing is sent without a wish");
+        await detail.AiEditAsync();
+        detail.IsAiEditing.ShouldBeTrue();
+        detail.AiPrice.ShouldContain("Claude Sonnet 5.5");
+        await detail.SendAiEditAsync();
+        detail.AiStatus.ShouldBe(text["concepts.ai.empty"], "nothing is sent without a wish");
         fake.Requests.ShouldBeEmpty();
 
-        page.AiInstruction = "Also tell the journey on the road there.";
-        await page.SendAiEditAsync();
+        detail.AiInstruction = "Also tell the journey on the road there.";
+        await detail.SendAiEditAsync();
 
         var request = fake.Requests.Single();
         fake.Models.Single().Id.ShouldBe("claude-sonnet-5-5", "the concept step's model");
@@ -171,23 +167,24 @@ public sealed class ConceptEditTests
         request.System.ShouldContain("exactly as written and in the same place");
         request.Stream.ShouldBeTrue();
         request.Progress.ShouldNotBeNull();
-        request.Effort.ShouldBe(page.Picker.Row(TMConcept.Core.Pipeline.PipelineSteps.Concepts)!.Effort?.Value ?? string.Empty);
+        request.Effort.ShouldBe(page.Settings.Picker.Row(TMConcept.Core.Pipeline.PipelineSteps.Concepts)!.Effort?.Value ?? string.Empty);
         request.MaxOutputTokens.ShouldBe(ConceptOutputBudget.MaxOutputTokens(fake.Models.Single()));
 
         // The result opens in the editor first; nothing is saved yet.
         var run = await RunOfAsync(h);
         run.Status.ShouldBe(RunStatus.Succeeded);
         run.ActualUsd.ShouldBeGreaterThan(0);
-        page.AiEditing.ShouldBeFalse();
-        page.Editing.ShouldBeTrue();
-        page.EditHeadline.ShouldBe(other.Title);
-        page.EditText.ShouldStartWith("[on screen: road map from Galata]");
-        page.EditInfo.ShouldBe(text.Format("concepts.ai.ready", text.Usd(run.ActualUsd)), "the ready line is plain, not a warning");
-        page.EditNotice.ShouldContain("#" + 2, Case.Sensitive, "the new title looks like concept #2 (made into a video): a note, not a block");
-        page.EditNotice.ShouldNotContain(text.Usd(run.ActualUsd));
+        detail.IsAiEditing.ShouldBeFalse();
+        detail.IsEditing.ShouldBeTrue();
+        detail.EditHeadline.ShouldBe(other.Title);
+        detail.EditText.ShouldStartWith("[on screen: road map from Galata]");
+        detail.EditInfo.ShouldBe(text.Format("concepts.ai.ready", text.Usd(run.ActualUsd)), "the ready line is plain, not a warning");
+        detail.EditNotice.ShouldContain("#" + 2, Case.Sensitive, "the new title looks like concept #2 (made into a video): a note, not a block");
+        detail.EditNotice.ShouldNotContain(text.Usd(run.ActualUsd));
+        detail.Unsaved.ShouldBeTrue("an AI result always counts as unsaved");
         (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!.Title.ShouldBe(concept.Title);
 
-        await page.SaveEditAsync();
+        await detail.SaveEditAsync();
 
         var saved = (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!;
         saved.Title.ShouldBe(other.Title);
@@ -199,8 +196,8 @@ public sealed class ConceptEditTests
         card.Title.ShouldBe("#1 " + other.Title);
         (await h.Get<IConceptWishStore>().ListAsync(profile.Id, 10, CancellationToken.None)).Single().Text
             .ShouldBe("Also tell the journey on the road there.", "a saved edit's wish is kept for the next concepts");
-        page.Editing.ShouldBeFalse();
-        page.Notice.ShouldContain("#2", Case.Sensitive);
+        detail.IsViewing.ShouldBeTrue();
+        detail.Notice.ShouldContain("#2", Case.Sensitive);
     }
 
     [AvaloniaFact]
@@ -210,19 +207,21 @@ public sealed class ConceptEditTests
         using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
         var (profile, concept) = await PrepareAsync(h);
         var page = await PageAsync(h);
-        await page.AiEditAsync(page.NewConcepts.Single());
-        page.AiInstruction = "Make it funnier, use slang.";
+        await page.ChooseAsync(page.NewConcepts.Single());
+        var detail = page.Detail;
+        await detail.AiEditAsync();
+        detail.AiInstruction = "Make it funnier, use slang.";
 
-        await page.SendAiEditAsync();
-        page.Editing.ShouldBeTrue("the result is in the editor");
-        page.CancelEdit();
+        await detail.SendAiEditAsync();
+        detail.IsEditing.ShouldBeTrue("the result is in the editor");
+        detail.CancelEdit();
 
         (await h.Get<IConceptWishStore>().ListAsync(profile.Id, 10, CancellationToken.None)).ShouldBeEmpty("a result the user threw away is no wish");
         (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!.Title.ShouldBe(concept.Title);
 
         // A plain edit of the same concept saved later does not bring the thrown-away wish back.
-        await page.EditAsync(page.NewConcepts.Single());
-        await page.SaveEditAsync();
+        await detail.EditAsync();
+        await detail.SaveEditAsync();
         (await h.Get<IConceptWishStore>().ListAsync(profile.Id, 10, CancellationToken.None)).ShouldBeEmpty();
     }
 
@@ -236,26 +235,27 @@ public sealed class ConceptEditTests
         var (_, concept) = await PrepareAsync(h);
         var text = h.Get<Localizer>();
         var page = await PageAsync(h);
-        await page.AiEditAsync(page.NewConcepts.Single());
-        page.AiInstruction = "Shorter.";
+        await page.ChooseAsync(page.NewConcepts.Single());
+        var detail = page.Detail;
+        await detail.AiEditAsync();
+        detail.AiInstruction = "Shorter.";
 
-        await page.SendAiEditAsync();
+        await detail.SendAiEditAsync();
 
         var cut = await RunOfAsync(h);
         cut.Status.ShouldBe(RunStatus.Failed);
         cut.Error.ShouldBe("truncated");
         cut.ActualUsd.ShouldBeGreaterThan(0, "a cut-off answer was billed");
         cut.CostExact.ShouldBeTrue();
-        page.AiEditFailed.ShouldBeTrue();
-        page.AiEditStatus.ShouldBe(text.Format("concepts.ai.failed", ProviderErrors.Text(text, "truncated"), text.Usd(cut.ActualUsd)));
-        page.AiEditing.ShouldBeTrue("the box stays open");
-        page.Editing.ShouldBeFalse();
+        detail.AiFailed.ShouldBeTrue();
+        detail.AiStatus.ShouldBe(text.Format("concepts.ai.failed", ProviderErrors.Text(text, "truncated"), text.Usd(cut.ActualUsd)));
+        detail.IsAiEditing.ShouldBeTrue("the box stays open");
 
-        await page.SendAiEditAsync();
+        await detail.SendAiEditAsync();
 
         var unreadable = await RunOfAsync(h);
         unreadable.Error.ShouldBe("parse");
-        page.AiEditStatus.ShouldBe(text.Format("concepts.ai.failed", text["concepts.parse_failed"], text.Usd(unreadable.ActualUsd)));
+        detail.AiStatus.ShouldBe(text.Format("concepts.ai.failed", text["concepts.parse_failed"], text.Usd(unreadable.ActualUsd)));
         var stored = (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!;
         stored.Title.ShouldBe(concept.Title);
         stored.Content.ShouldBe(Content);
@@ -273,73 +273,92 @@ public sealed class ConceptEditTests
         var (_, concept) = await PrepareAsync(h, ConceptStatus.Approved);
         var text = h.Get<Localizer>();
         var page = await PageAsync(h);
-        await page.AiEditAsync(page.Approved.Single());
-        page.AiInstruction = "Add the road there.";
+        await page.ChooseAsync(page.Approved.Single());
+        var detail = page.Detail;
+        await detail.AiEditAsync();
+        detail.AiInstruction = "Add the road there.";
 
-        var send = page.SendAiEditAsync();
+        var send = detail.SendAiEditAsync();
         await Until(() => fake.Requests.Count == 1);
-        page.AiEditRunning.ShouldBeTrue();
+        detail.AiRunning.ShouldBeTrue();
         page.Working.ShouldBeTrue();
-        page.CancelAiEdit();
+        detail.CancelAiEdit();
         await send;
 
         var run = await RunOfAsync(h);
         run.Status.ShouldBe(RunStatus.Canceled);
         run.CostExact.ShouldBeFalse();
         run.ActualUsd.ShouldBeGreaterThan(0, "the prompt may be billed");
-        page.AiEditStatus.ShouldBe(text.Format("concepts.ai.canceled", text.Usd(run.ActualUsd)));
-        page.AiEditFailed.ShouldBeFalse();
-        page.AiEditRunning.ShouldBeFalse();
+        detail.AiStatus.ShouldBe(text.Format("concepts.ai.canceled", text.Usd(run.ActualUsd)));
+        detail.AiFailed.ShouldBeFalse();
+        detail.AiRunning.ShouldBeFalse();
+        page.Working.ShouldBeFalse();
         (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!.Content.ShouldBe(Content);
 
-        // Cancel again closes the box.
-        page.CancelAiEdit();
-        page.AiEditing.ShouldBeFalse();
-        page.Listing.ShouldBeTrue();
+        // Cancel again closes the box: the panel shows the text again.
+        detail.CancelAiEdit();
+        detail.IsAiEditing.ShouldBeFalse();
+        detail.IsViewing.ShouldBeTrue();
     }
 
     [AvaloniaFact]
-    public async Task UnsavedEditorTextIsNotLostWhenTheAiBoxIsCanceledOrAnotherConceptIsOpened()
+    public async Task UnsavedEditorTextIsNotLostWhenTheAiBoxIsCanceled()
     {
         using var h = new DesktopHarness();
-        var (profile, concept) = await PrepareAsync(h);
-        var second = new Concept { ProfileId = profile.Id, Title = "The Nika riot", Summary = "s", Content = Content, Language = "en", Status = ConceptStatus.Approved };
-        await h.Get<IConceptStore>().AddAsync([second], CancellationToken.None);
-        var text = h.Get<Localizer>();
+        var (_, concept) = await PrepareAsync(h);
+        var page = await PageAsync(h);
+        await page.ChooseAsync(page.NewConcepts.Single());
+        var detail = page.Detail;
+
+        await detail.EditAsync();
+        detail.EditHeadline = "My own title";
+        detail.EditText = Content + "\n[pause 2 s] My own line.";
+
+        // AI edit from the editor, then Cancel: back to the editor with the typed text.
+        await detail.AiEditAsync();
+        detail.IsAiEditing.ShouldBeTrue();
+        detail.Unsaved.ShouldBeTrue("the editor's text waits behind the AI box");
+        detail.CancelAiEdit();
+        detail.IsEditing.ShouldBeTrue();
+        detail.EditHeadline.ShouldBe("My own title");
+        detail.EditText.ShouldEndWith("My own line.");
+        (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!.Title.ShouldBe(concept.Title);
+    }
+
+    [AvaloniaFact]
+    public async Task TrashingTheCardBeingAiEditedCancelsTheEdit()
+    {
+        var fake = new FakeChat().AnswerAsync(async (_, token) =>
+        {
+            await Task.Delay(Timeout.Infinite, token);
+            throw new InvalidOperationException("not reached");
+        });
+        var confirm = new FakeConfirm();
+        using var h = new DesktopHarness(s =>
+        {
+            s.AddSingleton<IChatClientFactory>(fake);
+            s.AddSingleton<IConfirmDialog>(confirm);
+        });
+        var (_, concept) = await PrepareAsync(h);
         var page = await PageAsync(h);
         var card = page.NewConcepts.Single();
-        var approved = page.Approved.Single();
+        await page.ChooseAsync(card);
+        var detail = page.Detail;
+        await detail.AiEditAsync();
+        detail.AiInstruction = "Shorter.";
+        var send = detail.SendAiEditAsync();
+        await Until(() => fake.Requests.Count == 1);
 
-        await page.EditAsync(card);
-        page.EditHeadline = "My own title";
-        page.EditText = Content + "\n[pause 2 s] My own line.";
+        // The running AI edit counts as unsaved work: the row's Delete asks first, then goes on.
+        await page.TrashRowAsync(card);
+        await send;
 
-        // Another concept does not open over the unsaved changes.
-        await page.EditAsync(approved);
-        await page.AiEditAsync(approved);
-        page.EditCard.ShouldBe(card);
-        page.AiEditing.ShouldBeFalse();
-        page.EditStatus.ShouldBe(text["concepts.unsaved"]);
+        confirm.Messages.Single().ShouldBe(h.Get<Localizer>()["detail.unsaved"]);
 
-        // ✨ from the editor, then Cancel: back to the editor with the typed text.
-        await page.AiEditAsync(card);
-        page.AiEditing.ShouldBeTrue();
-        page.Editing.ShouldBeFalse();
-        page.CancelAiEdit();
-        page.AiEditing.ShouldBeFalse();
-        page.EditCard.ShouldBe(card);
-        page.EditHeadline.ShouldBe("My own title");
-        page.EditText.ShouldEndWith("My own line.");
-
-        // A typed wish in the AI box is not cleared by another concept's ✨.
-        page.CancelEdit();
-        await page.AiEditAsync(card);
-        page.AiInstruction = "Add the road there.";
-        await page.AiEditAsync(approved);
-        page.AiEditCard.ShouldBe(card);
-        page.AiInstruction.ShouldBe("Add the road there.");
-        page.AiEditStatus.ShouldBe(text["concepts.unsaved"]);
-        (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!.Title.ShouldBe(concept.Title);
+        detail.AiRunning.ShouldBeFalse("the running AI edit was canceled");
+        detail.IsEmpty.ShouldBeTrue();
+        (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!.Status.ShouldBe(ConceptStatus.Trashed);
+        (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!.Content.ShouldBe(Content);
     }
 
     [AvaloniaFact]
@@ -354,9 +373,11 @@ public sealed class ConceptEditTests
         using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
         var (_, concept) = await PrepareAsync(h);
         var page = await PageAsync(h);
-        await page.AiEditAsync(page.NewConcepts.Single());
-        page.AiInstruction = "Shorter.";
-        var send = page.SendAiEditAsync();
+        await page.ChooseAsync(page.NewConcepts.Single());
+        var detail = page.Detail;
+        await detail.AiEditAsync();
+        detail.AiInstruction = "Shorter.";
+        var send = detail.SendAiEditAsync();
         await Until(() => fake.Requests.Count == 1);
 
         var otherProfile = new Profile { Name = "Rome", ContentLanguage = ContentLanguages.English, ConceptText = "Roman history." };
@@ -366,8 +387,8 @@ public sealed class ConceptEditTests
         gate.SetResult();
         await send;
 
-        page.Editing.ShouldBeFalse("the old profile's concept does not open on the new profile's page");
-        page.AiEditing.ShouldBeFalse();
+        detail.IsEditing.ShouldBeFalse("the old profile's concept does not open on the new profile's page");
+        detail.IsEmpty.ShouldBeTrue();
         (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!.Title.ShouldBe(concept.Title);
     }
 
@@ -378,11 +399,17 @@ public sealed class ConceptEditTests
         var (_, concept) = await PrepareAsync(h);
         var page = await PageAsync(h);
         var card = page.NewConcepts.Single();
+        await page.ChooseAsync(card);
         await h.Get<IConceptStore>().SetStatusAsync([concept.Id], ConceptStatus.Queued, CancellationToken.None);
 
-        await page.AiEditAsync(card);
+        await page.Detail.AiEditAsync();
 
-        page.AiEditing.ShouldBeFalse();
-        page.Status.ShouldBe(h.Get<Localizer>()["concepts.ai.not_editable"]);
+        page.Detail.IsAiEditing.ShouldBeFalse();
+        page.Detail.Notice.ShouldBe(h.Get<Localizer>()["concepts.ai.not_editable"]);
+
+        // Opened again, it is read-only with the note where to change it.
+        await page.Detail.LoadAsync(card);
+        page.Detail.CanEdit.ShouldBeFalse();
+        page.Detail.ReadOnlyNote.ShouldBe(h.Get<Localizer>()["detail.queued"]);
     }
 }

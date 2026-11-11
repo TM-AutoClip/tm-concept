@@ -1,0 +1,116 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:TMConcept.Desktop.ViewModels"
+             xmlns:views="using:TMConcept.Desktop.Views"
+             x:Class="TMConcept.Desktop.Views.ConceptDetailView"
+             x:DataType="vm:ConceptDetailViewModel">
+  <!-- The chosen concept in a fixed panel (never under its row): the head (title, status, words and length), the text in the middle (or
+       the editors, or the AI box), the actions at the bottom. -->
+  <Border Classes="card" Padding="14,10">
+    <Panel>
+      <TextBlock Name="EmptyLine" Text="{DynamicResource detail.empty}" Classes="muted" TextWrapping="Wrap" TextAlignment="Center"
+                 HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding IsEmpty}" />
+      <DockPanel IsVisible="{Binding !IsEmpty}">
+        <StackPanel DockPanel.Dock="Top" Spacing="2" Margin="0,0,0,6">
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <TextBlock Name="DetailTitle" Text="{Binding Title}" FontWeight="SemiBold" FontSize="15" TextWrapping="Wrap" MaxLines="2"
+                       TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
+            <Border Grid.Column="1" Classes="badge" VerticalAlignment="Top">
+              <TextBlock Name="StatusBadge" Text="{Binding StatusText}" Classes="small" />
+            </Border>
+          </Grid>
+          <TextBlock Name="MetaLine" Text="{Binding MetaLine}" Classes="tiny" />
+          <TextBlock Name="ReadOnlyLine" Text="{Binding ReadOnlyNote}" Classes="small warning" TextWrapping="Wrap"
+                     IsVisible="{Binding ReadOnlyNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+          <TextBlock Name="NoticeLine" Text="{Binding Notice}" Classes="small warning" TextWrapping="Wrap"
+                     IsVisible="{Binding Notice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+        </StackPanel>
+
+        <!-- The actions of the mode, always at the bottom. -->
+        <Panel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+          <WrapPanel Name="ViewActions" IsVisible="{Binding IsViewing}">
+            <Panel IsVisible="{Binding CanEdit}">
+              <WrapPanel>
+                <Button Name="ApproveButton" Classes="accent" Content="{DynamicResource concepts.approve}" Command="{Binding ApproveCommand}"
+                        IsVisible="{Binding CanApprove}" Margin="0,0,8,4" ToolTip.Tip="{DynamicResource concepts.approve.tip}" />
+                <Button Name="UnapproveButton" Content="{DynamicResource concepts.unapprove}" Command="{Binding UnapproveCommand}"
+                        IsVisible="{Binding CanUnapprove}" Margin="0,0,8,4" />
+                <Button Name="EditButton" Content="{DynamicResource detail.edit}" Command="{Binding EditCommand}" Margin="0,0,8,4"
+                        ToolTip.Tip="{DynamicResource concepts.edit.tip}" />
+                <Button Name="AiEditButton" Content="{DynamicResource detail.ai_edit}" Command="{Binding AiEditCommand}" Margin="0,0,8,4"
+                        ToolTip.Tip="{DynamicResource concepts.ai.tip}" />
+                <Button Name="TrashButton" Classes="danger" Content="{DynamicResource detail.delete}" Click="OnTrashClick" Margin="0,0,8,4"
+                        ToolTip.Tip="{DynamicResource concepts.trash.tip}" />
+              </WrapPanel>
+            </Panel>
+          </WrapPanel>
+          <StackPanel Name="EditActions" Spacing="6" IsVisible="{Binding IsEditing}">
+            <TextBlock Text="{Binding EditStatus}" Classes="error" IsVisible="{Binding EditStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
+              <views:MarkerPicker Target="{Binding #EditBox}" Markers="{Binding Placeholders}" />
+              <Button Grid.Column="1" Content="{DynamicResource detail.ai_edit}" Command="{Binding AiEditCommand}" ToolTip.Tip="{DynamicResource concepts.ai.tip}" />
+              <Button Name="SaveButton" Grid.Column="2" Classes="accent" Content="{DynamicResource common.save}" Command="{Binding SaveEditCommand}" />
+              <Button Grid.Column="3" Content="{DynamicResource common.cancel}" Command="{Binding CancelEditCommand}" />
+            </Grid>
+          </StackPanel>
+          <StackPanel Name="AiActions" Spacing="4" IsVisible="{Binding IsAiEditing}">
+            <TextBlock Text="{Binding AiPrice}" Classes="tiny" TextWrapping="Wrap" />
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" IsVisible="{Binding AiRunning}">
+              <ProgressBar IsIndeterminate="True" Width="48" MinWidth="48" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="1" Text="{Binding AiCall.Text}" Classes="small" TextTrimming="CharacterEllipsis" />
+            </Grid>
+            <TextBlock Name="AiStatusLine" Text="{Binding AiStatus}" Classes="small" Classes.error="{Binding AiFailed}" TextWrapping="Wrap"
+                       IsVisible="{Binding AiStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Name="SendAiButton" Classes="accent" Content="{DynamicResource concepts.ai.send}" Command="{Binding SendAiEditCommand}"
+                      IsEnabled="{Binding AiIdle}" />
+              <Button Content="{DynamicResource common.cancel}" Command="{Binding CancelAiEditCommand}" />
+            </StackPanel>
+          </StackPanel>
+        </Panel>
+
+        <Panel>
+          <!-- Viewing: the summary and the whole text (scene lines set apart). -->
+          <ScrollViewer Name="TextScroll" HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding !IsEditing}">
+            <StackPanel Spacing="6" MaxWidth="900" HorizontalAlignment="Left">
+              <StackPanel Spacing="4" IsVisible="{Binding IsAiEditing}">
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Text="{DynamicResource concepts.ai.instruction}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                  <views:HelpTip Text="{DynamicResource concepts.ai.hint}" />
+                </StackPanel>
+                <TextBox Name="AiInstructionBox" Text="{Binding AiInstruction}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="70"
+                         MaxLength="{Binding AiInstructionMax}" PlaceholderText="{DynamicResource detail.ai_hint}" IsEnabled="{Binding AiIdle}" />
+              </StackPanel>
+              <TextBlock Name="SummaryLine" Text="{Binding Summary}" Classes="muted" TextWrapping="Wrap" />
+              <ItemsControl Name="TextLines" ItemsSource="{Binding Lines}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:ContentLine">
+                    <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Margin="0,2" Classes.scene="{Binding IsScene}" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </ScrollViewer>
+
+          <!-- Editing: title, summary, the text (an AI result waits here for Save). -->
+          <DockPanel Name="Editor" IsVisible="{Binding IsEditing}">
+            <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,6">
+              <TextBlock Name="EditInfoLine" Text="{Binding EditInfo}" Classes="ok small" TextWrapping="Wrap"
+                         IsVisible="{Binding EditInfo, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+              <TextBlock Name="EditNoticeLine" Text="{Binding EditNotice}" Classes="warning small" TextWrapping="Wrap"
+                         IsVisible="{Binding EditNotice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+              <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="6">
+                <TextBlock Text="{DynamicResource concepts.edit.headline}" VerticalAlignment="Center" />
+                <TextBox Name="EditHeadlineBox" Grid.Column="1" Text="{Binding EditHeadline}" MaxLength="{Binding EditHeadlineMax}" />
+                <TextBlock Grid.Row="1" Text="{DynamicResource concepts.edit.summary}" VerticalAlignment="Center" />
+                <TextBox Name="EditSummaryBox" Grid.Row="1" Grid.Column="1" Text="{Binding EditSummary}" TextWrapping="Wrap" MaxLength="{Binding EditSummaryMax}" />
+              </Grid>
+            </StackPanel>
+            <TextBox Name="EditBox" Text="{Binding EditText}" AcceptsReturn="True" TextWrapping="Wrap" MaxLength="{Binding EditMax}"
+                     VerticalContentAlignment="Top" ToolTip.Tip="{DynamicResource concepts.edit.hint}" />
+          </DockPanel>
+        </Panel>
+      </DockPanel>
+    </Panel>
+  </Border>
+</UserControl>

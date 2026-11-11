@@ -34,9 +34,6 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
     public override string TitleKey => "nav.profile";
 
     /// <inheritdoc />
-    public override string Glyph => "👤";
-
-    /// <inheritdoc />
     public override int Order => 50;
 
     /// <summary>Templates.</summary>

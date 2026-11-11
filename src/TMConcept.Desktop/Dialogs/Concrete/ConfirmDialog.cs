@@ -8,9 +8,9 @@ namespace TMConcept.Desktop.Dialogs;
 public sealed class ConfirmDialog(WindowHost host, Localizer text) : IConfirmDialog
 {
     /// <inheritdoc />
-    public async Task<ConfirmResult> AskAsync(string title, string message, string confirmText, bool danger, string? checkbox = null)
+    public async Task<ConfirmResult> AskAsync(string title, string message, string confirmText, bool danger, string? checkbox = null, string? cancelText = null)
     {
-        var model = new ConfirmViewModel(title, message, confirmText, text["common.cancel"], danger, checkbox);
+        var model = new ConfirmViewModel(title, message, confirmText, cancelText ?? text["common.cancel"], danger, checkbox);
         var window = new ConfirmWindow { DataContext = model };
         if (host.Active is { } owner)
         {

@@ -1,64 +1,81 @@
-using System.Windows.Input;
+using System.ComponentModel;
 using Avalonia.Controls;
-using Avalonia.Controls.Primitives;
 using Avalonia.Input;
-using Avalonia.Interactivity;
 using TMConcept.Desktop.ViewModels;
 
 namespace TMConcept.Desktop.Views;
 
 /// <summary>
-/// Generate concepts page. Keys on the list: A approves, D (or Delete) moves to the trash without a reason, ↑↓ move. 🗑 on a card opens a
-/// small menu: "I did not like the topic", "I did not like the telling", "Just delete" (the reason goes to the prompts as a dislike).
+/// The concepts page: only a layout of its parts (the bar, the two sections, the list, the detail panel). Keys on the list: A approves a
+/// new concept (takes an approved one back), D or Delete deletes it without a reason, ↑↓ move. While the detail panel edits a concept
+/// (by hand or with AI) the generate sections fold away, so the editor gets the height of the page; they come back when it closes.
 /// </summary>
 public sealed partial class ConceptsView : UserControl
 {
+    private static readonly GridLength SectionsHeight = new(4, GridUnitType.Star);
+    private ConceptDetailViewModel? _detail;
+
     /// <summary>Creates.</summary>
     public ConceptsView() => InitializeComponent();
 
+    /// <inheritdoc />
+    protected override void OnDataContextChanged(EventArgs e)
+    {
+        base.OnDataContextChanged(e);
+        if (_detail is not null)
+        {
+            _detail.PropertyChanged -= OnDetailChanged;
+        }
+
+        _detail = (DataContext as ConceptsViewModel)?.Detail;
+        if (_detail is not null)
+        {
+            _detail.PropertyChanged += OnDetailChanged;
+        }
+
+        FoldSections();
+    }
+
+    private void OnDetailChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(ConceptDetailViewModel.IsEditing) or nameof(ConceptDetailViewModel.IsAiEditing))
+        {
+            FoldSections();
+        }
+    }
+
+    private void FoldSections()
+    {
+        var writing = _detail is { IsEditing: true } or { IsAiEditing: true };
+        Sections.IsVisible = !writing;
+        PageGrid.RowDefinitions[1].Height = writing ? new GridLength(0) : SectionsHeight;
+    }
+
+    private void OnBackdropPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (DataContext is ConceptsViewModel page)
+        {
+            page.Settings.ClosePanel();
+            e.Handled = true;
+        }
+    }
+
     private void OnListKeyDown(object? sender, KeyEventArgs e)
     {
-        if (DataContext is not ConceptsViewModel page || page.Selected is not { } card)
+        if (DataContext is not ConceptsViewModel page || sender is not ListBox { SelectedItem: ConceptCardViewModel card })
         {
             return;
         }
 
         if (e.Key == Key.A)
         {
-            page.ApproveCommand.Execute(card);
+            (page.ShowApproved ? page.UnapproveRowCommand : page.ApproveRowCommand).Execute(card);
             e.Handled = true;
         }
         else if (e.Key is Key.D or Key.Delete)
         {
-            page.TrashCommand.Execute(card);
+            page.TrashRowCommand.Execute(card);
             e.Handled = true;
         }
     }
-
-    /// <summary>
-    /// Opens the trash menu of the clicked card. Built here with its commands and card set directly: a flyout lives in its own popup,
-    /// where a binding to the list's data context would not reach.
-    /// </summary>
-    private void OnTrashClick(object? sender, RoutedEventArgs e)
-    {
-        if (sender is not Button { DataContext: ConceptCardViewModel card } button || DataContext is not ConceptsViewModel page)
-        {
-            return;
-        }
-
-        var menu = new MenuFlyout { Placement = PlacementMode.BottomEdgeAlignedRight };
-        menu.Items.Add(Item("concepts.trash.topic", page.TrashTopicCommand, card));
-        menu.Items.Add(Item("concepts.trash.telling", page.TrashTellingCommand, card));
-        menu.Items.Add(Item("concepts.trash.just", page.TrashCommand, card));
-        FlyoutBase.SetAttachedFlyout(button, menu);
-        FlyoutBase.ShowAttachedFlyout(button);
-        e.Handled = true;
-    }
-
-    private MenuItem Item(string key, ICommand command, ConceptCardViewModel card) => new()
-    {
-        Header = this.TryFindResource(key, out var text) ? text : key,
-        Command = command,
-        CommandParameter = card,
-    };
 }

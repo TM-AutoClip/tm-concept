@@ -24,11 +24,12 @@ namespace TMConcept.Desktop.ViewModels;
 /// online voice's cost is shown first.
 /// (b) Another engine needs new code: the estimate of the code call is shown and confirmed first; images, clips and texts are used again.
 /// Both make a new version folder; older versions stay. The models come from the profile's choices (video code with its engine, voice) and
-/// are made ready like any process (keys, licenses, the install window); the choices are saved for the profile.
+/// are made ready like any process (keys, licenses, the install window); the choices are saved for the profile. While a version is made,
+/// its steps show with their time and cost (<see cref="Progress"/>, the same list as a video in the queue).
 /// </summary>
 public sealed partial class VersionEditorViewModel(StepPickerViewModel picker, VideoRemaker remaker, SpeechService speech, StepModelResolver resolver,
     VideoCostEstimator estimator, IEnumerable<IVideoEngine> engines, Core.Media.IMediaTools media, IConfirmDialog confirm, INotifier notifier,
-    IActivityLog activity, Localizer text, Work.WorkStatus work, ILogger<VersionEditorViewModel> logger) : ObservableObject
+    IActivityLog activity, Localizer text, ProductionProgressViewModel progress, ILogger<VersionEditorViewModel> logger) : ObservableObject
 {
     private static readonly IReadOnlyList<string> Steps = [PipelineSteps.VideoCode, PipelineSteps.Speech];
 
@@ -66,13 +67,8 @@ public sealed partial class VersionEditorViewModel(StepPickerViewModel picker, V
     /// <summary>Whether a new version can be started now.</summary>
     public bool CanStart => CanEdit && !Busy;
 
-    /// <summary>Progress 0–100.</summary>
-    [ObservableProperty]
-    public partial double Percent { get; set; }
-
-    /// <summary>The running step.</summary>
-    [ObservableProperty]
-    public partial string Step { get; set; } = string.Empty;
+    /// <summary>The steps of the version being made.</summary>
+    public ProductionProgressViewModel Progress { get; } = progress;
 
     /// <summary>Why nothing can be made, or what the last attempt did.</summary>
     [ObservableProperty]
@@ -155,7 +151,7 @@ public sealed partial class VersionEditorViewModel(StepPickerViewModel picker, V
             }
         }
 
-        await RunAsync(PipelineSteps.Speech, source.Engine, async (token, progress) =>
+        await RunAsync(PipelineSteps.Speech, source.Engine, string.Empty, async (token, progress) =>
         {
             SpeechSetup? voice = null;
             if (Picker.Choice(PipelineSteps.Speech) is { } choice && model is not null)
@@ -190,7 +186,7 @@ public sealed partial class VersionEditorViewModel(StepPickerViewModel picker, V
             return;
         }
 
-        await RunAsync(PipelineSteps.VideoCode, engine, async (token, progress) =>
+        await RunAsync(PipelineSteps.VideoCode, engine, code.Name, async (token, progress) =>
         {
             var model = await resolver.ResolveAsync(PipelineSteps.VideoCode, Picker.Choice(PipelineSteps.VideoCode), token).ConfigureAwait(true);
             return await remaker.RecodeAsync(new RecodeJob(source, profile, engine, model), progress, token).ConfigureAwait(true);
@@ -221,13 +217,14 @@ public sealed partial class VersionEditorViewModel(StepPickerViewModel picker, V
 
     /// <summary>
     /// Makes the step ready (key, license, installs of the voice, ffmpeg and the engine in the install window; the choice is saved for the
-    /// profile), then makes the version with progress; the result is shown, said in a notification and written to the log file.
+    /// profile), then makes the version with its steps shown (<paramref name="codeModel"/> names the code call's model; empty = no code call);
+    /// the result is shown, said in a notification and written to the log file.
     /// </summary>
-    private async Task RunAsync(string step, IVideoEngine engine, Func<CancellationToken, IProgress<VideoProgress>, Task<VideoRecord>> make)
+    private async Task RunAsync(string step, IVideoEngine engine, string codeModel,
+        Func<CancellationToken, IProgress<VideoProgress>, Task<VideoRecord>> make)
     {
         Busy = true;
         Status = string.Empty;
-        Percent = 0;
         using var cancel = new CancellationTokenSource();
         _cancel = cancel;
         try
@@ -240,13 +237,19 @@ public sealed partial class VersionEditorViewModel(StepPickerViewModel picker, V
                 return;
             }
 
-            var progress = new Progress<VideoProgress>(p =>
+            Progress.Begin("work.version", codeModel);
+            VideoRecord record;
+            var made = false;
+            try
             {
-                Percent = Math.Round(p.Share * 100);
-                Step = text["video.step." + p.Step] + (p.Detail.Length > 0 ? " · " + p.Detail : string.Empty);
-                work.Show(this, text.Format("work.version", Percent, Step));
-            });
-            var record = await make(cancel.Token, progress).ConfigureAwait(true);
+                record = await make(cancel.Token, Progress.Reporter).ConfigureAwait(true);
+                made = true;
+            }
+            finally
+            {
+                await Progress.FinishAsync(made).ConfigureAwait(true);
+            }
+
             var name = VersionName(record);
             Status = text.Format("version.done", name, text.Usd(record.TotalUsd));
             activity.Add(ActivityLevel.Info, Status);
@@ -274,8 +277,6 @@ public sealed partial class VersionEditorViewModel(StepPickerViewModel picker, V
         {
             _cancel = null;
             Busy = false;
-            Step = string.Empty;
-            work.Clear(this);
         }
     }
 

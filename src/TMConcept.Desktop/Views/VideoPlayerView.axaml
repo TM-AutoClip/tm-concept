@@ -2,8 +2,10 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:TMConcept.Desktop.ViewModels"
              xmlns:c="using:TMConcept.Desktop.Converters"
+             xmlns:controls="using:TMConcept.Desktop.Controls"
              x:Class="TMConcept.Desktop.Views.VideoPlayerView"
              x:DataType="vm:PlayerViewModel">
+  <!-- The picture is 16:9 by the width it gets (never taller than the room it has); the controls sit under it. -->
   <DockPanel>
     <StackPanel DockPanel.Dock="Bottom" Spacing="4" Margin="0,6,0,0">
       <Slider Name="SeekBar" Minimum="0" Maximum="{Binding DurationMs}" Value="{Binding PositionMs}" IsEnabled="{Binding HasVideo}"
@@ -16,9 +18,11 @@
         <Slider Grid.Column="3" Minimum="0" Maximum="100" Value="{Binding Volume}" Width="90" ToolTip.Tip="{DynamicResource player.volume}" />
         <Button Grid.Column="4" Content="⛶" Command="{Binding FullscreenCommand}" IsEnabled="{Binding HasVideo}" ToolTip.Tip="{DynamicResource player.fullscreen}" />
       </Grid>
-      <TextBlock Text="{Binding Message}" Classes="small warning" TextWrapping="Wrap" />
+      <TextBlock Name="MessageLine" Text="{Binding Message}" Classes="small warning" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"
+                 ToolTip.Tip="{Binding Message}" IsVisible="{Binding Message, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
     </StackPanel>
-    <Border Background="Black" CornerRadius="6" ClipToBounds="True" MinHeight="200">
+    <controls:AspectBox VerticalAlignment="Top">
+    <Border Background="Black" CornerRadius="6" ClipToBounds="True">
       <Panel>
         <Image Source="{Binding Poster, Converter={x:Static c:FileBitmapConverter.Instance}, ConverterParameter=480}" Stretch="Uniform"
                IsVisible="{Binding ShowPoster}" />
@@ -27,5 +31,6 @@
                 HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="28" Padding="18,10" Opacity="0.85" />
       </Panel>
     </Border>
+    </controls:AspectBox>
   </DockPanel>
 </UserControl>

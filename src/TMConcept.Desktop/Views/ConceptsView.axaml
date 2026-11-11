@@ -4,318 +4,122 @@
              xmlns:views="using:TMConcept.Desktop.Views"
              x:Class="TMConcept.Desktop.Views.ConceptsView"
              x:DataType="vm:ConceptsViewModel">
-  <Grid ColumnDefinitions="380,*,300" Margin="16" ColumnSpacing="16">
-    <ScrollViewer>
-      <StackPanel Spacing="8">
-        <!-- Top to bottom: count, topics (how many to suggest + Suggest topics, the suggestions to tick, the selected list), extra request,
-             folded fine-tuning, the duplicate checks on one line, folded models. Long explanations are "?" tips, so the panel fits without
-             much scrolling. -->
-        <TextBlock Text="{DynamicResource nav.concepts}" Classes="h1" />
-        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-          <TextBlock Text="{DynamicResource concepts.count}" FontWeight="SemiBold" VerticalAlignment="Center" />
-          <!-- Off while topics are selected: the count is theirs then (one concept each). -->
-          <NumericUpDown Name="CountBox" Grid.Column="1" Value="{Binding Count}" Minimum="1" Maximum="100" Increment="1" FormatString="0" Width="130"
-                         IsEnabled="{Binding CountEnabled}" />
-        </Grid>
-        <TextBlock Name="CountFromTopicsLine" Text="{DynamicResource concepts.count.from_topics}" Classes="small" TextWrapping="Wrap"
-                   IsVisible="{Binding UsingTopics}" />
-        <!-- Topics: how many one press asks for (5-100) and its price next to the button; the extra request is not part of it. -->
-        <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="6" Margin="0,4,0,0">
-          <TextBlock Text="{DynamicResource topics.count}" FontWeight="SemiBold" VerticalAlignment="Center" />
-          <NumericUpDown Name="TopicCountBox" Grid.Column="1" Value="{Binding TopicCount}" Minimum="5" Maximum="100" Increment="5" FormatString="0"
-                         Width="110" ToolTip.Tip="{DynamicResource topics.count.hint}" IsEnabled="{Binding CanSuggest}" />
-          <TextBlock Grid.Column="2" Text="{Binding TopicPrice}" Classes="small" VerticalAlignment="Center" HorizontalAlignment="Right"
-                     TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding TopicEstimate}" />
-          <Button Name="SuggestButton" Grid.Column="3" Classes="small" Content="{DynamicResource topics.button}" Command="{Binding SuggestTopicsCommand}"
-                  IsEnabled="{Binding CanSuggest}" VerticalAlignment="Center">
-            <ToolTip.Tip>
-              <StackPanel Spacing="4" MaxWidth="320">
-                <TextBlock Text="{DynamicResource topics.hint}" TextWrapping="Wrap" />
-                <TextBlock Text="{Binding TopicEstimate}" TextWrapping="Wrap" FontWeight="SemiBold" />
-              </StackPanel>
-            </ToolTip.Tip>
-          </Button>
-        </Grid>
-        <!-- The result of "Suggest topics" right below it: the running call's steps, the topics to tick (a list that wraps long topics and
-             scrolls at many), why none came. -->
-        <Border Name="TopicCard" Classes="card" Padding="10" IsVisible="{Binding TopicCardShown}">
-          <StackPanel Spacing="6">
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" IsVisible="{Binding Suggesting}">
-              <StackPanel Spacing="4" VerticalAlignment="Center">
-                <TextBlock Text="{Binding TopicCall.Text}" TextWrapping="Wrap" />
-                <ProgressBar IsIndeterminate="True" />
-              </StackPanel>
-              <Button Grid.Column="1" Content="{DynamicResource common.cancel}" Command="{Binding CancelTopicsCommand}" VerticalAlignment="Center" />
-            </Grid>
-            <StackPanel Orientation="Horizontal" IsVisible="{Binding HasTopics}">
-              <TextBlock Text="{Binding TopicsHeader}" FontWeight="SemiBold" VerticalAlignment="Center" />
-              <views:HelpTip Text="{DynamicResource topics.card.hint}" />
-            </StackPanel>
-            <StackPanel Orientation="Horizontal" Spacing="12" IsVisible="{Binding HasTopics}">
-              <Button Name="SelectAllTopics" Classes="link small" Content="{DynamicResource topics.select_all}" Command="{Binding SelectAllTopicsCommand}" />
-              <Button Name="SelectNoTopics" Classes="link small" Content="{DynamicResource topics.select_none}" Command="{Binding SelectNoTopicsCommand}" />
-            </StackPanel>
-            <Border Classes="inset" IsVisible="{Binding HasTopics}">
-              <ScrollViewer Name="TopicScroll" MaxHeight="320" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                <ItemsControl Name="TopicList" ItemsSource="{Binding Topics}">
-                  <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="vm:TopicItemViewModel">
-                      <CheckBox Classes="topic" IsChecked="{Binding Checked}">
-                        <TextBlock Text="{Binding Text}" TextWrapping="Wrap" />
-                      </CheckBox>
-                    </DataTemplate>
-                  </ItemsControl.ItemTemplate>
-                </ItemsControl>
-              </ScrollViewer>
-            </Border>
-            <Button Name="AddCheckedButton" Classes="accent small" Content="{Binding AddCheckedText}" Command="{Binding AddCheckedTopicsCommand}"
-                    IsEnabled="{Binding HasChecked}" IsVisible="{Binding HasTopics}" HorizontalAlignment="Left" />
-            <TextBlock Name="TopicRepeatsLine" Text="{Binding TopicRepeats}" Classes="small" TextWrapping="Wrap"
-                       IsVisible="{Binding TopicRepeats, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-            <TextBlock Name="TopicStatusLine" Text="{Binding TopicStatus}" Classes="small" Classes.error="{Binding TopicFailed}" TextWrapping="Wrap"
-                       IsVisible="{Binding TopicStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-          </StackPanel>
-        </Border>
-        <!-- The selected topics (kept for the profile): one concept each, in this order; done topics leave the list. -->
-        <Border Name="SelectedTopicsCard" Classes="card" Padding="10" IsVisible="{Binding UsingTopics}">
-          <StackPanel Spacing="6">
-            <StackPanel Orientation="Horizontal">
-              <TextBlock Text="{Binding SelectedHeader}" FontWeight="SemiBold" VerticalAlignment="Center" />
-              <views:HelpTip Text="{DynamicResource topics.selected.hint}" />
-            </StackPanel>
-            <Border Classes="inset">
-              <ScrollViewer MaxHeight="240" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                <ItemsControl Name="SelectedTopicList" ItemsSource="{Binding SelectedTopics}">
-                  <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="vm:TopicItemViewModel">
-                      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6" Margin="0,2">
-                        <TextBlock Text="{Binding Text}" TextWrapping="Wrap" VerticalAlignment="Center" />
-                        <Button Grid.Column="1" Classes="small" Content="✕" VerticalAlignment="Top" ToolTip.Tip="{DynamicResource topics.selected.remove}"
-                                IsEnabled="{Binding $parent[ItemsControl].((vm:ConceptsViewModel)DataContext).Idle}"
-                                Command="{Binding $parent[ItemsControl].((vm:ConceptsViewModel)DataContext).RemoveSelectedTopicCommand}" CommandParameter="{Binding}" />
-                      </Grid>
-                    </DataTemplate>
-                  </ItemsControl.ItemTemplate>
-                </ItemsControl>
-              </ScrollViewer>
-            </Border>
-            <TextBlock Text="{DynamicResource topics.selected.over}" Classes="small warning" TextWrapping="Wrap" IsVisible="{Binding SelectedOver}" />
-            <Button Classes="link small" Content="{DynamicResource topics.selected.clear}" Command="{Binding ClearSelectedTopicsCommand}"
-                    IsEnabled="{Binding Idle}" HorizontalAlignment="Left" />
-          </StackPanel>
-        </Border>
-        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-          <TextBlock Text="{DynamicResource concepts.extra}" FontWeight="SemiBold" VerticalAlignment="Center" />
-          <views:HelpTip Text="{DynamicResource concepts.extra.hint}" />
+  <!-- 0.1.13 layout, made for 1280×720 and wider (down to 1024×600): the shared bar (models, fine-tuning, word check) on one line; the two
+       generate sections side by side (4 parts of the height); the concept list next to the detail panel (5 parts, the main working area).
+       While the detail panel edits a concept the sections fold away and the editor gets the whole height (ConceptsView.axaml.cs). Nothing
+       on the page scrolls as a whole: the topic list, the concept list and the concept's text scroll inside their own areas. An unfolded
+       bar line opens a panel over a dimmed page (the last children of the grid, drawn on top) instead of pushing it: at 720 px a pushed
+       page had no room left. A click on the dimmed page or Close folds it. -->
+  <Grid Name="PageGrid" RowDefinitions="Auto,4*,5*" RowSpacing="10" Margin="12,10">
+    <Border Name="PageBar" Classes="bar">
+      <Grid ColumnDefinitions="*,*,Auto" ColumnSpacing="12">
+        <views:ModelSummaryBar Name="ModelsBar" Picker="{Binding Settings.Picker}" IsOpen="{Binding Settings.ModelsOpen}" />
+        <views:FineTuneBar Name="FineTuneBar" Grid.Column="1" DataContext="{Binding Settings}" />
+        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+          <CheckBox Name="WordCheck" IsChecked="{Binding Settings.LocalCheck}" Content="{DynamicResource concepts.check.local}" MinHeight="0" />
+          <views:HelpTip Text="{DynamicResource concepts.check.hint}" />
         </StackPanel>
-        <TextBox Name="ExtraBox" Text="{Binding ExtraPrompt}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="90" MaxLength="1000"
-                 PlaceholderText="{DynamicResource concepts.extra.placeholder}" />
-        <!-- Only general choices (tone, audience, structure), folded: nothing here asks the user to know the subject. -->
-        <Expander Name="FineTune" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Margin="0,4,0,0">
-          <Expander.Header>
-            <StackPanel Orientation="Horizontal">
-              <TextBlock Text="{Binding FineTuneHeader}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="290" />
-              <views:HelpTip Text="{DynamicResource focus.hint}" />
-            </StackPanel>
-          </Expander.Header>
-          <ItemsControl ItemsSource="{Binding FocusRows}">
-            <ItemsControl.ItemTemplate>
-              <DataTemplate x:DataType="vm:FocusRowViewModel">
-                <Grid ColumnDefinitions="120,*" ColumnSpacing="8" Margin="0,2">
-                  <TextBlock Text="{Binding Title}" VerticalAlignment="Center" />
-                  <ComboBox Grid.Column="1" ItemsSource="{Binding Options}" SelectedItem="{Binding Selected}" HorizontalAlignment="Stretch">
-                    <ComboBox.ItemTemplate>
-                      <DataTemplate x:DataType="vm:ChoiceOption">
-                        <TextBlock Text="{Binding Label}" />
-                      </DataTemplate>
-                    </ComboBox.ItemTemplate>
-                  </ComboBox>
-                </Grid>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
-        </Expander>
-        <!-- The two duplicate checks on one line: by words (free, no model) and by meaning (a model picked right here). -->
-        <TextBlock Text="{DynamicResource concepts.check}" FontWeight="SemiBold" Margin="0,8,0,0" />
-        <Grid Name="CheckLine" ColumnDefinitions="Auto,Auto,16,Auto,*,Auto" ColumnSpacing="4">
-          <CheckBox IsChecked="{Binding LocalCheck}" Content="{DynamicResource concepts.check.local}" />
-          <views:HelpTip Grid.Column="1" Text="{DynamicResource concepts.check.hint}" Margin="0" />
-          <TextBlock Grid.Column="3" Text="{DynamicResource concepts.check.meaning}" VerticalAlignment="Center" />
-          <ComboBox Grid.Column="4" ItemsSource="{Binding Meaning.Options}" SelectedItem="{Binding Meaning.Selected}" HorizontalAlignment="Stretch" MinWidth="0"
-                    IsEnabled="{Binding !Picker.Busy}" ToolTip.Tip="{Binding Meaning.Note}">
-            <ComboBox.ItemTemplate>
-              <DataTemplate x:DataType="vm:StepOption">
-                <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
-              </DataTemplate>
-            </ComboBox.ItemTemplate>
-          </ComboBox>
-          <views:HelpTip Grid.Column="5" Text="{Binding Meaning.Purpose}" Margin="0" />
-        </Grid>
-        <TextBlock Text="{Binding Meaning.Note}" Classes="small warning" TextWrapping="Wrap" IsVisible="{Binding Meaning.NoteIsWarning, FallbackValue=False}" />
-        <!-- Folded; the title names the concept model. It opens by itself while no concept model is chosen. -->
-        <Expander Name="Models" IsExpanded="{Binding ModelsOpen}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Margin="0,8,0,0">
-          <Expander.Header>
-            <StackPanel Orientation="Horizontal">
-              <TextBlock Text="{Binding ModelsHeader}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="290" />
-              <views:HelpTip Text="{DynamicResource concepts.models.hint}" />
-            </StackPanel>
-          </Expander.Header>
-          <views:StepPickerView DataContext="{Binding Picker}" />
-        </Expander>
-      </StackPanel>
-    </ScrollViewer>
+      </Grid>
+    </Border>
 
-    <DockPanel Grid.Column="1">
-      <StackPanel DockPanel.Dock="Top" Spacing="8">
-        <Border Classes="card">
-          <StackPanel Spacing="4">
-            <TextBlock Text="{DynamicResource concepts.estimate.title}" FontWeight="SemiBold" />
-            <TextBlock Text="{Binding Estimate}" TextWrapping="Wrap" />
-            <TextBlock Text="{Binding LastCost}" Classes="ok" />
-            <TextBlock Text="{Binding PricedOn}" Classes="small" />
-          </StackPanel>
-        </Border>
-        <StackPanel Orientation="Horizontal" Spacing="8">
-          <Button Classes="accent big" Content="{DynamicResource concepts.generate}" Command="{Binding GenerateCommand}" IsEnabled="{Binding Idle}" />
-          <Button Content="{DynamicResource common.cancel}" Command="{Binding CancelCommand}" IsVisible="{Binding Busy}" />
-          <Button Content="{Binding FillMissingText}" Command="{Binding FillMissingCommand}" IsVisible="{Binding HasMissing}" />
-        </StackPanel>
-        <!-- Right under the buttons: why concepts are missing (a warning) and what went wrong (red). -->
-        <TextBlock Name="NoticeLine" Text="{Binding Notice}" Classes="warning" TextWrapping="Wrap"
-                   IsVisible="{Binding Notice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-        <TextBlock Name="StatusLine" Text="{Binding Status}" Classes="error" TextWrapping="Wrap"
-                   IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-        <!-- The running call step by step (sent, thinking with the seconds, writing, concepts ready), so a long wait does not look like a hang. -->
-        <StackPanel Spacing="4" IsVisible="{Binding Busy}">
-          <TextBlock Name="ProgressLine" Text="{Binding Progress}" Classes="muted" TextWrapping="Wrap" />
-          <ProgressBar IsIndeterminate="True" />
-        </StackPanel>
-        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-          <TextBlock Text="{Binding NewHeader}" Classes="h2" VerticalAlignment="Center" />
-          <views:HelpTip Text="{DynamicResource concepts.keys}" />
-        </StackPanel>
-      </StackPanel>
-      <Panel>
-      <!-- The text editor takes the list's place: title, summary, the text, the placeholders at the cursor, save or cancel. An AI edit's
-           result opens here too (with its cost), so it is checked before it is saved. -->
-      <Border Name="Editor" Classes="card" Padding="12" IsVisible="{Binding Editing}">
+    <Grid Name="Sections" Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="12">
+      <views:TopicSectionView Name="TopicSection" DataContext="{Binding Topics}" />
+      <views:IdeaSectionView Name="IdeaSection" Grid.Column="1" DataContext="{Binding Ideas}" />
+    </Grid>
+
+    <Grid Grid.Row="2" ColumnDefinitions="5*,6*" ColumnSpacing="12">
+      <Border Classes="card" Padding="10,8">
         <DockPanel>
-          <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,8">
-            <StackPanel Orientation="Horizontal">
-              <TextBlock Text="{Binding EditTitle}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="520" />
-              <views:HelpTip Text="{DynamicResource concepts.edit.hint}" />
+          <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*" ColumnSpacing="12" Margin="0,0,0,6">
+            <StackPanel Name="ListSwitch" Orientation="Horizontal">
+              <ToggleButton Name="NewSwitch" Classes="segment" Content="{Binding NewHeader}" IsChecked="{Binding ShowNew, Mode=OneWay}"
+                            Command="{Binding ShowNewListCommand}" />
+              <ToggleButton Name="ApprovedSwitch" Classes="segment" Content="{Binding ApprovedHeader}" IsChecked="{Binding ShowApproved, Mode=OneWay}"
+                            Command="{Binding ShowApprovedListCommand}" />
             </StackPanel>
-            <TextBlock Name="EditInfoLine" Text="{Binding EditInfo}" Classes="ok" TextWrapping="Wrap"
-                       IsVisible="{Binding EditInfo, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-            <TextBlock Name="EditNoticeLine" Text="{Binding EditNotice}" Classes="warning" TextWrapping="Wrap"
-                       IsVisible="{Binding EditNotice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="6">
-              <TextBlock Text="{DynamicResource concepts.edit.headline}" VerticalAlignment="Center" />
-              <TextBox Name="EditHeadlineBox" Grid.Column="1" Text="{Binding EditHeadline}" MaxLength="{Binding EditHeadlineMax}" />
-              <TextBlock Grid.Row="1" Text="{DynamicResource concepts.edit.summary}" VerticalAlignment="Center" />
-              <TextBox Name="EditSummaryBox" Grid.Row="1" Grid.Column="1" Text="{Binding EditSummary}" TextWrapping="Wrap" MaxLength="{Binding EditSummaryMax}" />
-            </Grid>
-          </StackPanel>
-          <StackPanel DockPanel.Dock="Bottom" Spacing="6" Margin="0,8,0,0">
-            <TextBlock Text="{Binding EditStatus}" Classes="error" TextWrapping="Wrap"
-                       IsVisible="{Binding EditStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-            <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
-              <views:MarkerPicker Target="{Binding #EditBox}" Markers="{Binding Placeholders}" />
-              <Button Grid.Column="1" Content="{DynamicResource concepts.ai.button}" ToolTip.Tip="{DynamicResource concepts.ai.tip}"
-                      Command="{Binding AiEditCommand}" CommandParameter="{Binding EditCard}" />
-              <Button Grid.Column="2" Classes="accent" Content="{DynamicResource common.save}" Command="{Binding SaveEditCommand}" />
-              <Button Grid.Column="3" Content="{DynamicResource common.cancel}" Command="{Binding CancelEditCommand}" />
-            </Grid>
-          </StackPanel>
-          <TextBox Name="EditBox" Text="{Binding EditText}" AcceptsReturn="True" TextWrapping="Wrap" MaxLength="{Binding EditMax}" />
+            <TextBox Name="ApprovedSearch" Grid.Column="1" Text="{Binding Search}" PlaceholderText="{DynamicResource common.search}"
+                     IsVisible="{Binding ShowApproved}" MinHeight="0" />
+          </Grid>
+          <TextBlock DockPanel.Dock="Bottom" Text="{Binding KeysText}" Classes="tiny" Margin="2,4,0,0" />
+          <Panel>
+            <ListBox x:Name="NewList" Classes="rows" ItemsSource="{Binding NewConcepts}" SelectedItem="{Binding SelectedNew}" KeyDown="OnListKeyDown"
+                     Background="Transparent" IsVisible="{Binding ShowNew}">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:ConceptCardViewModel">
+                  <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+                    <StackPanel VerticalAlignment="Center">
+                      <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
+                      <TextBlock Text="{Binding Summary}" Classes="small" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Text="{Binding Note}" Classes="small warning" TextTrimming="CharacterEllipsis" IsVisible="{Binding HasNote}" />
+                    </StackPanel>
+                    <Button Grid.Column="1" Classes="small accent" Content="{DynamicResource concepts.approve}" VerticalAlignment="Center"
+                            ToolTip.Tip="{DynamicResource concepts.approve.tip}"
+                            Command="{Binding $parent[ListBox].((vm:ConceptsViewModel)DataContext).ApproveRowCommand}" CommandParameter="{Binding}" />
+                    <Button Grid.Column="2" Classes="small danger" Content="{DynamicResource concepts.delete}" VerticalAlignment="Center"
+                            ToolTip.Tip="{DynamicResource concepts.delete.tip}"
+                            Command="{Binding $parent[ListBox].((vm:ConceptsViewModel)DataContext).TrashRowCommand}" CommandParameter="{Binding}" />
+                  </Grid>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <ListBox x:Name="ApprovedList" Classes="rows" ItemsSource="{Binding Approved}" SelectedItem="{Binding SelectedApproved}" KeyDown="OnListKeyDown"
+                     Background="Transparent" IsVisible="{Binding ShowApproved}">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:ConceptCardViewModel">
+                  <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+                    <StackPanel VerticalAlignment="Center">
+                      <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
+                      <TextBlock Text="{Binding Summary}" Classes="small" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <Button Grid.Column="1" Classes="small" Content="{DynamicResource concepts.unapprove}" VerticalAlignment="Center"
+                            Command="{Binding $parent[ListBox].((vm:ConceptsViewModel)DataContext).UnapproveRowCommand}" CommandParameter="{Binding}" />
+                    <Button Grid.Column="2" Classes="small danger" Content="{DynamicResource concepts.delete}" VerticalAlignment="Center"
+                            ToolTip.Tip="{DynamicResource concepts.delete.tip}"
+                            Command="{Binding $parent[ListBox].((vm:ConceptsViewModel)DataContext).TrashRowCommand}" CommandParameter="{Binding}" />
+                  </Grid>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <TextBlock Name="EmptyListLine" Text="{Binding EmptyText}" Classes="muted" TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center"
+                       VerticalAlignment="Center" Margin="12" IsHitTestVisible="False"
+                       IsVisible="{Binding EmptyText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+          </Panel>
         </DockPanel>
       </Border>
-      <!-- AI edit takes the list's place too: what should change, the estimate, the running call's steps, Send and Cancel. -->
-      <Border Name="AiEditor" Classes="card" Padding="12" IsVisible="{Binding AiEditing}" VerticalAlignment="Top">
-        <StackPanel Spacing="8">
-          <StackPanel Orientation="Horizontal">
-            <TextBlock Text="{Binding AiEditTitle}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="520" />
-            <views:HelpTip Text="{DynamicResource concepts.ai.hint}" />
-          </StackPanel>
-          <TextBlock Text="{DynamicResource concepts.ai.instruction}" />
-          <TextBox Name="AiInstructionBox" Text="{Binding AiInstruction}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="90"
-                   MaxLength="{Binding AiInstructionMax}" PlaceholderText="{DynamicResource concepts.ai.placeholder}" IsEnabled="{Binding AiEditIdle}" />
-          <TextBlock Text="{Binding AiEditPrice}" Classes="small" TextWrapping="Wrap" />
-          <StackPanel Spacing="4" IsVisible="{Binding AiEditRunning}">
-            <TextBlock Text="{Binding AiEditCall.Text}" TextWrapping="Wrap" />
-            <ProgressBar IsIndeterminate="True" />
-          </StackPanel>
-          <TextBlock Name="AiEditStatusLine" Text="{Binding AiEditStatus}" Classes="small" Classes.error="{Binding AiEditFailed}" TextWrapping="Wrap"
-                     IsVisible="{Binding AiEditStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-          <StackPanel Orientation="Horizontal" Spacing="8">
-            <Button Classes="accent" Content="{DynamicResource concepts.ai.send}" Command="{Binding SendAiEditCommand}" IsEnabled="{Binding AiEditIdle}" />
-            <Button Content="{DynamicResource common.cancel}" Command="{Binding CancelAiEditCommand}" />
-          </StackPanel>
-        </StackPanel>
-      </Border>
-      <ListBox x:Name="NewList" ItemsSource="{Binding NewConcepts}" SelectedItem="{Binding Selected}" KeyDown="OnListKeyDown" Background="Transparent"
-               IsVisible="{Binding Listing}">
-        <ListBox.ItemTemplate>
-          <DataTemplate x:DataType="vm:ConceptCardViewModel">
-            <Border Classes="card" Padding="12">
-              <StackPanel Spacing="4">
-                <!-- The actions are always shown (0.1.8 showed them only on the opened card, and the developer did not find them). -->
-                <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="6">
-                  <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                  <Button Grid.Column="1" Classes="small" Content="✨" ToolTip.Tip="{DynamicResource concepts.ai.tip}" VerticalAlignment="Top"
-                          Command="{Binding $parent[ListBox].((vm:ConceptsViewModel)DataContext).AiEditCommand}" CommandParameter="{Binding}" />
-                  <Button Grid.Column="2" Classes="small" Content="✎" ToolTip.Tip="{DynamicResource concepts.edit.tip}" VerticalAlignment="Top"
-                          Command="{Binding $parent[ListBox].((vm:ConceptsViewModel)DataContext).EditCommand}" CommandParameter="{Binding}" />
-                  <Button Grid.Column="3" Classes="small accent" Content="✓" ToolTip.Tip="{DynamicResource concepts.approve.tip}" VerticalAlignment="Top"
-                          Command="{Binding $parent[ListBox].((vm:ConceptsViewModel)DataContext).ApproveCommand}" CommandParameter="{Binding}" />
-                  <!-- 🗑 asks why (topic / telling / just delete): the prompts send the reason as a dislike. The key D or Delete = just delete. -->
-                  <Button Grid.Column="4" Classes="small danger" Content="🗑" ToolTip.Tip="{DynamicResource concepts.trash.tip}" VerticalAlignment="Top"
-                          Click="OnTrashClick" />
-                </Grid>
-                <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" Classes="muted" IsVisible="{Binding !Expanded}" />
-                <TextBlock Text="{Binding Note}" Classes="warning" IsVisible="{Binding HasNote}" TextWrapping="Wrap" />
-                <ItemsControl ItemsSource="{Binding Lines}" IsVisible="{Binding Expanded}">
-                  <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="vm:ContentLine">
-                      <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Margin="0,2" Classes.scene="{Binding IsScene}" />
-                    </DataTemplate>
-                  </ItemsControl.ItemTemplate>
-                </ItemsControl>
-              </StackPanel>
-            </Border>
-          </DataTemplate>
-        </ListBox.ItemTemplate>
-      </ListBox>
-      </Panel>
-    </DockPanel>
+      <views:ConceptDetailView Name="Detail" Grid.Column="1" DataContext="{Binding Detail}" />
+    </Grid>
 
-    <DockPanel Grid.Column="2">
-      <StackPanel DockPanel.Dock="Top" Spacing="8">
-        <TextBlock Text="{Binding ApprovedHeader}" Classes="h2" />
-        <TextBox Text="{Binding ApprovedSearch}" PlaceholderText="{DynamicResource common.search}" />
+    <Border Name="BarBackdrop" Grid.Row="1" Grid.RowSpan="2" Margin="-12,-10,-12,-10" Background="{DynamicResource tm-scrim}"
+            IsVisible="{Binding Settings.AnyOpen}" PointerPressed="OnBackdropPressed" />
+    <Border Name="BarPanel" Grid.Row="1" Grid.RowSpan="2" Classes="card" Padding="12,8" VerticalAlignment="Top" BoxShadow="{DynamicResource tm-shadow}"
+            IsVisible="{Binding Settings.AnyOpen}">
+      <StackPanel Spacing="6">
+        <Button Name="ClosePanelButton" Classes="small" Content="{DynamicResource common.close}" Command="{Binding Settings.ClosePanelCommand}"
+                HorizontalAlignment="Right" />
+        <views:StepPickerView Name="ModelPickers" DataContext="{Binding Settings.Picker}"
+                              IsVisible="{Binding $parent[UserControl].((vm:ConceptsViewModel)DataContext).Settings.ModelsOpen}" />
+        <ItemsControl Name="FineTuneRows" ItemsSource="{Binding Settings.FocusRows}" IsVisible="{Binding Settings.FineTuneOpen}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <UniformGrid Rows="1" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:FocusRowViewModel">
+              <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" Margin="0,4,16,4">
+                <TextBlock Text="{Binding Title}" VerticalAlignment="Center" />
+                <ComboBox Grid.Column="1" ItemsSource="{Binding Options}" SelectedItem="{Binding Selected}" HorizontalAlignment="Stretch">
+                  <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ChoiceOption">
+                      <TextBlock Text="{Binding Label}" />
+                    </DataTemplate>
+                  </ComboBox.ItemTemplate>
+                </ComboBox>
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
       </StackPanel>
-      <ListBox ItemsSource="{Binding Approved}" Background="Transparent" Margin="0,8,0,0">
-        <ListBox.ItemTemplate>
-          <DataTemplate x:DataType="vm:ConceptCardViewModel">
-            <!-- A click on the title opens the text in the editor (fix it, add placeholders); ✨ opens the AI edit. -->
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
-              <Button Classes="link" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                      Command="{Binding $parent[ListBox].((vm:ConceptsViewModel)DataContext).EditCommand}" CommandParameter="{Binding}">
-                <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis">
-                  <ToolTip.Tip>
-                    <StackPanel Spacing="4" MaxWidth="320">
-                      <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" />
-                      <TextBlock Text="{DynamicResource concepts.approved.tip}" FontWeight="SemiBold" />
-                    </StackPanel>
-                  </ToolTip.Tip>
-                </TextBlock>
-              </Button>
-              <Button Grid.Column="1" Classes="small" Content="✨" ToolTip.Tip="{DynamicResource concepts.approved.ai.tip}" VerticalAlignment="Center"
-                      Command="{Binding $parent[ListBox].((vm:ConceptsViewModel)DataContext).AiEditCommand}" CommandParameter="{Binding}" />
-            </Grid>
-          </DataTemplate>
-        </ListBox.ItemTemplate>
-      </ListBox>
-    </DockPanel>
+    </Border>
   </Grid>
 </UserControl>

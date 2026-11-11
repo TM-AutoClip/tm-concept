@@ -12,4 +12,10 @@ public sealed class UiPreferences
     /// memory and threads live in the app's process). A preferences file that says false keeps it off. Read at start.
     /// </summary>
     public bool UseGraphicsCard { get; set; } = true;
+
+    /// <summary>
+    /// Whether the activity log at the bottom of the main window is open. Folded by default since 0.1.13 (one line with the newest entry and
+    /// the running step; open it was a quarter of a 720-pixel window); the last choice is kept.
+    /// </summary>
+    public bool LogOpen { get; set; }
 }

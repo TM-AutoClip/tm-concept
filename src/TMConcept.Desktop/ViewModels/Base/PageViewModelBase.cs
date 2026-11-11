@@ -2,23 +2,20 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace TMConcept.Desktop.ViewModels;
 
-/// <summary>A page of the main window. The sidebar lists every registered page by <see cref="Order"/>.</summary>
+/// <summary>A page of the main window. The app bar shows every registered page as a tab, by <see cref="Order"/>.</summary>
 public abstract partial class PageViewModelBase : ObservableObject
 {
     /// <summary>Localization key of the title.</summary>
     public abstract string TitleKey { get; }
 
-    /// <summary>A single glyph shown before the title.</summary>
-    public abstract string Glyph { get; }
-
-    /// <summary>Position in the sidebar.</summary>
+    /// <summary>Position among the tabs (Settings, from <see cref="ShellViewModel.TabOrderMax"/> on, stands apart on the right).</summary>
     public abstract int Order { get; }
 
     /// <summary>Status line of the page.</summary>
     [ObservableProperty]
     public partial string Status { get; set; } = string.Empty;
 
-    /// <summary>A short badge next to the sidebar title (for example the trash count); empty = none.</summary>
+    /// <summary>A short badge next to the tab title (for example the trash count); empty = none.</summary>
     [ObservableProperty]
     public partial string Badge { get; set; } = string.Empty;
 
@@ -36,6 +33,12 @@ public abstract partial class PageViewModelBase : ObservableObject
 
     /// <summary>Called whenever the page is shown or the selected profile changes while it is shown (reload data here).</summary>
     public virtual Task ActivateAsync() => Task.CompletedTask;
+
+    /// <summary>
+    /// Asked before another page or another profile is opened: false keeps this page (it asked the user about unsaved changes and the user
+    /// stays). Pages without anything to lose say true.
+    /// </summary>
+    public virtual Task<bool> CanLeaveAsync() => Task.FromResult(true);
 
     /// <summary>Called when another page is opened (stop what only makes sense on screen, such as a playing video).</summary>
     public virtual void Deactivate()

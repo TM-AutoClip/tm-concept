@@ -168,6 +168,7 @@ public static class DesktopServices
         services.AddSingleton<IActivityLog>(s => s.GetRequiredService<ActivityLog>());
         services.AddSingleton<IActivityFeed>(s => s.GetRequiredService<ActivityLog>());
         services.AddSingleton<Work.WorkStatus>();
+        services.AddSingleton<Work.SpendingMeter>();
         services.AddSingleton<ToastNotifier>();
         services.AddSingleton<INotifier>(s => s.GetRequiredService<ToastNotifier>());
         services.AddSingleton<AppStartup>();
@@ -178,6 +179,15 @@ public static class DesktopServices
         // One set of model pickers per page that uses models (Generate concepts, Concept → video, Profile).
         services.AddTransient<StepPickerViewModel>();
         services.AddTransient<VersionEditorViewModel>();
+
+        // The concept page's parts: the page (a singleton) gets its own bar, runner, sections and detail panel; the status changes are one
+        // service for every page.
+        services.AddSingleton<Concepts.ConceptActions>();
+        services.AddTransient<Concepts.ConceptRunner>();
+        services.AddTransient<ConceptSettingsViewModel>();
+        services.AddTransient<TopicSectionViewModel>();
+        services.AddTransient<IdeaSectionViewModel>();
+        services.AddTransient<ConceptDetailViewModel>();
         services.AddSingleton<Dialogs.IApiKeyDialog, Dialogs.ApiKeyDialog>();
 
         services.AddSingleton<Dialogs.IConfirmDialog, Dialogs.ConfirmDialog>();
@@ -189,7 +199,14 @@ public static class DesktopServices
         services.AddSingleton<Func<ReportProblemViewModel>>(s => () => s.GetRequiredService<ReportProblemViewModel>());
         services.AddSingleton<Dialogs.IReportDialog, Dialogs.ReportDialog>();
         services.AddSingleton<Engines.Playback.FfmpegPlayback>();
+
+        // One player for the pages that show made videos (Concept → video, Produced): one page is on screen at a time and each closes it
+        // when it is left. The made-video rows and their files are one service for both; every running video gets its own stage list.
         services.AddSingleton<PlayerViewModel>();
+        services.AddSingleton<Videos.VideoRows>();
+        services.AddSingleton<Videos.VideoFiles>();
+        services.AddTransient<ProductionProgressViewModel>();
+        services.AddSingleton<Func<ProductionProgressViewModel>>(s => () => s.GetRequiredService<ProductionProgressViewModel>());
         AddPage<ConceptsViewModel, ConceptsView>(services);
         AddPage<VideoViewModel, VideoView>(services);
         AddPage<ProducedViewModel, ProducedView>(services);
@@ -205,7 +222,7 @@ public static class DesktopServices
         AddSection<AboutSettingsViewModel, AboutSettingsView>(services);
     }
 
-    /// <summary>Registers a page of the sidebar and its view.</summary>
+    /// <summary>Registers a page (a tab of the main window) and its view.</summary>
     internal static void AddPage<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TPage, TView>(IServiceCollection services)
         where TPage : PageViewModelBase
         where TView : Avalonia.Controls.Control, new()

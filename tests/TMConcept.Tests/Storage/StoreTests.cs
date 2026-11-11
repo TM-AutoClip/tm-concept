@@ -167,7 +167,7 @@ public sealed class StoreTests
     }
 
     [Fact]
-    public async Task TopicSuggestionsAreListedNewestFirstAndByStatusInSelectionOrder()
+    public async Task TopicSuggestionsAreListedNewestFirst()
     {
         var (h, p) = await WithProfileAsync();
         using var _ = h;
@@ -177,27 +177,11 @@ public sealed class StoreTests
             new TopicSuggestion { ProfileId = p.Id, Text = "Old", CreatedAtUtc = at.AddMinutes(-2) },
             new TopicSuggestion { ProfileId = p.Id, Text = "New", CreatedAtUtc = at },
         ], None);
+        await store.AddAsync([], None);
 
         (await store.ListAsync(p.Id, 10, None)).Select(s => s.Text).ShouldBe(["New", "Old"]);
         (await store.ListAsync(p.Id, 1, None)).Select(s => s.Text).ShouldBe(["New"]);
         (await store.ListAsync(Guid.NewGuid(), 10, None)).ShouldBeEmpty();
-
-        (await store.ListAsync(p.Id, 10, None)).ShouldAllBe(s => s.Status == TopicStatus.Offered, "a new suggestion is only offered");
-
-        var all = await store.ListAsync(p.Id, 10, None);
-        var press = Enumerable.Range(0, 3).Select(i => new TopicSuggestion { ProfileId = p.Id, Text = "Press " + i, CreatedAtUtc = at.AddMinutes(1).AddTicks(i) })
-            .ToList();
-        await store.AddAsync(press, None);
-        await store.SetStatusAsync([press[2].Id, press[0].Id, all.Single(s => s.Text == "Old").Id, Guid.NewGuid()], TopicStatus.Selected, None);
-        (await store.ListAsync(p.Id, TopicStatus.Selected, None)).Select(s => s.Text).ShouldBe(["Old", "Press 0", "Press 2"],
-            "oldest first: the order they were suggested in; an unknown id is skipped");
-        (await store.ListAsync(p.Id, TopicStatus.Offered, None)).Select(s => s.Text).ShouldBe(["New", "Press 1"]);
-
-        await store.SetStatusAsync([press[0].Id], TopicStatus.Made, None);
-        await store.SetStatusAsync([], TopicStatus.Made, None);
-        (await store.ListAsync(p.Id, TopicStatus.Selected, None)).Select(s => s.Text).ShouldBe(["Old", "Press 2"]);
-        (await store.ListAsync(p.Id, TopicStatus.Made, None)).Select(s => s.Text).ShouldBe(["Press 0"]);
-        (await store.ListAsync(Guid.NewGuid(), TopicStatus.Selected, None)).ShouldBeEmpty();
     }
 
     [Fact]

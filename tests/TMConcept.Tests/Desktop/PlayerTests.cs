@@ -131,7 +131,7 @@ public sealed class PlayerTests
     }
 
     /// <summary>An empty ffmpeg (and ffprobe) on a private search path, used as the "system copy" (no real decoding happens).</summary>
-    private static void PlaceholderFfmpeg(IServiceCollection services)
+    internal static void PlaceholderFfmpeg(IServiceCollection services)
     {
         services.AddSingleton(s =>
         {

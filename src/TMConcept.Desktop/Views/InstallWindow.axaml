@@ -5,7 +5,7 @@
         x:DataType="d:InstallViewModel"
         Title="{Binding Title}"
         Width="600" SizeToContent="Height" CanResize="False"
-        WindowStartupLocation="CenterOwner">
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
   <StackPanel Margin="24" Spacing="12">
     <TextBlock Text="{Binding Title}" Classes="h2" />
     <TextBlock Text="{DynamicResource install.window.hint}" Classes="small" TextWrapping="Wrap" />

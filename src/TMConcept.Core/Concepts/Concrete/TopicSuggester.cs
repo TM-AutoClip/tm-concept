@@ -15,9 +15,10 @@ namespace TMConcept.Core.Concepts;
 /// "Suggest topics" on the concept page: ONE call (no batching, also for 100 topics) to the cheap chat model of the profile's topics step
 /// with the prompt of <see cref="ConceptPromptBuilder.BuildTopics"/> (Prompts/&lt;lang&gt;/topics.txt: the channel content and format, the
 /// chosen fine-tuning, the profile's covered concepts and topic dislikes from <see cref="IPromptMemorySource"/>, the newest
-/// <see cref="PromptMemoryLimits.SuggestionsSent"/> topics it suggested before and the topics in the selected list: do not suggest them
-/// again); the answer is the asked number (<see cref="TopicLimits"/>, 5-100) of short topics in the interface language (the user reads and
-/// picks them; each selected topic later becomes one concept). The extra request is not sent (0.1.12): the old prompt told the model to
+/// <see cref="PromptMemoryLimits.SuggestionsSent"/> topics it suggested before: do not suggest them again); the answer is the asked number
+/// (<see cref="TopicLimits"/>, 5-100) of short topics in the interface language (the user reads and ticks them on the page; each ticked
+/// topic later becomes exactly one concept). The kept suggestions are only the profile's memory of what was already suggested: the tick
+/// list itself lives on the page (0.1.13 removed the 0.1.12 stored "selected" list). The extra request is not sent (0.1.12): the old prompt told the model to
 /// follow it even outside the channel's scope, and topics drifted away from the channel. The call is a run of its own (<see cref="RunKind.Topics"/>), so the month's spending counts it, also
 /// when it fails after being billed. It is meant to be cheap and quick: effort low (none for a model without effort levels; the user's
 /// effort choice is not used), streamed, cancelable, with room for thinking (0.1.7 gave it 1 500 tokens and Haiku 5.5 at effort high was
@@ -91,7 +92,7 @@ public sealed class TopicSuggester(IConceptStore concepts, ITopicSuggestionStore
 
     /// <summary>
     /// Asks for <paramref name="count"/> topics (kept within <see cref="TopicLimits"/>); <paramref name="progress"/> gets the call's steps
-    /// (sent, thinking, writing, done). The topics come back saved as <see cref="TopicStatus.Offered"/>.
+    /// (sent, thinking, writing, done). The topics come back already kept as the profile's suggestions, with their ids.
     /// </summary>
     public async Task<TopicSuggestions> SuggestAsync(Profile profile, ResolvedModel model, string focus, int count, string language,
         IProgress<ChatProgress>? progress, CancellationToken cancellationToken)
@@ -332,12 +333,12 @@ public sealed class TopicSuggester(IConceptStore concepts, ITopicSuggestionStore
     }
 
     /// <summary>
-    /// Saves the new topics as <see cref="TopicStatus.Offered"/> and gives them back with their ids (the page selects them by id). The
-    /// topics of one press are a tick apart, so the selected list (oldest first) keeps the answer's order.
+    /// Keeps the new topics as the profile's suggestions (so the next press does not bring them again) and gives them back with their ids.
+    /// The topics of one press are a tick apart, so they keep the answer's order.
     /// </summary>
     private async Task<IReadOnlyList<TopicSuggestion>> KeepSuggestionsAsync(Guid profileId, IReadOnlyList<string> topics, DateTimeOffset at)
     {
-        var rows = topics.Select((t, i) => new TopicSuggestion { ProfileId = profileId, Text = t, CreatedAtUtc = at.AddTicks(i), Status = TopicStatus.Offered })
+        var rows = topics.Select((t, i) => new TopicSuggestion { ProfileId = profileId, Text = t, CreatedAtUtc = at.AddTicks(i) })
             .ToList();
         try
         {
@@ -345,8 +346,7 @@ public sealed class TopicSuggester(IConceptStore concepts, ITopicSuggestionStore
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // The topics are shown anyway; only the next press would not know them. Selecting one later sets the status of a row that is
-            // not there: the store skips an unknown id, so the selection then lives only on the page.
+            // The topics are shown anyway; only the next press would not know them.
             logger.LogError(ex, "The topic suggestions could not be kept");
         }
 
@@ -354,8 +354,8 @@ public sealed class TopicSuggester(IConceptStore concepts, ITopicSuggestionStore
     }
 
     /// <summary>
-    /// The prompt, and the folded texts a new topic must not equal (every concept title of the profile and every earlier suggestion, the
-    /// selected ones too; the prompt sends only the newest suggestions, the selected list and the condensed history).
+    /// The prompt, and the folded texts a new topic must not equal (every concept title of the profile and every earlier suggestion; the
+    /// prompt sends only the newest suggestions and the condensed history).
     /// </summary>
     private async Task<(string System, string User, HashSet<string> Earlier)> PromptAsync(Profile profile, string focus, int count,
         string language, CancellationToken cancellationToken)
@@ -366,13 +366,8 @@ public sealed class TopicSuggester(IConceptStore concepts, ITopicSuggestionStore
         var earlier = all.Select(c => TurkishFold.Fold(c.Title)).Concat(suggested.Select(s => TurkishFold.Fold(s.Text))).Where(t => t.Length > 0)
             .ToHashSet(StringComparer.Ordinal);
         var past = await memory.ReadAsync(profile, cancellationToken).ConfigureAwait(false);
-        // The selected topics go in their own block (oldest first, the list's order), so they are not listed twice. Read from the rows
-        // already loaded, ordered like ITopicSuggestionStore.ListAsync(profile, status).
-        var selected = suggested.Where(s => s.Status == TopicStatus.Selected).OrderBy(s => s.CreatedAtUtc).ThenBy(s => s.Id)
-            .Take(PromptMemoryLimits.SuggestionsSent).Select(s => s.Text).ToList();
         var prompt = ConceptPromptBuilder.BuildTopics(new TopicPromptInput(profile, language, focus ?? string.Empty, past,
-            suggested.Where(s => s.Status != TopicStatus.Selected).Take(PromptMemoryLimits.SuggestionsSent).Select(s => s.Text).ToList(), selected,
-            count));
+            suggested.Take(PromptMemoryLimits.SuggestionsSent).Select(s => s.Text).ToList(), count));
         return (prompt.System, prompt.User, earlier);
     }
 }

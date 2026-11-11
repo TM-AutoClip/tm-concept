@@ -1,9 +1,9 @@
 namespace TMConcept.Core.Concepts;
 
 /// <summary>
-/// A topic "Suggest topics" once brought for a profile. Every one is kept (deleted with its profile), so the next press can tell the model
-/// what it already suggested and drop a repeat locally (the developer, 10 Nov 2026: "could it ask the same ones again every time?"). Its
-/// <see cref="Status"/> tells whether the user picked it into the selected list and whether a concept was written for it.
+/// A topic "Suggest topics" once brought for a profile. Every one is kept (deleted with its profile) only as memory, so the next press can
+/// tell the model what it already suggested and drop a repeat locally (the developer, 10 Nov 2026: "could it ask the same ones again every
+/// time?"). Which topics are ticked lives on the concept page only (0.1.13).
 /// </summary>
 public sealed class TopicSuggestion
 {
@@ -18,7 +18,4 @@ public sealed class TopicSuggestion
 
     /// <summary>When it was suggested (UTC; the topics of one press follow each other by a tick, so they keep the answer's order).</summary>
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
-
-    /// <summary>Offered, selected or made into a concept.</summary>
-    public TopicStatus Status { get; set; }
 }

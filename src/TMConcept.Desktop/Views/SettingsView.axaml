@@ -5,7 +5,7 @@
              x:DataType="vm:SettingsViewModel">
   <DockPanel Margin="24">
     <TextBlock DockPanel.Dock="Top" Text="{DynamicResource nav.settings}" Classes="h1" Margin="0,0,0,12" />
-    <TabControl ItemsSource="{Binding Sections}" SelectedItem="{Binding SelectedSection}">
+    <TabControl Classes="inner" ItemsSource="{Binding Sections}" SelectedItem="{Binding SelectedSection}">
       <TabControl.ItemTemplate>
         <DataTemplate x:DataType="vm:SettingsSectionBase">
           <TextBlock Text="{Binding Title}" />

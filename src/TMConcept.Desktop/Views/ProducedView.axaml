@@ -3,15 +3,17 @@
              xmlns:vm="using:TMConcept.Desktop.ViewModels"
              xmlns:c="using:TMConcept.Desktop.Converters"
              xmlns:v="using:TMConcept.Desktop.Views"
+             xmlns:controls="using:TMConcept.Desktop.Controls"
              x:Class="TMConcept.Desktop.Views.ProducedView"
              x:DataType="vm:ProducedViewModel">
-  <!-- The list is narrow, the details take the rest of the width (0.1.6: the list had it all and the details 420 px). -->
+  <!-- The list is narrow, the details take the rest of the width (0.1.6: the list had it all and the details 420 px). In the details the
+       player with its buttons stands beside the tabs (narration, concept, details, new version) when the card is wide, over them when it
+       is narrow; each side scrolls on its own, so the player and its buttons stay in sight while the tabs are read. -->
   <Grid ColumnDefinitions="300,16,*" Margin="16">
     <DockPanel>
       <StackPanel DockPanel.Dock="Top" Spacing="8">
         <TextBlock Text="{DynamicResource nav.produced}" Classes="h1" />
         <TextBox Text="{Binding Search}" PlaceholderText="{DynamicResource common.search}" />
-        <TextBlock Text="{Binding Spending}" Classes="small" TextWrapping="Wrap" />
         <TextBlock Text="{Binding Status}" Classes="error" TextWrapping="Wrap" />
       </StackPanel>
       <ListBox ItemsSource="{Binding Items}" SelectedItem="{Binding Selected}" Background="Transparent" Margin="0,8,0,0">
@@ -32,7 +34,8 @@
       </ListBox>
     </DockPanel>
     <Border Grid.Column="2" Classes="card" IsVisible="{Binding HasSelection}" VerticalAlignment="Stretch">
-      <ScrollViewer>
+      <controls:AdaptiveSplitPanel Name="DetailSplit" Breakpoint="820" Ratio="0.5" StackedRatio="0.55" Spacing="16">
+      <ScrollViewer HorizontalScrollBarVisibility="Disabled">
         <StackPanel Spacing="10">
           <TextBlock Text="{Binding Selected.Title}" Classes="h2" TextWrapping="Wrap" />
           <!-- The versions of the video (v1, v2…): the chosen one plays, its texts and details show, a new version starts from it. -->
@@ -51,13 +54,16 @@
               </ListBox.ItemTemplate>
             </ListBox>
           </StackPanel>
-          <v:VideoPlayerView DataContext="{Binding Player}" Height="400" />
+          <v:VideoPlayerView Name="Player" DataContext="{Binding Player}" />
           <WrapPanel>
             <Button Content="{DynamicResource produced.play}" Command="{Binding PlayCommand}" Margin="0,0,8,8" />
             <Button Content="{DynamicResource produced.folder}" Command="{Binding OpenFolderCommand}" Margin="0,0,8,8" />
             <Button Content="{DynamicResource produced.again}" Command="{Binding ProduceAgainCommand}" Margin="0,0,8,8" />
             <Button Classes="danger" Content="{DynamicResource common.delete}" Command="{Binding DeleteCommand}" Margin="0,0,8,8" />
           </WrapPanel>
+        </StackPanel>
+      </ScrollViewer>
+      <ScrollViewer HorizontalScrollBarVisibility="Disabled">
           <TabControl Classes="inner">
             <TabItem Header="{DynamicResource produced.tab.narration}">
               <StackPanel Spacing="10" Margin="0,8,0,0">
@@ -131,9 +137,8 @@
                       </StackPanel>
                     </StackPanel>
                   </Border>
-                  <StackPanel Spacing="4" IsVisible="{Binding Busy}">
-                    <ProgressBar Value="{Binding Percent}" Maximum="100" />
-                    <TextBlock Text="{Binding Step}" Classes="small" />
+                  <StackPanel Spacing="6" IsVisible="{Binding Busy}">
+                    <v:ProductionStagesView Name="VersionStages" DataContext="{Binding Progress}" />
                     <Button Content="{DynamicResource common.cancel}" Command="{Binding CancelCommand}" />
                   </StackPanel>
                 </StackPanel>
@@ -141,8 +146,8 @@
               </Panel>
             </TabItem>
           </TabControl>
-        </StackPanel>
       </ScrollViewer>
+      </controls:AdaptiveSplitPanel>
     </Border>
   </Grid>
 </UserControl>

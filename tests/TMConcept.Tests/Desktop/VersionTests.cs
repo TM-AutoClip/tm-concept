@@ -226,6 +226,12 @@ public sealed class VersionTests
         }
 
         editor.Status.ShouldContain("v2");
+
+        // The version's steps were shown as a video's are: a new voice that is off renders the kept code, so no code call and no narration.
+        editor.Progress.Running.ShouldBeFalse();
+        editor.Progress.Stages.Where(s => s.Code is VideoSteps.Code or VideoSteps.Speech or VideoSteps.Images).ShouldAllBe(s => s.State == StageState.Skipped);
+        editor.Progress.Stages.Single(s => s.Code == VideoSteps.Render).State.ShouldBe(StageState.Done);
+        editor.Progress.SpentUsd.ShouldBe(0);
         page.Items.Count.ShouldBe(1, "one row per video");
         page.Versions.Select(v => v.Version).ShouldBe([1, 2]);
         page.SelectedVersion!.Version.ShouldBe(2, "the new version is shown");

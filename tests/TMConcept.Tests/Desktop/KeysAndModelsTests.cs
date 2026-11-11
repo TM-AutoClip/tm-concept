@@ -83,22 +83,22 @@ public sealed class KeysAndModelsTests
         var page = h.Get<ConceptsViewModel>();
         await page.ActivateAsync();
 
-        page.Picker.Rows.Select(r => r.Step.Code).ShouldBe(PipelineSteps.ConceptPage);
-        page.Picker.Rows.ShouldAllBe(r => r.Selected!.Model == null, "nothing paid is chosen for a new profile");
-        page.Picker.Rows.ShouldAllBe(r => r.Recommended.Length > 0);
-        var concepts = page.Picker.Row(PipelineSteps.Concepts)!;
+        page.Settings.Picker.Rows.Select(r => r.Step.Code).ShouldBe(PipelineSteps.ConceptPage);
+        page.Settings.Picker.Rows.ShouldAllBe(r => r.Selected!.Model == null, "nothing paid is chosen for a new profile");
+        page.Settings.Picker.Rows.ShouldAllBe(r => r.Recommended.Length > 0);
+        var concepts = page.Settings.Picker.Row(PipelineSteps.Concepts)!;
         concepts.Selected = concepts.Options.First(o => o.Model?.Id == "claude-haiku-5-5");
-        page.Count = 3;
-        await page.GenerateAsync();
+        page.Ideas.Count = 3;
+        await page.Ideas.GenerateAsync();
         fake.Requests.Count.ShouldBe(1);
 
         // Saved when the process started: the other profile has its own (none), the first one gets its model back.
         await session.SelectProfileAsync(second, CancellationToken.None);
         await page.ProfileChangedAsync();
-        page.Picker.Row(PipelineSteps.Concepts)!.Selected!.Model.ShouldBeNull();
+        page.Settings.Picker.Row(PipelineSteps.Concepts)!.Selected!.Model.ShouldBeNull();
         await session.SelectProfileAsync(first, CancellationToken.None);
         await page.ProfileChangedAsync();
-        page.Picker.Row(PipelineSteps.Concepts)!.Selected!.Model!.Id.ShouldBe("claude-haiku-5-5");
+        page.Settings.Picker.Row(PipelineSteps.Concepts)!.Selected!.Model!.Id.ShouldBe("claude-haiku-5-5");
         (await h.Get<IStepModelStore>().GetAsync(PipelineSteps.Concepts, second.Id, CancellationToken.None)).ShouldBeNull();
     }
 
@@ -148,21 +148,21 @@ public sealed class KeysAndModelsTests
         await h.Get<AppSession>().SelectProfileAsync(profile, CancellationToken.None);
         var page = h.Get<ConceptsViewModel>();
         await page.ActivateAsync();
-        var row = page.Picker.Row(PipelineSteps.Concepts)!;
+        var row = page.Settings.Picker.Row(PipelineSteps.Concepts)!;
         row.Selected = row.Options.First(o => o.Model?.Provider == "openai" && o.Model.Capabilities.HasFlag(ModelCapability.Chat));
-        page.Count = 2;
+        page.Ideas.Count = 2;
 
         // No key and the dialog closed without one: nothing is sent, the reason names the provider, the choice is not stored.
-        await page.GenerateAsync();
+        await page.Ideas.GenerateAsync();
         dialog!.Asked.ShouldBe(["openai"]);
         fake.Requests.ShouldBeEmpty();
-        page.Status.ShouldContain("openai");
+        page.Ideas.Status.ShouldContain("openai");
         row.NoteIsWarning.ShouldBeTrue();
         (await h.Get<IStepModelStore>().GetAsync(PipelineSteps.Concepts, profile.Id, CancellationToken.None)).ShouldBeNull();
 
         // A working key is added in the dialog: the same press goes on.
         dialog.Secret = Secret;
-        await page.GenerateAsync();
+        await page.Ideas.GenerateAsync();
         fake.Requests.Count.ShouldBe(1);
         fake.KeysUsed.ShouldBe([Secret]);
         (await h.Get<IStepModelStore>().GetAsync(PipelineSteps.Concepts, profile.Id, CancellationToken.None))!.Provider.ShouldBe("openai");
@@ -207,16 +207,16 @@ public sealed class KeysAndModelsTests
         await h.Get<AppSession>().SelectProfileAsync(profile, CancellationToken.None);
         var page = h.Get<ConceptsViewModel>();
         await page.ActivateAsync();
-        var row = page.Picker.Row(PipelineSteps.Concepts)!;
+        var row = page.Settings.Picker.Row(PipelineSteps.Concepts)!;
         row.Selected = row.Options.First(o => o.Model?.Provider == "openai" && o.Model.Capabilities.HasFlag(ModelCapability.Chat));
-        page.Count = 2;
+        page.Ideas.Count = 2;
 
-        await page.GenerateAsync();
+        await page.Ideas.GenerateAsync();
 
         fake.Requests.Single().Uri.Host.ShouldBe("api.openai.com");
         dialog!.Asked.ShouldBe(["openai"]);
         chat.Requests.ShouldBeEmpty();
-        page.Status.ShouldContain("openai");
+        page.Ideas.Status.ShouldContain("openai");
     }
 
     [AvaloniaFact]

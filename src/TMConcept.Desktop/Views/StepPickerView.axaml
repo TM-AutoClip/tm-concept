@@ -6,7 +6,7 @@
              x:DataType="vm:StepPickerViewModel">
   <StackPanel Spacing="6">
     <!-- Locked while a process is prepared (keys, installs): what is saved is what the rows showed when it started. -->
-    <ItemsControl ItemsSource="{Binding Cards}" IsEnabled="{Binding !Busy}">
+    <ItemsControl ItemsSource="{Binding Rows}" IsEnabled="{Binding !Busy}">
       <ItemsControl.ItemsPanel>
         <ItemsPanelTemplate>
           <UniformGrid Columns="{Binding $parent[ItemsControl].((vm:StepPickerViewModel)DataContext).Columns}" />

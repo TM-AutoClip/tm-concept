@@ -26,9 +26,11 @@ namespace TMConcept.Core.Videos;
 public sealed class VideoRemaker(IEnumerable<IVideoEngine> engines, SceneNarrator narrator, VideoAssembler assembler, IAppPaths paths,
     ILogger<VideoRemaker> logger)
 {
-    private static readonly (string Step, double Weight)[] RevoiceWeights = [("prepare", 2), ("speech", 30), ("timing", 1), ("render", 55), ("mux", 10), ("save", 2)];
+    private static readonly (string Step, double Weight)[] RevoiceWeights =
+        [(VideoSteps.Prepare, 2), (VideoSteps.Speech, 30), (VideoSteps.Timing, 1), (VideoSteps.Render, 55), (VideoSteps.Mux, 10), (VideoSteps.Save, 2)];
 
-    private static readonly (string Step, double Weight)[] RecodeWeights = [("prepare", 2), ("code", 25), ("render", 60), ("mux", 10), ("save", 3)];
+    private static readonly (string Step, double Weight)[] RecodeWeights =
+        [(VideoSteps.Prepare, 2), (VideoSteps.Code, 25), (VideoSteps.Render, 60), (VideoSteps.Mux, 10), (VideoSteps.Save, 3)];
 
     /// <summary>
     /// What a new version starts from: the version's folder, its engine (from its settings), the kept code and <c>input.json</c>. A version
@@ -70,16 +72,15 @@ public sealed class VideoRemaker(IEnumerable<IVideoEngine> engines, SceneNarrato
         var watch = Stopwatch.StartNew();
         var work = assembler.WorkFolder(id);
         var target = new VersionTarget();
-        var spent = new List<VideoCost>();
         var voice = job.Voice;
-        var steps = new VideoStepProgress(RevoiceWeights.Where(w => w.Step != "speech" || voice is not null).ToList(), progress);
+        var steps = new VideoStepProgress(RevoiceWeights.Where(w => w.Step != VideoSteps.Speech || voice is not null).ToList(), progress);
         logger.LogInformation("New version {Id} with a new voice started: {Engine}, voice {Voice}", id, source.Engine.Name,
             voice is null ? "off" : voice.Model.Provider + "/" + voice.Model.Id);
-        return await assembler.GuardAsync(job.Profile.Id, voice?.Online, work, target, spent, watch, async () =>
+        return await assembler.GuardAsync(job.Profile.Id, voice?.Online, work, target, steps, watch, async () =>
         {
-            steps.Report("prepare", 0);
+            steps.Report(VideoSteps.Prepare, 0);
             VideoAssembler.CopyProject(Path.Combine(source.Folder, VideoFolders.Source), Path.Combine(work, "project"));
-            steps.Finish("prepare");
+            steps.Finish(VideoSteps.Prepare);
 
             var warnings = new List<string>();
             var clips = new List<SpeechClip?>();
@@ -91,13 +92,15 @@ public sealed class VideoRemaker(IEnumerable<IVideoEngine> engines, SceneNarrato
             else
             {
                 var skipped = 0;
-                for (var i = 0; i < input.Scenes.Count; i++)
+                var count = input.Scenes.Count;
+                steps.Report(VideoSteps.Speech, 0, done: 0, total: count);
+                for (var i = 0; i < count; i++)
                 {
-                    var (clip, words) = await SceneVoiceAsync(voice, job.Profile.ContentLanguage, i + 1, job.SceneTexts[i], work, spent, id, cancellationToken)
+                    var (clip, words) = await SceneVoiceAsync(voice, job.Profile.ContentLanguage, i + 1, job.SceneTexts[i], work, steps, id, cancellationToken)
                         .ConfigureAwait(false);
                     skipped += words;
                     clips.Add(clip);
-                    steps.Report("speech", (i + 1.0) / input.Scenes.Count);
+                    steps.Report(VideoSteps.Speech, (i + 1.0) / count, done: i + 1, total: count);
                 }
 
                 warnings.Add(VideoWarnings.AiVoice);
@@ -107,10 +110,11 @@ public sealed class VideoRemaker(IEnumerable<IVideoEngine> engines, SceneNarrato
                     logger.LogWarning("The voice left out {Count} words it does not know; the subtitles still show them", skipped);
                 }
 
-                steps.Finish("speech");
+                steps.Finish(VideoSteps.Speech);
             }
 
             // C. timing: each scene lasts as long as its new clip (pauses included); a silent scene as long as its text takes to say.
+            steps.Report(VideoSteps.Timing, 0);
             var sources = input.Scenes.Select((s, i) =>
             {
                 var script = job.SceneTexts[i];
@@ -118,7 +122,7 @@ public sealed class VideoRemaker(IEnumerable<IVideoEngine> engines, SceneNarrato
                 return new RenderSceneSource(s.Visual, spoken, s.Image, clips[i]?.DurationMs ?? SilentMs(script, input.Language), MarkerText.Transition(script));
             }).ToList();
             var timed = RenderInputBuilder.Build(input.Title, input.Language, sources, input.Width, input.Height, input.Fps, input.Theme);
-            steps.Finish("timing");
+            steps.Finish(VideoSteps.Timing);
 
             var rendered = await assembler.RenderKeptAsync(source.Engine, source.Code, timed, work, steps, cancellationToken).ConfigureAwait(false);
             var options = Options(source.Record);
@@ -127,7 +131,7 @@ public sealed class VideoRemaker(IEnumerable<IVideoEngine> engines, SceneNarrato
             var record = await assembler.SaveAsync(new VersionSave(id, job.Profile, source.Record.ConceptId, source.Record.Title, work, rendered, clips, target,
                 VersionFolders.Next(Path.GetDirectoryName(source.Folder)!), options, source.Engine.Name, source.Record.CodeModel,
                 voice is null ? string.Empty : voice.Model.Provider + "/" + voice.Model.Id + ":" + voice.Voice, source.Record.ImageModel, source.Record.PromptVersion,
-                warnings, spent, [], watch) { Script = job.SceneTexts }, steps, cancellationToken).ConfigureAwait(false);
+                warnings, steps.Spent, [], watch) { Script = job.SceneTexts }, steps, cancellationToken).ConfigureAwait(false);
             logger.LogInformation("New version {Id} made in {Seconds:0} s with the kept code ({Usd} USD for the voice)", id, watch.Elapsed.TotalSeconds,
                 record.TotalUsd);
             assembler.TryDelete(work);
@@ -149,20 +153,19 @@ public sealed class VideoRemaker(IEnumerable<IVideoEngine> engines, SceneNarrato
         var watch = Stopwatch.StartNew();
         var work = assembler.WorkFolder(id);
         var target = new VersionTarget();
-        var spent = new List<VideoCost>();
         var steps = new VideoStepProgress(RecodeWeights, progress);
         logger.LogInformation("New version {Id} for {Engine} started (code model {Provider}/{Model})", id, job.Engine.Name, job.CodeModel.Model.Provider,
             job.CodeModel.Model.Id);
-        return await assembler.GuardAsync(job.Profile.Id, job.CodeModel, work, target, spent, watch, async () =>
+        return await assembler.GuardAsync(job.Profile.Id, job.CodeModel, work, target, steps, watch, async () =>
         {
-            steps.Report("prepare", 0);
+            steps.Report(VideoSteps.Prepare, 0);
             PlaceImages(source, Path.Combine(work, "project"));
             var clips = input.Scenes.Select(s => VersionFolders.Clip(source.Folder, s.Number))
                 .Select(f => File.Exists(f) ? new SpeechClip(f, WaveFile.DurationMs(f), 0, 0, "kept") : null).ToList();
-            steps.Finish("prepare");
+            steps.Finish(VideoSteps.Prepare);
 
             var options = Options(source.Record);
-            var rendered = await assembler.CodeAndRenderAsync(job.Engine, job.CodeModel, options.Subtitles, input, work, spent, id, steps, cancellationToken)
+            var rendered = await assembler.CodeAndRenderAsync(job.Engine, job.CodeModel, options.Subtitles, input, work, id, steps, cancellationToken)
                 .ConfigureAwait(false);
             var warnings = source.Record.Warnings.Split(',', StringSplitOptions.RemoveEmptyEntries).Where(w => w != VideoWarnings.Repaired).ToList();
             if (rendered.Repaired)
@@ -175,7 +178,7 @@ public sealed class VideoRemaker(IEnumerable<IVideoEngine> engines, SceneNarrato
             options.CodeModel = job.CodeModel.Model.Id;
             var record = await assembler.SaveAsync(new VersionSave(id, job.Profile, source.Record.ConceptId, source.Record.Title, work, rendered, clips, target,
                 VersionFolders.Next(Path.GetDirectoryName(source.Folder)!), options, job.Engine.Name, job.CodeModel.Model.Provider + "/" + job.CodeModel.Model.Id,
-                source.Record.SpeechModel, source.Record.ImageModel, VideoCodePrompt.Version, warnings, spent, [], watch) { Script = source.Texts }, steps,
+                source.Record.SpeechModel, source.Record.ImageModel, VideoCodePrompt.Version, warnings, steps.Spent, [], watch) { Script = source.Texts }, steps,
                 cancellationToken).ConfigureAwait(false);
             logger.LogInformation("New version {Id} for {Engine} made in {Seconds:0} s ({Usd} USD)", id, job.Engine.Name, watch.Elapsed.TotalSeconds, record.TotalUsd);
             assembler.TryDelete(work);
@@ -239,9 +242,9 @@ public sealed class VideoRemaker(IEnumerable<IVideoEngine> engines, SceneNarrato
         return marker is null || transition.Length == 0 ? text : (marker.TokenOf(language) + " " + text).TrimEnd();
     }
 
-    /// <summary>One scene's new clip (<see cref="SceneNarrator"/>), with what it cost in <paramref name="spent"/>; a voice that fails stops the version.</summary>
+    /// <summary>One scene's new clip (<see cref="SceneNarrator"/>), with what it cost spent in <paramref name="steps"/>; a voice that fails stops the version.</summary>
     private async Task<(SpeechClip? Clip, int Skipped)> SceneVoiceAsync(SpeechSetup voice, string language, int number, string text, string work,
-        List<VideoCost> spent, Guid id, CancellationToken cancellationToken)
+        VideoStepProgress steps, Guid id, CancellationToken cancellationToken)
     {
         decimal cost = 0;
         try
@@ -259,7 +262,7 @@ public sealed class VideoRemaker(IEnumerable<IVideoEngine> engines, SceneNarrato
             // Online parts made before a failure (or a cancel) were paid for: counted either way.
             if (cost > 0)
             {
-                spent.Add(new VideoCost { VideoId = id, Step = PipelineSteps.Speech, Usd = cost, Exact = false });
+                steps.Spend(new VideoCost { VideoId = id, Step = PipelineSteps.Speech, Usd = cost, Exact = false });
             }
         }
     }

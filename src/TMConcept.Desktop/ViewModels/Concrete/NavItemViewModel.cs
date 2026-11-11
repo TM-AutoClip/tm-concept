@@ -3,7 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace TMConcept.Desktop.ViewModels;
 
-/// <summary>A sidebar entry.</summary>
+/// <summary>A tab of the main window's app bar (a page).</summary>
 public sealed partial class NavItemViewModel(ShellViewModel shell, PageViewModelBase page) : ObservableObject
 {
     /// <summary>Page.</summary>
@@ -12,9 +12,6 @@ public sealed partial class NavItemViewModel(ShellViewModel shell, PageViewModel
     /// <summary>Title in the current language.</summary>
     [ObservableProperty]
     public partial string Title { get; set; } = string.Empty;
-
-    /// <summary>Glyph.</summary>
-    public string Glyph => Page.Glyph;
 
     /// <summary>Whether this page is shown.</summary>
     [ObservableProperty]

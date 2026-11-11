@@ -1,0 +1,25 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:TMConcept.Desktop.ViewModels"
+             x:Class="TMConcept.Desktop.Views.ConceptSectionFooter"
+             x:DataType="vm:ConceptSectionBase">
+  <!-- The foot both generate sections share: the section's button with its tiny estimate, why it is off, Cancel while it runs, the running
+       call in one line and the last run's status (red on an error, yellow on a cut or a cancel). -->
+  <StackPanel Spacing="4">
+    <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="8">
+      <Button Name="GenerateButton" Classes="accent" Content="{Binding GenerateText}" Command="{Binding GenerateCommand}" IsEnabled="{Binding CanGenerate}" />
+      <TextBlock Name="EstimateLine" Grid.Column="1" Text="{Binding Estimate}" Classes="tiny" VerticalAlignment="Center" ToolTip.Tip="{Binding EstimateDetail}" />
+      <TextBlock Name="BlockedLine" Grid.Column="2" Text="{Binding Blocked}" Classes="small" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                 IsVisible="{Binding IsBlocked}" ToolTip.Tip="{Binding Blocked}" />
+      <Button Name="CancelButton" Grid.Column="3" Classes="small" Content="{DynamicResource common.cancel}" Command="{Binding CancelCommand}"
+              IsVisible="{Binding Running}" />
+    </Grid>
+    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" IsVisible="{Binding Running}">
+      <ProgressBar IsIndeterminate="True" Width="48" MinWidth="48" VerticalAlignment="Center" />
+      <TextBlock Name="ProgressLine" Grid.Column="1" Text="{Binding Progress}" Classes="small" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Progress}" />
+    </Grid>
+    <TextBlock Name="StatusLine" Text="{Binding Status}" Classes="small" Classes.error="{Binding StatusIsError}" Classes.warning="{Binding StatusIsWarning}"
+               TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Status}"
+               IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+  </StackPanel>
+</UserControl>

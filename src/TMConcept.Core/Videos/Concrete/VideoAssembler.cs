@@ -33,12 +33,13 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
     public static int Workers() => Math.Clamp(Environment.ProcessorCount - 2, 1, 8);
 
     /// <summary>
-    /// E + F: the video code from <paramref name="codeModel"/> for <paramref name="input"/> (paid; every call is in <paramref name="spent"/>,
-    /// also a cut-off one), written into <c>&lt;work&gt;/project</c> after the safety check (a rejected code gets one repair), then the render
-    /// (a failed render gets one repair with its error text, unless the code was repaired already).
+    /// E + F: the video code from <paramref name="codeModel"/> for <paramref name="input"/> (paid; every call is spent in
+    /// <paramref name="steps"/>, also a cut-off one; the call's phase and tokens are reported while it streams), written into
+    /// <c>&lt;work&gt;/project</c> after the safety check (a rejected code gets one repair), then the render (a failed render gets one repair with
+    /// its error text, unless the code was repaired already).
     /// </summary>
     public async Task<RenderOutcome> CodeAndRenderAsync(IVideoEngine engine, ResolvedModel codeModel, bool subtitles, RenderInput input, string work,
-        List<VideoCost> spent, Guid id, VideoStepProgress steps, CancellationToken cancellationToken)
+        Guid id, VideoStepProgress steps, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(codeModel);
@@ -46,8 +47,8 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         var chat = chats.Create(codeModel.Model, codeModel.Key.Secret);
         var system = VideoCodePrompt.System(engine, subtitles);
         var repaired = false;
-        steps.Report("code", 0.1);
-        var code = await CodeAsync(chat, codeModel, system, VideoCodePrompt.User(input), spent, id, cancellationToken).ConfigureAwait(false);
+        steps.Report(VideoSteps.Code, 0.1);
+        var code = await CodeAsync(chat, codeModel, system, VideoCodePrompt.User(input), steps, id, cancellationToken).ConfigureAwait(false);
         var request = new EngineRenderRequest(Path.Combine(work, "project"), code, input, Path.Combine(work, "silent.mp4"), Workers());
         try
         {
@@ -57,7 +58,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         {
             await File.WriteAllTextAsync(Path.Combine(work, Rejected + "1.txt"), code, cancellationToken).ConfigureAwait(false);
             logger.LogWarning("The video code was rejected; asking for one repair: {Findings}", string.Join(" · ", ex.Findings.Take(4)));
-            code = await CodeAsync(chat, codeModel, system, VideoCodePrompt.Repair(code, string.Join("\n", ex.Findings)), spent, id, cancellationToken)
+            code = await CodeAsync(chat, codeModel, system, VideoCodePrompt.Repair(code, string.Join("\n", ex.Findings)), steps, id, cancellationToken)
                 .ConfigureAwait(false);
             request = request with { Code = code };
             repaired = true;
@@ -75,10 +76,10 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
             }
         }
 
-        steps.Finish("code");
+        steps.Finish(VideoSteps.Code);
 
         // F. render (+ one repair with the error text)
-        var engineProgress = new Progress<EngineEvent>(e => steps.Report("render", e.Ratio ?? 0, e.Message));
+        var engineProgress = new ForwardProgress<EngineEvent>(e => steps.Report(VideoSteps.Render, e.Ratio ?? 0, e.Message));
         try
         {
             await engine.RenderAsync(request, engineProgress, cancellationToken).ConfigureAwait(false);
@@ -86,7 +87,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         catch (EngineException ex) when (ex.Code == "render" && !repaired)
         {
             logger.LogWarning("Render failed; asking for one repair: {Error}", ex.Message);
-            code = await CodeAsync(chat, codeModel, system, VideoCodePrompt.Repair(code, ex.Message), spent, id, cancellationToken).ConfigureAwait(false);
+            code = await CodeAsync(chat, codeModel, system, VideoCodePrompt.Repair(code, ex.Message), steps, id, cancellationToken).ConfigureAwait(false);
             request = request with { Code = code };
             repaired = true;
             try
@@ -104,7 +105,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
             throw new VideoException("Render failed: " + ex.Message, ex) { Code = ex.Code == "check" ? "code" : "render" };
         }
 
-        steps.Finish("render");
+        steps.Finish(VideoSteps.Render);
         return new RenderOutcome(request, repaired);
     }
 
@@ -121,7 +122,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         try
         {
             engine.WriteProject(request);
-            await engine.RenderAsync(request, new Progress<EngineEvent>(e => steps.Report("render", e.Ratio ?? 0, e.Message)), cancellationToken)
+            await engine.RenderAsync(request, new ForwardProgress<EngineEvent>(e => steps.Report(VideoSteps.Render, e.Ratio ?? 0, e.Message)), cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (EngineException ex)
@@ -129,7 +130,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
             throw new VideoException("Render of the kept code failed: " + ex.Message, ex) { Code = ex.Code == "check" ? "code" : "render" };
         }
 
-        steps.Finish("render");
+        steps.Finish(VideoSteps.Render);
         return new RenderOutcome(request, false);
     }
 
@@ -159,7 +160,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         var audio = clips.Select((c, i) => (Clip: c, Start: (long)Math.Round(input.Scenes[i].StartSeconds * 1000))).Where(x => x.Clip is not null)
             .Select(x => (x.Clip!.File, x.Start)).ToList();
         var muxed = Path.Combine(save.Work, "video.partial.mp4");
-        steps.Report("mux", 0.1);
+        steps.Report(VideoSteps.Mux, 0.1);
         try
         {
             await media.MuxAsync(save.Work, save.Render.Request.Output, audio, ass, Fades(input), muxed, cancellationToken).ConfigureAwait(false);
@@ -187,7 +188,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
 
         var output = Path.Combine(folder, VideoFolders.VideoFile);
         File.Move(muxed, output, overwrite: true);
-        steps.Finish("mux");
+        steps.Finish(VideoSteps.Mux);
 
         var thumbnail = await media.ThumbnailAsync(output, Path.Combine(folder, VideoFolders.ThumbnailFile), cancellationToken).ConfigureAwait(false);
         var record = new VideoRecord
@@ -217,7 +218,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
             CreatedAtUtc = clock.GetUtcNow(),
         };
         await videos.AddAsync(record, [.. save.ExtraCosts, .. save.Spent], CancellationToken.None).ConfigureAwait(false);
-        steps.Finish("save");
+        steps.Finish(VideoSteps.Save);
         return record;
     }
 
@@ -256,13 +257,14 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
 
     /// <summary>
     /// Runs the body of a video run with the failure handling every run shares: a failure or a cancel removes what the run wrote
-    /// (<see cref="CleanFailed"/>), keeps what it paid as a run (<see cref="KeepLostAsync"/>, under <paramref name="payer"/>'s provider) and
-    /// goes up as a <see cref="VideoException"/> with its code and what was spent (a cancel goes up as it is).
+    /// (<see cref="CleanFailed"/>), keeps what it paid (<paramref name="steps"/>' costs) as a run (<see cref="KeepLostAsync"/>, under
+    /// <paramref name="payer"/>'s provider) and goes up as a <see cref="VideoException"/> with its code and what was spent (a cancel goes up as
+    /// it is).
     /// </summary>
-    public async Task<VideoRecord> GuardAsync(Guid profileId, ResolvedModel? payer, string work, VersionTarget target, List<VideoCost> spent,
+    public async Task<VideoRecord> GuardAsync(Guid profileId, ResolvedModel? payer, string work, VersionTarget target, VideoStepProgress steps,
         System.Diagnostics.Stopwatch watch, Func<Task<VideoRecord>> body)
     {
-        ArgumentNullException.ThrowIfNull(spent);
+        ArgumentNullException.ThrowIfNull(steps);
         ArgumentNullException.ThrowIfNull(watch);
         ArgumentNullException.ThrowIfNull(body);
         try
@@ -273,30 +275,30 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         {
             logger.LogError("Video failed ({Code}): {Message}", ex.Code, ex.Message);
             CleanFailed(work, target);
-            await KeepLostAsync(profileId, payer, spent, ex.Code, RunStatus.Failed, watch.Elapsed).ConfigureAwait(false);
-            throw new VideoException(ex.Message, ex) { Code = ex.Code, SpentUsd = spent.Sum(c => c.Usd) };
+            await KeepLostAsync(profileId, payer, steps.Spent, ex.Code, RunStatus.Failed, watch.Elapsed).ConfigureAwait(false);
+            throw new VideoException(ex.Message, ex) { Code = ex.Code, SpentUsd = steps.SpentUsd };
         }
         catch (Providers.ProviderException ex)
         {
             logger.LogError("Video failed: provider error ({Code}, request {RequestId}) after {Usd} USD", ex.Code, ex.RequestId.Length > 0 ? ex.RequestId : "-",
-                spent.Sum(c => c.Usd));
+                steps.SpentUsd);
             CleanFailed(work, target);
-            await KeepLostAsync(profileId, payer, spent, VideoException.ProviderPrefix + ex.Code, RunStatus.Failed, watch.Elapsed).ConfigureAwait(false);
-            throw new VideoException(ex.Message, ex) { Code = VideoException.ProviderPrefix + ex.Code, SpentUsd = spent.Sum(c => c.Usd) };
+            await KeepLostAsync(profileId, payer, steps.Spent, VideoException.ProviderPrefix + ex.Code, RunStatus.Failed, watch.Elapsed).ConfigureAwait(false);
+            throw new VideoException(ex.Message, ex) { Code = VideoException.ProviderPrefix + ex.Code, SpentUsd = steps.SpentUsd };
         }
         catch (OperationCanceledException)
         {
-            logger.LogWarning("Video canceled after {Usd} USD were spent", spent.Sum(c => c.Usd));
+            logger.LogWarning("Video canceled after {Usd} USD were spent", steps.SpentUsd);
             CleanFailed(work, target);
-            await KeepLostAsync(profileId, payer, spent, "canceled", RunStatus.Canceled, watch.Elapsed).ConfigureAwait(false);
+            await KeepLostAsync(profileId, payer, steps.Spent, "canceled", RunStatus.Canceled, watch.Elapsed).ConfigureAwait(false);
             throw;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             logger.LogError(ex, "Video failed: a file could not be written");
             CleanFailed(work, target);
-            await KeepLostAsync(profileId, payer, spent, "files", RunStatus.Failed, watch.Elapsed).ConfigureAwait(false);
-            throw new VideoException("A file could not be written: " + ex.Message, ex) { Code = "files", SpentUsd = spent.Sum(c => c.Usd) };
+            await KeepLostAsync(profileId, payer, steps.Spent, "files", RunStatus.Failed, watch.Elapsed).ConfigureAwait(false);
+            throw new VideoException("A file could not be written: " + ex.Message, ex) { Code = "files", SpentUsd = steps.SpentUsd };
         }
     }
 
@@ -427,7 +429,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         }
     }
 
-    private async Task<string> CodeAsync(IChatClient chat, ResolvedModel codeModel, string system, string user, List<VideoCost> spent, Guid id,
+    private async Task<string> CodeAsync(IChatClient chat, ResolvedModel codeModel, string system, string user, VideoStepProgress steps, Guid id,
         CancellationToken cancellationToken)
     {
         // Logged before the call, as the concept run does: a code answer can take 10 minutes and be cut at max_tokens (thinking counts
@@ -438,17 +440,18 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         ChatResponse answer;
         try
         {
+            // The call's phase and tokens go to the screen with the run's progress (a code answer can take minutes).
             answer = await chat.SendAsync(new ChatRequest(system, user, CacheSystem: true, MaxOutputTokens: maxTokens,
-                Effort: codeModel.Effort, Stream: true), cancellationToken).ConfigureAwait(false);
+                Effort: codeModel.Effort, Stream: true, Progress: new ForwardProgress<ChatProgress>(steps.Call)), cancellationToken).ConfigureAwait(false);
         }
         catch (Providers.ProviderException ex) when (ex.ChargedUsage is { } charged)
         {
             // A cut-off or refused code answer is billed: counted before the failure goes up.
-            spent.Add(new VideoCost { VideoId = id, Step = PipelineSteps.VideoCode, Usd = costs.Exact(codeModel.Model, charged), Exact = true });
+            steps.Spend(new VideoCost { VideoId = id, Step = PipelineSteps.VideoCode, Usd = costs.Exact(codeModel.Model, charged), Exact = true });
             throw;
         }
 
-        spent.Add(new VideoCost
+        steps.Spend(new VideoCost
         {
             VideoId = id,
             Step = PipelineSteps.VideoCode,

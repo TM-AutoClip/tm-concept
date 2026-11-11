@@ -2,76 +2,162 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:TMConcept.Desktop.ViewModels"
              xmlns:views="using:TMConcept.Desktop.Views"
+             xmlns:c="using:TMConcept.Desktop.Converters"
+             xmlns:controls="using:TMConcept.Desktop.Controls"
              x:Class="TMConcept.Desktop.Views.VideoView"
              x:DataType="vm:VideoViewModel">
-  <DockPanel Margin="16">
-    <!-- The models fit without scrolling: three compact step cards in two columns (two rows); the estimate and the per-item setting
-         stand above the queue they are about. -->
-    <Expander DockPanel.Dock="Top" Header="{DynamicResource video.settings}" IsExpanded="True" HorizontalAlignment="Stretch" Margin="0,0,0,12">
-      <views:StepPickerView DataContext="{Binding Picker}" />
-    </Expander>
-    <Grid ColumnDefinitions="*,16,*,16,*">
-      <DockPanel>
-        <TextBlock DockPanel.Dock="Top" Text="{DynamicResource video.approved}" Classes="h2" />
-        <TextBlock DockPanel.Dock="Top" Text="{DynamicResource video.approved.hint}" Classes="small" Margin="0,0,0,6" />
-        <ListBox ItemsSource="{Binding Approved}" Background="Transparent">
-          <ListBox.ItemTemplate>
-            <DataTemplate x:DataType="vm:ConceptCardViewModel">
-              <Button Classes="link" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                      Command="{Binding $parent[ListBox].((vm:VideoViewModel)DataContext).EnqueueCommand}" CommandParameter="{Binding}">
-                <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Summary}" />
-              </Button>
-            </DataTemplate>
-          </ListBox.ItemTemplate>
-        </ListBox>
-      </DockPanel>
-      <DockPanel Grid.Column="2">
-        <StackPanel DockPanel.Dock="Top" Spacing="6">
-          <TextBlock Text="{DynamicResource video.queue}" Classes="h2" />
-          <Border Classes="card">
-            <StackPanel Spacing="2">
-              <TextBlock Text="{Binding Estimate}" TextWrapping="Wrap" ToolTip.Tip="{DynamicResource concepts.estimate.title}" />
-              <TextBlock Text="{Binding LastCost}" Classes="ok" TextWrapping="Wrap" />
-              <TextBlock Text="{Binding PricedOn}" Classes="small" TextWrapping="Wrap" />
+  <!-- 0.1.13 layout, made for 1280×720 and wider (down to 1024×600): one bar line (the models folded, subtitles); the approved concepts over
+       the detail panel on the left; the queue and the made videos side by side (the made videos go under the queue on a narrow window).
+       The made videos get the larger share, and their list takes only the height its rows need, so the preview of the chosen video gets
+       the rest (on a low card, under the queue, they stand side by side). Nothing on the page scrolls as a whole. The unfolded models lie over a dimmed page (the last children, drawn on top); a
+       click on the dimmed page or Close folds them. -->
+  <Grid RowDefinitions="Auto,*" RowSpacing="10" Margin="12,10">
+    <Border Name="PageBar" Classes="bar">
+      <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12">
+        <views:ModelSummaryBar Name="ModelsBar" Picker="{Binding Picker}" IsOpen="{Binding ModelsOpen}" />
+        <views:HelpTip Grid.Column="1" Text="{DynamicResource video.models.tip}" VerticalAlignment="Center" />
+        <CheckBox Name="SubtitlesCheck" Grid.Column="2" IsChecked="{Binding Subtitles}" Content="{DynamicResource video.subtitles}" MinHeight="0" />
+      </Grid>
+    </Border>
+
+    <Grid Grid.Row="1" ColumnDefinitions="1*,2.15*" ColumnSpacing="12">
+      <!-- Left: the approved concepts; a click opens one in the detail panel below (only "Add to queue" queues it). -->
+      <Grid RowDefinitions="2*,Auto,3*" MinWidth="300">
+        <Border Classes="card" Padding="10,8">
+          <DockPanel>
+            <TextBlock DockPanel.Dock="Top" Text="{Binding ApprovedHeader}" Classes="h2" Margin="2,0,0,6" />
+            <Panel>
+              <ListBox x:Name="ApprovedList" Classes="rows" ItemsSource="{Binding Approved}" SelectedItem="{Binding SelectedApproved}" Background="Transparent">
+                <ListBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:ConceptCardViewModel">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                      <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                 ToolTip.Tip="{Binding Title}" />
+                      <Button Grid.Column="1" Classes="small accent" Content="{DynamicResource video.enqueue}" VerticalAlignment="Center"
+                              Command="{Binding $parent[ListBox].((vm:VideoViewModel)DataContext).EnqueueCommand}" CommandParameter="{Binding}" />
+                    </Grid>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+              <TextBlock Text="{Binding ApprovedEmpty}" Classes="muted" TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center"
+                         VerticalAlignment="Center" Margin="12" IsHitTestVisible="False"
+                         IsVisible="{Binding ApprovedEmpty, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            </Panel>
+          </DockPanel>
+        </Border>
+        <GridSplitter Grid.Row="1" Height="10" ResizeDirection="Rows" Background="Transparent" />
+        <views:ConceptDetailView Name="Detail" Grid.Row="2" DataContext="{Binding Detail}" />
+      </Grid>
+
+      <controls:AdaptiveSplitPanel Name="QueueAndProduced" Grid.Column="1" Breakpoint="790" Ratio="0.42" Spacing="12">
+        <!-- The queue: the running item shows its stages; a failed one its error, what it paid and Retry. -->
+        <Border Classes="card" Padding="10,8">
+          <DockPanel>
+            <StackPanel DockPanel.Dock="Top" Spacing="2" Margin="0,0,0,6">
+              <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                <TextBlock Text="{Binding QueueHeader}" Classes="h2" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                <Button Name="ProduceAllButton" Grid.Column="1" Classes="accent" Content="{DynamicResource video.produce_all}"
+                        Command="{Binding ProduceAllCommand}" IsEnabled="{Binding Idle}" />
+                <Button Grid.Column="2" Content="{DynamicResource common.cancel}" Command="{Binding CancelCommand}" IsVisible="{Binding Busy}" />
+              </Grid>
+              <TextBlock Name="QueueEstimate" Text="{Binding QueueEstimate}" ToolTip.Tip="{Binding QueueEstimateTip}" Classes="tiny"
+                         IsVisible="{Binding QueueEstimate, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+              <TextBlock Text="{Binding Status}" Classes="error" TextWrapping="Wrap"
+                         IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
             </StackPanel>
-          </Border>
-          <CheckBox IsChecked="{Binding Subtitles}" Content="{DynamicResource video.subtitles}" ToolTip.Tip="{DynamicResource video.item_settings}" />
-          <StackPanel Orientation="Horizontal" Spacing="8">
-            <Button Classes="accent" Content="{DynamicResource video.produce}" Command="{Binding ProduceAllCommand}" IsEnabled="{Binding Idle}" />
-            <Button Content="{DynamicResource common.cancel}" Command="{Binding CancelCommand}" IsVisible="{Binding Busy}" />
-          </StackPanel>
-          <TextBlock Text="{Binding Status}" Classes="error" TextWrapping="Wrap" />
-        </StackPanel>
-        <ScrollViewer Margin="0,8,0,0">
-        <ItemsControl ItemsSource="{Binding Queue}">
-          <ItemsControl.ItemTemplate>
-            <DataTemplate x:DataType="vm:QueueRowViewModel">
-              <Border Classes="card" Margin="0,4" Padding="10">
-                <StackPanel Spacing="4">
-                  <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="4">
-                    <TextBlock Text="{Binding Title}" TextWrapping="Wrap" FontWeight="SemiBold" />
-                    <Button Grid.Column="1" Content="↑" Command="{Binding $parent[ItemsControl].((vm:VideoViewModel)DataContext).UpCommand}" CommandParameter="{Binding}" />
-                    <Button Grid.Column="2" Content="↓" Command="{Binding $parent[ItemsControl].((vm:VideoViewModel)DataContext).DownCommand}" CommandParameter="{Binding}" />
-                    <Button Grid.Column="3" Content="✕" Command="{Binding $parent[ItemsControl].((vm:VideoViewModel)DataContext).DequeueCommand}" CommandParameter="{Binding}"
-                            IsEnabled="{Binding !Busy}" />
-                  </Grid>
-                  <ProgressBar Value="{Binding Percent}" Maximum="100" IsVisible="{Binding Busy}" />
-                  <TextBlock Text="{Binding Step}" Classes="small" IsVisible="{Binding Busy}" />
-                  <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding Failed}">
-                    <TextBlock Text="{Binding Error}" Classes="error" TextWrapping="Wrap" MaxWidth="360" />
-                    <Button Content="{DynamicResource video.retry}" Command="{Binding $parent[ItemsControl].((vm:VideoViewModel)DataContext).RetryCommand}" CommandParameter="{Binding}" />
-                  </StackPanel>
-                </StackPanel>
-              </Border>
-            </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
-        </ScrollViewer>
-      </DockPanel>
-      <DockPanel Grid.Column="4">
-        <TextBlock DockPanel.Dock="Top" Text="{DynamicResource video.produced}" Classes="h2" />
-        <ListBox ItemsSource="{Binding Produced}" Background="Transparent" Margin="0,8,0,0" />
-      </DockPanel>
+            <TextBlock Name="LastLine" DockPanel.Dock="Bottom" Text="{Binding LastLine}" Classes="tiny" TextTrimming="CharacterEllipsis" Margin="2,4,0,0"
+                       ToolTip.Tip="{Binding LastLine}" IsVisible="{Binding LastLine, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            <Panel>
+              <ListBox x:Name="QueueList" Classes="rows" ItemsSource="{Binding Queue}" SelectedItem="{Binding SelectedQueue}" Background="Transparent">
+                <ListBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:QueueRowViewModel">
+                    <StackPanel Spacing="6">
+                      <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="2">
+                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                   ToolTip.Tip="{Binding Title}" />
+                        <Button Grid.Column="1" Classes="small" Content="↑" ToolTip.Tip="{DynamicResource video.up}"
+                                Command="{Binding $parent[ListBox].((vm:VideoViewModel)DataContext).UpCommand}" CommandParameter="{Binding}" />
+                        <Button Grid.Column="2" Classes="small" Content="↓" ToolTip.Tip="{DynamicResource video.down}"
+                                Command="{Binding $parent[ListBox].((vm:VideoViewModel)DataContext).DownCommand}" CommandParameter="{Binding}" />
+                        <Button Grid.Column="3" Classes="small" Content="✕" ToolTip.Tip="{DynamicResource video.dequeue}" IsEnabled="{Binding !Busy}"
+                                Command="{Binding $parent[ListBox].((vm:VideoViewModel)DataContext).DequeueCommand}" CommandParameter="{Binding}" />
+                      </Grid>
+                      <Panel IsVisible="{Binding Busy}">
+                        <views:ProductionStagesView Name="Stages" DataContext="{Binding Progress}" />
+                      </Panel>
+                      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" IsVisible="{Binding Failed}">
+                        <TextBlock Text="{Binding Error}" Classes="error small" TextWrapping="Wrap" VerticalAlignment="Center" />
+                        <Button Grid.Column="1" Classes="small" Content="{DynamicResource video.retry}" VerticalAlignment="Center"
+                                Command="{Binding $parent[ListBox].((vm:VideoViewModel)DataContext).RetryCommand}" CommandParameter="{Binding}" />
+                      </Grid>
+                    </StackPanel>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+              <TextBlock Text="{Binding QueueEmpty}" Classes="muted" TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center"
+                         VerticalAlignment="Center" Margin="12" IsHitTestVisible="False"
+                         IsVisible="{Binding QueueEmpty, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            </Panel>
+          </DockPanel>
+        </Border>
+
+        <!-- The made videos: the list and the preview of the chosen one (poster first; ▶ plays) with its buttons; beside each other when the
+             card is wide (the made videos under the queue on a narrow window), the list over the preview when it is narrow. -->
+        <Border Classes="card" Padding="10,8">
+          <DockPanel>
+            <TextBlock DockPanel.Dock="Top" Text="{Binding ProducedHeader}" Classes="h2" Margin="2,0,0,6" />
+            <controls:AdaptiveSplitPanel Name="ProducedSplit" Breakpoint="900" WideBelowHeight="380" Ratio="0.4" StackedRatio="0.4" FitFirst="True" Spacing="10">
+              <Panel>
+                <ListBox x:Name="ProducedList" Classes="rows" ItemsSource="{Binding Produced}" SelectedItem="{Binding SelectedProduced}" Background="Transparent">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:VideoRowViewModel">
+                      <Grid ColumnDefinitions="64,*" ColumnSpacing="10">
+                        <Border Width="64" Height="36" Background="#22000000" CornerRadius="4" ClipToBounds="True" VerticalAlignment="Center">
+                          <Image Source="{Binding Thumbnail, Converter={x:Static c:FileBitmapConverter.Instance}, ConverterParameter=120}" Stretch="UniformToFill" />
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                          <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
+                          <TextBlock Text="{Binding Line}" Classes="small" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                      </Grid>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+                <TextBlock Text="{Binding ProducedEmpty}" Classes="muted" TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center"
+                           VerticalAlignment="Center" Margin="12" IsHitTestVisible="False"
+                           IsVisible="{Binding ProducedEmpty, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+              </Panel>
+              <Panel>
+                <TextBlock Text="{DynamicResource video.preview.empty}" Classes="muted" TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center"
+                           VerticalAlignment="Center" Margin="12" IsVisible="{Binding !HasProducedSelection}" />
+                <!-- The buttons are kept first; the picture takes what is left (16:9 by its width, never taller than the room). -->
+                <DockPanel IsVisible="{Binding HasProducedSelection}">
+                  <WrapPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
+                    <Button Name="PlaySystemButton" Classes="small" Content="{DynamicResource video.play_system}" Command="{Binding PlaySystemCommand}"
+                            Margin="0,0,6,6" />
+                    <Button Name="OpenFolderButton" Classes="small" Content="{DynamicResource video.open_folder}" Command="{Binding OpenFolderCommand}"
+                            Margin="0,0,6,6" />
+                    <Button Name="ProduceAgainButton" Classes="small" Content="{DynamicResource video.produce_again}" Command="{Binding ProduceAgainCommand}"
+                            ToolTip.Tip="{DynamicResource video.produce_again.tip}" Margin="0,0,6,6" />
+                  </WrapPanel>
+                  <views:VideoPlayerView Name="Preview" DataContext="{Binding Player}" VerticalAlignment="Top" />
+                </DockPanel>
+              </Panel>
+            </controls:AdaptiveSplitPanel>
+          </DockPanel>
+        </Border>
+      </controls:AdaptiveSplitPanel>
     </Grid>
-  </DockPanel>
+
+    <Border Name="ModelsBackdrop" Grid.Row="1" Margin="-12,-10,-12,-10" Background="{DynamicResource tm-scrim}" IsVisible="{Binding ModelsOpen}"
+            PointerPressed="OnBackdropPressed" />
+    <Border Name="ModelsPanel" Grid.Row="1" Classes="card" Padding="12,8" VerticalAlignment="Top" BoxShadow="{DynamicResource tm-shadow}"
+            IsVisible="{Binding ModelsOpen}">
+      <StackPanel Spacing="6">
+        <Button Name="CloseModelsButton" Classes="small" Content="{DynamicResource common.close}" Command="{Binding CloseModelsCommand}"
+                HorizontalAlignment="Right" />
+        <views:StepPickerView Name="ModelPickers" DataContext="{Binding Picker}" />
+      </StackPanel>
+    </Border>
+  </Grid>
 </UserControl>

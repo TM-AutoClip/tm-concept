@@ -5,69 +5,115 @@
         x:Class="TMConcept.Desktop.Views.MainWindow"
         x:DataType="vm:ShellViewModel"
         Title="TM Concept"
-        Width="1280" Height="820" MinWidth="960" MinHeight="600"
+        Width="1280" Height="720" MinWidth="1024" MinHeight="600"
         WindowStartupLocation="CenterScreen">
-  <Grid RowDefinitions="*,Auto">
-    <Grid ColumnDefinitions="240,*">
-      <Border Background="{DynamicResource tm-sidebar-bg}">
-        <DockPanel>
-          <StackPanel DockPanel.Dock="Top" Margin="14,16,14,10" Spacing="10">
-            <StackPanel Orientation="Horizontal" Spacing="10">
-              <Image Source="avares://TMConcept/Assets/app-256.png" Width="30" Height="30" />
-              <TextBlock Text="TM Concept" Classes="h2" VerticalAlignment="Center" />
-            </StackPanel>
-            <ComboBox Name="ProfilePicker" ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile}" HorizontalAlignment="Stretch"
-                      IsEnabled="{Binding CanSwitchProfile}"
-                      PlaceholderText="{DynamicResource profile.none}">
-              <ComboBox.ItemTemplate>
-                <DataTemplate x:DataType="p:Profile">
-                  <TextBlock Text="{Binding Name}" />
-                </DataTemplate>
-              </ComboBox.ItemTemplate>
-            </ComboBox>
-            <Button Classes="link" Content="{DynamicResource profile.add}" Command="{Binding NewProfileCommand}" IsEnabled="{Binding CanSwitchProfile}" />
+  <!-- Below MainWindow.NarrowWidth (the code-behind sets "narrow") the bar gives room to the tabs, so they never wrap or get cut. -->
+  <Window.Styles>
+    <Style Selector="ComboBox#ProfilePicker">
+      <Setter Property="MaxWidth" Value="200" />
+    </Style>
+    <Style Selector="Window.narrow TextBlock#AppTitle">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="Window.narrow TextBlock#SettingsTitle">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="Window.narrow ComboBox#ProfilePicker">
+      <Setter Property="MaxWidth" Value="150" />
+    </Style>
+    <Style Selector="Window.narrow Button.tab">
+      <Setter Property="Padding" Value="9,10" />
+    </Style>
+  </Window.Styles>
+  <!-- 0.1.13: the app bar on top (spending pill, page tabs, profile, report, settings), the page, the folded activity log at the bottom. -->
+  <Grid RowDefinitions="Auto,*,Auto">
+    <Border Name="AppBar" Height="44" Background="{DynamicResource tm-appbar-bg}" BorderBrush="{DynamicResource tm-border}" BorderThickness="0,0,0,1">
+      <Grid ColumnDefinitions="Auto,Auto,*,Auto" Margin="12,0,8,0">
+        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <Image Source="avares://TMConcept/Assets/app-256.png" Width="24" Height="24" />
+          <TextBlock Name="AppTitle" Text="TM Concept" Classes="h2" FontSize="15" VerticalAlignment="Center" />
+        </StackPanel>
+        <!-- This month's spending; while paid work runs, what it has spent so far. The tooltip has the parts and the prices' date. -->
+        <Border Name="SpendingPill" Grid.Column="1" Classes="pill" Margin="12,0,10,0" VerticalAlignment="Center" ToolTip.Tip="{Binding SpendingTip}">
+          <StackPanel Orientation="Horizontal" Spacing="5">
+            <TextBlock Name="SpendingText" Text="{Binding SpendingText}" FontSize="12" VerticalAlignment="Center" />
+            <TextBlock Text="·" FontSize="12" Classes="muted" VerticalAlignment="Center"
+                       IsVisible="{Binding SpendingLive, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            <TextBlock Name="SpendingLiveText" Text="{Binding SpendingLive}" FontSize="12" Foreground="{DynamicResource tm-accent}" VerticalAlignment="Center"
+                       IsVisible="{Binding SpendingLive, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
           </StackPanel>
-          <Button Name="ReportProblemButton" DockPanel.Dock="Bottom" Classes="nav" Command="{Binding ReportProblemCommand}" Margin="8,4,8,12"
-                  ToolTip.Tip="{DynamicResource report.tooltip}">
-            <Grid ColumnDefinitions="24,*">
-              <TextBlock Text="⚑" TextAlignment="Center" />
-              <TextBlock Grid.Column="1" Text="{DynamicResource report.button}" Margin="8,0,0,0" />
-            </Grid>
-          </Button>
-          <ItemsControl ItemsSource="{Binding Items}" Margin="8,4">
-            <ItemsControl.ItemTemplate>
-              <DataTemplate x:DataType="vm:NavItemViewModel">
-                <Button Classes="nav" Classes.selected="{Binding IsSelected}" Command="{Binding OpenCommand}" Margin="0,2">
-                  <Grid ColumnDefinitions="24,*,Auto">
-                    <TextBlock Text="{Binding Glyph}" TextAlignment="Center" />
-                    <TextBlock Grid.Column="1" Text="{Binding Title}" Margin="8,0,0,0" />
-                    <TextBlock Grid.Column="2" Text="{Binding Page.Badge}" Classes="small" />
-                  </Grid>
-                </Button>
+        </Border>
+        <!-- The tabs never wrap: on a window too narrow for them the strip is cut at its right edge. -->
+        <ItemsControl Name="TabStrip" Grid.Column="2" ItemsSource="{Binding Tabs}" ClipToBounds="True">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <StackPanel Orientation="Horizontal" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:NavItemViewModel">
+              <Button Classes="tab" Classes.selected="{Binding IsSelected}" Command="{Binding OpenCommand}" Height="44">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <TextBlock Text="{Binding Title}" VerticalAlignment="Center" />
+                  <Border Classes="pill" Padding="6,0" VerticalAlignment="Center"
+                          IsVisible="{Binding Page.Badge, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                    <TextBlock Text="{Binding Page.Badge}" FontSize="11" FontWeight="SemiBold" />
+                  </Border>
+                </StackPanel>
+              </Button>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6">
+          <ComboBox Name="ProfilePicker" ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile}" VerticalAlignment="Center"
+                    MinWidth="120" IsEnabled="{Binding CanSwitchProfile}" PlaceholderText="{DynamicResource profile.none}">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="p:Profile">
+                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
               </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
-        </DockPanel>
-      </Border>
-      <ContentControl Grid.Column="1" Content="{Binding Current}" />
-    </Grid>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+          <Button Name="NewProfileButton" Classes="small" Content="+" FontSize="14" VerticalAlignment="Center" Command="{Binding NewProfileCommand}"
+                  IsEnabled="{Binding CanSwitchProfile}" ToolTip.Tip="{DynamicResource profile.add}" />
+          <Button Name="ReportProblemButton" Classes="link" Content="{DynamicResource shell.report}" Command="{Binding ReportProblemCommand}"
+                  VerticalAlignment="Center" Margin="8,0" ToolTip.Tip="{DynamicResource report.tooltip}" />
+          <!-- Settings is a page too, drawn apart from the main tabs. -->
+          <Button Name="SettingsTab" Classes="tab" ToolTip.Tip="{Binding SettingsItem.Title}" Classes.selected="{Binding SettingsItem.IsSelected, FallbackValue=False}" Height="44"
+                  Command="{Binding SettingsItem.OpenCommand}" IsVisible="{Binding SettingsItem, Converter={x:Static ObjectConverters.IsNotNull}}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Text="⚙" VerticalAlignment="Center" />
+              <TextBlock Name="SettingsTitle" Text="{Binding SettingsItem.Title}" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+        </StackPanel>
+      </Grid>
+    </Border>
 
-    <!-- The activity log panel: header (toggle, the last line while folded, the running work's step, Copy, Clear), open by default. -->
-    <Border Grid.Row="1" Background="{DynamicResource tm-strip-bg}" BorderBrush="{DynamicResource tm-border}" BorderThickness="0,1,0,0">
+    <ContentControl Grid.Row="1" Content="{Binding Current}" />
+
+    <!-- The activity log: folded, one 30-pixel line (toggle, the newest line, the running work's step, Copy, Clear); open, 120 pixels. -->
+    <Border Grid.Row="2" Background="{DynamicResource tm-strip-bg}" BorderBrush="{DynamicResource tm-border}" BorderThickness="0,1,0,0">
       <DockPanel>
-        <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="8" Margin="8,3">
-          <Button Name="LogToggle" Classes="link" Command="{Binding ToggleLogCommand}" Content="{DynamicResource log.title}" VerticalAlignment="Center" />
+        <Grid DockPanel.Dock="Top" Height="30" ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="8" Margin="10,0,8,0">
+          <Button Name="LogToggle" Classes="link" Command="{Binding ToggleLogCommand}" VerticalAlignment="Center">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Text="▸" IsVisible="{Binding !LogOpen}" FontSize="12" VerticalAlignment="Center" />
+              <TextBlock Text="▾" IsVisible="{Binding LogOpen}" FontSize="12" VerticalAlignment="Center" />
+              <TextBlock Text="{DynamicResource shell.log}" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
           <TextBlock Grid.Column="1" Name="LastLine" Text="{Binding LastLine}" FontSize="12" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
-                     VerticalAlignment="Center" Margin="8,0" IsVisible="{Binding !LogOpen}"
+                     VerticalAlignment="Center" Margin="6,0" IsVisible="{Binding !LogOpen}"
                      Classes.warning="{Binding Last.IsWarning, FallbackValue=False}" Classes.error="{Binding Last.IsError, FallbackValue=False}" />
           <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" IsVisible="{Binding Spinning}">
-            <TextBlock Name="CurrentStep" Text="{Binding CurrentStep}" FontSize="12" MaxWidth="560" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-            <ProgressBar IsIndeterminate="True" Width="80" MinWidth="80" VerticalAlignment="Center" />
+            <ProgressBar IsIndeterminate="True" Width="60" MinWidth="60" Height="4" MinHeight="4" VerticalAlignment="Center" />
+            <TextBlock Name="CurrentStep" Text="{Binding CurrentStep}" FontSize="12" MaxWidth="520" TextTrimming="CharacterEllipsis"
+                       Classes="muted" VerticalAlignment="Center" />
           </StackPanel>
-          <Button Grid.Column="3" Content="{DynamicResource log.copy}" Command="{Binding CopyLogCommand}" />
-          <Button Grid.Column="4" Content="{DynamicResource log.clear}" Command="{Binding ClearLogCommand}" />
+          <Button Grid.Column="3" Classes="small" Content="{DynamicResource log.copy}" Command="{Binding CopyLogCommand}" VerticalAlignment="Center" />
+          <Button Grid.Column="4" Classes="small" Content="{DynamicResource log.clear}" Command="{Binding ClearLogCommand}" VerticalAlignment="Center" />
         </Grid>
-        <ScrollViewer Name="LogScroll" Height="130" IsVisible="{Binding LogOpen}" Margin="8,0,8,6">
+        <ScrollViewer Name="LogScroll" Height="90" IsVisible="{Binding LogOpen}" Margin="10,0,8,4">
           <ItemsControl ItemsSource="{Binding Lines}">
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:ActivityLineViewModel">

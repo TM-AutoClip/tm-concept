@@ -29,6 +29,15 @@ public sealed class VideoPageTests
 
     private static async Task<(VideoViewModel Page, Concept Concept)> PrepareAsync(DesktopHarness h, Action<VideoViewModel>? options = null)
     {
+        var (page, concept) = await OpenAsync(h);
+        options?.Invoke(page);
+        await page.EnqueueAsync(page.Approved.Single());
+        return (page, concept);
+    }
+
+    /// <summary>A profile with a key, its video code choice and one approved concept; the page is open (nothing queued).</summary>
+    private static async Task<(VideoViewModel Page, Concept Concept)> OpenAsync(DesktopHarness h)
+    {
         await FirstRunTests.CreateAsync(h);
         var profile = new Profile { Name = "Byzantium", ContentLanguage = ContentLanguages.English, ConceptText = "x" };
         await h.Get<IProfileStore>().SaveAsync(profile, CancellationToken.None);
@@ -45,8 +54,6 @@ public sealed class VideoPageTests
         }, CancellationToken.None);
         var page = h.Get<VideoViewModel>();
         await page.ActivateAsync();
-        options?.Invoke(page);
-        await page.EnqueueAsync(page.Approved.Single());
         return (page, concept);
     }
 
@@ -71,7 +78,7 @@ public sealed class VideoPageTests
         await page.ProduceAllAsync();
 
         page.Queue.ShouldBeEmpty();
-        page.Produced.Single().ShouldBe("Greek fire");
+        page.Produced.Single().Title.ShouldBe("Greek fire");
         var video = (await h.Get<IVideoStore>().ListAsync(concept.ProfileId, CancellationToken.None)).Single();
         video.Warnings.ShouldContain(VideoWarnings.SpeechOff);
         video.TotalUsd.ShouldBeGreaterThan(0);
@@ -96,24 +103,359 @@ public sealed class VideoPageTests
     }
 
     [AvaloniaFact]
-    public async Task TheModelsAndSettingsFitWithoutScrolling()
+    public async Task ModelsAreOneFoldedSummaryLineThatOpensToThePickers()
     {
         var engine = new FakeEngine();
         using var h = Harness(new FakeChat(), engine);
+        var (page, _) = await OpenAsync(h);
+        var (window, view) = Show(h, page, 1280, 720);
+        var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
+
+        // One line: code, engine, images, narration and the concept model of the AI edit; the cards are folded away.
+        page.ModelsOpen.ShouldBeFalse();
+        page.Picker.Rows.Select(r => r.Step.Code).ShouldBe([PipelineSteps.VideoCode, PipelineSteps.Images, PipelineSteps.Speech, PipelineSteps.Concepts]);
+        var line = Find<Avalonia.Controls.TextBlock>(view, "SummaryLine").Text!;
+        foreach (var part in new[] { "video-code", "engine", "images", "speech", "concepts" })
+        {
+            line.ShouldContain(text["steps.short." + part] + ":");
+        }
+
+        Find<TMConcept.Desktop.Views.StepPickerView>(view, "ModelPickers").IsEffectivelyVisible.ShouldBeFalse();
+        Find<Avalonia.Controls.Primitives.ToggleButton>(view, "Header").IsChecked = true;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        page.ModelsOpen.ShouldBeTrue();
+        Find<TMConcept.Desktop.Views.StepPickerView>(view, "ModelPickers").IsEffectivelyVisible.ShouldBeTrue();
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task PageAt1280x720HasApprovedDetailQueueAndProducedSideBySide()
+    {
+        var engine = new FakeEngine();
+        using var h = Harness(new FakeChat(), engine);
+        var (page, _) = await OpenAsync(h);
+        var (window, view) = Show(h, page, 1280, 720);
+
+        Avalonia.Rect At(string name)
+        {
+            var control = Find<Avalonia.Controls.Control>(view, name);
+            control.IsEffectivelyVisible.ShouldBeTrue(name);
+            var origin = Avalonia.VisualExtensions.TranslatePoint(control, new Avalonia.Point(0, 0), view)!.Value;
+            return new Avalonia.Rect(origin, control.Bounds.Size);
+        }
+
+        var approved = At("ApprovedList");
+        var detail = At("Detail");
+        var queue = At("QueueList");
+        var produced = At("ProducedList");
+        detail.Top.ShouldBeGreaterThanOrEqualTo(approved.Bottom, "the detail panel is under the approved list");
+        queue.Left.ShouldBeGreaterThan(Math.Max(approved.Right, detail.Right));
+        produced.Left.ShouldBeGreaterThan(queue.Right, "the made videos stand right of the queue");
+        foreach (var area in new[] { approved, detail, queue, produced })
+        {
+            area.Right.ShouldBeLessThanOrEqualTo(1280);
+            area.Bottom.ShouldBeLessThanOrEqualTo(720);
+        }
+
+        foreach (var area in new[] { approved, detail, queue })
+        {
+            area.Height.ShouldBeGreaterThan(60);
+        }
+
+        // The made videos' list takes only the height of its rows: the preview under it gets the rest.
+        produced.Height.ShouldBeGreaterThan(30);
+        produced.Height.ShouldBeLessThan(At("ProducedSplit").Height * 0.4 + 1);
+        queue.Width.ShouldBeLessThan(At("ProducedSplit").Width, "the made videos get the larger share");
+
+        Avalonia.VisualTree.VisualExtensions.GetVisualChildren(view).OfType<Avalonia.Controls.ScrollViewer>().ShouldBeEmpty("the page does not scroll as a whole");
+
+        // A narrow window: the made videos go under the queue.
+        window.Width = 1100;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        At("ProducedList").Top.ShouldBeGreaterThan(At("QueueList").Bottom);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task ClickingAnApprovedConceptOpensTheDetailAndDoesNotEnqueue()
+    {
+        var engine = new FakeEngine();
+        using var h = Harness(new FakeChat(), engine);
+        var (page, concept) = await OpenAsync(h);
+
+        page.SelectedApproved = page.Approved.Single();
+        await Until(() => page.Detail.Card is not null);
+
+        page.Detail.Card!.Id.ShouldBe(concept.Id);
+        page.Detail.IsViewing.ShouldBeTrue();
+        page.Detail.CanUnapprove.ShouldBeTrue();
+        page.Detail.CanApprove.ShouldBeFalse("nothing is approved or added here");
+        page.Detail.CanEdit.ShouldBeTrue();
+        page.Queue.ShouldBeEmpty("a click opens the concept, it does not queue it");
+        (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!.Status.ShouldBe(ConceptStatus.Approved);
+    }
+
+    [AvaloniaFact]
+    public async Task EnqueueButtonEnqueues()
+    {
+        var engine = new FakeEngine();
+        using var h = Harness(new FakeChat(), engine);
+        var (page, concept) = await OpenAsync(h);
+        await page.ChooseAsync(page.Approved.Single());
+
+        await page.EnqueueAsync(page.Approved.Single());
+
+        page.Queue.Single().Item.ConceptId.ShouldBe(concept.Id);
+        page.Approved.ShouldBeEmpty();
+        (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!.Status.ShouldBe(ConceptStatus.Queued);
+        page.Detail.ReadOnlyNote.ShouldBe(h.Get<TMConcept.Desktop.Localization.Localizer>()["detail.queued"], "a queued concept is shown read-only");
+        page.Detail.CanEdit.ShouldBeFalse();
+        page.QueueHeader.ShouldContain("1");
+
+        // The item keeps only its subtitles: the models are read when it starts.
+        var stored = (await h.Get<IQueueStore>().ListAsync(concept.ProfileId, CancellationToken.None)).Single();
+        var options = System.Text.Json.JsonSerializer.Deserialize(stored.SettingsJson, TMConcept.Core.Render.CoreJsonContext.Default.VideoOptions)!;
+        options.Subtitles.ShouldBeTrue();
+        options.CodeModel.ShouldBeEmpty();
+    }
+
+    [AvaloniaFact]
+    public async Task AiEditFromTheVideoPageUsesTheConceptStep()
+    {
+        var engine = new FakeEngine();
+        const string edited = "[on screen: the harbour chain]\nThe chain held the fleet out.\n[on screen: ships on rollers]\nSo the ships went over the hill.";
+        var chat = new FakeChat().Answer(_ => new ChatResponse("{\"konseptler\":[{\"baslik\":\"Greek fire\",\"ozet\":\"s\",\"icerik\":"
+            + System.Text.Json.JsonSerializer.Serialize(edited) + "}]}", new ChatUsage(900, 0, 0, 700), null, "end_turn", "r"));
+        using var h = Harness(chat, engine);
+        var (page, concept) = await OpenAsync(h);
+        var row = page.Picker.Row(PipelineSteps.Concepts)!;
+        row.Selected = row.Options.First(o => o.Model?.Id == "claude-haiku-5-5");
+        await page.ChooseAsync(page.Approved.Single());
+
+        await page.Detail.AiEditAsync();
+        page.Detail.AiInstruction = "Tell how the ships were carried over the hill.";
+        await page.Detail.SendAiEditAsync();
+
+        chat.Models.Single().Id.ShouldBe("claude-haiku-5-5", "the concept step chosen on this page");
+        page.Detail.IsEditing.ShouldBeTrue("the result waits in the editor");
+        await page.Detail.SaveEditAsync();
+        var saved = (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!;
+        saved.Content.ShouldContain("over the hill");
+        saved.Status.ShouldBe(ConceptStatus.Approved);
+        page.Queue.ShouldBeEmpty();
+    }
+
+    [AvaloniaFact]
+    public async Task DeleteFromTheVideoPageTrashesTheConcept()
+    {
+        var engine = new FakeEngine();
+        using var h = Harness(new FakeChat(), engine);
+        var (page, concept) = await OpenAsync(h);
+        await page.ChooseAsync(page.Approved.Single());
+
+        await page.Detail.TrashJustAsync();
+        await Until(() => page.Approved.Count == 0);
+
+        (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!.Status.ShouldBe(ConceptStatus.Trashed);
+        page.Detail.IsEmpty.ShouldBeTrue();
+
+        // Taking one back from approved also leaves this page (it is not approved here again).
+        var second = new Concept { ProfileId = concept.ProfileId, Title = "Iconoclasm", Summary = "s", Content = Content, Language = "en", Status = ConceptStatus.Approved };
+        await h.Get<IConceptStore>().AddAsync([second], CancellationToken.None);
+        await page.ActivateAsync();
+        await page.ChooseAsync(page.Approved.Single());
+        await page.Detail.UnapproveAsync();
+        await Until(() => page.Approved.Count == 0);
+        page.Detail.IsEmpty.ShouldBeTrue();
+        (await h.Get<IConceptStore>().GetAsync(second.Id, CancellationToken.None))!.Status.ShouldBe(ConceptStatus.New);
+    }
+
+    [AvaloniaFact]
+    public async Task ProductionReportsStagesSpentAndCodeTokens()
+    {
+        var engine = new FakeEngine();
+        var images = new FakeImages();
+        var chat = new FakeChat();
+        using var h = Harness(chat, engine, s =>
+        {
+            s.RemoveAll<IImageEngine>();
+            s.AddSingleton<IImageEngine>(images);
+        });
+        var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
+        var (page, concept) = await OpenAsync(h);
+        await h.Get<IApiKeyStore>().SaveAsync(new ApiKey { Provider = "fal", Label = "k", Secret = "fake-test-key-video-4567" }, CancellationToken.None);
+        await page.ActivateAsync();
+        var imageRow = page.Picker.Row(PipelineSteps.Images)!;
+        imageRow.Selected = imageRow.Options.First(o => o.Model?.Id == "fal-ai/flux-2/flash");
+        await page.EnqueueAsync(page.Approved.Single());
+        var row = page.Queue.Single();
+
+        // While the code model writes: the stages so far, as the screen shows them.
+        (StageState State, string Count, string Cost, string Detail)[] during = [];
+        decimal spentDuring = 0;
+        chat.Answer(_ => new ChatResponse("{\"prompts\":[\"a map\",\"burning ships\"]}", new ChatUsage(100, 0, 0, 50), null, "end_turn", "r"))
+            .AnswerAsync(async request =>
+            {
+                request.Progress.ShouldNotBeNull("the code call reports its phase and tokens");
+                request.Progress!.Report(new ChatProgress(ChatPhase.Writing, TimeSpan.FromSeconds(3), 4321, "window"));
+                await Task.Delay(50);
+                await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    during = row.Progress!.Stages.Select(s => (s.State, s.CountText, s.CostText, s.Detail)).ToArray();
+                    spentDuring = row.Progress.SpentUsd;
+                });
+                return Code(engine.SampleCode);
+            });
+
+        await page.ProduceAllAsync();
+
+        var steps = TMConcept.Core.Videos.VideoSteps.All.ToList();
+        (StageState State, string Count, string Cost, string Detail) At(string step) => during[steps.IndexOf(step)];
+        At(VideoSteps.Prepare).State.ShouldBe(StageState.Done);
+        At(VideoSteps.Speech).State.ShouldBe(StageState.Skipped, "narration is off");
+        At(VideoSteps.Speech).Count.ShouldBe(text["video.stage.skipped"]);
+        At(VideoSteps.Images).State.ShouldBe(StageState.Done);
+        At(VideoSteps.Images).Count.ShouldBe(text.Format("video.stage.count", 2, 2));
+        At(VideoSteps.Images).Cost.ShouldNotBeEmpty("the image prompts and the two images were paid");
+        At(VideoSteps.Code).State.ShouldBe(StageState.Running);
+        At(VideoSteps.Code).Detail.ShouldContain(4321.ToString("N0", text.Culture));
+        At(VideoSteps.Render).State.ShouldBe(StageState.Waiting);
+        spentDuring.ShouldBeGreaterThan(0.02m - 0.0000001m);
+
+        var video = (await h.Get<IVideoStore>().ListAsync(concept.ProfileId, CancellationToken.None)).Single();
+        row.Progress!.SpentUsd.ShouldBe(video.TotalUsd, "the stages show the same money as the record");
+        row.Progress.SpentUsd.ShouldBeGreaterThan(spentDuring, "the code call was paid after it");
+        row.Progress.Stages.Where(s => s.Code != VideoSteps.Speech).ShouldAllBe(s => s.State == StageState.Done);
+        row.Progress.Stages.Single(s => s.Code == VideoSteps.Code).CostText.ShouldNotBeEmpty();
+        page.LastLine.ShouldContain(text.Usd(video.TotalUsd));
+    }
+
+    [AvaloniaFact]
+    public async Task AFailedVideoShowsWhatItSpent()
+    {
+        var engine = new FakeEngine { FailRenders = 2 };
+        var chat = new FakeChat().Answer(_ => Code(engine.SampleCode)).Answer(_ => Code(engine.SampleCode));
+        using var h = Harness(chat, engine);
         var (page, _) = await PrepareAsync(h);
-        var view = new TMConcept.Desktop.Views.VideoView { DataContext = page };
-        var window = new Avalonia.Controls.Window { Content = view, Width = 1040, Height = 820 };
-        window.Show();
+        var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
+        var row = page.Queue.Single();
+
+        await page.ProduceAllAsync();
+
+        var model = h.Get<IModelCatalog>().Find("anthropic", "claude-sonnet-5-5")!;
+        var paid = 2 * h.Get<TMConcept.Core.Costs.ICostCalculator>().Exact(model, new ChatUsage(500, 0, 0, 800));
+        row.Failed.ShouldBeTrue();
+        row.Error.ShouldContain(text.Usd(paid));
+        page.LastLine.ShouldBe(text.Format("video.last.failed", row.Title, text.Usd(paid)));
+        row.Progress!.SpentUsd.ShouldBe(paid);
+        row.Progress.Stages.Single(s => s.Code == VideoSteps.Render).State.ShouldBe(StageState.Failed);
+        row.Progress.Stages.Single(s => s.Code == VideoSteps.Code).State.ShouldBe(StageState.Done);
+    }
+
+    [AvaloniaFact]
+    public async Task ClickingAProducedVideoLoadsThePreviewAndTheButtons()
+    {
+        var engine = new FakeEngine();
+        using var h = Harness(new FakeChat().Answer(_ => Code(engine.SampleCode)), engine);
+        var (page, _) = await PrepareAsync(h);
+        await page.ProduceAllAsync();
+        var (window, view) = Show(h, page, 1280, 720);
+        Find<Avalonia.Controls.Button>(view, "PlaySystemButton").IsEffectivelyVisible.ShouldBeFalse("no video is chosen yet");
+
+        var made = page.Produced.Single();
+        page.SelectedProduced = made;
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
 
-        // The three steps stand side by side as compact cards (purpose as a tooltip, notes cut to three lines), inside the folding area
-        // with no scroll bar of its own (0.1.6 scrolled a 420 px box).
-        page.Picker.Columns.ShouldBe(3);
-        page.Picker.Compact.ShouldBeTrue();
-        var expander = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(view).OfType<Avalonia.Controls.Expander>().Single();
-        expander.IsExpanded.ShouldBeTrue("it still folds");
-        Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(expander).OfType<Avalonia.Controls.ScrollViewer>().ShouldBeEmpty();
+        page.Player.Poster.ShouldBe(made.Thumbnail);
+        page.Player.DurationMs.ShouldBe(made.Video.DurationMs);
+        page.Player.IsPlaying.ShouldBeFalse("nothing starts by itself");
+        foreach (var name in new[] { "Preview", "PlaySystemButton", "OpenFolderButton", "ProduceAgainButton" })
+        {
+            Find<Avalonia.Controls.Control>(view, name).IsEffectivelyVisible.ShouldBeTrue(name);
+        }
+
+        // A file deleted from outside: "Open in player" says so instead of opening anything.
+        File.Delete(made.File);
+        page.PlaySystem();
+        page.Status.ShouldBe(h.Get<TMConcept.Desktop.Localization.Localizer>()["produced.file_missing"]);
         window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task ProduceAgainBringsTheConceptBackSelectedForEditing()
+    {
+        var engine = new FakeEngine();
+        using var h = Harness(new FakeChat().Answer(_ => Code(engine.SampleCode)), engine);
+        var (page, concept) = await PrepareAsync(h);
+        await page.ProduceAllAsync();
+        page.Approved.ShouldBeEmpty();
+        page.SelectedProduced = page.Produced.Single();
+
+        await page.ProduceAgainAsync();
+
+        (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!.Status.ShouldBe(ConceptStatus.Approved);
+        page.Approved.Single().Id.ShouldBe(concept.Id);
+        page.SelectedApproved.ShouldBe(page.Approved.Single());
+        page.Detail.Card!.Id.ShouldBe(concept.Id);
+        page.Detail.IsViewing.ShouldBeTrue();
+        page.Detail.CanEdit.ShouldBeTrue("one click to Edit or Edit with AI");
+
+        // Again while it is approved: refused with the existing message.
+        await page.ProduceAgainAsync();
+        page.Status.ShouldBe(h.Get<TMConcept.Desktop.Localization.Localizer>()["produced.again.already"]);
+    }
+
+    [AvaloniaFact]
+    public async Task LeavingThePageClosesThePlayer()
+    {
+        using var h = new DesktopHarness(PlayerTests.PlaceholderFfmpeg);
+        await FirstRunTests.CreateAsync(h);
+        var profile = new Profile { Name = "Byzantium", ContentLanguage = ContentLanguages.English, ConceptText = "x" };
+        await h.Get<IProfileStore>().SaveAsync(profile, CancellationToken.None);
+        await h.Get<AppSession>().SelectProfileAsync(profile, CancellationToken.None);
+        var folder = Path.Combine(h.Get<IAppPaths>().LibraryDirectory, "Byzantium", "2026-11-11-1-walls", VideoFolders.FirstVersion);
+        Directory.CreateDirectory(folder);
+        File.WriteAllBytes(Path.Combine(folder, "video.mp4"), new byte[16]);
+        await h.Get<IVideoStore>().AddAsync(new VideoRecord { ProfileId = profile.Id, Title = "Walls", FileName = "video.mp4", DurationMs = 10_000,
+            Folder = LibraryPaths.Relative(h.Get<IAppPaths>().LibraryDirectory, folder) }, [], CancellationToken.None);
+        var page = h.Get<VideoViewModel>();
+        await page.ActivateAsync();
+        page.SelectedProduced = page.Produced.Single();
+        page.Player.HasVideo.ShouldBeTrue(page.Player.Message);
+        page.Player.IsPlaying = true;
+
+        page.Deactivate();
+
+        page.Player.IsPlaying.ShouldBeFalse("another tab was opened: the video stops");
+        page.Player.Frame.ShouldBeNull();
+    }
+
+    [AvaloniaFact]
+    public async Task TheMoneyShownDuringARunIsWhatTheRecordAndAFailureSay()
+    {
+        var engine = new FakeEngine();
+        var chat = new FakeChat().Answer(_ => Code(engine.SampleCode));
+        using var h = Harness(chat, engine);
+        var (_, concept) = await OpenAsync(h);
+        var reports = new System.Collections.Concurrent.ConcurrentQueue<VideoProgress>();
+        var progress = new ForwardProgress<VideoProgress>(reports.Enqueue);
+
+        var record = await RunAsync(h, concept, new VideoOptions { Engine = engine.Kind, Speech = false }, progress);
+
+        record.TotalUsd.ShouldBeGreaterThan(0);
+        reports.Last().SpentUsd.ShouldBe(record.TotalUsd);
+        reports.Select(r => r.Share).ShouldBeInOrder();
+        reports.Last().Step.ShouldBeEmpty("after the last step nothing runs");
+        reports.Last().Plan.ShouldBe([VideoSteps.Prepare, VideoSteps.Timing, VideoSteps.Code, VideoSteps.Render, VideoSteps.Mux, VideoSteps.Save]);
+
+        var second = new Concept { ProfileId = concept.ProfileId, Title = "Iconoclasm", Summary = "s", Content = Content, Language = "en", Status = ConceptStatus.Queued };
+        await h.Get<IConceptStore>().AddAsync([second], CancellationToken.None);
+        engine.FailRenders = 2;
+        chat.Answer(_ => Code(engine.SampleCode)).Answer(_ => Code(engine.SampleCode));
+        reports.Clear();
+        var failure = await Should.ThrowAsync<VideoException>(() => RunAsync(h, second, new VideoOptions { Engine = engine.Kind, Speech = false }, progress));
+        failure.SpentUsd.ShouldBeGreaterThan(0);
+        reports.Last().SpentUsd.ShouldBe(failure.SpentUsd);
     }
 
     [AvaloniaFact]
@@ -204,7 +546,7 @@ public sealed class VideoPageTests
         (lost.ActualUsd, lost.Status, lost.Error).ShouldBe((paid, TMConcept.Core.Runs.RunStatus.Failed, "render"));
         var spending = await TMConcept.Desktop.Localization.PriceInfo.SpendingAsync(h.Get<TMConcept.Core.Runs.IRunStore>(), h.Get<IProfileStore>(),
             h.Get<IVideoStore>(), TimeProvider.System, text, CancellationToken.None);
-        spending.ShouldContain(text.Format("models.spending.failed", text.Usd(paid)));
+        spending.Breakdown.ShouldContain(text.Format("models.spending.failed", text.Usd(paid)));
 
         // A second failure adds to what the item lost.
         engine.FailRenders = 2;
@@ -260,7 +602,7 @@ public sealed class VideoPageTests
         var error = page.Queue.Single().Error;
         error.ShouldBe(text.Format("video.error.truncated", text.Usd(paid)));
         error.ShouldNotContain(text["provider.fail.truncated"]);
-        page.LastCost.ShouldContain(text.Usd(paid));
+        page.LastLine.ShouldContain(text.Usd(paid));
         (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!.Status.ShouldBe(ConceptStatus.Queued);
     }
 
@@ -297,13 +639,37 @@ public sealed class VideoPageTests
         text["produced.note." + VideoWarnings.SamplesNone].ShouldNotStartWith("produced.note.");
     }
 
-    private static async Task<VideoRecord> RunAsync(DesktopHarness h, Concept concept, VideoOptions options)
+    private static async Task<VideoRecord> RunAsync(DesktopHarness h, Concept concept, VideoOptions options, IProgress<VideoProgress>? progress = null)
     {
         var profile = (await h.Get<IProfileStore>().GetAsync(concept.ProfileId, CancellationToken.None))!;
         var model = new ResolvedModel(h.Get<IModelCatalog>().Find("anthropic", "claude-sonnet-5-5")!,
             new ApiKey { Provider = "anthropic", Label = "k", Secret = "fake-test-key-video-0123" }, string.Empty);
         var stored = (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!;
-        return await h.Get<VideoPipeline>().RunAsync(new VideoJob(stored, profile, options, model), null, CancellationToken.None);
+        return await h.Get<VideoPipeline>().RunAsync(new VideoJob(stored, profile, options, model), progress, CancellationToken.None);
+    }
+
+    private static (Avalonia.Controls.Window Window, TMConcept.Desktop.Views.VideoView View) Show(DesktopHarness h, VideoViewModel page, int width, int height)
+    {
+        var view = new TMConcept.Desktop.Views.VideoView { DataContext = page };
+        var window = new Avalonia.Controls.Window { Content = view, Width = width, Height = height };
+        h.Get<TMConcept.Desktop.Localization.LanguageResources>().Attach(window.Resources.MergedDictionaries);
+        window.Show();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        return (window, view);
+    }
+
+    private static T Find<T>(Avalonia.Visual root, string name)
+        where T : Avalonia.Controls.Control =>
+        Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(root).OfType<T>().First(c => c.Name == name);
+
+    private static async Task Until(Func<bool> condition)
+    {
+        for (var i = 0; i < 200 && !condition(); i++)
+        {
+            await Task.Delay(10);
+        }
+
+        condition().ShouldBeTrue();
     }
 
     [AvaloniaFact]
@@ -437,14 +803,14 @@ public sealed class VideoPageTests
         var code = page.Picker.Row(PipelineSteps.VideoCode)!;
         code.Selected!.Model!.Id.ShouldBe("claude-sonnet-5-5", "the profile's last choice is preselected");
         code.Selected = code.Options.First(o => o.Model?.Id == "claude-opus-5-5");
-        page.Estimate.ShouldContain("$");
+        page.QueueEstimate.ShouldContain("$");
 
         await page.ProduceAllAsync();
 
         page.Queue.ShouldBeEmpty();
         (await h.Get<IVideoStore>().ListAsync(concept.ProfileId, CancellationToken.None)).Single().CodeModel.ShouldBe("anthropic/claude-opus-5-5");
         (await h.Get<IStepModelStore>().GetAsync(PipelineSteps.VideoCode, concept.ProfileId, CancellationToken.None))!.Model.ShouldBe("claude-opus-5-5");
-        page.LastCost.ShouldNotBeEmpty();
+        page.LastLine.ShouldNotBeEmpty();
     }
 
     [AvaloniaFact]
@@ -475,7 +841,7 @@ public sealed class VideoPageTests
         concepts.EffortWarning.ShouldBeFalse();
 
         var view = new TMConcept.Desktop.Views.StepPickerView { DataContext = page.Picker };
-        var window = new Avalonia.Controls.Window { Content = view, Width = 1280, Height = 820 };
+        var window = new Avalonia.Controls.Window { Content = view, Width = 1280, Height = 720 };
         var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
         h.Get<TMConcept.Desktop.Localization.LanguageResources>().Attach(window.Resources.MergedDictionaries);
         code.Effort = code.Efforts.First(e => e.Value == "high");

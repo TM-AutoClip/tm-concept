@@ -13,7 +13,7 @@ using TMConcept.Tests.Providers;
 
 namespace TMConcept.Tests.Core;
 
-/// <summary>"Generate" with selected topics: one concept per topic, in order, each batch with its own slice (fake model only).</summary>
+/// <summary>A <see cref="TopicBrief"/>: one concept per ticked topic, in order, each batch with its own slice, no extra request (fake model only).</summary>
 public sealed class TopicGenerationTests
 {
     private static readonly CancellationToken None = CancellationToken.None;
@@ -47,27 +47,44 @@ public sealed class TopicGenerationTests
         "TOPICS (one concept each, in order):" + string.Concat(Enumerable.Range(from, to - from + 1).Select(i => $"\n{i - from + 1}. «Topic {i}»"));
 
     [AvaloniaFact]
-    public async Task FortyFiveTopicsRunAsTwentyTwentyFiveAndEveryBatchCarriesItsSlice()
+    public async Task FortyFiveTopicsRunAsTwentyTwentyFiveAndEveryBatchCarriesItsSliceAndNoExtraRequest()
     {
         var fake = new FakeChat().Concepts(FakeChat.Distinct(20)).Concepts(FakeChat.Distinct(20)).Concepts(FakeChat.Distinct(5));
         using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
         var (profile, model) = await PrepareAsync(h);
 
-        var result = await h.Get<ConceptGenerator>().GenerateAsync(new ConceptRequest(profile, 3, "a calm tone", model, Topics: Topics(45)), null, null, None);
+        var result = await h.Get<ConceptGenerator>().GenerateAsync(new ConceptRequest(profile, new TopicBrief(Topics(45)), model), null, null, None);
 
-        result.Run.Requested.ShouldBe(45, "the count comes from the topics, not from the Count box");
+        result.Run.Requested.ShouldBe(45, "the count is the number of topics");
+        result.Run.ExtraPrompt.ShouldBeEmpty();
         result.Accepted.Count.ShouldBe(45);
-        result.TopicsLeft.ShouldBeEmpty();
         fake.Requests.Count.ShouldBe(3);
         fake.Requests[0].User.ShouldContain(Block(1, 20) + "\nREQUESTED: 20 new concepts.");
         fake.Requests[1].User.ShouldContain(Block(21, 40) + "\nREQUESTED: 20 new concepts.");
         fake.Requests[2].User.ShouldContain(Block(41, 45) + "\nREQUESTED: 5 new concepts.");
         fake.Requests[1].User.ShouldNotContain("«Topic 20»");
-        fake.Requests.ShouldAllBe(r => r.User.Contains("EXTRA REQUEST: «a calm tone»"), "the extra request still goes along, for angle and tone");
+        fake.Requests.ShouldAllBe(r => !r.User.Contains("EXTRA REQUEST"), "a topic run sends no extra request (0.1.12 leaked it)");
     }
 
     [AvaloniaFact]
-    public async Task ACutSecondBatchLeavesTheTopicsAfterItsCompleteConcepts()
+    public async Task AnIdeaRunSendsItsIdeaAndCountAndNeverTopics()
+    {
+        var fake = new FakeChat().Concepts(FakeChat.Distinct(3));
+        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
+        var (profile, model) = await PrepareAsync(h);
+
+        var result = await h.Get<ConceptGenerator>().GenerateAsync(new ConceptRequest(profile, new IdeaBrief("  a calm tone ", 3), model), null, null, None);
+
+        result.Run.Requested.ShouldBe(3);
+        result.Run.ExtraPrompt.ShouldBe("a calm tone");
+        var user = fake.Requests.Single().User;
+        user.ShouldContain("EXTRA REQUEST: «a calm tone»");
+        user.ShouldContain("REQUESTED: 3 new concepts.");
+        user.ShouldNotContain("TOPICS (one concept each");
+    }
+
+    [AvaloniaFact]
+    public async Task ACutSecondBatchReportsOnlyTheTopicsOfItsCompleteConcepts()
     {
         var full = FakeChat.Json(FakeChat.Distinct(8));
         var starts = new List<int>();
@@ -86,32 +103,20 @@ public sealed class TopicGenerationTests
             });
         using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
         var (profile, model) = await PrepareAsync(h);
+        var batches = new List<ConceptBatch>();
 
-        var result = await h.Get<ConceptGenerator>().GenerateAsync(new ConceptRequest(profile, 45, string.Empty, model, Topics: Topics(45)), null, null, None);
+        var result = await h.Get<ConceptGenerator>().GenerateAsync(new ConceptRequest(profile, new TopicBrief(Topics(45)), model),
+            new ForwardProgress<ConceptBatch>(batches.Add), null, None);
 
         result.ErrorCode.ShouldBe("truncated");
         result.Accepted.Count.ShouldBe(27);
-        result.TopicsLeft.ShouldBe(Enumerable.Range(28, 18).Select(i => "Topic " + i).ToList(), "7 of the second batch came back; the third batch never ran");
+        batches.SelectMany(b => b.TopicsMade).ShouldBe(Enumerable.Range(1, 27).Select(i => "Topic " + i).ToList(),
+            "7 of the second batch came back; the page keeps topics 28-45 ticked");
         fake.Requests.Count.ShouldBe(2);
     }
 
     [AvaloniaFact]
-    public async Task AFailedBatchLeavesItsWholeSliceAndTheRest()
-    {
-        var fake = new FakeChat()
-            .Concepts(FakeChat.Distinct(20))
-            .Answer(_ => throw new ProviderException("overloaded") { Code = "http", ChargedUsage = new ChatUsage(0, 0, 0, 0) });
-        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
-        var (profile, model) = await PrepareAsync(h);
-
-        var result = await h.Get<ConceptGenerator>().GenerateAsync(new ConceptRequest(profile, 45, string.Empty, model, Topics: Topics(45)), null, null, None);
-
-        result.ErrorCode.ShouldBe("http");
-        result.TopicsLeft.ShouldBe(Enumerable.Range(21, 25).Select(i => "Topic " + i).ToList());
-    }
-
-    [AvaloniaFact]
-    public async Task EverySavedBatchReportsTheTopicsItMade()
+    public async Task EverySavedBatchReportsTheTopicsItMadeAndAFailedBatchNone()
     {
         var fake = new FakeChat()
             .Concepts(FakeChat.Distinct(20))
@@ -120,51 +125,35 @@ public sealed class TopicGenerationTests
         var (profile, model) = await PrepareAsync(h);
         var batches = new List<ConceptBatch>();
 
-        await h.Get<ConceptGenerator>().GenerateAsync(new ConceptRequest(profile, 45, string.Empty, model, Topics: Topics(45)),
+        var result = await h.Get<ConceptGenerator>().GenerateAsync(new ConceptRequest(profile, new TopicBrief(Topics(45)), model),
             new ForwardProgress<ConceptBatch>(batches.Add), null, None);
 
+        result.ErrorCode.ShouldBe("http");
         batches.Single().TopicsMade.ShouldBe(Enumerable.Range(1, 20).Select(i => "Topic " + i).ToList(),
-            "the page marks these made even when a later batch fails in an unexpected way");
+            "the page takes these off its list even when a later batch fails");
     }
 
-    [AvaloniaFact]
-    public async Task OneHundredTwentyTopicsRunTheFirstHundred()
+    [Fact]
+    public void TopicBriefRefusesMoreThan100AndNone()
     {
-        var fake = new FakeChat();
-        for (var i = 0; i < 5; i++)
-        {
-            fake.Concepts(FakeChat.Distinct(20));
-        }
-
-        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
-        var (profile, model) = await PrepareAsync(h);
-
-        var result = await h.Get<ConceptGenerator>().GenerateAsync(new ConceptRequest(profile, 1, string.Empty, model, Topics: Topics(120)), null, null, None);
-
-        result.Run.Requested.ShouldBe(ConceptLimits.CountMax);
-        result.Accepted.Count.ShouldBe(100);
-        result.TopicsLeft.ShouldBeEmpty("the topics past 100 were not given to this run: the page keeps them selected");
-        fake.Requests.Count.ShouldBe(5);
-        fake.Requests[^1].User.ShouldContain(Block(81, 100));
-        fake.Requests[^1].User.ShouldNotContain("«Topic 101»");
+        Should.Throw<ArgumentOutOfRangeException>(() => new TopicBrief(Topics(101)), "never cut silently");
+        Should.Throw<ArgumentOutOfRangeException>(() => new TopicBrief([]));
+        new TopicBrief(Topics(100)).Count.ShouldBe(100);
     }
 
     [AvaloniaFact]
-    public async Task TheEstimateWithTopicsSendsTheirSlicesAndIgnoresTheCount()
+    public async Task EstimateOfATopicBriefCountsTheTopics()
     {
         using var h = new DesktopHarness();
         var (profile, model) = await PrepareAsync(h);
         var generator = h.Get<ConceptGenerator>();
 
-        var plain = await generator.EstimateAsync(profile, 45, string.Empty, string.Empty, model.Model, string.Empty, None);
-        var topics = await generator.EstimateAsync(profile, 3, string.Empty, string.Empty, model.Model, string.Empty, None, Topics(45));
-        var sameCount = await generator.EstimateAsync(profile, 45, string.Empty, string.Empty, model.Model, string.Empty, None, Topics(45));
+        var idea = await generator.EstimateAsync(profile, new IdeaBrief(string.Empty, 45), string.Empty, model.Model, string.Empty, None);
+        var topics = await generator.EstimateAsync(profile, new TopicBrief(Topics(45)), string.Empty, model.Model, string.Empty, None);
+        var fewer = await generator.EstimateAsync(profile, new TopicBrief(Topics(3)), string.Empty, model.Model, string.Empty, None);
 
-        topics.ShouldBe(sameCount, "with topics the count is the number of topics");
-        topics.MaxUsd.ShouldBeGreaterThan(plain.MaxUsd, "every batch's prompt also carries its topics");
-        topics.MinUsd.ShouldBeGreaterThan(plain.MinUsd);
-        (await generator.EstimateAsync(profile, 1, string.Empty, string.Empty, model.Model, string.Empty, None, Topics(120)))
-            .ShouldBe(await generator.EstimateAsync(profile, 1, string.Empty, string.Empty, model.Model, string.Empty, None, Topics(100)),
-                "only the first 100 run");
+        topics.MaxUsd.ShouldBeGreaterThan(idea.MaxUsd, "45 concepts either way, and every batch's prompt also carries its topics");
+        topics.MinUsd.ShouldBeGreaterThan(idea.MinUsd);
+        fewer.MaxUsd.ShouldBeLessThan(topics.MaxUsd, "3 ticked topics are 3 concepts");
     }
 }

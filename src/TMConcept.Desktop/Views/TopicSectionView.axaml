@@ -1,0 +1,65 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:TMConcept.Desktop.ViewModels"
+             xmlns:views="using:TMConcept.Desktop.Views"
+             x:Class="TMConcept.Desktop.Views.TopicSectionView"
+             x:DataType="vm:TopicSectionViewModel">
+  <!-- Section A: suggest topics, tick them, "Generate selected (n)" writes exactly one concept per ticked topic. The topic list is the only
+       scroll of the section; the buttons, the tiny estimates and the status stay in sight. While the section generates the list is locked:
+       the topics that get their concept leave it. -->
+  <Border Classes="card" Padding="12,10">
+    <DockPanel>
+      <!-- The title gives way first (it trims, its help stays) when the section is narrow. -->
+      <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="8" Margin="0,0,0,6">
+        <DockPanel VerticalAlignment="Center">
+          <views:HelpTip DockPanel.Dock="Right" Text="{DynamicResource concepts.topics.tip}" />
+          <TextBlock Name="TopicTitle" Text="{DynamicResource concepts.topics.title}" Classes="h2" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                     ToolTip.Tip="{DynamicResource concepts.topics.title}" />
+        </DockPanel>
+        <TextBlock Grid.Column="1" Text="{DynamicResource concepts.topics.count}" Classes="small" VerticalAlignment="Center" />
+        <NumericUpDown Name="TopicCountBox" Grid.Column="2" Value="{Binding TopicCount}" Minimum="5" Maximum="100" Increment="5" FormatString="0" Width="110"
+                       ToolTip.Tip="{DynamicResource topics.count.hint}" IsEnabled="{Binding CanSuggest}" />
+        <Button Name="SuggestButton" Grid.Column="3" Content="{DynamicResource topics.button}" Command="{Binding SuggestCommand}"
+                IsEnabled="{Binding CanSuggest}" VerticalAlignment="Center" ToolTip.Tip="{DynamicResource topics.hint}" />
+        <TextBlock Name="SuggestEstimateLine" Grid.Column="4" Text="{Binding SuggestEstimate}" Classes="tiny" VerticalAlignment="Center"
+                   ToolTip.Tip="{Binding SuggestEstimateDetail}" />
+      </Grid>
+      <views:ConceptSectionFooter Name="TopicFooter" DockPanel.Dock="Bottom" Margin="0,6,0,0" />
+      <DockPanel>
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Margin="0,0,0,4" IsVisible="{Binding Suggesting}">
+          <ProgressBar IsIndeterminate="True" Width="48" MinWidth="48" VerticalAlignment="Center" />
+          <TextBlock Grid.Column="1" Text="{Binding SuggestCall.Text}" Classes="small" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+          <Button Grid.Column="2" Classes="small" Content="{DynamicResource common.cancel}" Command="{Binding CancelSuggestCommand}" />
+        </Grid>
+        <!-- One line over the list: tick all / none and how many are ticked, then what the last suggestion did (red when it failed). -->
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,Auto,Auto,*" ColumnSpacing="12" Margin="0,0,0,4">
+          <Button Name="TickAll" Classes="link small" Content="{DynamicResource topics.select_all}" Command="{Binding TickAllCommand}"
+                  IsVisible="{Binding HasTopics}" IsEnabled="{Binding !Running}" />
+          <Button Name="TickNone" Grid.Column="1" Classes="link small" Content="{DynamicResource topics.select_none}" Command="{Binding TickNoneCommand}"
+                  IsVisible="{Binding HasTopics}" IsEnabled="{Binding !Running}" />
+          <TextBlock Name="CheckedLine" Grid.Column="2" Text="{Binding CheckedText}" Classes="small" VerticalAlignment="Center" FontWeight="SemiBold"
+                     IsVisible="{Binding HasTopics}" />
+          <TextBlock Name="SuggestStatusLine" Grid.Column="3" Text="{Binding SuggestStatus}" Classes="small" Classes.error="{Binding SuggestFailed}"
+                     TextTrimming="CharacterEllipsis" TextAlignment="Right" VerticalAlignment="Center" ToolTip.Tip="{Binding SuggestStatus}" />
+        </Grid>
+        <Border Classes="inset" MinHeight="60">
+          <Panel>
+            <TextBlock Text="{DynamicResource concepts.topics.empty}" Classes="small" TextWrapping="Wrap" VerticalAlignment="Center" HorizontalAlignment="Center"
+                       TextAlignment="Center" Margin="8" IsVisible="{Binding !HasTopics}" />
+            <ScrollViewer Name="TopicScroll" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto" IsVisible="{Binding HasTopics}">
+              <ItemsControl Name="TopicList" ItemsSource="{Binding Topics}" IsEnabled="{Binding !Running}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:TopicItemViewModel">
+                    <CheckBox Classes="topic" IsChecked="{Binding Checked}">
+                      <TextBlock Text="{Binding Text}" TextWrapping="Wrap" />
+                    </CheckBox>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+          </Panel>
+        </Border>
+      </DockPanel>
+    </DockPanel>
+  </Border>
+</UserControl>

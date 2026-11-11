@@ -9,8 +9,8 @@ namespace TMConcept.Core.Concepts;
 /// <summary>
 /// Builds the prompts of concepts, AI edit and topic suggestions from the embedded templates (Prompts/&lt;lang&gt;/*.txt). Concepts and AI
 /// edit: Turkish for Turkish videos, English for every other output language, which the prompt names (the user's texts may be in the
-/// interface language). Topics: the interface language, since the user reads and picks the topics; a selected topic later goes to the
-/// concept prompt as one line of its TOPICS block (one concept each, in order). The order follows the
+/// interface language). Topics: the interface language, since the user reads and ticks the topics; a ticked topic later goes to the
+/// concept prompt as one line of its TOPICS block (one concept each, in order; see <see cref="TopicBrief"/>). The order follows the
 /// cache: the fixed part (rules + channel content + format + sample images) comes first and carries the cache mark; the changing part (the
 /// profile's past, see <see cref="PromptMemoryBuilder"/>, the wishes, the extra request, the topics, the count) comes last, so a new concept never
 /// changes the cached part (inside it the growing history made every call write a new cache entry at 1.25× and never read one). The
@@ -37,7 +37,7 @@ public static partial class ConceptPromptBuilder
         // Names from the app's own focus lists (not free text), in the prompt's language.
         values["focus"] = string.IsNullOrWhiteSpace(input.Focus) ? null : PromptText.Data(input.Focus, ConceptLimits.ExtraPromptMax);
 
-        // The selected topics of this batch, numbered in order (one concept each); no topics, no line.
+        // The ticked topics of this batch, numbered in order (one concept each); an idea brief has none, so no line.
         values["topics"] = input.Topics is not { Count: > 0 } topics
             ? null
             : string.Concat(topics.Select((t, i) => string.Create(CultureInfo.InvariantCulture, $"\n{i + 1}. «{PromptText.Line(t, TopicLimits.TopicMax)}»")));
@@ -67,7 +67,7 @@ public static partial class ConceptPromptBuilder
     /// <summary>
     /// Builds the "Suggest topics" prompt (Prompts/&lt;interface lang&gt;/topics.txt; a language other than Turkish gets the English one): the
     /// channel content, its format and target length (so a topic fits one video), the video language, the profile's covered concepts and
-    /// topic dislikes, the newest earlier suggestions, the selected topics and the focus. The extra request is not sent (0.1.12): the old
+    /// topic dislikes, the newest earlier suggestions and the focus. The extra request is not sent (0.1.12): the old
     /// prompt followed it even outside the channel's scope.
     /// </summary>
     public static ConceptPrompt BuildTopics(TopicPromptInput input)
@@ -85,7 +85,6 @@ public static partial class ConceptPromptBuilder
         };
         Memory(values, input.Memory);
         values["suggested"] = Lines(input.EarlierSuggestions);
-        values["selected"] = Lines(input.Selected);
         values["focus"] = string.IsNullOrWhiteSpace(input.Focus) ? null : PromptText.Data(input.Focus, ConceptLimits.ExtraPromptMax);
         values["count"] = input.Count.ToString(CultureInfo.InvariantCulture);
         return Make(template, values, TopicSchema());

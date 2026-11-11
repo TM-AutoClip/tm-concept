@@ -5,7 +5,7 @@
         x:DataType="d:ApiKeyPromptViewModel"
         Title="{Binding Title}"
         Width="620" SizeToContent="Height" CanResize="False"
-        WindowStartupLocation="CenterOwner">
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
   <StackPanel Margin="24" Spacing="12">
     <TextBlock Text="{Binding Title}" Classes="h2" TextWrapping="Wrap" />
     <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />

@@ -4,7 +4,8 @@ namespace TMConcept.Core.Pipeline;
 
 /// <summary>
 /// The steps that call a model. Each is chosen on the page that uses it (there is no model setting in Settings): Generate concepts =
-/// concept model and the semantic duplicate check; Concept → video = video code model and engine, images, narration; Profile = describing
+/// concept model and the semantic duplicate check; Concept → video = video code model and engine, images, narration (and the concept model for
+/// editing an approved concept there); Profile = describing
 /// a sample image. The last choice is kept per profile and shown again next time.
 /// </summary>
 public static class PipelineSteps
@@ -51,8 +52,11 @@ public static class PipelineSteps
     /// <summary>The steps chosen on the Generate concepts page.</summary>
     public static readonly IReadOnlyList<string> ConceptPage = [Concepts, Embedding, Topics];
 
-    /// <summary>The steps chosen on the Concept → video page.</summary>
-    public static readonly IReadOnlyList<string> VideoPage = [VideoCode, Images, Speech];
+    /// <summary>
+    /// The steps chosen on the Concept → video page: the video's own (code with its engine, images, narration) and the concept step, which
+    /// the AI edit of an approved concept uses there. A video is made only with the first three (production names them itself).
+    /// </summary>
+    public static readonly IReadOnlyList<string> VideoPage = [VideoCode, Images, Speech, Concepts];
 
     /// <summary>The steps chosen on the Profile page (sample images).</summary>
     public static readonly IReadOnlyList<string> ProfilePage = [DescribeImage];

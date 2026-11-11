@@ -1,0 +1,19 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:TMConcept.Desktop.ViewModels"
+             x:Class="TMConcept.Desktop.Views.FineTuneBar"
+             x:DataType="vm:ConceptSettingsViewModel">
+  <!-- The fine-tuning folded into one line ("▸ Fine-tuning: Tone: mysterious · Audience: not set · …"); a click unfolds the drop-downs,
+       which the page places under its bar. -->
+  <ToggleButton Name="Header" Classes="fold" IsChecked="{Binding FineTuneOpen}" HorizontalAlignment="Stretch" ToolTip.Tip="{DynamicResource focus.hint}">
+    <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="6">
+      <Panel Width="10">
+        <TextBlock Text="▸" IsVisible="{Binding !FineTuneOpen}" VerticalAlignment="Center" />
+        <TextBlock Text="▾" IsVisible="{Binding FineTuneOpen}" VerticalAlignment="Center" />
+      </Panel>
+      <TextBlock Grid.Column="1" Text="{DynamicResource concepts.finetune}" FontWeight="SemiBold" VerticalAlignment="Center" />
+      <TextBlock Name="SummaryLine" Grid.Column="2" Text="{Binding FineTuneSummary}" Classes="muted" TextTrimming="CharacterEllipsis"
+                 VerticalAlignment="Center" />
+    </Grid>
+  </ToggleButton>
+</UserControl>

@@ -1,0 +1,20 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="using:TMConcept.Desktop.Views"
+             x:Class="TMConcept.Desktop.Views.ModelSummaryBar"
+             x:DataType="views:ModelSummaryBar">
+  <!-- The page's models folded into one line ("▸ Models: Concept: Claude Sonnet 5.5 (medium) · Topics: … · Meaning: off"); a click unfolds
+       the pickers, which the page places under its bar (so several folded lines can share one row). -->
+  <ToggleButton Name="Header" Classes="fold" IsChecked="{Binding $parent[views:ModelSummaryBar].IsOpen}" HorizontalAlignment="Stretch"
+                ToolTip.Tip="{Binding $parent[views:ModelSummaryBar].Picker.Summary}">
+    <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="6">
+      <Panel Width="10">
+        <TextBlock Text="▸" IsVisible="{Binding !$parent[views:ModelSummaryBar].IsOpen}" VerticalAlignment="Center" />
+        <TextBlock Text="▾" IsVisible="{Binding $parent[views:ModelSummaryBar].IsOpen}" VerticalAlignment="Center" />
+      </Panel>
+      <TextBlock Grid.Column="1" Text="{DynamicResource concepts.models}" FontWeight="SemiBold" VerticalAlignment="Center" />
+      <TextBlock Name="SummaryLine" Grid.Column="2" Text="{Binding $parent[views:ModelSummaryBar].Picker.Summary}" Classes="muted"
+                 TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+    </Grid>
+  </ToggleButton>
+</UserControl>

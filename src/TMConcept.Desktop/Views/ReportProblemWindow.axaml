@@ -5,7 +5,7 @@
         x:DataType="vm:ReportProblemViewModel"
         Title="{DynamicResource report.title}"
         Width="640" SizeToContent="Height" CanResize="False"
-        WindowStartupLocation="CenterOwner">
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
   <StackPanel Margin="24" Spacing="12">
     <TextBlock Text="{DynamicResource report.title}" Classes="h2" />
     <TextBlock Text="{DynamicResource report.intro}" TextWrapping="Wrap" FontWeight="SemiBold" />

@@ -70,8 +70,8 @@ public sealed class ConceptPromptTests
             {
                 ConceptPromptBuilder.Build(new ConceptPromptInput(profile, [], memory, "x", 3)),
                 ConceptPromptBuilder.BuildEdit(new ConceptEditPromptInput(profile, [], "t", "s", "c", "w")),
-                ConceptPromptBuilder.BuildTopics(new TopicPromptInput(profile, "tr", string.Empty, memory, [], [], 10)),
-                ConceptPromptBuilder.BuildTopics(new TopicPromptInput(profile, "en", string.Empty, memory, [], [], 10)),
+                ConceptPromptBuilder.BuildTopics(new TopicPromptInput(profile, "tr", string.Empty, memory, [], 10)),
+                ConceptPromptBuilder.BuildTopics(new TopicPromptInput(profile, "en", string.Empty, memory, [], 10)),
             };
             foreach (var prompt in prompts)
             {
@@ -134,7 +134,7 @@ public sealed class ConceptPromptTests
         var memory = PromptMemoryBuilder.Build([Of(1, "Hagia Sophia", ConceptStatus.Produced), Of(2, "Iconoclasm", ConceptStatus.Trashed, TrashReason.Topic)], [],
             ContentLanguages.German);
         var english = ConceptPromptBuilder.BuildTopics(new TopicPromptInput(Profile(ContentLanguages.German), "en", "Tone: calm",
-            memory, ["Greek fire", "The Varangian Guard"], ["The Nika riots", "Basil II"], 37));
+            memory, ["Greek fire", "The Varangian Guard"], 37));
 
         english.System.ShouldStartWith("You suggest video topics for a channel.");
         english.System.ShouldContain("with exactly 37 items", Case.Sensitive, "the picked count goes through");
@@ -147,7 +147,7 @@ public sealed class ConceptPromptTests
         english.User.ShouldContain("- [video] Hagia Sophia");
         english.User.ShouldContain("DISLIKED TOPICS:\n- Iconoclasm");
         english.User.ShouldContain("ALREADY SUGGESTED (newest first):\n- Greek fire\n- The Varangian Guard");
-        english.User.ShouldContain("SELECTED TOPICS (already chosen):\n- The Nika riots\n- Basil II");
+        english.User.ShouldNotContain("SELECTED", Case.Sensitive, "the tick list lives on the page only (0.1.13)");
         english.User.ShouldContain("FOCUS: Tone: calm");
         english.User.ShouldEndWith("Suggest 37 topics now.");
         english.Schema["required"]!.ToJsonString().ShouldBe("[\"scope\",\"topics\"]");
@@ -162,7 +162,7 @@ public sealed class ConceptPromptTests
         }
 
         var turkish = ConceptPromptBuilder.BuildTopics(new TopicPromptInput(Profile(ContentLanguages.German), "tr", string.Empty,
-            PromptMemory.Empty, [], [], 10));
+            PromptMemory.Empty, [], 10));
         turkish.System.ShouldStartWith("Bir video kanalı için konu öneriyorsun.");
         turkish.System.ShouldContain("Öğeleri Türkçe yaz.");
         turkish.System.ShouldContain("VİDEO DİLİ: Almanca");
@@ -174,7 +174,7 @@ public sealed class ConceptPromptTests
     }
 
     [Fact]
-    public void SelectedTopicsGoToTheConceptPromptNumberedOneConceptEach()
+    public void TickedTopicsGoToTheConceptPromptNumberedOneConceptEach()
     {
         foreach (var (language, heading, rule) in new[]
         {

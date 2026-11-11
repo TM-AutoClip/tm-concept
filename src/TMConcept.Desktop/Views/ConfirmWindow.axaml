@@ -5,7 +5,7 @@
         x:DataType="d:ConfirmViewModel"
         Title="{Binding Title}"
         Width="520" SizeToContent="Height" CanResize="False"
-        WindowStartupLocation="CenterOwner">
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
   <StackPanel Margin="24" Spacing="14">
     <TextBlock Text="{Binding Title}" Classes="h2" TextWrapping="Wrap" />
     <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />
