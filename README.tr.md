@@ -195,8 +195,9 @@ Sonra modelleri onları kullanan sayfalarda seç (yukarıya bak). Ücretli hiçb
 
 ## İlk videonu üret
 
-1. **Konsept Üret:** modeli, adedi ve isteğe bağlı ek istemi seç (ton, izleyici ve anlatım biçimi ince ayarı ve
-   **Konu öner** yardım eder); tahmini gör; **Üret**'e bas.
+1. **Konsept Üret:** modeli, adedi ve isteğe bağlı ek istemi seç (ton, izleyici ve anlatım biçimi ince ayarı); tahmini gör; **Üret**'e
+   bas. **Konu öner** kanalın konusu içinde 5-100 konu önerir: beğendiklerini tikleyip seçilen konular listesine ekle, **Üret** her seçilen
+   konudan bir konsept yazar.
 2. Kartları aç, iyileri onayla (A), kalanı sil (D). ✎ (ya da onaylı bir konsepte tıklamak) metni düzenler; `[duraklama 1 sn]`,
    `[yumuşak geçiş]` gibi yer tutucular imlecin olduğu yere eklenir, program videoda kendisi uygular.
 3. **Konseptten Video:** onaylı konseptlere tıklayıp sıraya al, ayarlara bak, **Sıradakileri sırayla üret**'e bas.

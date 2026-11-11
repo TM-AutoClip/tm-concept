@@ -187,7 +187,7 @@ public sealed class BackupTests
         var (source, _) = await BackupAsync();
         using var __ = source;
         var profile = (await new ProfileStore(source.Database).ListAsync(None)).Single();
-        await new TopicSuggestionStore(source.Database).AddAsync([new TopicSuggestion { ProfileId = profile.Id, Text = "Greek fire", Used = true }], None);
+        await new TopicSuggestionStore(source.Database).AddAsync([new TopicSuggestion { ProfileId = profile.Id, Text = "Greek fire", Status = TopicStatus.Selected }], None);
         await new ConceptWishStore(source.Database).AddAsync(new ConceptWish { ProfileId = profile.Id, Text = "Shorter sentences" }, None);
         var service = Service(source);
         var all = Path.Combine(source.Paths.DataDirectory, "all" + BackupRules.Extension);
@@ -199,7 +199,7 @@ public sealed class BackupTests
         {
             await Service(target).RestoreAsync(all, Password, target.Protector, None);
             var back = (await new TopicSuggestionStore(target.Database).ListAsync(profile.Id, 10, None)).Single();
-            (back.Text, back.Used).ShouldBe(("Greek fire", true));
+            (back.Text, back.Status).ShouldBe(("Greek fire", TopicStatus.Selected));
             (await new ConceptWishStore(target.Database).ListAsync(profile.Id, 10, None)).Single().Text.ShouldBe("Shorter sentences");
         }
 

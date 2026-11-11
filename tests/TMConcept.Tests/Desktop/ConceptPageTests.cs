@@ -157,7 +157,7 @@ public sealed class ConceptPageTests
         TopicsCanceledException? canceled = null;
         try
         {
-            await h.Get<TopicSuggester>().SuggestAsync(profile, model, string.Empty, string.Empty, "en", null, CancellationToken.None);
+            await h.Get<TopicSuggester>().SuggestAsync(profile, model, string.Empty, TopicLimits.CountDefault, "en", null, CancellationToken.None);
         }
         catch (TopicsCanceledException ex)
         {
@@ -179,32 +179,39 @@ public sealed class ConceptPageTests
     }
 
     [AvaloniaFact]
-    public async Task SuggestTopicsBringsTopicsThatGoIntoTheExtraRequestAndCountsTheCost()
+    public async Task SuggestTopicsBringsTopicsToTickThatGoToTheSelectedListNotIntoTheExtraRequest()
     {
-        var fake = new FakeChat().Answer(_ => new ChatResponse("{\"topics\": [\"The fall of Trebizond\", \"Greek fire\", \"greek  fire\", \"\"]}",
+        var fake = new FakeChat().Answer(_ => new ChatResponse(
+            "{\"scope\": \"Byzantine history\", \"topics\": [\"The fall of Trebizond\", \"Greek fire\", \"greek  fire\", \"\"]}",
             new ChatUsage(600, 0, 0, 120), null, "end_turn", "r"));
         using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
         var profile = await PrepareAsync(h);
         await h.Get<IConceptStore>().AddAsync([new Concept { ProfileId = profile.Id, Title = "Hagia Sophia", Summary = "s", Content = "c", Language = "en" }],
             CancellationToken.None);
         var page = await PageAsync(h);
+        var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
         var topicsRow = page.Picker.Row(TMConcept.Core.Pipeline.PipelineSteps.Topics)!;
         page.TopicEstimate.ShouldNotBeEmpty();
         await page.SuggestTopicsAsync();
-        page.TopicStatus.ShouldBe(h.Get<TMConcept.Desktop.Localization.Localizer>()["topics.no_model"], "nothing is asked without a model");
+        page.TopicStatus.ShouldBe(text["topics.no_model"], "nothing is asked without a model");
         fake.Requests.ShouldBeEmpty();
 
         topicsRow.Selected = topicsRow.Options.First(o => o.Model?.Id == "claude-haiku-5-5");
         await Until(() => page.TopicEstimate.Contains("Claude Haiku", StringComparison.Ordinal));
         page.FocusRows.First(r => r.Dimension.Id == "tone").Selected = page.FocusRows.First(r => r.Dimension.Id == "tone").Options[1];
         page.ExtraPrompt = "only sieges";
+        page.TopicCount = 5;
 
         await page.SuggestTopicsAsync();
 
-        page.Topics.ShouldBe(["The fall of Trebizond", "Greek fire"], "cleaned, no repeats, no empty ones");
+        page.Topics.Select(t => t.Text).ShouldBe(["The fall of Trebizond", "Greek fire"], "cleaned, no repeats, no empty ones");
+        page.Topics.ShouldAllBe(t => !t.Checked, "suggestions come unticked");
+        page.HasChecked.ShouldBeFalse();
         var request = fake.Requests.Single();
         request.User.ShouldContain("- Hagia Sophia", Case.Sensitive, "earlier titles are not suggested again");
-        request.User.ShouldContain("EXTRA REQUEST SO FAR: «only sieges»");
+        request.User.ShouldContain("Suggest 5 topics now.", Case.Sensitive, "the count picker's value is asked for");
+        request.User.ShouldNotContain("only sieges", Case.Sensitive, "the extra request is not part of the topics prompt");
+        request.User.ShouldNotContain("EXTRA REQUEST");
         request.User.ShouldContain("FOCUS: ");
         request.MaxOutputTokens.ShouldBe(TopicSuggester.OutputMax, "room for thinking (1 500 cut Haiku at effort high before the first topic)");
         request.Stream.ShouldBeTrue();
@@ -212,11 +219,239 @@ public sealed class ConceptPageTests
         topicsRow.HasEfforts.ShouldBeFalse("the topics step shows no effort picker");
         var run = (await h.Get<IRunStore>().ListAsync(DateTimeOffset.UtcNow.AddHours(-1), CancellationToken.None)).Single(r => r.Kind == RunKind.Topics);
         run.ActualUsd.ShouldBeGreaterThan(0);
-        page.TopicStatus.ShouldContain(h.Get<TMConcept.Desktop.Localization.Localizer>().Usd(run.ActualUsd));
+        page.TopicStatus.ShouldContain(text.Usd(run.ActualUsd));
 
-        await page.AddTopicAsync("Greek fire");
-        page.ExtraPrompt.ShouldBe("only sieges\nGreek fire");
-        page.Topics.ShouldBe(["The fall of Trebizond"]);
+        // Ticked ones go to the selected list (kept in the store); the extra request does not change.
+        page.SelectAllTopics();
+        page.HasChecked.ShouldBeTrue();
+        page.AddCheckedText.ShouldBe(text.Format("topics.add_checked", 2));
+        page.UsingTopics.ShouldBeFalse();
+        page.CountEnabled.ShouldBeTrue();
+        await page.AddCheckedTopicsAsync();
+
+        page.ExtraPrompt.ShouldBe("only sieges");
+        page.Topics.ShouldBeEmpty();
+        page.SelectedTopics.Select(t => t.Text).ShouldBe(["The fall of Trebizond", "Greek fire"]);
+        page.UsingTopics.ShouldBeTrue();
+        page.CountEnabled.ShouldBeFalse("the count comes from the selected topics");
+        page.SelectedHeader.ShouldBe(text.Format("topics.selected.header", 2, 2));
+        (await h.Get<ITopicSuggestionStore>().ListAsync(profile.Id, TopicStatus.Selected, CancellationToken.None)).Select(s => s.Text)
+            .ShouldBe(["The fall of Trebizond", "Greek fire"]);
+    }
+
+    [AvaloniaFact]
+    public async Task TheTopicCountIsKeptWithinFiveToAHundredAndTheEstimateFollowsIt()
+    {
+        static ChatResponse Answer() => new("{\"scope\": \"s\", \"topics\": [\"Greek fire\"]}", new ChatUsage(600, 0, 0, 120), null, "end_turn", "r");
+        var fake = new FakeChat().Answer(_ => Answer()).Answer(_ => Answer());
+        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
+        await PrepareAsync(h);
+        var page = await PageAsync(h);
+        var topicsRow = page.Picker.Row(TMConcept.Core.Pipeline.PipelineSteps.Topics)!;
+        topicsRow.Selected = topicsRow.Options.First(o => o.Model?.Id == "claude-haiku-5-5");
+        await Until(() => page.TopicEstimate.Contains("Claude Haiku", StringComparison.Ordinal));
+        page.TopicCount.ShouldBe(TopicLimits.CountDefault);
+
+        page.TopicCount = 5;
+        await Until(() => page.TopicPrice.Length > 0);
+        var few = page.TopicEstimate;
+        page.TopicCount = 100;
+        await Until(() => page.TopicEstimate != few);
+
+        page.TopicCount = 500;
+        await page.SuggestTopicsAsync();
+        fake.Requests[0].User.ShouldContain("Suggest 100 topics now.", Case.Sensitive, "at most 100");
+        page.TopicCount = 1;
+        await page.SuggestTopicsAsync();
+        fake.Requests[1].User.ShouldContain("Suggest 5 topics now.", Case.Sensitive, "at least 5");
+    }
+
+    [AvaloniaFact]
+    public async Task TopicsAreTickedUntickedAndTakenBackFromTheSelectedList()
+    {
+        var fake = new FakeChat().Answer(_ => new ChatResponse("{\"scope\": \"s\", \"topics\": [\"The fall of Trebizond\", \"Greek fire\", \"The Nika riot\"]}",
+            new ChatUsage(600, 0, 0, 120), null, "end_turn", "r"));
+        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
+        var profile = await PrepareAsync(h);
+        var page = await PageAsync(h);
+        var topicsRow = page.Picker.Row(TMConcept.Core.Pipeline.PipelineSteps.Topics)!;
+        topicsRow.Selected = topicsRow.Options.First(o => o.Model?.Id == "claude-haiku-5-5");
+        await page.SuggestTopicsAsync();
+        var store = h.Get<ITopicSuggestionStore>();
+
+        page.SelectAllTopics();
+        page.CheckedCount.ShouldBe(3);
+        page.SelectNoTopics();
+        page.HasChecked.ShouldBeFalse();
+        await page.AddCheckedTopicsAsync();
+        page.SelectedTopics.ShouldBeEmpty("nothing ticked, nothing added");
+
+        page.Topics[0].Checked = true;
+        page.Topics[2].Checked = true;
+        page.AddCheckedText.ShouldBe(h.Get<TMConcept.Desktop.Localization.Localizer>().Format("topics.add_checked", 2));
+        await page.AddCheckedTopicsAsync();
+        page.SelectedTopics.Select(t => t.Text).ShouldBe(["The fall of Trebizond", "The Nika riot"]);
+        page.Topics.Select(t => t.Text).ShouldBe(["Greek fire"]);
+
+        // ✕ takes one back among the suggestions, unticked, and "offered" again in the store.
+        await page.RemoveSelectedTopicAsync(page.SelectedTopics[0]);
+        page.SelectedTopics.Select(t => t.Text).ShouldBe(["The Nika riot"]);
+        page.Topics.Select(t => t.Text).ShouldBe(["Greek fire", "The fall of Trebizond"]);
+        page.Topics.ShouldAllBe(t => !t.Checked);
+        (await store.ListAsync(profile.Id, TopicStatus.Offered, CancellationToken.None)).Select(s => s.Text)
+            .ShouldBe(["The fall of Trebizond", "Greek fire"], ignoreOrder: true);
+
+        // Added again, it goes back to its place in the store's order (when it was suggested), not to the end.
+        page.Topics.Single(t => t.Text == "The fall of Trebizond").Checked = true;
+        await page.AddCheckedTopicsAsync();
+        page.SelectedTopics.Select(t => t.Text).ShouldBe(["The fall of Trebizond", "The Nika riot"]);
+        (await store.ListAsync(profile.Id, TopicStatus.Selected, CancellationToken.None)).Select(s => s.Text)
+            .ShouldBe(page.SelectedTopics.Select(t => t.Text).ToList(), "the page and the store keep the same order");
+
+        await page.ClearSelectedTopicsAsync();
+        page.SelectedTopics.ShouldBeEmpty();
+        page.UsingTopics.ShouldBeFalse();
+        page.Topics.Count.ShouldBe(3);
+        (await store.ListAsync(profile.Id, TopicStatus.Selected, CancellationToken.None)).ShouldBeEmpty();
+    }
+
+    /// <summary>Puts <paramref name="count"/> topics in the selected list of <paramref name="profile"/> (in this order) and gives their texts.</summary>
+    private static async Task<IReadOnlyList<string>> SelectedAsync(DesktopHarness h, Profile profile, int count)
+    {
+        var at = DateTimeOffset.UtcNow.AddMinutes(-5);
+        var texts = Enumerable.Range(1, count).Select(i => "Topic number " + i).ToList();
+        await h.Get<ITopicSuggestionStore>().AddAsync(texts.Select((t, i) => new TopicSuggestion
+        {
+            ProfileId = profile.Id,
+            Text = t,
+            CreatedAtUtc = at.AddTicks(i),
+            Status = TopicStatus.Selected,
+        }).ToList(), CancellationToken.None);
+        return texts;
+    }
+
+    [AvaloniaFact]
+    public async Task TheSelectedTopicsAreKeptForTheProfileAcrossAProfileSwitch()
+    {
+        using var h = new DesktopHarness();
+        var profile = await PrepareAsync(h);
+        var texts = await SelectedAsync(h, profile, 3);
+        var page = await PageAsync(h);
+        page.SelectedTopics.Select(t => t.Text).ShouldBe(texts, "read from the store in the order they were added");
+
+        var other = new Profile { Name = "Ottomans", ContentLanguage = ContentLanguages.English, ConceptText = "Ottoman history." };
+        await h.Get<IProfileStore>().SaveAsync(other, CancellationToken.None);
+        await h.Get<AppSession>().SelectProfileAsync(other, CancellationToken.None);
+        await page.ProfileChangedAsync();
+        page.SelectedTopics.ShouldBeEmpty("another profile has its own list");
+        page.UsingTopics.ShouldBeFalse();
+
+        await h.Get<AppSession>().SelectProfileAsync(profile, CancellationToken.None);
+        await page.ProfileChangedAsync();
+        page.SelectedTopics.Select(t => t.Text).ShouldBe(texts);
+    }
+
+    [AvaloniaFact]
+    public async Task GenerateWritesOneConceptPerSelectedTopicAndMarksThemMade()
+    {
+        var fake = new FakeChat().Concepts(FakeChat.Distinct(3));
+        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
+        var profile = await PrepareAsync(h);
+        var texts = await SelectedAsync(h, profile, 3);
+        var page = await PageAsync(h);
+        page.Count = 20;
+        page.CountEnabled.ShouldBeFalse();
+        await Until(() => page.Estimate.Contains(" · 3 ", StringComparison.Ordinal));
+
+        await page.GenerateAsync();
+
+        var user = fake.Requests.Single().User;
+        user.ShouldContain("REQUESTED: 3 new concepts.", Case.Sensitive, "the count is the number of topics, not the count box");
+        user.ShouldContain("TOPICS (one concept each, in order):\n1. «Topic number 1»\n2. «Topic number 2»\n3. «Topic number 3»", Case.Sensitive);
+        page.NewConcepts.Count.ShouldBe(3);
+        page.SelectedTopics.ShouldBeEmpty("done topics leave the list");
+        page.Missing.ShouldBe(0);
+        page.Count.ShouldBe(20, "the count box keeps its own value");
+        page.CountEnabled.ShouldBeTrue();
+        var store = h.Get<ITopicSuggestionStore>();
+        (await store.ListAsync(profile.Id, TopicStatus.Made, CancellationToken.None)).Select(s => s.Text).ShouldBe(texts);
+        (await store.ListAsync(profile.Id, TopicStatus.Selected, CancellationToken.None)).ShouldBeEmpty();
+    }
+
+    [AvaloniaFact]
+    public async Task ACutRunKeepsTheTopicsItDidNotReachAndFillTheMissingRunsExactlyThem()
+    {
+        var titles = FakeChat.Distinct(5);
+        var full = FakeChat.Json(titles);
+        var starts = new List<int>();
+        for (var at = full.IndexOf("{\"baslik\"", StringComparison.Ordinal); at >= 0; at = full.IndexOf("{\"baslik\"", at + 1, StringComparison.Ordinal))
+        {
+            starts.Add(at);
+        }
+
+        var fake = new FakeChat()
+            .Answer(_ => throw new ProviderException("cut")
+            {
+                Code = "truncated",
+                ChargedUsage = new ChatUsage(1000, 0, 0, 30_000),
+                PartialText = full[..(starts[3] + 12)],
+                StopReason = "max_tokens",
+            })
+            .Concepts(titles.Skip(3));
+        using var h = new DesktopHarness(s =>
+        {
+            s.AddSingleton<IChatClientFactory>(fake);
+            s.AddSingleton<IConfirmDialog>(new FakeConfirm());
+        });
+        var profile = await PrepareAsync(h);
+        var texts = await SelectedAsync(h, profile, 5);
+        var page = await PageAsync(h);
+
+        await page.GenerateAsync();
+
+        page.NewConcepts.Count.ShouldBe(3);
+        page.SelectedTopics.Select(t => t.Text).ShouldBe(texts.Skip(3), "the topics after the cut stay selected");
+        page.Missing.ShouldBe(2);
+        var store = h.Get<ITopicSuggestionStore>();
+        (await store.ListAsync(profile.Id, TopicStatus.Made, CancellationToken.None)).Select(s => s.Text).ShouldBe(texts.Take(3));
+
+        await page.FillMissingAsync();
+
+        fake.Requests.Count.ShouldBe(2);
+        fake.Requests[1].User.ShouldContain("REQUESTED: 2 new concepts.", Case.Sensitive);
+        fake.Requests[1].User.ShouldContain("TOPICS (one concept each, in order):\n1. «Topic number 4»\n2. «Topic number 5»", Case.Sensitive);
+        page.NewConcepts.Count.ShouldBe(5);
+        page.SelectedTopics.ShouldBeEmpty();
+        page.Missing.ShouldBe(0);
+        (await store.ListAsync(profile.Id, TopicStatus.Made, CancellationToken.None)).Count.ShouldBe(5);
+    }
+
+    [AvaloniaFact]
+    public async Task MoreThanAHundredSelectedTopicsRunAHundredAndTheRestStay()
+    {
+        var fake = new FakeChat();
+        for (var i = 0; i < 5; i++)
+        {
+            fake.Concepts(FakeChat.Distinct(20));
+        }
+
+        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
+        var profile = await PrepareAsync(h);
+        await MeasuredAsync(h, profile);
+        var texts = await SelectedAsync(h, profile, 105);
+        var page = await PageAsync(h);
+        page.SelectedOver.ShouldBeTrue();
+        await Until(() => page.Estimate.Contains(" · 100 ", StringComparison.Ordinal));
+
+        await page.GenerateAsync();
+
+        fake.Requests.Count.ShouldBe(5);
+        fake.Requests[^1].User.ShouldContain("«Topic number 100»", Case.Sensitive);
+        page.NewConcepts.Count.ShouldBe(100);
+        page.SelectedTopics.Select(t => t.Text).ShouldBe(texts.Skip(100));
+        page.SelectedOver.ShouldBeFalse();
+        page.Missing.ShouldBe(0, "the rest were never part of this run");
+        (await h.Get<ITopicSuggestionStore>().ListAsync(profile.Id, TopicStatus.Selected, CancellationToken.None)).Count.ShouldBe(5);
     }
 
     [AvaloniaFact]
@@ -241,7 +476,7 @@ public sealed class ConceptPageTests
         await Until(() => page.TopicEstimate.Contains("Claude Haiku", StringComparison.Ordinal));
 
         await page.SuggestTopicsAsync();
-        page.Topics.ShouldBe(["The fall of Trebizond", "Greek fire"]);
+        page.Topics.Select(t => t.Text).ShouldBe(["The fall of Trebizond", "Greek fire"]);
         var first = fake.Requests.Single().User;
         first.ShouldContain("- [video] Hagia Sophia", Case.Sensitive, "a concept made into a video is marked");
         first.ShouldContain("- Theodora's riot", Case.Sensitive, "a trashed concept is no new topic either");
@@ -252,15 +487,16 @@ public sealed class ConceptPageTests
         (await suggestions.ListAsync(profile.Id, 100, CancellationToken.None)).Select(s => s.Text).ShouldBe(["The fall of Trebizond", "Greek fire"],
             ignoreOrder: true);
 
-        await page.AddTopicAsync("Greek fire");
-        (await suggestions.ListAsync(profile.Id, 100, CancellationToken.None)).Single(s => s.Used).Text.ShouldBe("Greek fire");
+        page.Topics.Single(t => t.Text == "Greek fire").Checked = true;
+        await page.AddCheckedTopicsAsync();
+        (await suggestions.ListAsync(profile.Id, 100, CancellationToken.None)).Single(s => s.Status == TopicStatus.Selected).Text.ShouldBe("Greek fire");
 
         await page.SuggestTopicsAsync();
         var second = fake.Requests[1].User;
         second.ShouldContain("ALREADY SUGGESTED");
         second.ShouldContain("- The fall of Trebizond", Case.Sensitive);
         second.ShouldContain("- Greek fire", Case.Sensitive);
-        page.Topics.ShouldBe(["The Varangian Guard"], "an earlier suggestion and two concept titles (folded) are left out");
+        page.Topics.Select(t => t.Text).ShouldBe(["The Varangian Guard"], "an earlier suggestion and two concept titles (folded) are left out");
         var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
         page.TopicRepeats.ShouldBe(text.Format("topics.repeats", 3));
         (await suggestions.ListAsync(profile.Id, 100, CancellationToken.None)).Count.ShouldBe(3, "only the kept ones are saved");
@@ -479,7 +715,7 @@ public sealed class ConceptPageTests
 
         await page.SuggestTopicsAsync();
 
-        page.Topics.ShouldBe(["The fall of Trebizond", "Greek \"fire\""], "the unfinished last topic is dropped");
+        page.Topics.Select(t => t.Text).ShouldBe(["The fall of Trebizond", "Greek \"fire\""], "the unfinished last topic is dropped");
         var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
         var run = (await h.Get<IRunStore>().ListAsync(DateTimeOffset.UtcNow.AddHours(-1), CancellationToken.None)).Single(r => r.Kind == RunKind.Topics);
         run.Status.ShouldBe(RunStatus.Succeeded);

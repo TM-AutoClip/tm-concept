@@ -50,7 +50,14 @@ public sealed partial class StepModelRowViewModel(PipelineStep step, string titl
 
     /// <summary>Chosen effort (value "" = Automatic).</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(EffortWarning))]
     public partial ChoiceOption? Effort { get; set; }
+
+    /// <summary>
+    /// A high effort on the video code step: a warning under the picker. 10-11 Nov 2026 a video code call spent 34k-64k output tokens, about
+    /// 78% of them thinking, and could hit its limit; medium is usually enough (the choice is kept, not forced).
+    /// </summary>
+    public bool EffortWarning => IsEngineStep && Effort?.Value is "high" or "xhigh" or "max";
 
     /// <summary>Whether this is the video code step (it has the engine picker).</summary>
     public bool IsEngineStep => Step.Code == PipelineSteps.VideoCode;

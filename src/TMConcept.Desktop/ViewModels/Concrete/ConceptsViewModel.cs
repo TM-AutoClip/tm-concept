@@ -14,11 +14,13 @@ using TMConcept.Desktop.Startup;
 namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
-/// 💡 Generate concepts. The left panel, top to bottom: count (1–100); extra request (plain text) and a small "Suggest topics"
-/// next to its title (a cheap chat model of the topics step brings about ten topics from the channel concept and the extra request so far;
-/// a click adds one to the extra request); a folded "Fine-tuning (optional)" with only tone, audience and structure (nothing that asks the
-/// user to know the subject: period, region or field come from the extra request; "any" by default; the choices go into the prompt as its
-/// FOCUS line); the duplicate checks on one line (by words: free, no model; by meaning: a local or online embedding model picked right
+/// 💡 Generate concepts. The left panel, top to bottom: count (1–100; off while topics are selected, the count is then theirs); the
+/// topics row: how many to suggest (5–100) and a small "Suggest topics" (a cheap chat model of the topics step brings that many topics
+/// inside the channel's scope); the suggestions with tick boxes (Select all / Select none / Add selected); the selected topics, kept for
+/// the profile in the store, one concept each and in order (0.1.12, the developer: suggestions no longer go into the extra request);
+/// extra request (plain text: angle and tone); a folded "Fine-tuning (optional)" with only tone, audience and structure (nothing that asks
+/// the user to know the subject; "any" by default; the choices go into the prompt as its FOCUS line); the duplicate checks on one line
+/// (by words: free, no model; by meaning: a local or online embedding model picked right
 /// there); a folded "Models" whose title names the concept model (opened by itself while none is chosen). Long explanations are "?" tips.
 /// The selected profile's last model choices are shown, a new profile starts with none. The estimate is recalculated when an input or a
 /// model changes; after "Generate" the same box shows the exact cost.
@@ -30,7 +32,8 @@ namespace TMConcept.Desktop.ViewModels;
 /// A running call is followed step by step (getting ready, sent, thinking with the seconds, writing with about how many tokens and how many
 /// concepts are complete, answer received), on the page and on the strip at the bottom of the window, so a long wait does not look like a
 /// hang; Cancel stays next to it. "Suggest topics" shows the same steps under its button, a spinner and Cancel, and its result in a card
-/// right below the extra request (the topics to click, why none came, a failure in red); the profile cannot be switched meanwhile.
+/// right below it (the topics to tick, why none came, a failure in red); the profile cannot be switched meanwhile. A run with selected
+/// topics marks the topics that got a concept as made and takes them off the list; the ones a cut or canceled run did not reach stay.
 /// A new card (✎ when open) or an approved concept (a click in its list) opens its text in an editor in place of the list: the text can be
 /// fixed and placeholders put in at the cursor from a drop-down (pauses, speed, transitions; the program applies them in the video, no
 /// model sees them); saving needs a text with something to narrate.
@@ -75,6 +78,18 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
     private bool _loading;
     private bool _pickerAttached;
 
+    /// <summary>The profile whose selected topics are listed (they are read from the store once per profile).</summary>
+    private Guid? _selectedFor;
+
+    /// <summary>
+    /// The selected topics the last run did not reach (a cut run): "Fill the missing" runs exactly these, so its count matches its button.
+    /// Empty after a run without topics.
+    /// </summary>
+    private readonly List<TopicItemViewModel> _topicsLeft = [];
+
+    /// <summary>The selected topics the saved batches of the running "Generate" wrote a concept for (used when the run fails unexpectedly).</summary>
+    private readonly List<string> _topicsMade = [];
+
     /// <inheritdoc />
     public override string TitleKey => "nav.concepts";
 
@@ -84,9 +99,12 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
     /// <inheritdoc />
     public override int Order => 10;
 
-    /// <summary>How many concepts.</summary>
+    /// <summary>How many concepts (not used while topics are selected: the count is theirs then).</summary>
     [ObservableProperty]
     public partial decimal? Count { get; set; } = 20;
+
+    /// <summary>Whether the count can be changed (no selected topics, nothing running).</summary>
+    public bool CountEnabled => !UsingTopics && !Busy;
 
     /// <summary>Extra request.</summary>
     [ObservableProperty]
@@ -110,8 +128,37 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
     /// <summary>The meaning check's picker, shown on the line of the word check (null before the page is loaded).</summary>
     public StepModelRowViewModel? Meaning => Picker.Row(PipelineSteps.Embedding);
 
-    /// <summary>The topics "Suggest topics" brought (a click adds one to the extra request).</summary>
-    public ObservableCollection<string> Topics { get; } = [];
+    /// <summary>The topics the last "Suggest topics" brought, each with a tick box (ticked ones go to <see cref="SelectedTopics"/>).</summary>
+    public ObservableCollection<TopicItemViewModel> Topics { get; } = [];
+
+    /// <summary>
+    /// The selected topics, in the order they were suggested (the store's order, so the list reads the same after a profile switch or a
+    /// restart): one concept each (kept for the profile in the store).
+    /// </summary>
+    public ObservableCollection<TopicItemViewModel> SelectedTopics { get; } = [];
+
+    /// <summary>How many topics one "Suggest topics" press asks for (5–100).</summary>
+    [ObservableProperty]
+    public partial decimal? TopicCount { get; set; } = TopicLimits.CountDefault;
+
+    /// <summary>Whether concepts are made from the selected topics (the count box is off then).</summary>
+    public bool UsingTopics => SelectedTopics.Count > 0;
+
+    /// <summary>"Selected topics: 150 · concepts to make now: 100" (at most 100 run at once).</summary>
+    public string SelectedHeader =>
+        text.Format("topics.selected.header", SelectedTopics.Count, Math.Min(SelectedTopics.Count, ConceptLimits.CountMax));
+
+    /// <summary>More topics are selected than one run makes: only the first 100 run now, the rest stay.</summary>
+    public bool SelectedOver => SelectedTopics.Count > ConceptLimits.CountMax;
+
+    /// <summary>How many offered topics are ticked.</summary>
+    public int CheckedCount => Topics.Count(t => t.Checked);
+
+    /// <summary>Whether anything is ticked ("Add selected" can be pressed).</summary>
+    public bool HasChecked => CheckedCount > 0;
+
+    /// <summary>"Add selected (4)".</summary>
+    public string AddCheckedText => text.Format("topics.add_checked", CheckedCount);
 
     /// <summary>The estimate of one "Suggest topics" press with the topics step's model (or why there is none).</summary>
     [ObservableProperty]
@@ -189,7 +236,7 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
 
     /// <summary>Running.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Idle), nameof(CanSuggest))]
+    [NotifyPropertyChangedFor(nameof(Idle), nameof(CanSuggest), nameof(CountEnabled))]
     public partial bool Busy { get; set; }
 
     /// <summary>Not running.</summary>
@@ -753,6 +800,11 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
             LoadFocus();
         }
 
+        if (session.Profile?.Id != _selectedFor)
+        {
+            await LoadSelectedTopicsAsync().ConfigureAwait(true);
+        }
+
         await ReloadAsync().ConfigureAwait(true);
     }
 
@@ -771,31 +823,38 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         _aiFromEditor = false;
         _aiWishes.Clear();
         CloseEditor();
-        Topics.Clear();
+        // The offered topics belong to the old profile's press; the selected list is the new profile's, from the store.
+        ClearOffered();
         TopicStatus = string.Empty;
         TopicRepeats = string.Empty;
         TopicFailed = false;
-        OnPropertyChanged(nameof(TopicCardShown));
-        OnPropertyChanged(nameof(HasTopics));
+        TopicsChanged();
         LoadFocus();
 
         // Each profile keeps its own last choices: the new profile's are shown.
         await LoadModelsAsync().ConfigureAwait(true);
+        await LoadSelectedTopicsAsync().ConfigureAwait(true);
         await ReloadAsync().ConfigureAwait(true);
     }
 
-    /// <summary>Generates.</summary>
+    /// <summary>
+    /// Generates: one concept per selected topic (the first 100; the rest stay selected), or the count without selected topics.
+    /// </summary>
     [RelayCommand]
-    public Task GenerateAsync() => RunAsync((int)Math.Clamp(Count ?? 0, ConceptLimits.CountMin, ConceptLimits.CountMax));
+    public Task GenerateAsync() => UsingTopics
+        ? RunAsync(SelectedTopics.Take(ConceptLimits.CountMax).ToList())
+        : RunAsync((int)Math.Clamp(Count ?? 0, ConceptLimits.CountMin, ConceptLimits.CountMax));
 
     /// <summary>
     /// Generates as many as are missing, after a confirmation that shows the estimate (the developer's rule: no money is spent again without
-    /// asking). Without a concept model the run itself says what is missing, before anything is paid for.
+    /// asking). Without a concept model the run itself says what is missing, before anything is paid for. After a run with topics, the
+    /// missing ones are the selected topics it did not reach, and exactly those run.
     /// </summary>
     [RelayCommand]
     public async Task FillMissingAsync()
     {
-        var missing = Missing;
+        var left = _topicsLeft.Where(SelectedTopics.Contains).ToList();
+        var missing = _topicsLeft.Count > 0 ? left.Count : Missing;
         if (Busy || missing < 1)
         {
             return;
@@ -806,7 +865,7 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
             try
             {
                 var estimate = await generator.EstimateAsync(profile, missing, ExtraPrompt, Focus(profile.ContentLanguage), model, ConceptEffort(),
-                    CancellationToken.None).ConfigureAwait(true);
+                    CancellationToken.None, left.Count > 0 ? Texts(left) : null).ConfigureAwait(true);
                 var answer = await confirm.AskAsync(text["concepts.fill_missing.title"],
                     text.Format("concepts.fill_missing.message", missing, model.Name, text.Usd(estimate.MinUsd), text.Usd(estimate.MaxUsd)),
                     text.Format("concepts.fill_missing", missing), danger: false).ConfigureAwait(true);
@@ -824,8 +883,210 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
             }
         }
 
+        if (left.Count > 0)
+        {
+            await RunAsync(left).ConfigureAwait(true);
+            return;
+        }
+
         await RunAsync(missing).ConfigureAwait(true);
     }
+
+    /// <summary>Ticks every suggested topic.</summary>
+    [RelayCommand]
+    public void SelectAllTopics() => Tick(true);
+
+    /// <summary>Unticks every suggested topic.</summary>
+    [RelayCommand]
+    public void SelectNoTopics() => Tick(false);
+
+    /// <summary>
+    /// Moves the ticked suggestions to the selected list (their status becomes "selected" in the store, so the list survives a profile
+    /// switch and a restart). The extra request does not change.
+    /// </summary>
+    [RelayCommand]
+    public async Task AddCheckedTopicsAsync()
+    {
+        var ticked = Topics.Where(t => t.Checked).ToList();
+        if (ticked.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var topic in ticked)
+        {
+            topic.PropertyChanged -= OnTopicTicked;
+            topic.Checked = false;
+            Topics.Remove(topic);
+            Select(topic);
+        }
+
+        TopicsChanged();
+        await SetTopicStatusAsync(ticked, Core.Concepts.TopicStatus.Selected).ConfigureAwait(true);
+    }
+
+    /// <summary>Takes a topic off the selected list: it goes back among the suggestions, unticked (status "offered" again).</summary>
+    [RelayCommand]
+    public async Task RemoveSelectedTopicAsync(TopicItemViewModel? topic)
+    {
+        if (topic is null || Busy || !SelectedTopics.Remove(topic))
+        {
+            return;
+        }
+
+        Offer(topic);
+        TopicsChanged();
+        await SetTopicStatusAsync([topic], Core.Concepts.TopicStatus.Offered).ConfigureAwait(true);
+    }
+
+    /// <summary>Empties the selected list: every topic goes back among the suggestions, unticked.</summary>
+    [RelayCommand]
+    public async Task ClearSelectedTopicsAsync()
+    {
+        if (Busy || SelectedTopics.Count == 0)
+        {
+            return;
+        }
+
+        var all = SelectedTopics.ToList();
+        SelectedTopics.Clear();
+        foreach (var topic in all)
+        {
+            Offer(topic);
+        }
+
+        TopicsChanged();
+        await SetTopicStatusAsync(all, Core.Concepts.TopicStatus.Offered).ConfigureAwait(true);
+    }
+
+    /// <summary>Empties the suggestions (their tick boxes are no longer followed).</summary>
+    private void ClearOffered()
+    {
+        foreach (var topic in Topics)
+        {
+            topic.PropertyChanged -= OnTopicTicked;
+        }
+
+        Topics.Clear();
+    }
+
+    private void Tick(bool value)
+    {
+        foreach (var topic in Topics)
+        {
+            topic.Checked = value;
+        }
+    }
+
+    /// <summary>Adds <paramref name="topic"/> to the suggestions, unticked, and follows its tick box.</summary>
+    /// <summary>Puts a topic on the selected list at its place in the store's order (when it was suggested, then its id).</summary>
+    private void Select(TopicItemViewModel topic)
+    {
+        var index = 0;
+        while (index < SelectedTopics.Count && Before(SelectedTopics[index], topic))
+        {
+            index++;
+        }
+
+        SelectedTopics.Insert(index, topic);
+    }
+
+    private static bool Before(TopicItemViewModel a, TopicItemViewModel b) =>
+        a.SuggestedAtUtc < b.SuggestedAtUtc || (a.SuggestedAtUtc == b.SuggestedAtUtc && a.Id.CompareTo(b.Id) < 0);
+
+    private void Offer(TopicItemViewModel topic)
+    {
+        topic.Checked = false;
+        topic.PropertyChanged -= OnTopicTicked;
+        topic.PropertyChanged += OnTopicTicked;
+        Topics.Add(topic);
+    }
+
+    private void OnTopicTicked(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(TopicItemViewModel.Checked))
+        {
+            OnPropertyChanged(nameof(CheckedCount));
+            OnPropertyChanged(nameof(HasChecked));
+            OnPropertyChanged(nameof(AddCheckedText));
+        }
+    }
+
+    /// <summary>
+    /// Everything shown from the two topic lists is told again, and the estimate follows the selected list (called once after a change, not
+    /// per item: 100 topics would be 100 estimates).
+    /// </summary>
+    private void TopicsChanged()
+    {
+        // A topic taken off the list is not "missing" any more.
+        if (_topicsLeft.RemoveAll(t => !SelectedTopics.Contains(t)) > 0 && !Busy)
+        {
+            Missing = _topicsLeft.Count;
+        }
+
+        TopicsHeader = text.Format("topics.title", Topics.Count);
+        foreach (var name in new[]
+                 {
+                     nameof(TopicCardShown), nameof(HasTopics), nameof(CheckedCount), nameof(HasChecked), nameof(AddCheckedText), nameof(UsingTopics),
+                     nameof(CountEnabled), nameof(SelectedHeader), nameof(SelectedOver),
+                 })
+        {
+            OnPropertyChanged(name);
+        }
+
+        if (!_loading)
+        {
+            _ = SafeAsync(EstimateAsync);
+        }
+    }
+
+    /// <summary>Saves the status of <paramref name="topics"/> (a failure is only logged: the lists on the page are right for this session).</summary>
+    private async Task SetTopicStatusAsync(IReadOnlyCollection<TopicItemViewModel> topics, Core.Concepts.TopicStatus status)
+    {
+        try
+        {
+            await suggestions.SetStatusAsync(topics.Select(t => t.Id).ToList(), status, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "The status of {Count} topics could not be saved as {Status}", topics.Count, status);
+        }
+    }
+
+    /// <summary>The selected list of the profile now shown, from the store (in the order the topics were suggested).</summary>
+    private async Task LoadSelectedTopicsAsync()
+    {
+        var profile = session.Profile;
+        _selectedFor = profile?.Id;
+        _topicsLeft.Clear();
+        IReadOnlyList<TopicSuggestion> selected = [];
+        if (profile is not null)
+        {
+            try
+            {
+                selected = await suggestions.ListAsync(profile.Id, Core.Concepts.TopicStatus.Selected, CancellationToken.None).ConfigureAwait(true);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(ex, "The selected topics could not be read");
+            }
+
+            if (session.Profile?.Id != profile.Id)
+            {
+                return;
+            }
+        }
+
+        SelectedTopics.Clear();
+        foreach (var topic in selected)
+        {
+            SelectedTopics.Add(new TopicItemViewModel(topic.Id, topic.Text, topic.CreatedAtUtc));
+        }
+
+        TopicsChanged();
+    }
+
+    private static List<string> Texts(IEnumerable<TopicItemViewModel> topics) => topics.Select(t => t.Text).ToList();
 
     /// <summary>Stops the running request at once (the answer stream is closed); the batches saved before stay.</summary>
     [RelayCommand]
@@ -892,6 +1153,8 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
 
     partial void OnExtraPromptChanged(string value) => _ = SafeAsync(EstimateAsync);
 
+    partial void OnTopicCountChanged(decimal? value) => _ = SafeAsync(() => session.Profile is { } profile ? TopicEstimateAsync(profile) : Task.CompletedTask);
+
     partial void OnAiInstructionChanged(string value) => _ = SafeAsync(AiEstimateAsync);
 
     partial void OnAiEditRunningChanged(bool value) => Working = value || Busy || Suggesting;
@@ -913,7 +1176,10 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         _aiCancel?.Cancel();
     }
 
-    private async Task RunAsync(int count)
+    /// <summary>A run with selected topics (at most 100): one concept each.</summary>
+    private Task RunAsync(IReadOnlyList<TopicItemViewModel> topics) => RunAsync(topics.Count, topics);
+
+    private async Task RunAsync(int count, IReadOnlyList<TopicItemViewModel>? topics = null)
     {
         if (Busy || count < 1)
         {
@@ -964,22 +1230,34 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         Status = string.Empty;
         Notice = string.Empty;
         Missing = 0;
+        _topicsLeft.Clear();
         Busy = true;
         _live = null;
         Call.Begin(resolved.Model.Name);
         using var cancel = new CancellationTokenSource();
         _cancel = cancel;
+        _topicsMade.Clear();
         try
         {
             var progress = new Progress<ConceptBatch>(OnBatch);
             var live = new Progress<ConceptCallProgress>(OnLive);
             var result = await generator.GenerateAsync(new ConceptRequest(profile, count, ExtraPrompt.Trim(), resolved, LocalCheck, embedding,
-                Focus(profile.ContentLanguage)), progress, live, cancel.Token).ConfigureAwait(true);
+                Focus(profile.ContentLanguage), topics is null ? null : Texts(topics)), progress, live, cancel.Token).ConfigureAwait(true);
             Report(result);
+            if (topics is not null)
+            {
+                await TopicsRanAsync(topics, result.TopicsLeft, result.ErrorCode == "canceled").ConfigureAwait(true);
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "Concept generation failed");
+            if (topics is not null)
+            {
+                // The run stopped on an unexpected error after some batches were saved: their topics are made, the rest stay selected.
+                await TopicsRanAsync(topics, Unmade(topics), canceled: false).ConfigureAwait(true);
+            }
+
             activity.Add(ActivityLevel.Error, text.Format("concepts.failed", ex.Message));
             Status = text.Format("concepts.failed", ex.Message);
             notifier.Notify(new AppNotification(NotificationKind.Failed, text["concepts.error.title"], Status));
@@ -993,6 +1271,41 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
             Progress = string.Empty;
             work.Clear(this);
             await ReloadAsync().ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>
+    /// After a run with topics: the ones that got a concept (a concept thrown away as a duplicate counts, its topic is already among the
+    /// concepts) are made and leave the list; the ones it did not reach stay selected. After a cut run they are "the missing" (Fill the
+    /// missing runs exactly them); after a cancel there is no Fill button, Generate runs them again.
+    /// </summary>
+    private async Task TopicsRanAsync(IReadOnlyList<TopicItemViewModel> ran, IReadOnlyList<string> topicsLeft, bool canceled)
+    {
+        // The left texts are ones the run was given, in order; a text listed twice is matched once per row.
+        var left = topicsLeft.ToList();
+        var made = new List<TopicItemViewModel>();
+        var kept = new List<TopicItemViewModel>();
+        foreach (var topic in ran)
+        {
+            (left.Remove(topic.Text) ? kept : made).Add(topic);
+        }
+
+        foreach (var topic in made)
+        {
+            SelectedTopics.Remove(topic);
+        }
+
+        _topicsLeft.Clear();
+        if (!canceled)
+        {
+            _topicsLeft.AddRange(kept.Where(SelectedTopics.Contains));
+        }
+
+        Missing = _topicsLeft.Count;
+        TopicsChanged();
+        if (made.Count > 0)
+        {
+            await SetTopicStatusAsync(made, Core.Concepts.TopicStatus.Made).ConfigureAwait(true);
         }
     }
 
@@ -1067,8 +1380,16 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
         work.Show(this, text.Format("work.concepts", Progress));
     }
 
+    /// <summary>The texts of <paramref name="ran"/> that no saved batch reported as made (each reported text matched once).</summary>
+    private List<string> Unmade(IReadOnlyList<TopicItemViewModel> ran)
+    {
+        var made = _topicsMade.ToList();
+        return ran.Select(t => t.Text).Where(t => !made.Remove(t)).ToList();
+    }
+
     private void OnBatch(ConceptBatch batch)
     {
+        _topicsMade.AddRange(batch.TopicsMade);
         foreach (var concept in batch.Accepted.Where(c => NewConcepts.All(n => n.Id != c.Id)))
         {
             NewConcepts.Add(new ConceptCardViewModel(concept, text));
@@ -1216,9 +1537,11 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
             return;
         }
 
-        var count = (int)Math.Clamp(Count ?? 0, ConceptLimits.CountMin, ConceptLimits.CountMax);
-        var estimate = await generator.EstimateAsync(profile, count, ExtraPrompt, Focus(profile.ContentLanguage), model, ConceptEffort(), CancellationToken.None)
-            .ConfigureAwait(true);
+        // With selected topics the count is theirs (the first 100 run at once).
+        var topics = UsingTopics ? Texts(SelectedTopics.Take(ConceptLimits.CountMax)) : null;
+        var count = topics?.Count ?? (int)Math.Clamp(Count ?? 0, ConceptLimits.CountMin, ConceptLimits.CountMax);
+        var estimate = await generator.EstimateAsync(profile, count, ExtraPrompt, Focus(profile.ContentLanguage), model, ConceptEffort(), CancellationToken.None,
+            topics).ConfigureAwait(true);
         var backfill = 0;
         if (Picker.Model(PipelineSteps.Embedding) is { } embedding)
         {
@@ -1234,9 +1557,10 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
     }
 
     /// <summary>
-    /// "Suggest topics": the topics step's model is made ready like any process (key, saved for the profile), then ONE call brings about ten
-    /// topics in the interface language. While it runs the status says so and it can be canceled; the cost is shown here and counted in the
-    /// month's spending; any failure is shown and logged (a cut-off answer still shows the complete topics before the cut).
+    /// "Suggest topics": the topics step's model is made ready like any process (key, saved for the profile), then ONE call brings
+    /// <see cref="TopicCount"/> topics (5–100) in the interface language, inside the channel's scope (the extra request is not sent). They
+    /// replace the last press's suggestions, unticked. While it runs the status says so and it can be canceled; the cost is shown here and
+    /// counted in the month's spending; any failure is shown and logged (a cut-off answer still shows the complete topics before the cut).
     /// </summary>
     [RelayCommand]
     public async Task SuggestTopicsAsync()
@@ -1276,12 +1600,12 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
             var model = await resolver.ResolveAsync(PipelineSteps.Topics, Picker.Choice(PipelineSteps.Topics), CancellationToken.None).ConfigureAwait(true);
             paid = model.Model;
             TopicCall.Begin(model.Model.Name);
-            var result = await topics.SuggestAsync(profile, model, Focus(text.Language), ExtraPrompt, text.Language,
+            var result = await topics.SuggestAsync(profile, model, Focus(text.Language), TopicsAsked(), text.Language,
                 new Progress<Core.Chat.ChatProgress>(TopicCall.Report), cancel.Token).ConfigureAwait(true);
-            Topics.Clear();
+            ClearOffered();
             foreach (var topic in result.Topics)
             {
-                Topics.Add(topic);
+                Offer(new TopicItemViewModel(topic.Id, topic.Text, topic.CreatedAtUtc));
             }
 
             TopicRepeats = result.Repeats > 0 ? text.Format("topics.repeats", result.Repeats) : string.Empty;
@@ -1325,44 +1649,12 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
             TopicCall.Stop();
             work.Clear(_topicWork);
             Suggesting = false;
-            TopicsHeader = text.Format("topics.title", Topics.Count);
-            OnPropertyChanged(nameof(TopicCardShown));
-            OnPropertyChanged(nameof(HasTopics));
+            TopicsChanged();
         }
     }
 
-    /// <summary>
-    /// Adds a suggested topic to the extra request (on a line of its own), takes it off the list and marks the kept suggestion used (a
-    /// failure to mark it is only logged: the topic is in the extra request anyway).
-    /// </summary>
-    [RelayCommand]
-    public async Task AddTopicAsync(string? topic)
-    {
-        if (string.IsNullOrWhiteSpace(topic))
-        {
-            return;
-        }
-
-        var current = ExtraPrompt.TrimEnd();
-        ExtraPrompt = current.Length == 0 ? topic : current + "\n" + topic;
-        Topics.Remove(topic);
-        TopicsHeader = text.Format("topics.title", Topics.Count);
-        OnPropertyChanged(nameof(TopicCardShown));
-        OnPropertyChanged(nameof(HasTopics));
-        if (session.Profile is not { } profile)
-        {
-            return;
-        }
-
-        try
-        {
-            await suggestions.MarkUsedAsync(profile.Id, topic, CancellationToken.None).ConfigureAwait(true);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogError(ex, "A clicked topic suggestion could not be marked used");
-        }
-    }
+    /// <summary>How many topics a press asks for (the picker's value within 5–100).</summary>
+    private int TopicsAsked() => TopicSuggester.Clamp((int)(TopicCount ?? TopicLimits.CountDefault));
 
     /// <summary>The fine-tuning drop-downs, every one on "any" (another profile starts without a leftover choice).</summary>
     private void LoadFocus()
@@ -1416,7 +1708,7 @@ public sealed partial class ConceptsViewModel(AppSession session, IConceptStore 
             return;
         }
 
-        var estimate = await topics.EstimateAsync(profile, model, Focus(text.Language), ExtraPrompt, text.Language, CancellationToken.None)
+        var estimate = await topics.EstimateAsync(profile, model, Focus(text.Language), TopicsAsked(), text.Language, CancellationToken.None)
             .ConfigureAwait(true);
         TopicEstimate = text.Format("topics.estimate", model.Name, text.Usd(estimate.MinUsd), text.Usd(estimate.MaxUsd));
         TopicPrice = text.Format("topics.price", text.Usd(estimate.MinUsd), text.Usd(estimate.MaxUsd));

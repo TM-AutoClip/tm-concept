@@ -2,25 +2,32 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:TMConcept.Desktop.ViewModels"
              xmlns:views="using:TMConcept.Desktop.Views"
-             xmlns:sys="using:System"
              x:Class="TMConcept.Desktop.Views.ConceptsView"
              x:DataType="vm:ConceptsViewModel">
   <Grid ColumnDefinitions="380,*,300" Margin="16" ColumnSpacing="16">
     <ScrollViewer>
       <StackPanel Spacing="8">
-        <!-- Top to bottom: count, extra request (+ Suggest topics and its card), folded fine-tuning, the duplicate checks on one line, folded
-             models. Long explanations are "?" tips, so the panel fits without much scrolling. -->
+        <!-- Top to bottom: count, topics (how many to suggest + Suggest topics, the suggestions to tick, the selected list), extra request,
+             folded fine-tuning, the duplicate checks on one line, folded models. Long explanations are "?" tips, so the panel fits without
+             much scrolling. -->
         <TextBlock Text="{DynamicResource nav.concepts}" Classes="h1" />
         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
           <TextBlock Text="{DynamicResource concepts.count}" FontWeight="SemiBold" VerticalAlignment="Center" />
-          <NumericUpDown Grid.Column="1" Value="{Binding Count}" Minimum="1" Maximum="100" Increment="1" FormatString="0" Width="130" />
+          <!-- Off while topics are selected: the count is theirs then (one concept each). -->
+          <NumericUpDown Name="CountBox" Grid.Column="1" Value="{Binding Count}" Minimum="1" Maximum="100" Increment="1" FormatString="0" Width="130"
+                         IsEnabled="{Binding CountEnabled}" />
         </Grid>
-        <Grid ColumnDefinitions="Auto,Auto,*,Auto" Margin="0,4,0,0">
-          <TextBlock Text="{DynamicResource concepts.extra}" FontWeight="SemiBold" VerticalAlignment="Center" />
-          <views:HelpTip Grid.Column="1" Text="{DynamicResource concepts.extra.hint}" />
-          <TextBlock Grid.Column="2" Text="{Binding TopicPrice}" Classes="small" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="8,0" />
+        <TextBlock Name="CountFromTopicsLine" Text="{DynamicResource concepts.count.from_topics}" Classes="small" TextWrapping="Wrap"
+                   IsVisible="{Binding UsingTopics}" />
+        <!-- Topics: how many one press asks for (5-100) and its price next to the button; the extra request is not part of it. -->
+        <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="6" Margin="0,4,0,0">
+          <TextBlock Text="{DynamicResource topics.count}" FontWeight="SemiBold" VerticalAlignment="Center" />
+          <NumericUpDown Name="TopicCountBox" Grid.Column="1" Value="{Binding TopicCount}" Minimum="5" Maximum="100" Increment="5" FormatString="0"
+                         Width="110" ToolTip.Tip="{DynamicResource topics.count.hint}" IsEnabled="{Binding CanSuggest}" />
+          <TextBlock Grid.Column="2" Text="{Binding TopicPrice}" Classes="small" VerticalAlignment="Center" HorizontalAlignment="Right"
+                     TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding TopicEstimate}" />
           <Button Name="SuggestButton" Grid.Column="3" Classes="small" Content="{DynamicResource topics.button}" Command="{Binding SuggestTopicsCommand}"
-                  IsEnabled="{Binding CanSuggest}">
+                  IsEnabled="{Binding CanSuggest}" VerticalAlignment="Center">
             <ToolTip.Tip>
               <StackPanel Spacing="4" MaxWidth="320">
                 <TextBlock Text="{DynamicResource topics.hint}" TextWrapping="Wrap" />
@@ -29,9 +36,8 @@
             </ToolTip.Tip>
           </Button>
         </Grid>
-        <TextBox Name="ExtraBox" Text="{Binding ExtraPrompt}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="90" MaxLength="1000"
-                 PlaceholderText="{DynamicResource concepts.extra.placeholder}" />
-        <!-- The result of "Suggest topics" right below the extra request: the running call's steps, the topics to click, why none came. -->
+        <!-- The result of "Suggest topics" right below it: the running call's steps, the topics to tick (a list that wraps long topics and
+             scrolls at many), why none came. -->
         <Border Name="TopicCard" Classes="card" Padding="10" IsVisible="{Binding TopicCardShown}">
           <StackPanel Spacing="6">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" IsVisible="{Binding Suggesting}">
@@ -41,22 +47,69 @@
               </StackPanel>
               <Button Grid.Column="1" Content="{DynamicResource common.cancel}" Command="{Binding CancelTopicsCommand}" VerticalAlignment="Center" />
             </Grid>
-            <TextBlock Text="{Binding TopicsHeader}" FontWeight="SemiBold" IsVisible="{Binding HasTopics}" />
-            <TextBlock Text="{DynamicResource topics.card.hint}" Classes="small" TextWrapping="Wrap" IsVisible="{Binding HasTopics}" />
-            <ItemsControl ItemsSource="{Binding Topics}">
-              <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="sys:String">
-                  <Button Classes="link" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Content="{Binding}"
-                          Command="{Binding $parent[ItemsControl].((vm:ConceptsViewModel)DataContext).AddTopicCommand}" CommandParameter="{Binding}" />
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
+            <StackPanel Orientation="Horizontal" IsVisible="{Binding HasTopics}">
+              <TextBlock Text="{Binding TopicsHeader}" FontWeight="SemiBold" VerticalAlignment="Center" />
+              <views:HelpTip Text="{DynamicResource topics.card.hint}" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="12" IsVisible="{Binding HasTopics}">
+              <Button Name="SelectAllTopics" Classes="link small" Content="{DynamicResource topics.select_all}" Command="{Binding SelectAllTopicsCommand}" />
+              <Button Name="SelectNoTopics" Classes="link small" Content="{DynamicResource topics.select_none}" Command="{Binding SelectNoTopicsCommand}" />
+            </StackPanel>
+            <Border Classes="inset" IsVisible="{Binding HasTopics}">
+              <ScrollViewer Name="TopicScroll" MaxHeight="320" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                <ItemsControl Name="TopicList" ItemsSource="{Binding Topics}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:TopicItemViewModel">
+                      <CheckBox Classes="topic" IsChecked="{Binding Checked}">
+                        <TextBlock Text="{Binding Text}" TextWrapping="Wrap" />
+                      </CheckBox>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+            </Border>
+            <Button Name="AddCheckedButton" Classes="accent small" Content="{Binding AddCheckedText}" Command="{Binding AddCheckedTopicsCommand}"
+                    IsEnabled="{Binding HasChecked}" IsVisible="{Binding HasTopics}" HorizontalAlignment="Left" />
             <TextBlock Name="TopicRepeatsLine" Text="{Binding TopicRepeats}" Classes="small" TextWrapping="Wrap"
                        IsVisible="{Binding TopicRepeats, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
             <TextBlock Name="TopicStatusLine" Text="{Binding TopicStatus}" Classes="small" Classes.error="{Binding TopicFailed}" TextWrapping="Wrap"
                        IsVisible="{Binding TopicStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
           </StackPanel>
         </Border>
+        <!-- The selected topics (kept for the profile): one concept each, in this order; done topics leave the list. -->
+        <Border Name="SelectedTopicsCard" Classes="card" Padding="10" IsVisible="{Binding UsingTopics}">
+          <StackPanel Spacing="6">
+            <StackPanel Orientation="Horizontal">
+              <TextBlock Text="{Binding SelectedHeader}" FontWeight="SemiBold" VerticalAlignment="Center" />
+              <views:HelpTip Text="{DynamicResource topics.selected.hint}" />
+            </StackPanel>
+            <Border Classes="inset">
+              <ScrollViewer MaxHeight="240" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                <ItemsControl Name="SelectedTopicList" ItemsSource="{Binding SelectedTopics}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:TopicItemViewModel">
+                      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6" Margin="0,2">
+                        <TextBlock Text="{Binding Text}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                        <Button Grid.Column="1" Classes="small" Content="✕" VerticalAlignment="Top" ToolTip.Tip="{DynamicResource topics.selected.remove}"
+                                IsEnabled="{Binding $parent[ItemsControl].((vm:ConceptsViewModel)DataContext).Idle}"
+                                Command="{Binding $parent[ItemsControl].((vm:ConceptsViewModel)DataContext).RemoveSelectedTopicCommand}" CommandParameter="{Binding}" />
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+            </Border>
+            <TextBlock Text="{DynamicResource topics.selected.over}" Classes="small warning" TextWrapping="Wrap" IsVisible="{Binding SelectedOver}" />
+            <Button Classes="link small" Content="{DynamicResource topics.selected.clear}" Command="{Binding ClearSelectedTopicsCommand}"
+                    IsEnabled="{Binding Idle}" HorizontalAlignment="Left" />
+          </StackPanel>
+        </Border>
+        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+          <TextBlock Text="{DynamicResource concepts.extra}" FontWeight="SemiBold" VerticalAlignment="Center" />
+          <views:HelpTip Text="{DynamicResource concepts.extra.hint}" />
+        </StackPanel>
+        <TextBox Name="ExtraBox" Text="{Binding ExtraPrompt}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="90" MaxLength="1000"
+                 PlaceholderText="{DynamicResource concepts.extra.placeholder}" />
         <!-- Only general choices (tone, audience, structure), folded: nothing here asks the user to know the subject. -->
         <Expander Name="FineTune" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Margin="0,4,0,0">
           <Expander.Header>

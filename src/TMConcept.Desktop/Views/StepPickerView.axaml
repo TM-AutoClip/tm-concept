@@ -41,6 +41,7 @@
                     </ComboBox.ItemTemplate>
                   </ComboBox>
                 </WrapPanel>
+                <TextBlock Text="{DynamicResource step.effort.costly}" Classes="small warning" TextWrapping="Wrap" IsVisible="{Binding EffortWarning}" />
                 <WrapPanel IsVisible="{Binding ShowEngine}">
                   <TextBlock Text="{DynamicResource models.engine}" VerticalAlignment="Center" Margin="0,0,8,4" />
                   <ComboBox ItemsSource="{Binding Engines}" SelectedItem="{Binding Engine}" MinWidth="200" Margin="0,0,0,4">

@@ -63,7 +63,7 @@ public sealed class StorageFormatTests
             sql.ShouldNotBeNull().ShouldContain("CONSTRAINT \"FK_concepts_profiles_ProfileId\" FOREIGN KEY (\"ProfileId\") REFERENCES \"profiles\" (\"Id\") ON DELETE CASCADE");
         }
 
-        (await h.QueryAsync(db => db.SchemaObjects.CountAsync(o => o.Type == "index" && o.Name.StartsWith("IX_")))).ShouldBe(14, "11, the language index of the pronunciations and the profile indexes of the topic suggestions and the AI-edit wishes");
+        (await h.QueryAsync(db => db.SchemaObjects.CountAsync(o => o.Type == "index" && o.Name.StartsWith("IX_")))).ShouldBe(15, "11, the language index of the pronunciations, the two profile indexes of the topic suggestions (by time, by status) and the profile index of the AI-edit wishes");
         (await h.QueryAsync(db => db.SchemaObjects.CountAsync(o => o.Type == ConceptSchema.TableType))).ShouldBe(15);
 
         // Opening again leaves an existing schema alone.

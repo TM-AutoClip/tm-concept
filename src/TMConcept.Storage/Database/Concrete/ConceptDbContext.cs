@@ -217,6 +217,9 @@ internal sealed class ConceptDbContext(DbContextOptions<ConceptDbContext> option
             e.HasKey(t => t.Id);
             e.Property(t => t.Id).ValueGeneratedNever();
             e.HasIndex(t => new { t.ProfileId, t.CreatedAtUtc });
+
+            // The selected list of a profile is read by its status (TopicStatus is stored as its number, like every enum here).
+            e.HasIndex(t => new { t.ProfileId, t.Status });
             e.HasOne<Profile>().WithMany().HasForeignKey(t => t.ProfileId).OnDelete(DeleteBehavior.Cascade);
         });
         modelBuilder.Entity<ConceptWish>(e =>

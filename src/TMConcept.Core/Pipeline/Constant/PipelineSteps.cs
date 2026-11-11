@@ -24,7 +24,7 @@ public static class PipelineSteps
     /// <summary>Semantic duplicate check (optional).</summary>
     public const string Embedding = "embedding";
 
-    /// <summary>"Suggest topics" on the concept page: a cheap chat model writes about ten topics for the extra request (optional).</summary>
+    /// <summary>"Suggest topics" on the concept page: a cheap chat model writes 5-100 topics to pick from, one concept each (optional).</summary>
     public const string Topics = "topics";
 
     /// <summary>Sample image description (optional).</summary>

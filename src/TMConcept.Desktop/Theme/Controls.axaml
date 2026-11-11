@@ -47,6 +47,21 @@
     <Setter Property="CornerRadius" Value="{DynamicResource tm-radius}" />
     <Setter Property="Padding" Value="16" />
   </Style>
+  <!-- A list inside a card (the topics to tick, the selected topics): a slightly lighter well, so the rows read as one scrolling list. -->
+  <Style Selector="Border.inset">
+    <Setter Property="Background" Value="{DynamicResource tm-surface-2}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource tm-border}" />
+    <Setter Property="BorderThickness" Value="{DynamicResource tm-border-width}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource tm-radius-sm}" />
+    <Setter Property="Padding" Value="8,4" />
+  </Style>
+  <!-- A topic to tick: the box at the top of a wrapped, long topic, a little air between rows. -->
+  <Style Selector="CheckBox.topic">
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
+    <Setter Property="VerticalContentAlignment" Value="Top" />
+    <Setter Property="Margin" Value="0,1" />
+    <Setter Property="Padding" Value="6,5,0,0" />
+  </Style>
   <Style Selector="Border.badge">
     <Setter Property="CornerRadius" Value="{DynamicResource tm-radius-sm}" />
     <Setter Property="Padding" Value="8,2" />

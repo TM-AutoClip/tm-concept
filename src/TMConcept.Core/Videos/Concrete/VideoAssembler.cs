@@ -430,10 +430,15 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
     private async Task<string> CodeAsync(IChatClient chat, ResolvedModel codeModel, string system, string user, List<VideoCost> spent, Guid id,
         CancellationToken cancellationToken)
     {
+        // Logged before the call, as the concept run does: a code answer can take 10 minutes and be cut at max_tokens (thinking counts
+        // toward it), so the log must say what budget and effort it ran with even when it never returns.
+        var maxTokens = VideoCodeBudget.For(codeModel.Model);
+        logger.LogInformation("Video {Video}: code with {Provider}/{Model}, max_tokens {MaxTokens}, effort {Effort}", id, codeModel.Model.Provider,
+            codeModel.Model.Id, maxTokens, codeModel.Effort.Length > 0 ? codeModel.Effort : "automatic");
         ChatResponse answer;
         try
         {
-            answer = await chat.SendAsync(new ChatRequest(system, user, CacheSystem: true, MaxOutputTokens: VideoCodeBudget.For(codeModel.Model),
+            answer = await chat.SendAsync(new ChatRequest(system, user, CacheSystem: true, MaxOutputTokens: maxTokens,
                 Effort: codeModel.Effort, Stream: true), cancellationToken).ConfigureAwait(false);
         }
         catch (Providers.ProviderException ex) when (ex.ChargedUsage is { } charged)

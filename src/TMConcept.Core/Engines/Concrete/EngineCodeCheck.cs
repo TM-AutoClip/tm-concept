@@ -48,6 +48,8 @@ public static partial class EngineCodeCheck
         (new(@"fromCharCode|fromCodePoint|\batob\s*\(|\bbtoa\s*\(|unescape\s*\(|decodeURI"), "hidden text (escape sequences)"),
         (new(@"\b(window|globalThis|self|document)\s*\["), "global access by brackets"),
         (new(@"constructor\s*[\.\[]|\[\s*['""`]constructor|__proto__|prototype\s*\[|Reflect\s*\.|\bProxy\s*\(|defineProperty"), "object chain escape"),
+        // Comments are not skipped, on purpose: telling a comment from code needs a real parser ("//" also occurs inside strings and
+        // regex literals), and a wrong guess would let code through. A harmless "// no innerHTML" is refused; the prompt says so instead.
         (new(@"innerHTML|outerHTML|insertAdjacentHTML|document\s*\.\s*write|createContextualFragment|DOMParser|srcdoc", RegexOptions.IgnoreCase), "HTML injection (use textContent)"),
     ];
 

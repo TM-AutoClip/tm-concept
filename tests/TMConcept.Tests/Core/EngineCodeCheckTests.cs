@@ -1,5 +1,13 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using TMConcept.Core.Engines;
+using TMConcept.Core.Processes;
+using TMConcept.Core.Videos;
+using TMConcept.Engines.Engines;
+using TMConcept.Engines.Processes;
+using TMConcept.Engines.Tools;
+using TMConcept.Tests.Engines;
+using TMConcept.Tests.Storage;
 
 namespace TMConcept.Tests.Core;
 
@@ -86,9 +94,41 @@ public sealed class EngineCodeCheckTests
     [Fact]
     public void RepairPromptNamesTheWholeSvgNamespace()
     {
-        var text = TMConcept.Core.Videos.VideoCodePrompt.Repair("x", "line 1: address");
+        var text = VideoCodePrompt.Repair("x", "line 1: address");
         text.ShouldContain("createElementNS(\"" + EngineCodeCheck.SvgNamespace + "\"");
         text.ShouldContain("DOMParser");
-        TMConcept.Core.Videos.VideoCodePrompt.Version.ShouldBe("6");
+        text.ShouldContain("comments included");
+        VideoCodePrompt.Version.ShouldBe("7");
+    }
+
+    [Theory]
+    [InlineData("// no DOMParser here, only createElementNS")]
+    [InlineData("/* never innerHTML */")]
+    [InlineData("// see https://gsap.com for easing")]
+    public void RefusedNamesAndAddressesInCommentsAreStillFound(string line) =>
+        // Strict on purpose: comments are not skipped (telling them from strings needs a parser); the prompt asks for clean comments instead.
+        EngineCodeCheck.Check(EngineKind.HyperFrames, HyperFramesOk + line + "\n").ShouldNotBeEmpty();
+
+    [Fact]
+    public void SystemPromptKeepsTheCodeSmallAndTheImageFirst()
+    {
+        using var paths = new TempPaths();
+        IProcessRunner runner = new ProcessRunner(ChildProcessTests.Guard(), NullLogger<ProcessRunner>.Instance);
+        var platform = new WindowsToolPlatform(runner);
+        var tools = new ToolInstaller(paths, platform, new ToolDownloader(DownloadTransport.Network, NullLogger<ToolDownloader>.Instance),
+            NullLogger<ToolInstaller>.Instance);
+        var chrome = new ChromeLocator(paths, platform, NullLogger<ChromeLocator>.Instance);
+        var engine = new HyperFramesEngine(paths, tools, chrome, runner, NullLogger<HyperFramesEngine>.Instance);
+
+        var text = VideoCodePrompt.System(engine, subtitles: true);
+
+        text.ShouldContain("the image is the main visual");
+        text.ShouldContain("at most about 10 simple elements per scene");
+        text.ShouldContain("fractions of width and height");
+        text.ShouldContain("one shared set of helpers");
+        text.ShouldContain("under about 400 lines");
+        text.ShouldContain("Do not plan exact geometry at length");
+        text.ShouldContain("Never write these API names or any other web address (only the namespaces above are allowed)");
+        text.ShouldNotContain("icons drawn with simple elements");
     }
 }

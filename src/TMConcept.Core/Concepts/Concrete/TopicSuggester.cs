@@ -12,12 +12,13 @@ using TMConcept.Core.Text;
 namespace TMConcept.Core.Concepts;
 
 /// <summary>
-/// "Suggest topics" on the concept page: ONE call to the cheap chat model of the profile's topics step with the prompt of
-/// <see cref="ConceptPromptBuilder.BuildTopics"/> (Prompts/&lt;lang&gt;/topics.txt: the channel content, the chosen fine-tuning, the extra
-/// request so far, the profile's covered concepts and topic dislikes from <see cref="IPromptMemorySource"/> and the newest
-/// <see cref="PromptMemoryLimits.SuggestionsSent"/> topics it suggested before: do not suggest them again); the answer is about
-/// <see cref="Count"/> short topic requests in the language the user writes prompts in (the interface language: they go into the extra
-/// request, which the user writes). The call is a run of its own (<see cref="RunKind.Topics"/>), so the month's spending counts it, also
+/// "Suggest topics" on the concept page: ONE call (no batching, also for 100 topics) to the cheap chat model of the profile's topics step
+/// with the prompt of <see cref="ConceptPromptBuilder.BuildTopics"/> (Prompts/&lt;lang&gt;/topics.txt: the channel content and format, the
+/// chosen fine-tuning, the profile's covered concepts and topic dislikes from <see cref="IPromptMemorySource"/>, the newest
+/// <see cref="PromptMemoryLimits.SuggestionsSent"/> topics it suggested before and the topics in the selected list: do not suggest them
+/// again); the answer is the asked number (<see cref="TopicLimits"/>, 5-100) of short topics in the interface language (the user reads and
+/// picks them; each selected topic later becomes one concept). The extra request is not sent (0.1.12): the old prompt told the model to
+/// follow it even outside the channel's scope, and topics drifted away from the channel. The call is a run of its own (<see cref="RunKind.Topics"/>), so the month's spending counts it, also
 /// when it fails after being billed. It is meant to be cheap and quick: effort low (none for a model without effort levels; the user's
 /// effort choice is not used), streamed, cancelable, with room for thinking (0.1.7 gave it 1 500 tokens and Haiku 5.5 at effort high was
 /// cut before writing a topic, 8 Nov 2026). A cut-off answer still gives the complete topics before the cut. A model may still repeat
@@ -27,12 +28,6 @@ namespace TMConcept.Core.Concepts;
 public sealed class TopicSuggester(IConceptStore concepts, ITopicSuggestionStore suggestions, IPromptMemorySource memory, IRunStore runs, IChatClientFactory chats, ICostCalculator costs, TimeProvider clock,
     ILogger<TopicSuggester> logger)
 {
-    /// <summary>How many topics are asked for.</summary>
-    public const int Count = 10;
-
-    /// <summary>Longest topic kept.</summary>
-    public const int TopicMax = 120;
-
     /// <summary>The concept statuses whose titles are sent: all of them (a trashed or produced concept is no new topic either).</summary>
     private static readonly ConceptStatus[] AllStatuses = Enum.GetValues<ConceptStatus>();
 
@@ -42,11 +37,18 @@ public sealed class TopicSuggester(IConceptStore concepts, ITopicSuggestionStore
     /// </summary>
     public const int OutputMax = 16_000;
 
-    /// <summary>Fewest output tokens of an answer (ten short topics).</summary>
-    public const int OutputMin = 250;
+    /// <summary>Fewest output tokens of an answer of <paramref name="count"/> topics (about 12 tokens for a short English topic).</summary>
+    public static int OutputMinFor(int count) => 12 * Clamp(count);
 
-    /// <summary>Output tokens of a usual answer at effort low (ten short topics and a little thinking): the high end of the estimate.</summary>
-    public const int OutputExpected = 3_000;
+    /// <summary>
+    /// Output tokens of a usual answer of <paramref name="count"/> topics at effort low (the high end of the estimate): about 1 000 of thinking
+    /// and the scope line, then up to 50 per topic (a Turkish topic of 90 characters is 35-45 tokens). 10 topics = 1 500, 100 = 6 000: still
+    /// well under <see cref="OutputMax"/>, so 100 topics stay one call. Lowered to <see cref="OutputFor"/> in the estimate.
+    /// </summary>
+    public static int OutputExpectedFor(int count) => 1_000 + (50 * Clamp(count));
+
+    /// <summary>The asked number of topics kept within <see cref="TopicLimits"/>.</summary>
+    public static int Clamp(int count) => Math.Clamp(count, TopicLimits.CountMin, TopicLimits.CountMax);
 
     /// <summary>The effort sent when the model has it (otherwise its lowest known level, see <see cref="EffortFor"/>).</summary>
     public const string Effort = "low";
@@ -77,21 +79,27 @@ public sealed class TopicSuggester(IConceptStore concepts, ITopicSuggestionStore
     }
 
     /// <summary>The estimate of one press with <paramref name="model"/>.</summary>
-    public async Task<CostEstimate> EstimateAsync(Profile profile, CatalogModel model, string focus, string extraPrompt, string language,
+    public async Task<CostEstimate> EstimateAsync(Profile profile, CatalogModel model, string focus, int count, string language,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(model);
-        var (system, user, _) = await PromptAsync(profile, focus, extraPrompt, language, cancellationToken).ConfigureAwait(false);
-        return costs.EstimateChat(model, costs.Tokens(system + user, language), 0, OutputMin, Math.Min(OutputExpected, OutputFor(model)));
+        count = Clamp(count);
+        var (system, user, _) = await PromptAsync(profile, focus, count, language, cancellationToken).ConfigureAwait(false);
+        var roof = OutputFor(model);
+        return costs.EstimateChat(model, costs.Tokens(system + user, language), 0, Math.Min(OutputMinFor(count), roof), Math.Min(OutputExpectedFor(count), roof));
     }
 
-    /// <summary>Asks for the topics; <paramref name="progress"/> gets the call's steps (sent, thinking, writing, done).</summary>
-    public async Task<TopicSuggestions> SuggestAsync(Profile profile, ResolvedModel model, string focus, string extraPrompt, string language,
+    /// <summary>
+    /// Asks for <paramref name="count"/> topics (kept within <see cref="TopicLimits"/>); <paramref name="progress"/> gets the call's steps
+    /// (sent, thinking, writing, done). The topics come back saved as <see cref="TopicStatus.Offered"/>.
+    /// </summary>
+    public async Task<TopicSuggestions> SuggestAsync(Profile profile, ResolvedModel model, string focus, int count, string language,
         IProgress<ChatProgress>? progress, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(model);
-        var (system, user, earlier) = await PromptAsync(profile, focus, extraPrompt, language, cancellationToken).ConfigureAwait(false);
+        count = Clamp(count);
+        var (system, user, earlier) = await PromptAsync(profile, focus, count, language, cancellationToken).ConfigureAwait(false);
         var started = clock.GetUtcNow();
         var run = new Run
         {
@@ -100,7 +108,7 @@ public sealed class TopicSuggester(IConceptStore concepts, ITopicSuggestionStore
             Provider = model.Model.Provider,
             Model = model.Model.Id,
             KeyLabel = model.Key.Label,
-            Requested = Count,
+            Requested = count,
             StartedAtUtc = started,
         };
         string text;
@@ -116,7 +124,7 @@ public sealed class TopicSuggester(IConceptStore concepts, ITopicSuggestionStore
             usage = answer.Usage;
             reported = answer.ReportedCostUsd;
         }
-        catch (ProviderException ex) when (ex.Code is "truncated" or "incomplete" && ex.ChargedUsage is { } charged && ParsePartial(ex.PartialText).Count > 0)
+        catch (ProviderException ex) when (ex.Code is "truncated" or "incomplete" && ex.ChargedUsage is { } charged && ParsePartial(ex.PartialText, count).Count > 0)
         {
             // Cut off after some topics were written: they were paid for, so the complete ones are shown.
             logger.LogWarning("Topic suggestions were cut off ({Code}, stop reason {StopReason}, {Output} output tokens); keeping the complete topics before the cut",
@@ -154,7 +162,9 @@ public sealed class TopicSuggester(IConceptStore concepts, ITopicSuggestionStore
             throw new TopicsCanceledException(run.ActualUsd);
         }
 
-        var parsed = cut ? ParsePartial(text) : Parse(text);
+        // The scope sentence only anchors the model to the channel before it lists topics; it is not shown, only logged.
+        logger.LogDebug("Topic suggestions: the model's scope: {Scope}", Scope(text));
+        var parsed = cut ? ParsePartial(text, count) : Parse(text, count);
         var topics = parsed.Where(t => !earlier.Contains(TurkishFold.Fold(t))).ToList();
         var repeats = parsed.Count - topics.Count;
         run.ActualUsd = costs.Exact(model.Model, usage, reported);
@@ -167,17 +177,17 @@ public sealed class TopicSuggester(IConceptStore concepts, ITopicSuggestionStore
         run.Error = parsed.Count > 0 ? string.Empty : "parse";
         run.FinishedAtUtc = clock.GetUtcNow();
         await KeepAsync(run).ConfigureAwait(false);
-        await KeepSuggestionsAsync(profile.Id, topics, run.FinishedAtUtc.Value).ConfigureAwait(false);
-        logger.LogInformation("Topic suggestions: {Count} topics ({Repeats} repeats dropped) from {Provider}/{Model} for {Usd} USD{Cut}", topics.Count, repeats,
-            model.Model.Provider, model.Model.Id, run.ActualUsd, cut ? " (cut off)" : string.Empty);
-        return new TopicSuggestions(topics, run.ActualUsd, run.CostExact, cut, repeats);
+        var kept = await KeepSuggestionsAsync(profile.Id, topics, run.FinishedAtUtc.Value).ConfigureAwait(false);
+        logger.LogInformation("Topic suggestions: {Count} of {Requested} topics ({Repeats} repeats dropped) from {Provider}/{Model} for {Usd} USD{Cut}", topics.Count,
+            count, repeats, model.Model.Provider, model.Model.Id, run.ActualUsd, cut ? " (cut off)" : string.Empty);
+        return new TopicSuggestions(kept, run.ActualUsd, run.CostExact, cut, repeats);
     }
 
     /// <summary>
     /// The complete topics of an answer that was cut off: every string item of the <c>"topics"</c> array whose closing quote arrived (the
     /// last, unfinished one is dropped); cleaned like <see cref="Parse"/>. A complete answer gives the same as <see cref="Parse"/>.
     /// </summary>
-    public static IReadOnlyList<string> ParsePartial(string answer)
+    public static IReadOnlyList<string> ParsePartial(string answer, int count)
     {
         var text = answer ?? string.Empty;
         var key = text.IndexOf("\"topics\"", StringComparison.Ordinal);
@@ -222,10 +232,10 @@ public sealed class TopicSuggester(IConceptStore concepts, ITopicSuggestionStore
             at = end + 1;
         }
 
-        return found.Select(t => TextClean.OneLine(t, TopicMax))
+        return found.Select(t => TextClean.OneLine(t, TopicLimits.TopicMax))
             .Where(t => t.Length > 0)
             .DistinctBy(TurkishFold.Fold)
-            .Take(Count)
+            .Take(count)
             .ToList();
     }
 
@@ -247,8 +257,11 @@ public sealed class TopicSuggester(IConceptStore concepts, ITopicSuggestionStore
         return -1;
     }
 
-    /// <summary>The topics of an answer (<c>{"topics": […]}</c>, also inside a code block); short, one line each, no repeats.</summary>
-    public static IReadOnlyList<string> Parse(string answer)
+    /// <summary>
+    /// The topics of an answer (<c>{"scope": "…", "topics": […]}</c>, also inside a code block; the scope is not needed here); short, one
+    /// line each, no repeats, at most <paramref name="count"/> (the schema cannot carry the count: see <see cref="ConceptPromptBuilder.TopicSchema"/>).
+    /// </summary>
+    public static IReadOnlyList<string> Parse(string answer, int count)
     {
         var text = answer ?? string.Empty;
         var start = text.IndexOf('{', StringComparison.Ordinal);
@@ -265,10 +278,10 @@ public sealed class TopicSuggester(IConceptStore concepts, ITopicSuggestionStore
                 return [];
             }
 
-            return items.Select(i => i is JsonValue value && value.TryGetValue<string>(out var topic) ? TextClean.OneLine(topic, TopicMax) : string.Empty)
+            return items.Select(i => i is JsonValue value && value.TryGetValue<string>(out var topic) ? TextClean.OneLine(topic, TopicLimits.TopicMax) : string.Empty)
                 .Where(t => t.Length > 0)
                 .DistinctBy(TurkishFold.Fold)
-                .Take(Count)
+                .Take(count)
                 .ToList();
         }
         catch (JsonException)
@@ -290,25 +303,61 @@ public sealed class TopicSuggester(IConceptStore concepts, ITopicSuggestionStore
         }
     }
 
-    private async Task KeepSuggestionsAsync(Guid profileId, IReadOnlyList<string> topics, DateTimeOffset at)
+    /// <summary>
+    /// The scope sentence the model wrote before the topics (empty when there is none): read from the answer as far as it arrived, so a cut
+    /// answer gives it too.
+    /// </summary>
+    private static string Scope(string answer)
     {
+        var text = answer ?? string.Empty;
+        var key = text.IndexOf("\"scope\"", StringComparison.Ordinal);
+        var colon = key < 0 ? -1 : text.IndexOf(':', key);
+        var start = colon < 0 ? -1 : text.IndexOf('"', colon);
+        var end = start < 0 ? -1 : ClosingQuote(text, start + 1);
+        if (end < 0)
+        {
+            return string.Empty;
+        }
+
         try
         {
-            await suggestions.AddAsync(topics.Select(t => new TopicSuggestion { ProfileId = profileId, Text = t, CreatedAtUtc = at }).ToList(),
-                CancellationToken.None).ConfigureAwait(false);
+            return JsonNode.Parse(text[start..(end + 1)]) is JsonValue value && value.TryGetValue<string>(out var scope)
+                ? TextClean.OneLine(scope, ProfileLimits.ConceptTextMax)
+                : string.Empty;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (JsonException)
         {
-            // The topics are shown anyway; only the next press would not know them.
-            logger.LogError(ex, "The topic suggestions could not be kept");
+            return string.Empty;
         }
     }
 
     /// <summary>
-    /// The prompt, and the folded texts a new topic must not equal (every concept title of the profile and every earlier suggestion; the
-    /// prompt sends only the newest suggestions and the condensed history).
+    /// Saves the new topics as <see cref="TopicStatus.Offered"/> and gives them back with their ids (the page selects them by id). The
+    /// topics of one press are a tick apart, so the selected list (oldest first) keeps the answer's order.
     /// </summary>
-    private async Task<(string System, string User, HashSet<string> Earlier)> PromptAsync(Profile profile, string focus, string extraPrompt,
+    private async Task<IReadOnlyList<TopicSuggestion>> KeepSuggestionsAsync(Guid profileId, IReadOnlyList<string> topics, DateTimeOffset at)
+    {
+        var rows = topics.Select((t, i) => new TopicSuggestion { ProfileId = profileId, Text = t, CreatedAtUtc = at.AddTicks(i), Status = TopicStatus.Offered })
+            .ToList();
+        try
+        {
+            await suggestions.AddAsync(rows, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The topics are shown anyway; only the next press would not know them. Selecting one later sets the status of a row that is
+            // not there: the store skips an unknown id, so the selection then lives only on the page.
+            logger.LogError(ex, "The topic suggestions could not be kept");
+        }
+
+        return rows;
+    }
+
+    /// <summary>
+    /// The prompt, and the folded texts a new topic must not equal (every concept title of the profile and every earlier suggestion, the
+    /// selected ones too; the prompt sends only the newest suggestions, the selected list and the condensed history).
+    /// </summary>
+    private async Task<(string System, string User, HashSet<string> Earlier)> PromptAsync(Profile profile, string focus, int count,
         string language, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(profile);
@@ -317,8 +366,13 @@ public sealed class TopicSuggester(IConceptStore concepts, ITopicSuggestionStore
         var earlier = all.Select(c => TurkishFold.Fold(c.Title)).Concat(suggested.Select(s => TurkishFold.Fold(s.Text))).Where(t => t.Length > 0)
             .ToHashSet(StringComparer.Ordinal);
         var past = await memory.ReadAsync(profile, cancellationToken).ConfigureAwait(false);
-        var prompt = ConceptPromptBuilder.BuildTopics(new TopicPromptInput(profile, language, focus ?? string.Empty, extraPrompt ?? string.Empty, past,
-            suggested.Take(PromptMemoryLimits.SuggestionsSent).Select(s => s.Text).ToList(), Count));
+        // The selected topics go in their own block (oldest first, the list's order), so they are not listed twice. Read from the rows
+        // already loaded, ordered like ITopicSuggestionStore.ListAsync(profile, status).
+        var selected = suggested.Where(s => s.Status == TopicStatus.Selected).OrderBy(s => s.CreatedAtUtc).ThenBy(s => s.Id)
+            .Take(PromptMemoryLimits.SuggestionsSent).Select(s => s.Text).ToList();
+        var prompt = ConceptPromptBuilder.BuildTopics(new TopicPromptInput(profile, language, focus ?? string.Empty, past,
+            suggested.Where(s => s.Status != TopicStatus.Selected).Take(PromptMemoryLimits.SuggestionsSent).Select(s => s.Text).ToList(), selected,
+            count));
         return (prompt.System, prompt.User, earlier);
     }
 }

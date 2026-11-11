@@ -199,8 +199,9 @@ Then choose the models on the pages that use them (see above). Nothing paid is c
 
 ## Make your first video
 
-1. **Generate concepts:** choose the model, the count and an optional extra request (an optional fine-tuning of tone, audience and structure,
-   and **Suggest topics** help with it); check the estimate; press **Generate**.
+1. **Generate concepts:** choose the model, the count and an optional extra request (an optional fine-tuning of tone, audience and structure);
+   check the estimate; press **Generate**. **Suggest topics** offers 5-100 topics within the channel's scope: tick the ones you like and add
+   them to the selected list, and **Generate** then writes one concept per selected topic.
 2. Open cards, approve the good ones (A), delete the rest (D). ✎ (or a click on an approved concept) edits the text; placeholders such as
    `[pause 1 s]` or `[soft transition]` go in at the cursor and the program applies them in the video.
 3. **Concept to video:** click approved concepts to queue them, check the settings, press **Produce the queue in order**.

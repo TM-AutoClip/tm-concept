@@ -448,6 +448,45 @@ public sealed class VideoPageTests
     }
 
     [AvaloniaFact]
+    public async Task AHighEffortOnTheVideoCodeStepShowsAWarningButIsKept()
+    {
+        var engine = new FakeEngine();
+        using var h = Harness(new FakeChat(), engine);
+        var (page, _) = await PrepareAsync(h);
+        var code = page.Picker.Row(PipelineSteps.VideoCode)!;
+        code.Selected = code.Options.First(o => o.Model?.Id == "claude-opus-5-5");
+        code.HasEfforts.ShouldBeTrue();
+        code.EffortWarning.ShouldBeFalse("Automatic is no warning");
+
+        foreach (var level in new[] { "high", "xhigh", "max" }.Where(l => code.Efforts.Any(e => e.Value == l)))
+        {
+            code.Effort = code.Efforts.Single(e => e.Value == level);
+            code.EffortWarning.ShouldBeTrue(level);
+            code.Effort.Value.ShouldBe(level, "the choice is kept, not forced down");
+        }
+
+        code.Effort = code.Efforts.First(e => e.Value == "medium");
+        code.EffortWarning.ShouldBeFalse();
+
+        // Only the video code step warns (a long concept batch at high effort is the user's choice there).
+        var concepts = new StepModelRowViewModel(PipelineSteps.All.Single(s => s.Code == PipelineSteps.Concepts), "c", "p", string.Empty, "auto");
+        concepts.Selected = code.Selected;
+        concepts.Effort = concepts.Efforts.First(e => e.Value == "high");
+        concepts.EffortWarning.ShouldBeFalse();
+
+        var view = new TMConcept.Desktop.Views.StepPickerView { DataContext = page.Picker };
+        var window = new Avalonia.Controls.Window { Content = view, Width = 1280, Height = 820 };
+        var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
+        h.Get<TMConcept.Desktop.Localization.LanguageResources>().Attach(window.Resources.MergedDictionaries);
+        code.Effort = code.Efforts.First(e => e.Value == "high");
+        window.Show();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(view).OfType<Avalonia.Controls.TextBlock>()
+            .Where(t => t.IsEffectivelyVisible).Select(t => t.Text).ShouldContain(text["step.effort.costly"]);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public async Task TheImagesStepOffMakesNoImageCallAndAnImageModelGetsItsPromptsFromTheCodeModel()
     {
         var engine = new FakeEngine();

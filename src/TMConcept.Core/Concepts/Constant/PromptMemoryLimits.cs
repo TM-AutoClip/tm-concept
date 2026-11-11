@@ -45,7 +45,9 @@ public static class PromptMemoryLimits
     public const int WishMax = 200;
 
     /// <summary>
-    /// Earlier topic suggestions listed in the topic prompt (the newest; 0.1.9 sent 150). The local repeat filter still checks every one.
+    /// Earlier topic suggestions listed in the topic prompt (the newest; 0.1.9 sent 150, 0.1.11 sent 60). A press can now bring 100 topics,
+    /// so 60 did not even cover the last press; 200 short lines are about 6 000 input tokens on the cheap topics model. The local repeat
+    /// filter still checks every one.
     /// </summary>
-    public const int SuggestionsSent = 60;
+    public const int SuggestionsSent = 200;
 }
