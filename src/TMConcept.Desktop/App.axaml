@@ -13,5 +13,10 @@
   <Application.Styles>
     <FluentTheme />
     <StyleInclude Source="avares://TMConcept/Theme/Controls.axaml" />
+    <!-- Every window (dialogs and the full-screen player too) carries the app icon, so the taskbar never shows the framework's icon.
+         The multi-size .ico lets Windows pick its drawn 16/24/32 px frame instead of shrinking one big picture. -->
+    <Style Selector="Window">
+      <Setter Property="Icon" Value="avares://TMConcept/Assets/app.ico" />
+    </Style>
   </Application.Styles>
 </Application>

@@ -2,6 +2,9 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using TMConcept.Desktop.ViewModels;
 
 namespace TMConcept.Desktop.Views;
@@ -85,6 +88,8 @@ public sealed partial class VideoPlayerView : UserControl
         }
 
         _fullscreen = new PlayerWindow { DataContext = _player };
+        // Its own taskbar button: the same id as the main window, or Windows shows its generic icon on it.
+        Os.TaskbarIcon.ApplyWhenOpen(_fullscreen, App.Services?.GetService<ILogger<PlayerWindow>>() ?? NullLogger<PlayerWindow>.Instance);
         _fullscreen.Closed += (_, _) => _fullscreen = null;
         _fullscreen.Show();
     }

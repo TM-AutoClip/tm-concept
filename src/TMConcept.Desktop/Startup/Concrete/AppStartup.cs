@@ -1,7 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Platform;
 using Avalonia.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -37,13 +36,6 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
     {
         ArgumentNullException.ThrowIfNull(desktop);
         _desktop = desktop;
-        // Every window (dialogs and the full-screen player too) gets the app icon by default, so the taskbar never shows the framework's icon.
-        // Metadata can be overridden once per process (tests start the app more than once).
-        if (Interlocked.Exchange(ref s_iconSet, 1) == 0)
-        {
-            Window.IconProperty.OverrideDefaultValue<Window>(AppIcon());
-        }
-
         Dispatcher.UIThread.UnhandledException += (_, e) =>
         {
             // A command that throws (a storage error, a full disk) must not take the whole app down: logged with its cause and shown.
@@ -124,6 +116,7 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
 
     private void Present(Window window)
     {
+        Os.TaskbarIcon.ApplyWhenOpen(window, logger);
         window.Closed += (_, _) =>
         {
             if (_main is null && windows.Active == window)
@@ -186,6 +179,7 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
         });
         var shell = services.GetRequiredService<ShellViewModel>();
         var window = new MainWindow { DataContext = shell };
+        Os.TaskbarIcon.ApplyWhenOpen(window, logger);
         window.Closing += (_, e) => OnClosing(window, shell, e);
         window.Closed += (_, _) => Quit();
         _main = window;
@@ -273,14 +267,5 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
 
         _closeConfirmed = true;
         window.Close();
-    }
-
-    private static int s_iconSet;
-
-    /// <summary>The multi-size .ico (16–256): Windows picks the small frame for the taskbar and title bar instead of shrinking one big picture.</summary>
-    private static WindowIcon AppIcon()
-    {
-        using var stream = AssetLoader.Open(new Uri("avares://TMConcept/Assets/app.ico"));
-        return new WindowIcon(stream);
     }
 }
