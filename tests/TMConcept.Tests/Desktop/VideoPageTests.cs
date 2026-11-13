@@ -482,7 +482,10 @@ public sealed class VideoPageTests
 
         // The pronunciation dictionary changes only what the voice reads; subtitles and the narration file keep the written word.
         voice.Requests.First().Text.ShouldBe("In 672 the city was under seej.");
-        File.ReadAllText(Path.Combine(folder, "subtitles.srt")).ShouldContain("under siege");
+        // (0.1.15: a vertical video's subtitle line holds 26 characters, so "under" and "siege" may stand on two lines.)
+        var subtitles = File.ReadAllText(Path.Combine(folder, "subtitles.srt"));
+        subtitles.ShouldContain("siege.");
+        subtitles.ShouldNotContain("seej");
         File.ReadAllText(Path.Combine(folder, VideoFolders.NarrationFile)).ShouldNotContain("seej");
         record.Warnings.ShouldNotContain(VideoWarnings.SpeechFailed);
     }

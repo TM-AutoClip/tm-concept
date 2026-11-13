@@ -148,7 +148,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         var clips = save.Clips;
         var cueSources = input.Scenes.Select(s => new SubtitleSource((long)Math.Round(s.StartSeconds * 1000),
             clips.ElementAtOrDefault(s.Number - 1)?.DurationMs ?? (long)Math.Round(s.DurationSeconds * 1000), s.Caption)).ToList();
-        var cues = SubtitleBuilder.Build(SubtitleSources(input, clips));
+        var cues = SubtitleBuilder.Build(SubtitleSources(input, clips), SubtitleBuilder.LineLength(input.Width, input.Height));
         string? ass = null;
         if (save.Options.Subtitles && cues.Count > 0)
         {

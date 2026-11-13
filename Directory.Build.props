@@ -5,7 +5,7 @@
     Warnings are errors: a warning is fixed, never silenced (generated code excluded).
   -->
   <PropertyGroup>
-    <Version>0.1.14</Version>
+    <Version>0.1.15</Version>
     <Product>TM Concept</Product>
     <Company>TM Concept contributors</Company>
     <Copyright>Copyright (c) 2026 TM Concept contributors</Copyright>

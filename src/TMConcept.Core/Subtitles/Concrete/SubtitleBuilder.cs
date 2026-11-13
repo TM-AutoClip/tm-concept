@@ -5,25 +5,53 @@ using TMConcept.Core.Render;
 namespace TMConcept.Core.Subtitles;
 
 /// <summary>
-/// Subtitles from the narration: each scene's text is cut into pieces of at most two lines of 42 characters (at sentence ends first,
-/// then at words); a piece's time is its share of the scene's spoken length by characters. Writes SRT (always next to the video) and ASS
-/// (burned in when on-screen subtitles are chosen).
+/// Subtitles from the narration: each scene's text is cut into pieces of at most two lines (at sentence ends first, then at words); a
+/// piece's time is its share of the scene's spoken length by characters. Writes SRT (always next to the video) and ASS (burned in when
+/// on-screen subtitles are chosen). The line length comes from the picture (<see cref="LineLength"/>): 0.1.7–0.1.14 used 42 characters at
+/// a text size made for wide video, so in a 1080-wide vertical video a long line ran off both sides of the picture (13 Nov 2026).
 /// </summary>
 public static class SubtitleBuilder
 {
-    /// <summary>Characters per line.</summary>
+    /// <summary>Most characters per line (wide video).</summary>
     public const int LineMax = 42;
+
+    /// <summary>Fewest characters per line, however narrow the picture.</summary>
+    public const int LineMin = 16;
+
+    /// <summary>
+    /// Width of one character as a share of the text size, taken generously (bold sans text averages about 0.55; capitals and wide letters
+    /// run more), so a full line stays inside the picture.
+    /// </summary>
+    public const double CharWidth = 0.62;
+
+    /// <summary>Text size in pixels for a picture: 5.5 % of its shorter side.</summary>
+    public static int FontSize(int width, int height) => Math.Max(1, (int)Math.Round(Math.Min(width, height) * 0.055));
+
+    /// <summary>Left and right margin in pixels: 5 % of the width.</summary>
+    public static int SideMargin(int width) => (int)Math.Round(width * 0.05);
+
+    /// <summary>
+    /// Characters per line that fit between the side margins at <see cref="FontSize"/> (1080×1920: 26; 1920×1080: 42), between
+    /// <see cref="LineMin"/> and <see cref="LineMax"/>.
+    /// </summary>
+    public static int LineLength(int width, int height)
+    {
+        var usable = width - (2 * SideMargin(width));
+        var fits = (int)Math.Floor(usable / (FontSize(width, height) * CharWidth));
+        return Math.Clamp(fits, LineMin, LineMax);
+    }
 
     private static readonly char[] WordSeparators = [' ', '\n', '\r', '\t'];
 
-    /// <summary>Cues of the scenes.</summary>
-    public static IReadOnlyList<SubtitleCue> Build(IReadOnlyList<SubtitleSource> scenes)
+    /// <summary>Cues of the scenes, lines of at most <paramref name="lineLength"/> characters (<see cref="LineLength"/> for the picture).</summary>
+    public static IReadOnlyList<SubtitleCue> Build(IReadOnlyList<SubtitleSource> scenes, int lineLength = LineMax)
     {
         ArgumentNullException.ThrowIfNull(scenes);
+        ArgumentOutOfRangeException.ThrowIfLessThan(lineLength, 1);
         var cues = new List<SubtitleCue>();
         foreach (var scene in scenes.Where(s => s.Text.Trim().Length > 0 && s.DurationMs > 0))
         {
-            var pieces = Pieces(scene.Text);
+            var pieces = Pieces(scene.Text, lineLength);
             var total = pieces.Sum(p => p.Sum(l => l.Length + 1));
             var start = scene.StartMs;
             foreach (var piece in pieces)
@@ -53,20 +81,24 @@ public static class SubtitleBuilder
         return text.ToString();
     }
 
-    /// <summary>ASS text sized for the video (white text, dark outline, lower third).</summary>
+    /// <summary>
+    /// ASS text sized for the video (white text, dark outline, lower third). Smart wrapping stays on (WrapStyle 0): a line that is still too
+    /// wide for the picture is broken by libass instead of running off the sides.
+    /// </summary>
     public static string Ass(IReadOnlyList<SubtitleCue> cues, int width, int height, RenderTheme theme)
     {
         ArgumentNullException.ThrowIfNull(cues);
         ArgumentNullException.ThrowIfNull(theme);
         var c = CultureInfo.InvariantCulture;
-        var size = (int)Math.Round(Math.Min(width, height) * 0.055);
+        var size = FontSize(width, height);
         var margin = (int)Math.Round(height * 0.12);
+        var side = SideMargin(width);
         var text = new StringBuilder();
-        text.Append("[Script Info]\nScriptType: v4.00+\nWrapStyle: 2\nScaledBorderAndShadow: yes\n")
+        text.Append("[Script Info]\nScriptType: v4.00+\nWrapStyle: 0\nScaledBorderAndShadow: yes\n")
             .Append(c, $"PlayResX: {width}\nPlayResY: {height}\n\n")
             .Append("[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ")
             .Append("ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n")
-            .Append(c, $"Style: Default,DejaVu Sans,{size},{Colour(theme.Text)},&H000000FF,&H00000000,&H64000000,1,0,0,0,100,100,0,0,1,{Math.Max(2, size / 12)},0,2,40,40,{margin},1\n\n")
+            .Append(c, $"Style: Default,DejaVu Sans,{size},{Colour(theme.Text)},&H000000FF,&H00000000,&H64000000,1,0,0,0,100,100,0,0,1,{Math.Max(2, size / 12)},0,2,{side},{side},{margin},1\n\n")
             .Append("[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n");
         foreach (var cue in cues)
         {
@@ -90,26 +122,26 @@ public static class SubtitleBuilder
     /// The words of a text (split at spaces, tabs and line ends; a no-break space, as in French "Bonjour !", stays inside its word so a line
     /// never starts with the "!"), a word longer than a line cut into line-long parts, so nothing of it is lost.
     /// </summary>
-    private static IEnumerable<string> Words(string text)
+    private static IEnumerable<string> Words(string text, int lineLength)
     {
         foreach (var word in text.Split(WordSeparators, StringSplitOptions.RemoveEmptyEntries))
         {
-            for (var i = 0; i < word.Length; i += LineMax)
+            for (var i = 0; i < word.Length; i += lineLength)
             {
-                yield return word.Substring(i, Math.Min(LineMax, word.Length - i));
+                yield return word.Substring(i, Math.Min(lineLength, word.Length - i));
             }
         }
     }
 
-    private static List<List<string>> Pieces(string text)
+    private static List<List<string>> Pieces(string text, int lineLength)
     {
-        var words = Words(text);
+        var words = Words(text, lineLength);
         var pieces = new List<List<string>>();
         var lines = new List<string>();
         var line = new StringBuilder();
         foreach (var word in words)
         {
-            if (line.Length > 0 && line.Length + 1 + word.Length > LineMax)
+            if (line.Length > 0 && line.Length + 1 + word.Length > lineLength)
             {
                 lines.Add(line.ToString());
                 line.Clear();

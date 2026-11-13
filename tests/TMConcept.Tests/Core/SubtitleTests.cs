@@ -38,6 +38,37 @@ public sealed class SubtitleTests
         ass.ShouldContain("&H00FFFFFF");
     }
 
+    [Theory]
+    [InlineData(1080, 1920, 26)]
+    [InlineData(720, 1280, 26)]
+    [InlineData(1080, 1080, 26)]
+    [InlineData(1920, 1080, 42)]
+    public void TheLineLengthFitsThePicture(int width, int height, int expected)
+    {
+        var length = SubtitleBuilder.LineLength(width, height);
+
+        length.ShouldBe(expected);
+        var widest = length * SubtitleBuilder.FontSize(width, height) * SubtitleBuilder.CharWidth;
+        widest.ShouldBeLessThanOrEqualTo(width - (2 * SubtitleBuilder.SideMargin(width)));
+    }
+
+    /// <summary>0.1.14: a vertical video got 42-character lines at a size made for wide video; long lines ran off both sides.</summary>
+    [Fact]
+    public void AVerticalVideoGetsLinesThatStayInsideIt()
+    {
+        var scene = new SubtitleSource(0, 9000,
+            "Machu Picchu ise Cusco'nun kuzeybatısında, yaklaşık 2400 metre yükseklikte, Urubamba Nehri'nin kıvrıldığı sarp bir sırtta duruyordu.");
+        var length = SubtitleBuilder.LineLength(1080, 1920);
+
+        var cues = SubtitleBuilder.Build([scene], length);
+
+        cues.ShouldAllBe(c => c.Lines.Count <= 2 && c.Lines.All(l => l.Length <= length));
+        string.Join(' ', cues.SelectMany(c => c.Lines)).ShouldBe(scene.Text);
+        var ass = SubtitleBuilder.Ass(cues, 1080, 1920, new RenderTheme());
+        ass.ShouldContain("WrapStyle: 0");
+        ass.ShouldContain(",54,54,230,1");
+    }
+
     [Fact]
     public void TheNarrationFileListsEveryScene()
     {
