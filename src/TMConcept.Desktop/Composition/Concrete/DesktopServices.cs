@@ -87,6 +87,21 @@ public static class DesktopServices
         services.AddSingleton<Core.Speech.VoiceSampleLibrary>();
         services.AddSingleton<Core.Speech.ISpeechEngine, Speech.Speech.PocketSpeechEngine>();
         services.AddSingleton<Core.Speech.ISpeechEngine, Speech.Speech.ChatterboxSpeechEngine>();
+
+        // The Python voices (0.1.17): uv installs a pinned Python and one environment per voice family into <tools>/speech-py; each voice speaks
+        // in one Python worker (one voice at a time), on an NVIDIA card through CUDA when there is one.
+        services.AddSingleton<Speech.Python.PythonLayout>();
+        services.AddSingleton<Speech.Python.PythonInstaller>();
+        services.AddSingleton<Speech.Python.PythonModelStore>();
+        services.AddSingleton<Speech.Python.PythonWorkerClient>();
+        foreach (var voice in Speech.Python.PythonVoices.All)
+        {
+            services.AddSingleton<Core.Speech.ISpeechEngine>(s => new Speech.Python.PythonSpeechEngine(voice, s.GetRequiredService<Speech.Python.PythonLayout>(),
+                s.GetRequiredService<Speech.Python.PythonInstaller>(), s.GetRequiredService<Speech.Python.PythonModelStore>(),
+                s.GetRequiredService<Speech.Python.PythonWorkerClient>(), s.GetRequiredService<Core.Speech.VoiceSampleLibrary>(),
+                s.GetRequiredService<Core.Hardware.IGpuInfo>(), s.GetRequiredService<ILogger<Speech.Python.PythonSpeechEngine>>()));
+        }
+
         services.AddSingleton<Speech.Embeddings.LocalEmbedder>();
         services.AddSingleton<Core.Duplicates.ILocalEmbedder>(s => s.GetRequiredService<Speech.Embeddings.LocalEmbedder>());
         services.AddSingleton<Core.Speech.ISpeechEngine, Providers.Speech.OpenAISpeechEngine>();
@@ -113,6 +128,8 @@ public static class DesktopServices
         services.AddSingleton<IModelDirectory, ModelDirectory>();
         services.AddSingleton<IGpuCoordinator, GpuCoordinator>();
         services.AddSingleton<ILocalModelSource, Engines.Images.SdCppModelSource>();
+        // The Python voices' source comes first: the speech worker's source takes every other local voice.
+        services.AddSingleton<ILocalModelSource, Speech.Python.PythonModelSource>();
         services.AddSingleton<ILocalModelSource, Speech.Speech.WorkerModelSource>();
         services.AddSingleton<Engines.Tools.ToolInstaller>();
         services.AddSingleton<Core.Tools.IToolLocator>(s => s.GetRequiredService<Engines.Tools.ToolInstaller>());
@@ -127,6 +144,7 @@ public static class DesktopServices
         services.AddSingleton<Core.Components.IComponentSource, Engines.Components.EngineComponentSource>();
         services.AddSingleton<Core.Components.IComponentSource, Speech.Components.VoiceComponentSource>();
         services.AddSingleton<Core.Components.IComponentSource, Speech.Components.EmbeddingComponentSource>();
+        services.AddSingleton<Core.Components.IComponentSource, Speech.Components.PythonComponentSource>();
         services.AddSingleton<Core.Components.ComponentPlanner>();
         services.AddSingleton<Components.ComponentInstallFlow>();
         AddDesktop(services);

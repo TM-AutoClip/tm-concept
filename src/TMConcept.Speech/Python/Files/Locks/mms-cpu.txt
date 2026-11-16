@@ -1,0 +1,32 @@
+# TM Concept: the mms environment of the Python voices, PyTorch build cpu. Every package at an exact version (Windows and Linux).
+# Made with uv 0.13.6: uv pip compile <PythonEnvironments.mms packages> --universal --python-version 3.11 --torch-backend cpu
+#   --exclude-newer 2026-11-01T00:00:00Z --no-header --no-annotate
+certifi==2026.10.23
+charset-normalizer==3.5.2
+colorama==0.4.6 ; sys_platform == 'win32'
+filelock==4.2.6
+fsspec==2026.9.0
+hf-xet==1.8.0 ; platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64'
+huggingface-hub==0.36.2
+idna==3.20
+jinja2==3.1.6
+markupsafe==3.0.4
+mpmath==1.3.0
+networkx==3.6.1 ; python_full_version < '3.12'
+networkx==3.7 ; python_full_version >= '3.12'
+numpy==2.4.6 ; python_full_version < '3.12'
+numpy==2.5.4 ; python_full_version >= '3.12'
+packaging==26.3
+pyyaml==6.0.3
+regex==2026.9.29
+requests==2.34.2
+safetensors==0.8.0
+setuptools==84.2.1 ; python_full_version >= '3.12'
+sympy==1.14.0
+tokenizers==0.22.2
+torch==2.8.0 ; sys_platform == 'darwin'
+torch==2.8.0+cpu ; sys_platform != 'darwin'
+tqdm==4.70.1
+transformers==4.56.2
+typing-extensions==4.16.0
+urllib3==2.8.0

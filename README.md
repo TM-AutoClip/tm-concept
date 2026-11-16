@@ -156,6 +156,17 @@ the model that describes a sample image. Each step says what it is for:
   Dutch, Polish and Swedish with the same recordings. It runs on the processor only (the graphics card is not used) and is slow: about
   6× the length of the speech on an 8-thread share of a 16-thread processor, plus about 1.5 minutes to load the model for the first scene.
   Long scenes are spoken sentence by sentence (at most 300 characters at a time). No speed setting, no watermark.
+- **Python voices** (local, free to run; large downloads) — voices that run on PyTorch in a Python of their own, installed into the app's
+  tools folder by uv (nothing goes to your system Python, PATH or registry): **XTTS-v2** (Coqui; 10 of the video languages, built-in
+  speakers or your own voice), **F5-TTS Turkish**, **VoxCPM2** (OpenBMB; every video language, your own voice or a described narrator),
+  **Trendyol-TTS** (Turkish), **Ahenk** (Turkish, seven moods) and **MMS-TTS Turkish** (small, on the processor). With an NVIDIA card and
+  its driver they run on the card through CUDA (the step shows whether your card is big enough: 4 GB for XTTS-v2 and F5, 8 GB for
+  VoxCPM2, Trendyol-TTS and Ahenk); with an AMD or Intel card, or none, they run on the processor, which the step says is slow. The first
+  use installs Python 3.11, the voice's packages with PyTorch (about 4 GB for NVIDIA cards, under 1 GB otherwise) and the model (0.15–5 GB);
+  the confirmation lists every download with its size. **XTTS-v2, F5-TTS Turkish and MMS-TTS Turkish have NON-COMMERCIAL licences**: the
+  step shows the licence and asks you to accept it before anything is downloaded; do not use them for a channel with ads, sponsors or paid
+  work. Ahenk (CC BY 4.0) must be credited when you publish. While a Python voice speaks on the card it holds the card like any other
+  local model; it is unloaded when the narration ends, so the card is free for the images.
 - **Pronunciation** — Settings → Voice and pronunciation: per video language, words the voice should read differently ("Viking" →
   "Vikink" in Turkish; Turkish comes with a small list, you add your own). Only the voice changes; subtitles keep the written word.
 - **Duplicate check by meaning** — optional: the local **Multilingual MiniLM** (free, on this computer, 50+ languages including Turkish)
@@ -175,8 +186,8 @@ now* with the reason; nothing starts with it until it is back or you choose anot
 
 **One local model on the graphics card at a time.** Models of a local server on this computer (Ollama, LM Studio, llama-server,
 Lemonade…) and the local image models share the graphics card: before a local model starts, the one used before it is unloaded (when its
-server can be asked to) and the app waits until the card's memory is free again; online models and the local voices (they run on the
-processor) never wait. The free memory is measured each time: on Windows the smaller of what Task Manager shows and what Windows lets
+server can be asked to) and the app waits until the card's memory is free again; online models and the sherpa-onnx voices (they run on the
+processor) never wait; a Python voice on an NVIDIA card takes the card like the image models. The free memory is measured each time: on Windows the smaller of what Task Manager shows and what Windows lets
 the app use, on Linux the AMD driver's files or `nvidia-smi`. Graphics memory classes are 4, 6, 8, 12, 16, 24 and 32 GB: a card counts in
 the class it reports within about an eighth (a "16 GB" card that reports 15.8 GB is a 16 GB card) and can use its own class and every
 lower one; a model of a higher class is shown in red.
@@ -196,6 +207,9 @@ every attempt is paid and counted in the cost, and after three unreadable answer
 | Pocket TTS int8 (needs sherpa-onnx) | github.com (k2-fsa) | 98 MB |
 | Chatterbox Multilingual V3 ONNX (Masterx export, 4-bit language model; needs sherpa-onnx) | huggingface.co | 1.56 GB |
 | Multilingual MiniLM (paraphrase-multilingual-MiniLM-L12-v2, int8 ONNX + tokenizer; needs sherpa-onnx) | huggingface.co | 127 MB |
+| uv 0.13.6 + Python 3.11.18 (for the Python voices) | github.com (astral-sh) | 45 MB |
+| Python voice packages with PyTorch 2.8 (one set per voice family: XTTS-v2, F5-TTS, VoxCPM2 for VoxCPM2/Trendyol/Ahenk, MMS) | download.pytorch.org, pypi.org | NVIDIA (CUDA 12.8): about 3.7 GB each (Linux 4.1 GB); processor: 0.7–1 GB each |
+| XTTS-v2 / F5-TTS Turkish / VoxCPM2 / Trendyol-TTS / Ahenk (+ VoxCPM2) / MMS-TTS Turkish models | huggingface.co | 1.9 GB / 1.4 GB / 5 GB / 5 GB / 145 MB / 145 MB |
 | stable-diffusion.cpp master-890, the build of Image acceleration (Windows: CUDA 12 build + CUDA runtime, Vulkan or processor build; Linux x64: Vulkan or processor build) | github.com (leejet) | CUDA 900 MB, Vulkan 32–39 MB, processor 17–25 MB |
 | FLUX.2 klein 4B weights (model, Qwen3-4B text encoder, VAE) | huggingface.co | 5.3 GB |
 | Z-Image Turbo weights (model, Qwen3-4B-Instruct text encoder, VAE) | huggingface.co | 9.4 GB |
@@ -266,6 +280,9 @@ Portable mode: start the program with `--data-dir <folder>`; then everything, vi
 - **Supertonic 3** (default voice): OpenRAIL-M. Say that the voice is AI-generated when you publish; no impersonation. The video details
   remind you.
 - **Kokoro 82M**: Apache-2.0. **Multilingual MiniLM** (sentence-transformers): Apache-2.0.
+- **Python voices**: **XTTS-v2** (Coqui Public Model License), **F5-TTS Turkish** and **MMS-TTS Turkish** (CC BY-NC 4.0) are
+  **non-commercial only**; the step asks you to accept the licence first. **VoxCPM2** Apache-2.0, **Trendyol-TTS** MIT, **Ahenk** CC BY 4.0
+  (credit "Ahenk (github.com/ozguradmin/ahenk-turkish-tts), CC BY 4.0"). PyTorch and the voices' packages have their own (open) licences.
 - **Remotion**: not open source; free for individuals and companies of up to 3 people, larger companies need a Remotion license.
 - **Sample images**: you must have the right to use them.
 - **ffmpeg**: GPL, downloaded as a separate program.

@@ -195,6 +195,12 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                 logger.LogError(LogEvents.OnScreen, ex, "Narration failed; the video is stopped");
                 throw new VideoException(ex.Message, ex) { Code = "speech" };
             }
+            finally
+            {
+                // The voice is not needed until the next video: its worker ends, so the card (a Python voice on CUDA) and the main memory are
+                // free for the images.
+                await speech.ReleaseAsync(voice!, CancellationToken.None).ConfigureAwait(false);
+            }
 
             steps.Finish(VideoSteps.Speech);
         }

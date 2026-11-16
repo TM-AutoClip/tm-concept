@@ -152,6 +152,17 @@ adım ne işe yaradığını yazar:
   İtalyanca, Portekizce, Felemenkçe, Lehçe ve İsveççe konuşur. Yalnız işlemcide çalışır (ekran kartı kullanılmaz) ve yavaştır: 16 iş
   parçacıklı bir işlemcinin 8 iş parçacığıyla konuşmanın yaklaşık 6 katı, ilk sahnede ayrıca modelin yüklenmesi için yaklaşık 1,5
   dakika. Uzun sahneler cümle cümle (bir seferde en çok 300 karakter) okunur. Hız ayarı yok, filigran yok.
+- **Python sesleri** (yerel, çalıştırması ücretsiz; indirmeleri büyük) — kendi Python'unda PyTorch ile çalışan sesler; uv bunları programın
+  araç klasörüne kurar (sistemindeki Python'a, PATH'e ya da kayıt defterine bir şey yazılmaz): **XTTS-v2** (Coqui; video dillerinden 10'u,
+  hazır konuşmacılar ya da kendi sesin), **F5-TTS Türkçe**, **VoxCPM2** (OpenBMB; bütün video dilleri, kendi sesin ya da tarifle
+  oluşturulan bir anlatıcı), **Trendyol-TTS** (Türkçe), **Ahenk** (Türkçe, yedi duygu) ve **MMS-TTS Türkçe** (küçük, işlemcide). Sürücüsüyle
+  birlikte bir NVIDIA kartın varsa CUDA ile kartta çalışırlar (adım, kartının yetip yetmediğini gösterir: XTTS-v2 ve F5 için 4 GB, VoxCPM2,
+  Trendyol-TTS ve Ahenk için 8 GB); AMD ya da Intel kartta, ya da kart yoksa işlemcide çalışırlar ve adım bunun yavaş olduğunu söyler. İlk
+  kullanımda Python 3.11, sesin PyTorch'lu paketleri (NVIDIA kartlar için yaklaşık 4 GB, diğerlerinde 1 GB'tan az) ve model (0,15–5 GB)
+  kurulur; onay penceresi her indirmeyi boyutuyla listeler. **XTTS-v2, F5-TTS Türkçe ve MMS-TTS Türkçe TİCARİ OLMAYAN lisanslıdır**: adım
+  lisansı gösterir ve bir şey indirilmeden önce kabul etmeni ister; reklamlı, sponsorlu bir kanalda ya da ücretli işte kullanma. Ahenk
+  (CC BY 4.0) yayınlarken anılmalıdır. Kartta konuşan bir Python sesi kartı diğer yerel modeller gibi tutar; seslendirme bitince boşaltılır,
+  kart görseller için boş kalır.
 - **Telaffuz** — Ayarlar → Ses ve telaffuz: her video dili için sesin farklı okuması gereken kelimeler (Türkçede "Viking" → "Vikink";
   Türkçe küçük bir hazır listeyle gelir, kendi kelimelerini eklersin). Yalnız ses değişir; altyazı yazıldığı gibi kalır.
 - **Anlamca tekrar denetimi** — isteğe bağlı: yerel **Multilingual MiniLM** (ücretsiz, bu bilgisayarda, Türkçe dahil 50'den fazla dil) ya
@@ -171,8 +182,8 @@ kullanılamıyor* diye görünür; geri gelene ya da başka bir model seçene ka
 
 **Ekran kartında aynı anda tek yerel model.** Bu bilgisayardaki bir yerel sunucunun modelleri (Ollama, LM Studio, llama-server,
 Lemonade…) ve yerel görsel modelleri ekran kartını paylaşır: bir yerel model başlamadan önce ondan önce kullanılan boşaltılır (sunucusuna
-sorulabiliyorsa) ve program kartın belleği yeniden boşalana kadar bekler; online modeller ve yerel sesler (işlemcide çalışırlar) hiç
-beklemez. Boş bellek her seferinde ölçülür: Windows'ta Görev Yöneticisi'nin gösterdiğiyle Windows'un programa izin verdiğinden küçük
+sorulabiliyorsa) ve program kartın belleği yeniden boşalana kadar bekler; online modeller ve sherpa-onnx sesleri (işlemcide çalışırlar) hiç
+beklemez; NVIDIA kartta konuşan bir Python sesi kartı görsel modelleri gibi alır. Boş bellek her seferinde ölçülür: Windows'ta Görev Yöneticisi'nin gösterdiğiyle Windows'un programa izin verdiğinden küçük
 olanı, Linux'ta AMD sürücüsünün dosyaları ya da `nvidia-smi`. Ekran belleği sınıfları 4, 6, 8, 12, 16, 24 ve 32 GB'tır: bir kart
 bildirdiği belleğe sekizde bir payla en yakın sınıfta sayılır (15,8 GB bildiren "16 GB" kart 16 GB'lık karttır), kendi sınıfını ve
 altındakileri kullanabilir; daha yüksek sınıftaki model kırmızı görünür.
@@ -192,6 +203,9 @@ iki kez daha gönderilir; her deneme ödenir ve maliyete sayılır, üç okunama
 | Pocket TTS int8 (sherpa-onnx gerekir) | github.com (k2-fsa) | 98 MB |
 | Chatterbox Multilingual V3 ONNX (Masterx dönüşümü, 4 bit dil modeli; sherpa-onnx gerekir) | huggingface.co | 1,56 GB |
 | Multilingual MiniLM (paraphrase-multilingual-MiniLM-L12-v2, int8 ONNX + tokenizer; sherpa-onnx gerekir) | huggingface.co | 127 MB |
+| uv 0.13.6 + Python 3.11.18 (Python sesleri için) | github.com (astral-sh) | 45 MB |
+| PyTorch 2.8'li Python ses paketleri (her ses ailesi için bir takım: XTTS-v2, F5-TTS, VoxCPM2/Trendyol/Ahenk için VoxCPM2, MMS) | download.pytorch.org, pypi.org | NVIDIA (CUDA 12.8): her biri yaklaşık 3,7 GB (Linux 4,1 GB); işlemci: her biri 0,7–1 GB |
+| XTTS-v2 / F5-TTS Türkçe / VoxCPM2 / Trendyol-TTS / Ahenk (+ VoxCPM2) / MMS-TTS Türkçe modelleri | huggingface.co | 1,9 GB / 1,4 GB / 5 GB / 5 GB / 145 MB / 145 MB |
 | stable-diffusion.cpp master-890, Görsel hızlandırma'nın seçtiği derleme (Windows: CUDA 12 derlemesi + CUDA kitaplıkları, Vulkan ya da işlemci derlemesi; Linux x64: Vulkan ya da işlemci derlemesi) | github.com (leejet) | CUDA 900 MB, Vulkan 32–39 MB, işlemci 17–25 MB |
 | FLUX.2 klein 4B ağırlıkları (model, Qwen3-4B metin kodlayıcı, VAE) | huggingface.co | 5,3 GB |
 | Z-Image Turbo ağırlıkları (model, Qwen3-4B-Instruct metin kodlayıcı, VAE) | huggingface.co | 9,4 GB |
@@ -262,6 +276,9 @@ Taşınabilir kip: programı `--data-dir <klasör>` ile başlat; videolar dahil 
 - **Supertonic 3** (varsayılan ses): OpenRAIL-M. Yayınlarken sesin yapay zekâ ile üretildiğini belirt; kimseyi taklit etme. Video
   ayrıntısı bunu hatırlatır.
 - **Kokoro 82M**: Apache-2.0. **Multilingual MiniLM** (sentence-transformers): Apache-2.0.
+- **Python sesleri**: **XTTS-v2** (Coqui Public Model License), **F5-TTS Türkçe** ve **MMS-TTS Türkçe** (CC BY-NC 4.0) **yalnız ticari
+  olmayan** işler içindir; adım önce lisansı kabul etmeni ister. **VoxCPM2** Apache-2.0, **Trendyol-TTS** MIT, **Ahenk** CC BY 4.0 (atıf:
+  "Ahenk (github.com/ozguradmin/ahenk-turkish-tts), CC BY 4.0"). PyTorch'un ve seslerin paketlerinin kendi (açık) lisansları vardır.
 - **Remotion**: açık kaynak değil; bireyler ve en çok 3 kişilik şirketler ücretsiz, daha büyük şirketler Remotion lisansı almalı.
 - **Örnek görseller**: kullanım hakkı sende olmalı.
 - **ffmpeg**: GPL, ayrı bir program olarak indirilir.

@@ -78,4 +78,16 @@ public sealed class CatalogModel
 
     /// <summary>Main memory (GB) a local model needs besides (0 = unknown or small); used when its weights move off the graphics card.</summary>
     public int MemoryGb { get; set; }
+
+    /// <summary>
+    /// The licence of a local model's weights as its makers name it (<c>CPML</c>, <c>CC-BY-NC-4.0</c>, <c>CC-BY-4.0</c>, <c>MIT</c>…); empty when
+    /// the model needs no notice.
+    /// </summary>
+    public string License { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The weights may not be used commercially (a monetised channel counts): the licence is shown and must be accepted before the first
+    /// download or use (0.1.17, the developer: offered WITH a clear warning).
+    /// </summary>
+    public bool NonCommercial { get; set; }
 }

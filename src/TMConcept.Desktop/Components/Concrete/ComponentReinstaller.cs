@@ -12,14 +12,14 @@ namespace TMConcept.Desktop.Components;
 /// <summary>
 /// The components after a new app version, or on request (General settings): <see cref="UpdateAsync"/> installs again, through the one
 /// install flow (<see cref="ComponentInstallFlow"/>: one confirmation, the install window), what was installed before and is now missing or
-/// changed; nothing else is touched. <see cref="ReinstallAsync"/> first ends the idle speech worker (it keeps the speech libraries open for a
-/// minute after the last scene), renames the whole components folder (<c>&lt;data&gt;/tools</c>) aside in one step (a file in use makes the
+/// changed; nothing else is touched. <see cref="ReinstallAsync"/> first ends the idle speech workers (they keep the speech libraries and the
+/// Python voice's environment open for a minute after the last scene), renames the whole components folder (<c>&lt;data&gt;/tools</c>) aside in one step (a file in use makes the
 /// rename fail and nothing changes; a half-moved folder cannot happen), moves that folder to the recycle bin (when that fails, a permanent
 /// delete only after its own confirmation that says so; declined, the folder is put back and the message says whether it is still whole),
 /// then installs again what was there. The database, the profiles, the concepts and the videos are outside that folder and never touched.
 /// </summary>
 public sealed class ComponentReinstaller(ComponentPlanner planner, ComponentInstallFlow flow, IRecycleBin bin, IConfirmDialog confirm, AppPaths paths,
-    Speech.Speech.SpeechWorkerClient speech, IActivityLog activity, Localizer text, TimeProvider clock, ILogger<ComponentReinstaller> logger)
+    Speech.Speech.SpeechWorkerClient speech, Speech.Python.PythonWorkerClient python, IActivityLog activity, Localizer text, TimeProvider clock, ILogger<ComponentReinstaller> logger)
 {
     /// <summary>The text of what an install confirmation says a cancel means here.</summary>
     public const string PurposeKey = "install.purpose.update";
@@ -77,7 +77,7 @@ public sealed class ComponentReinstaller(ComponentPlanner planner, ComponentInst
         logger.LogInformation("Components reinstall: {Count} were installed ({Codes})", codes.Count, string.Join(", ", codes));
         if (Directory.Exists(tools))
         {
-            if (!await Task.Run(speech.StopIfIdle, CancellationToken.None).ConfigureAwait(true))
+            if (!await Task.Run(() => speech.StopIfIdle() & python.StopIfIdle(), CancellationToken.None).ConfigureAwait(true))
             {
                 logger.LogInformation("Components reinstall: the speech worker is speaking; nothing was changed");
                 return new InstallOutcome(false, text["components.reinstall.busy"]);

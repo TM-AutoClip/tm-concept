@@ -22,6 +22,12 @@ public sealed class AppSettings
     public bool SupertonicLicenseAccepted { get; set; }
 
     /// <summary>
+    /// Model licences the user accepted (<c>provider/id@licence</c>; a model that changes its licence asks again): the non-commercial voices
+    /// (XTTS-v2, F5-TTS Turkish, MMS) are offered with their licence and used only after it was accepted.
+    /// </summary>
+    public List<string> AcceptedModelLicenses { get; set; } = [];
+
+    /// <summary>
     /// Answer limit (max_tokens, thinking included) of "Suggest topics" (default 16 000; Settings → General; kept within the topic limits and
     /// lowered to the model's own limit). Only what the model writes is paid for.
     /// </summary>

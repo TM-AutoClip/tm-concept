@@ -16,10 +16,12 @@ namespace TMConcept.Core.Speech;
 /// text, engine, model, voice and speed, so a repeated scene is not spoken (or paid) twice. The text is put through the language's
 /// pronunciation dictionary first (<see cref="PronunciationService"/>: "Viking" is read "Vikink" in Turkish); the key is that of the spoken
 /// text, so a changed dictionary word is spoken again. Subtitles never see the spoken text. Every spoken clip is made inside a graphics card
-/// lease (<see cref="IGpuCoordinator"/>): today's local voices run on the processor and never wait, a voice on the card would.
+/// lease (<see cref="IGpuCoordinator"/>): the sherpa-onnx voices run on the processor and never wait; a Python voice on an NVIDIA card takes
+/// the card (the model that was on it is unloaded first). <see cref="ReleaseAsync"/> frees a local voice when the narration step ends, so the
+/// card (and the main memory) is free for the next step.
 /// </summary>
 public sealed class SpeechService(IEnumerable<ISpeechEngine> engines, StepModelResolver resolver, IAppPaths paths, PronunciationService pronunciations,
-    IGpuCoordinator gpu, ILogger<SpeechService> logger)
+    IGpuCoordinator gpu, IModelDirectory models, ILogger<SpeechService> logger)
 {
     /// <summary>Every engine.</summary>
     public IReadOnlyList<ISpeechEngine> Engines { get; } = engines.ToList();
@@ -101,6 +103,38 @@ public sealed class SpeechService(IEnumerable<ISpeechEngine> engines, StepModelR
         File.Copy(outputWav, cache, overwrite: true);
         logger.LogInformation("Spoke {Characters} characters with {Engine} ({Ms} ms)", clip.Characters, setup.Engine.Code, clip.DurationMs);
         return clip;
+    }
+
+    /// <summary>
+    /// The narration step is over: a local voice is unloaded (its worker ends). A voice on the graphics card is freed through the coordinator
+    /// (only when nobody uses it now); a voice on the processor directly. Online voices hold nothing. Never throws for an unload that fails.
+    /// </summary>
+    public async Task ReleaseAsync(SpeechSetup setup, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(setup);
+        if (!setup.Engine.IsLocal || models.Get(setup.Model) is not ILocalModel local)
+        {
+            return;
+        }
+
+        try
+        {
+            if (local.Device == ModelDevice.Gpu)
+            {
+                if (ReferenceEquals(gpu.Loaded, local))
+                {
+                    await gpu.FreeAsync(cancellationToken).ConfigureAwait(false);
+                }
+            }
+            else
+            {
+                await local.UnloadAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "The voice {Engine} could not be unloaded after the narration", setup.Engine.Code);
+        }
     }
 
     /// <summary>The cache key.</summary>

@@ -115,5 +115,8 @@ public sealed class EmbeddedModelCatalog : IModelCatalog
         PriceSource = m.PriceSource,
         Requires = [.. m.Requires],
         MinVideoMemoryGb = m.MinVideoMemoryGb,
+        MemoryGb = m.MemoryGb,
+        License = m.License,
+        NonCommercial = m.NonCommercial,
     };
 }

@@ -15,6 +15,15 @@ public static class ComponentCodes
     /// <summary>stable-diffusion.cpp (sd-cli) of the local image models.</summary>
     public const string ImageRuntime = "sd-cpp";
 
+    /// <summary>uv, which installs Python and the packages of the Python voices.</summary>
+    public const string Uv = "uv";
+
+    /// <summary>The pinned Python of the Python voices (installed by uv into the tools folder).</summary>
+    public const string Python = "speech-python";
+
+    /// <summary>Prefix of a Python voice environment (its packages, torch included: "speech-env.xtts").</summary>
+    public const string PythonEnvironmentPrefix = "speech-env.";
+
     /// <summary>Prefix of engine components ("engine.hyperframes").</summary>
     public const string EnginePrefix = "engine.";
 
