@@ -48,6 +48,7 @@ public static class SpeechWorker
         KokoroLexicon? lexicon = null;
         Embeddings.OnnxEmbedder? embedder = null;
         Chatterbox.ChatterboxSynthesizer? chatterbox = null;
+        AhenkCep.AhenkCepSynthesizer? ahenk = null;
         try
         {
             while (reader.ReadLine() is { } line)
@@ -60,7 +61,7 @@ public static class SpeechWorker
                 SpeechWorkerReply reply;
                 try
                 {
-                    if (synthesizer is null && embedder is null && chatterbox is null)
+                    if (synthesizer is null && embedder is null && chatterbox is null && ahenk is null)
                     {
                         var loading = Stopwatch.StartNew();
                         if (Embeddings.OnnxEmbedder.IsHere())
@@ -72,6 +73,11 @@ public static class SpeechWorker
                         {
                             chatterbox = new Chatterbox.ChatterboxSynthesizer(arguments[1], Math.Clamp(threads, 1, 16));
                             logger.LogInformation("Chatterbox loaded in {Ms} ms (ONNX Runtime {Version}): {Graphs}", loading.ElapsedMilliseconds, chatterbox.RuntimeVersion, chatterbox.LoadTimes);
+                        }
+                        else if (AhenkCep.AhenkCepSynthesizer.IsHere())
+                        {
+                            ahenk = new AhenkCep.AhenkCepSynthesizer(arguments[1], Math.Clamp(threads, 1, 16));
+                            logger.LogInformation("Ahenk Cep loaded in {Ms} ms (ONNX Runtime {Version})", loading.ElapsedMilliseconds, ahenk.RuntimeVersion);
                         }
                         else
                         {
@@ -100,6 +106,8 @@ public static class SpeechWorker
 
                     reply = chatterbox is not null
                         ? Speak(chatterbox, request)
+                        : ahenk is not null
+                        ? Speak(ahenk, request)
                         : synthesizer is null
                             ? new SpeechWorkerReply(false, 0, "engine", "This worker holds the embedding model, not a voice.")
                             : Speak(synthesizer, lexicon, request);
@@ -108,6 +116,11 @@ public static class SpeechWorker
                         logger.LogInformation("Chatterbox: {Tokens} speech tokens; voice sample {Sample} ms, language model {Language} ms, decoder {Decoder} ms",
                             chatterbox.LastTokens, chatterbox.LastTimes.Sample, chatterbox.LastTimes.Language, chatterbox.LastTimes.Decoder);
                     }
+                    if (ahenk is not null && reply.Ok)
+                    {
+                        logger.LogInformation("Ahenk Cep: {Pieces} pieces, {Frames} frames", ahenk.Last.Pieces, ahenk.Last.Frames);
+                    }
+
                     if (reply.Ok)
                     {
                         logger.LogInformation("Scene spoken ({Language}, {Characters} characters): {AudioMs} ms of audio in {Ms} ms", request.Language,
@@ -150,6 +163,7 @@ public static class SpeechWorker
             synthesizer?.Dispose();
             embedder?.Dispose();
             chatterbox?.Dispose();
+            ahenk?.Dispose();
         }
     }
 
@@ -187,6 +201,18 @@ public static class SpeechWorker
 
         WaveFile.WritePcm16(request.OutputWav, samples, Chatterbox.ChatterboxModel.SampleRate);
         return new SpeechWorkerReply(true, (long)Math.Round(samples.Length * 1000.0 / Chatterbox.ChatterboxModel.SampleRate), string.Empty, string.Empty);
+    }
+
+    private static SpeechWorkerReply Speak(AhenkCep.AhenkCepSynthesizer ahenk, SpeechWorkerRequest request)
+    {
+        var samples = ahenk.Speak(request.Text, request.Speaker, request.Speed > 0 ? request.Speed : 1f);
+        if (samples.Length == 0)
+        {
+            return new SpeechWorkerReply(false, 0, "engine", "The voice produced no audio for the text.");
+        }
+
+        WaveFile.WritePcm16(request.OutputWav, samples, AhenkCep.AhenkCepModel.SampleRate);
+        return new SpeechWorkerReply(true, (long)Math.Round(samples.Length * 1000.0 / AhenkCep.AhenkCepModel.SampleRate), string.Empty, string.Empty);
     }
 
     private static SpeechWorkerReply Speak(SherpaSynthesizer synthesizer, KokoroLexicon? lexicon, SpeechWorkerRequest request)

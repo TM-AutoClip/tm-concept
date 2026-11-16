@@ -4,8 +4,10 @@ using System.Text;
 namespace TMConcept.Core.Pronunciation;
 
 /// <summary>
-/// The pronunciations that come with the app (Pronunciation/Files/&lt;language&gt;.txt, embedded; "word=spoken" lines, "#" comments). Only
-/// Turkish has a list so far: the voices read most foreign names of other languages well enough, and the user adds their own.
+/// The pronunciations that come with the app (Pronunciation/Files/&lt;language&gt;.txt, embedded). One "word=spoken" per line; "#" starts
+/// a comment line, "## heading" starts a category (shown in the settings list); "!WORD=spoken" is matched only as written, letter case
+/// included (abbreviations such as "!IT", so the English-looking "it" of a normal sentence stays). Only Turkish has a list so far: the
+/// voices read most foreign names of other languages well enough, and the user adds their own.
 /// </summary>
 public static class BuiltInPronunciations
 {
@@ -31,15 +33,29 @@ public static class BuiltInPronunciations
     {
         ArgumentNullException.ThrowIfNull(text);
         var rules = new List<PronunciationRule>();
-        foreach (var line in text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'))
+        var category = string.Empty;
+        foreach (var raw in text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'))
         {
+            var line = raw.Trim();
+            if (line.StartsWith("##", StringComparison.Ordinal))
+            {
+                category = line[2..].Trim();
+                continue;
+            }
+
             var eq = line.IndexOf('=', StringComparison.Ordinal);
-            if (line.TrimStart().StartsWith('#') || eq <= 0 || line[(eq + 1)..].Trim().Length == 0)
+            if (line.StartsWith('#') || eq <= 0 || line[(eq + 1)..].Trim().Length == 0)
             {
                 continue;
             }
 
-            rules.Add(new PronunciationRule(line[..eq].Trim(), line[(eq + 1)..].Trim(), null));
+            var word = line[..eq].Trim();
+            var exact = word[0] == PronunciationRule.ExactMark;
+            word = exact ? word[1..].Trim() : word;
+            if (word.Length > 0)
+            {
+                rules.Add(new PronunciationRule(word, line[(eq + 1)..].Trim(), null, exact, category));
+            }
         }
 
         return rules;

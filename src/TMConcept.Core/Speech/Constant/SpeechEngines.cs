@@ -14,4 +14,7 @@ public static class SpeechEngines
 
     /// <summary>Local Chatterbox Multilingual V3 (Turkish and nine more languages; speaks with the user's own voice sample).</summary>
     public const string Chatterbox = "chatterbox";
+
+    /// <summary>Local Ahenk Cep (Turkish only; seven speaking styles, 48 kHz).</summary>
+    public const string AhenkCep = "ahenk-cep";
 }

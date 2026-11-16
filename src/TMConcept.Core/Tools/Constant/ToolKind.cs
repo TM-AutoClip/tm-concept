@@ -44,4 +44,7 @@ public enum ToolKind
 
     /// <summary>stable-diffusion.cpp (sd-cli), the processor build (no graphics card).</summary>
     ImageRuntimeCpu = 12,
+
+    /// <summary>A file of the Ahenk Cep voice model (Turkish, ONNX graphs, run with the ONNX Runtime of the speech libraries).</summary>
+    AhenkCepVoice = 13,
 }

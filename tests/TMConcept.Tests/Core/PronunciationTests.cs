@@ -42,8 +42,8 @@ public sealed class PronunciationTests
     {
         var turkish = BuiltInPronunciations.Of(ContentLanguages.Turkish);
         turkish.ShouldContain(r => r.Word == "Viking" && r.Spoken == "Vikink");
-        turkish.Count.ShouldBeInRange(20, 80, "a small starting set");
-        turkish.Select(r => PronunciationRewriter.Fold(r.Word, Turkish)).Distinct().Count().ShouldBe(turkish.Count, "no word twice");
+        turkish.Count.ShouldBeInRange(400, 2000, "several hundred names, brands, places and units");
+        turkish.Select(r => PronunciationService.Key(r, Turkish)).Distinct().Count().ShouldBe(turkish.Count, "no word twice");
         turkish.ShouldAllBe(r => r.BuiltIn);
         BuiltInPronunciations.Of(ContentLanguages.German).ShouldBeEmpty();
         BuiltInPronunciations.Parse("# comment\nA=B\n=x\nC=\nD = E ").Select(r => (r.Word, r.Spoken)).ShouldBe([("A", "B"), ("D", "E")]);
