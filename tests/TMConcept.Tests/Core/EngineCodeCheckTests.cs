@@ -98,7 +98,7 @@ public sealed class EngineCodeCheckTests
         text.ShouldContain("createElementNS(\"" + EngineCodeCheck.SvgNamespace + "\"");
         text.ShouldContain("DOMParser");
         text.ShouldContain("comments included");
-        VideoCodePrompt.Version.ShouldBe("7");
+        VideoCodePrompt.Version.ShouldBe("8", "8: without subtitles the narration is never drawn and the captions are left out");
     }
 
     [Theory]

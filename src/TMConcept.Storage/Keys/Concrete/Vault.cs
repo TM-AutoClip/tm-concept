@@ -48,7 +48,7 @@ public sealed class Vault(IAppPaths paths, DatabaseKey key, IEnumerable<IKeyProt
 
             await using (var db = await new ConceptDatabase(paths, key).OpenAsync(cancellationToken).ConfigureAwait(false))
             {
-                await ConceptDatabase.EnsureSchemaAsync(db, cancellationToken).ConfigureAwait(false);
+                await ConceptDatabase.EnsureSchemaAsync(db, cancellationToken, logger).ConfigureAwait(false);
             }
 
             KeyFile.Write(paths.KeyFile, envelope);
@@ -83,13 +83,19 @@ public sealed class Vault(IAppPaths paths, DatabaseKey key, IEnumerable<IKeyProt
 
         try
         {
-            await using var db = await new ConceptDatabase(paths, key).OpenAsync(cancellationToken).ConfigureAwait(false);
-            // Reading the schema state (tables, settings row, pragmas) is the check that the key opens the file.
-            await ConceptDatabase.EnsureSchemaAsync(db, cancellationToken).ConfigureAwait(false);
+            // Reading the schema state (tables, recorded steps, pragmas) is the check that the key opens the file; an older file is upgraded
+            // here, after a copy of it is kept (a failed upgrade leaves it as it was).
+            var upgrade = await new ConceptDatabase(paths, key).UpgradeAsync(logger, cancellationToken).ConfigureAwait(false);
+            if (upgrade.Applied.Count > 0)
+            {
+                logger.LogInformation("The database went through {Count} schema step(s): {Steps}", upgrade.Applied.Count,
+                    string.Join(", ", upgrade.Applied.Select(SchemaUpgrader.Name)));
+            }
         }
         catch
         {
             key.Clear();
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
             throw;
         }
 
@@ -150,13 +156,13 @@ public sealed class Vault(IAppPaths paths, DatabaseKey key, IEnumerable<IKeyProt
         File.Copy(databaseFile, paths.DatabaseFile, overwrite: true);
         key.Load(dek);
 
-        // The copy is checked against this version's schema before anything uses it (a backup of another version is refused). The key
-        // file comes after it.
+        // The copy is brought to this version's schema before anything uses it (an older backup goes through the schema steps it lacks; one
+        // made before upgrades were recorded, or by a newer version, is refused). The key file comes after it.
         try
         {
             await using (var db = await new ConceptDatabase(paths, key).OpenAsync(cancellationToken).ConfigureAwait(false))
             {
-                await ConceptDatabase.EnsureSchemaAsync(db, cancellationToken).ConfigureAwait(false);
+                await ConceptDatabase.EnsureSchemaAsync(db, cancellationToken, logger).ConfigureAwait(false);
             }
 
             KeyFile.Write(paths.KeyFile, envelope);
@@ -193,4 +199,29 @@ public sealed class Vault(IAppPaths paths, DatabaseKey key, IEnumerable<IKeyProt
 
     /// <summary>Forgets the key in memory (the database is locked again).</summary>
     public void Lock() => key.Clear();
+
+    /// <summary>
+    /// Sets a database this version cannot open aside, with its key file (renamed <c>concept.db.set-aside-…</c>, <c>key.json.set-aside-…</c>,
+    /// never deleted: renamed back, the version that made it opens it again), so the next step is a first start (new, or a restore).
+    /// Returns the database file's new name.
+    /// </summary>
+    public string SetAside()
+    {
+        key.Clear();
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        var suffix = ".set-aside-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss", System.Globalization.CultureInfo.InvariantCulture);
+        var database = paths.DatabaseFile + suffix;
+        if (File.Exists(paths.DatabaseFile))
+        {
+            File.Move(paths.DatabaseFile, database);
+        }
+
+        if (File.Exists(paths.KeyFile))
+        {
+            File.Move(paths.KeyFile, paths.KeyFile + suffix);
+        }
+
+        logger.LogWarning("The database and its key file were set aside ({Suffix}); the next step is a first start", suffix);
+        return database;
+    }
 }

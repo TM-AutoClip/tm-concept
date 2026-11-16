@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
-using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
@@ -32,7 +31,9 @@ namespace TMConcept.Desktop.ViewModels;
 /// "Produce in order" first makes the choices ready (licenses, a key asked for when a provider has none, ONE confirmation that lists every
 /// download) and saves them for the profile; declined or failed = nothing is made or paid for. The videos are made one by one: before each
 /// item the queue is read again, so a removed item is not made, a new one is, and the order follows ↑↓; the models are the profile's
-/// choices when the item starts (a queue item keeps only its subtitles choice). Cancel stops after the running step.
+/// choices when the item starts, and so is the subtitles choice (kept on this computer, <see cref="Paths.UiPreferences.Subtitles"/>; until
+/// 0.1.16 each queue item kept the choice it was added with, so turning subtitles off did not reach the queued videos). Cancel stops after
+/// the running step.
 /// </summary>
 public sealed partial class VideoViewModel : PageViewModelBase
 {
@@ -56,6 +57,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
     private readonly IActivityLog _activity;
     private readonly Localizer _text;
     private readonly ILogger<VideoViewModel> _logger;
+    private readonly Paths.UiPreferencesFile _preferences;
     private readonly Dictionary<Guid, Concept> _queued = [];
     private CancellationTokenSource? _cancel;
     private Guid? _running;
@@ -68,7 +70,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
         IEnumerable<IVideoEngine> engines, StepModelResolver resolver, Core.Media.IMediaTools media, VideoCostEstimator estimator, StepPickerViewModel picker,
         ConceptDetailViewModel detail, ConceptActions actions, VideoRows rows, VideoFiles files, PlayerViewModel player,
         Func<ProductionProgressViewModel> progress, ConceptEvents events, INotifier notifier, IActivityLog activity, Localizer text,
-        ILogger<VideoViewModel> logger)
+        Paths.UiPreferencesFile preferences, ILogger<VideoViewModel> logger)
     {
         _session = session;
         _concepts = concepts;
@@ -88,6 +90,10 @@ public sealed partial class VideoViewModel : PageViewModelBase
         _activity = activity;
         _text = text;
         _logger = logger;
+
+        // The kept subtitles choice, set before the preferences file is known to the page: restoring it writes nothing and estimates nothing.
+        Subtitles = preferences.Read().Subtitles;
+        _preferences = preferences;
         Player = player;
         Detail = detail;
 
@@ -123,7 +129,10 @@ public sealed partial class VideoViewModel : PageViewModelBase
     [RelayCommand]
     public void CloseModels() => ModelsOpen = false;
 
-    /// <summary>Subtitles in the picture (kept with each queue item).</summary>
+    /// <summary>
+    /// Subtitles in the picture, kept on this computer. Read when each queued video starts, so a change applies to every video not started
+    /// yet. Off: nothing is burned in and the video code gets no narration text to draw (the .srt file is still written).
+    /// </summary>
     [ObservableProperty]
     public partial bool Subtitles { get; set; } = true;
 
@@ -303,7 +312,6 @@ public sealed partial class VideoViewModel : PageViewModelBase
             ProfileId = profile.Id,
             ConceptId = card.Id,
             Position = Queue.Count,
-            SettingsJson = JsonSerializer.Serialize(Options(), Core.Render.CoreJsonContext.Default.VideoOptions),
         }, CancellationToken.None).ConfigureAwait(true);
         await _concepts.SetStatusAsync([card.Id], ConceptStatus.Queued, CancellationToken.None).ConfigureAwait(true);
         _events.Raise(this);
@@ -491,7 +499,28 @@ public sealed partial class VideoViewModel : PageViewModelBase
 
     partial void OnBusyChanged(bool value) => Working = value || Detail.AiRunning;
 
-    partial void OnSubtitlesChanged(bool value) => _ = SafeAsync(EstimateAsync);
+    partial void OnSubtitlesChanged(bool value)
+    {
+        // Set by the constructor from the file before the page knows the file: nothing to keep or estimate yet.
+        if (_preferences is null)
+        {
+            return;
+        }
+
+        if (value != _preferences.Read().Subtitles)
+        {
+            try
+            {
+                _preferences.Change(p => p.Subtitles = value);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _logger.LogWarning(ex, "The subtitles choice could not be kept");
+            }
+        }
+
+        _ = SafeAsync(EstimateAsync);
+    }
 
     partial void OnSelectedApprovedChanged(ConceptCardViewModel? value)
     {
@@ -630,9 +659,10 @@ public sealed partial class VideoViewModel : PageViewModelBase
                 return;
             }
 
-            // The item keeps only its subtitles; the models are the profile's choices now (saved when the run was prepared): code model
-            // and engine, images, narration.
-            var options = new VideoOptions { Subtitles = Stored(stored).Subtitles };
+            // Everything is the choice of now: the subtitles checkbox (an item queued before it was changed follows it too) and the profile's
+            // models (saved when the run was prepared): code model and engine, images, narration.
+            var options = new VideoOptions { Subtitles = Subtitles };
+            _logger.LogInformation("Queued video starts with subtitles {Subtitles}", Subtitles ? "on" : "off");
             ResolvedModel model;
             var choice = await _resolver.ChoiceAsync(PipelineSteps.VideoCode, profile.Id, CancellationToken.None).ConfigureAwait(true);
             try
@@ -711,19 +741,6 @@ public sealed partial class VideoViewModel : PageViewModelBase
 
             // The job's buffers (scene images, audio, model answers) are garbage now: give the memory back (small machines).
             Memory.MemoryRelease.Now(_logger, "a video job");
-        }
-    }
-
-    /// <summary>The settings a queue item was stored with (only its subtitles are read).</summary>
-    private static VideoOptions Stored(QueueItem item)
-    {
-        try
-        {
-            return JsonSerializer.Deserialize(item.SettingsJson, Core.Render.CoreJsonContext.Default.VideoOptions) ?? new VideoOptions();
-        }
-        catch (JsonException)
-        {
-            return new VideoOptions();
         }
     }
 
@@ -808,9 +825,6 @@ public sealed partial class VideoViewModel : PageViewModelBase
             _logger.LogError(ex, "The failure of a queue item could not be kept");
         }
     }
-
-    /// <summary>What a queue item keeps: its subtitles choice (everything else is the profile's choice when the item starts).</summary>
-    private VideoOptions Options() => new() { Subtitles = Subtitles };
 
     private async Task MoveAsync(QueueRowViewModel? row, int step)
     {

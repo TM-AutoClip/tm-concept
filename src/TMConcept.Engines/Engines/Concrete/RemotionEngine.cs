@@ -41,7 +41,7 @@ public sealed class RemotionEngine(IAppPaths paths, ToolInstaller tools, ChromeL
         Write ONE file (src/Scene.tsx) that exports `export const Scene: React.FC<ConceptInput> = (input) => …`.
         Allowed imports only: 'react', 'remotion' and `import type {ConceptInput, ConceptScene} from './input';`.
         The input type: {width, height, fps, totalFrames, durationSeconds, language, title, theme {background, accent, text},
-        scenes [{number, startFrame, frameCount, startSeconds, durationSeconds, visual, caption, image, transition}]}.
+        scenes [{number, startFrame, frameCount, startSeconds, durationSeconds, visual, image, transition}]}.
         Put each scene in `<Sequence from={scene.startFrame} durationInFrames={scene.frameCount}>`; animate with useCurrentFrame,
         interpolate and spring. Images: `<Img src={staticFile(scene.image)} />` only when scene.image is not empty.
         Never hard-code texts or durations. No network, no external fonts, no randomness that changes between frames.
@@ -62,8 +62,6 @@ public sealed class RemotionEngine(IAppPaths paths, ToolInstaller tools, ChromeL
             <AbsoluteFill style={{justifyContent: 'center', alignItems: 'center', opacity: leave}}>
               <div style={{color: input.theme.text, fontSize: input.width * 0.06, fontWeight: 700, textAlign: 'center',
                 padding: '0 8%', transform: `translateY(${(1 - enter) * 60}px)`, opacity: enter}}>{scene.visual}</div>
-              <div style={{position: 'absolute', bottom: '12%', left: '8%', right: '8%', color: input.theme.text,
-                fontSize: input.width * 0.035, textAlign: 'center'}}>{scene.caption}</div>
               <div style={{position: 'absolute', top: '10%', left: '10%', height: 8, width: `${enter * 80}%`, background: input.theme.accent}} />
             </AbsoluteFill>
           );

@@ -187,6 +187,8 @@ public sealed class ImageBackendTests
         runtime.WasInstalled.ShouldBeFalse();
 
         Directory.CreateDirectory(Path.Combine(installer.ToolRoot(ToolKind.ImageRuntime), "old-version"));
+        runtime.WasInstalled.ShouldBeFalse("an empty folder is no install");
+        File.WriteAllText(Path.Combine(installer.ToolRoot(ToolKind.ImageRuntime), "old-version", "sd-cli.exe"), "old");
 
         runtime.WasInstalled.ShouldBeTrue();
         runtime.Ready.ShouldBeFalse();

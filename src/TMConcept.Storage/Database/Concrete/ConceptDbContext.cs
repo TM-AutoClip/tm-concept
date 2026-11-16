@@ -21,9 +21,9 @@ namespace TMConcept.Storage.Database;
 /// Deleting a profile removes its concepts, queue, image records, embeddings, step choices, topic suggestions, AI-edit wishes and video records; deleting a concept removes
 /// its embedding and queue entry and leaves its videos (their link becomes empty).
 /// The app runs on the compiled model of this mapping (CompiledModel/, found by EF Core through its assembly attribute): building the model
-/// at every start cost about 1 s at the unlock of the trimmed release. After any change here run tools/compiled-model.ps1 (or .sh);
-/// CompiledModelTests fails until then. Creating the schema uses the model built from this method (EF
-/// Core's design-time model).
+/// at every start cost about 1 s at the unlock of the trimmed release. The schema itself comes from the upgrade steps in Migrations/ (one
+/// per app version that changes it, docs/database.md). After any change here run tools/database-step.ps1 -Name VersionNNNN (or .sh) once
+/// for the version: it writes the step and the compiled model; SchemaUpgradeTests and CompiledModelTests fail until then.
 /// </summary>
 internal sealed class ConceptDbContext(DbContextOptions<ConceptDbContext> options) : DbContext(options)
 {

@@ -32,9 +32,11 @@ public interface IComponent
 
     /// <summary>
     /// Whether an install of this app left it on disk, ready or not, in this version or an earlier one (a new app version may pin a newer
-    /// download in a new folder): an update after a new app version installs again exactly these. By default: one of its folders exists.
+    /// download in a new folder): an update after a new app version installs again exactly these (with what <see cref="IInstallRecord"/>
+    /// says). By default: one of its folders holds a finished file (<see cref="ComponentFolders.HasContent"/>; an empty folder or one with
+    /// only a partial download does not count).
     /// </summary>
-    bool WasInstalled => Folders().Any(Directory.Exists);
+    bool WasInstalled => Folders().Any(ComponentFolders.HasContent);
 
     /// <summary>Looks again at what is on the computer (a suitable Node.js on the PATH); may start a short process. No network.</summary>
     Task RefreshAsync(CancellationToken cancellationToken);

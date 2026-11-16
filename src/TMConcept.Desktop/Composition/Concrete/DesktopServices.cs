@@ -127,6 +127,8 @@ public static class DesktopServices
         services.AddSingleton<Core.Components.IComponentSource, Engines.Components.EngineComponentSource>();
         services.AddSingleton<Core.Components.IComponentSource, Speech.Components.VoiceComponentSource>();
         services.AddSingleton<Core.Components.IComponentSource, Speech.Components.EmbeddingComponentSource>();
+        services.AddSingleton<Core.Components.IInstallRecord>(s => new Components.InstallRecordFile(paths, Logging.AppIdentity.ShortVersion,
+            s.GetRequiredService<TimeProvider>(), s.GetRequiredService<ILogger<Components.InstallRecordFile>>()));
         services.AddSingleton<Core.Components.ComponentPlanner>();
         services.AddSingleton<Components.ComponentInstallFlow>();
         AddDesktop(services);
@@ -220,12 +222,21 @@ public static class DesktopServices
 
         // Package C (version change): after a new app version the installed components are updated, reinstalled or left for later.
         services.AddSingleton<Dialogs.IUpdateDialog, Dialogs.UpdateDialog>();
+        services.AddSingleton(Updates.UpdateTransport.Network);
+        services.AddSingleton<Updates.ReleaseFeed>();
+        services.AddSingleton<Updates.SelfReplacer>();
+        services.AddSingleton<Updates.IAppRestarter, Updates.AppRestarter>();
+        services.AddSingleton<Updates.AppUpdater>();
+        services.AddSingleton<Dialogs.IAppUpdateDialog, Dialogs.AppUpdateDialog>();
         services.AddSingleton<Components.ComponentReinstaller>();
         services.AddSingleton<VersionCheck>();
 
         services.AddSingleton<Reports.SystemReport>();
         services.AddSingleton<Reports.ReportNames>();
         services.AddSingleton<Reports.ProblemReport>();
+        services.AddTransient<LogViewerViewModel>();
+        services.AddSingleton<Func<LogViewerViewModel>>(s => () => s.GetRequiredService<LogViewerViewModel>());
+        services.AddSingleton<Dialogs.ILogViewer, Dialogs.LogViewer>();
         services.AddTransient<ReportProblemViewModel>();
         services.AddSingleton<Func<ReportProblemViewModel>>(s => () => s.GetRequiredService<ReportProblemViewModel>());
         services.AddSingleton<Dialogs.IReportDialog, Dialogs.ReportDialog>();

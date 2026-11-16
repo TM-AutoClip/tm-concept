@@ -231,12 +231,39 @@ Sonra modelleri onları kullanan sayfalarda seç (yukarıya bak). Ücretli hiçb
 2. Bir konsepte tıkla, detay panelinde oku; iyileri onayla (A), kalanı sil (D). **Düzenle** (ya da **Yapay zekâyla düzenle**) metni
    değiştirir; `[duraklama 1 sn]`, `[yumuşak geçiş]` gibi yer tutucular imlecin olduğu yere eklenir, program videoda kendisi uygular.
 3. **Konseptten video:** onaylı konseptlerde **Sıraya ekle**'ye bas, üstteki modellere bak, **Sırayla üret**'e bas.
+   *Ekranda altyazı* kapalıysa ne altyazı ne de ekranda anlatım yazısı olur (video koduna çizebileceği anlatım verilmez); seçim bu
+   bilgisayarda saklanır ve henüz başlamamış her sıradaki videoya uygulanır.
 4. **Üretilen Videolar:** program içinde izle (Linux'ta ses PulseAudio ya da PipeWire ile), klasörü aç. Her video, konseptin klasöründe bir sürüm klasörüdür (`v1/`): `video.mp4`, `subtitles.srt`, `narration.txt` (her zaman yazılır) ve `thumbnail.jpg`; ayrıca sonraki bir yeniden render için `source/` (render edildiği hâliyle motor projesi: modelin kodu, `input.json`, sahne görselleri) ve `audio/` (her sahnenin seslendirme klibi).
 
 ## Güncelleme
 
-Yeni sürümü indir, program dosyasını değiştir (Windows: `.exe`; Linux: eski klasörün üstüne aç). Verin, araçların ve videoların yerinde
-kalır. Motor paketleri yalnız yeni sürüm başka sürümleri sabitlediyse yeniden kurulur (sonraki videodan önce sorulur).
+**Programın içinden:** TM Concept açılışta (günde en çok bir kez) projenin GitHub'daki son sürümüne bakar (hesap gerekmez, sana dair hiçbir
+şey gönderilmez) ve daha yeni bir sürüm varsa sürüm numarasını ve sürüm notlarını gösterir. **İndir ve kur**, sistemine uygun dosyayı
+indirir, sürüm notlarındaki SHA-256 ile karşılaştırır (SHA-256'sı olmayan ya da tutmayan dosya asla kurulmaz), program dosyasını aynı yerde
+değiştirir ve yeni sürümü açar. Sen onaylamadan hiçbir şey indirilmez. Ayarlar → Genel → *Güncellemeler* altında açılıştaki kontrolü
+kapatabilir, **Şimdi bak** ile hemen bakabilirsin. Kaynaktan derlenmiş bir kopya ya da yazılamayan bir klasördeki kopya (örneğin Program
+Files) bunun yerine sürüm sayfasını gösterir.
+
+**Elle:** yeni sürümü indir, program dosyasını değiştir (Windows: `.exe`; Linux: eski klasörün üstüne aç).
+
+İki yolda da verin, araçların ve videoların yerinde kalır. Yeni sürümün ilk açılışında:
+
+- **Veritabanı adım adım yükseltilir.** Veritabanını değiştiren her sürüm bir yükseltme adımı getirir; birkaç sürüm geriden gelen bir
+  veritabanı bütün adımlardan sırayla geçer. Önce veritabanı dosyasının bir kopyası `backups/before-upgrade/` içine alınır (son 5); başarısız
+  olan bir adım veritabanını olduğu gibi bırakır. Eski bir yedeği geri yüklemek onu da aynı yolla yükseltir. 0.1.16 ya da daha eski bir
+  sürümün oluşturduğu veritabanı (yükseltmeler kaydedilmeden önce) açılmaz: kilit açma penceresi onu kenara koymayı (anahtar dosyasıyla
+  birlikte yeniden adlandırılır, asla silinmez) ve sıfırdan başlamayı ya da bir yedeği geri yüklemeyi önerir. Daha yeni bir sürümün
+  oluşturduğu veritabanı da açılmaz: programı güncelle.
+- **Bileşenler** (motorlar, sesler, görsel modelleri) için güncelleme ya da yeniden kurulum önerilir. Neyin kurulu olduğu
+  `installed-components.json` içinde (bileşen klasörünün dışında, her birinin kurulduğu sürümle) kaydedilir; bu yüzden iptal edilen ya da
+  başarısız olan bir yeniden kurulum bir sonraki açılışta yine sorulur. **Sıfırdan yeniden kur** bileşen klasörünü kenara alır, yeniden kurar
+  ve eski klasörü ancak ondan sonra geri dönüşüm kutusuna taşır; indirmeyi iptal edersen eski klasör yerine geri döner. Boş bir klasör ya da
+  yarım kalmış bir indirme asla kurulu sayılmaz.
+
+İndirmeler kötü bir bağlantıdan sonra devam eder: her dosya, aralarındaki bekleme giderek uzayarak en çok 5 kez denenir ve inen kısım
+saklanır (`.part`), böylece bir sonraki deneme ya da bir sonraki kurulum 12 GB'lık bir modeli baştan indirmek yerine kaldığı yerden devam
+eder. Bir indirme sonunda başarısız olursa ileti nedenini senin dilinde, sistemin kendi açıklamasıyla söyler (güvenli bağlantı (SSL/TLS),
+sunucu adı bulunamadı, bağlantı koptu, bir dakika boyunca veri gelmedi).
 
 ## Kaldırma
 
@@ -250,6 +277,7 @@ kalır. Motor paketleri yalnız yeni sürüm başka sürümleri sabitlediyse yen
 |---|---|---|---|
 | Veritabanı (profiller, konseptler, anahtarlar) | `%LOCALAPPDATA%\TM Concept\concept.db` | `~/.local/share/tm-concept/concept.db` | evet |
 | Yedekler (son 10, günlük) | `…\TM Concept\backups\*.tmcbak` | `~/.local/share/tm-concept/backups/` | evet (parola) |
+| Veritabanı yükseltmesinden önce alınan kopyalar (son 5) | `…\TM Concept\backups\before-upgrade\` | `~/.local/share/tm-concept/backups/before-upgrade/` | evet (aynı anahtar) |
 | Günlükler (anahtarsız; ev ve program klasörleri gizli; 7 gün) | `…\TM Concept\logs\` | `~/.local/share/tm-concept/logs/` | hayır |
 | Hata bildirimi zip'leri (son 5) | `…\TM Concept\reports\` | `~/.local/share/tm-concept/reports/` | hayır |
 | Araçlar (Node, ffmpeg, motorlar, sesler, görsel modelleri) | `…\TM Concept\tools\` | `~/.local/share/tm-concept/tools/` | hayır |
@@ -288,6 +316,10 @@ TM Concept kendiliğinden hiçbir şey göndermez: telemetri yok, çökme raporu
 Günlükler gün başına bir düz metin dosyasıdır (`app-2026-11-06.log`, yerel ses için `speech-worker-….log`) ve veri klasörünün `logs`
 klasöründedir (yukarıdaki tablo). 7 günden eski dosyalar kendiliğinden silinir; bir günün dosyası 20 MB'ta durur.
 
+Alttaki işlem panelindeki **Tümünü göster** günlük sayfasını açar: bir günün günlük dosyalarındaki (programın ve yerel sesin) her satır;
+seviye süzgeci (tümü, uyarılar ve hatalar, yalnız hatalar), arama, *Yalnız bu açılıştan beri*, **Gösterilen satırları kopyala** ve
+**Günlük klasörünü aç**. Sayfa açıkken bugünün satırları canlı izlenir.
+
 ## Bilinen kısıtlar
 
 - Videolar en çok 3 dakika; uzun yatay video henüz yok.
@@ -300,3 +332,10 @@ klasöründedir (yukarıdaki tablo). 7 günden eski dosyalar kendiliğinden sili
 .NET 10 SDK. `dotnet build TMConcept.slnx` ve `dotnet test TMConcept.slnx`. Yayın dosyaları: `tools/publish.ps1` (Windows) ya da
 `tools/publish.sh`. İlk commit'ten önce `tools/install-hooks.ps1` (ya da `.sh`) çalıştır: pre-commit kancası anahtarları, jetonları ve
 kişisel verileri durdurur.
+
+**Veritabanını değiştirmek:** `ConceptDbContext` içindeki eşlemeyi değiştir, sonra sürüm başına bir kez `tools/database-step.ps1 -Name
+Version0118` (ya da `tools/database-step.sh Version0118`) çalıştır: EF Core'un aracı yükseltme adımını ve derlenmiş modeli yazar. Yayımlanmış
+bir adımı asla değiştirme, elle SQL asla yazma. Ayrıntı: [docs/database.md](docs/database.md).
+
+**Sürümler** sürüm notlarında her dosyanın SHA-256'sını listelemelidir (`tools/package.py` satırları yazdırır); programın kendi güncelleyicisi
+yalnız SHA-256'sı orada olan dosyayı kurar.

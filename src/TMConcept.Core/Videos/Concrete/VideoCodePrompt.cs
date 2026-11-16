@@ -7,9 +7,10 @@ namespace TMConcept.Core.Videos;
 
 /// <summary>
 /// The video code prompts (English: models write code best in English). The texts are not put into the code: the code reads them from the
-/// input at render time; the prompt only shows the scenes so the model can design for them. The model is told whether subtitles are
-/// burned in afterwards (then it must never draw the narration and keeps the bottom free) and which harmless-looking names the safety
-/// check refuses, so a correct design is not rejected for a variable name (every rejection costs a paid repair).
+/// input at render time; the prompt only shows the scenes so the model can design for them. The model never draws the narration: with
+/// subtitles they are burned in afterwards (and the bottom stays free), without subtitles there is no narration text on screen at all (the
+/// captions are left out of the prompt and of the input the code reads, see <see cref="RenderInputBuilder.ForEngine"/>). It is also told
+/// which harmless-looking names the safety check refuses, so a correct design is not rejected for a variable name (every rejection costs a paid repair).
 /// </summary>
 public static class VideoCodePrompt
 {
@@ -17,9 +18,10 @@ public static class VideoCodePrompt
     /// Version of the prompts, kept on every video (2: subtitle rule and the names the safety check refuses; 3: the video's language; 4: the
     /// scene transitions; 5: the transitions are read from the input, never hard-coded, so a later version with edited ones follows them;
     /// 6: the SVG namespace is allowed as one whole literal, and markup parsing is named as refused; 7: the scene image is the main visual,
-    /// few shapes, relative positions, shared helpers, a length target, and no refused name or address in comments either).
+    /// few shapes, relative positions, shared helpers, a length target, and no refused name or address in comments either; 8: without
+    /// subtitles the narration is never drawn and the captions are left out).
     /// </summary>
-    public const string Version = "7";
+    public const string Version = "8";
 
     /// <summary>
     /// SVG: the check allows exactly the SVG (and xlink) namespace written as one whole literal; a model that only read "no web addresses"
@@ -48,7 +50,11 @@ public static class VideoCodePrompt
         prefer simple, robust layouts.
         """;
 
-    /// <summary>The system text of an engine; <paramref name="subtitles"/>: subtitles are burned in after the render.</summary>
+    /// <summary>
+    /// The system text of an engine; <paramref name="subtitles"/>: subtitles are burned in after the render. Off means no narration text on
+    /// screen at all: up to v7 the model was allowed to show the caption "small at the bottom", so a video made with subtitles off still
+    /// showed the narration (the developer's report, 16 Nov 2026).
+    /// </summary>
     public static string System(IVideoEngine engine, bool subtitles)
     {
         ArgumentNullException.ThrowIfNull(engine);
@@ -57,7 +63,11 @@ public static class VideoCodePrompt
               Subtitles are burned into the bottom of the finished video afterwards: NEVER draw the caption (narration) text yourself, and keep the
               bottom 22 % of the frame free of text and important shapes.
               """
-            : "There are no subtitles: the caption (narration) may appear small at the bottom only if it helps.";
+            : """
+              There are NO subtitles in this video, by the user's choice: NEVER draw the caption (narration) text or any part of it, in any size
+              or place, and never write the spoken sentences into the code; the narration is left out of the input on purpose. Short titles,
+              labels, numbers or years that belong to a scene's visual idea are fine.
+              """;
         return $"""
             You are a motion designer who writes video code. Make a clean, modern, readable animated video for a social media channel.
             {engine.Contract}
@@ -93,8 +103,10 @@ public static class VideoCodePrompt
         text.Append(c, $"Video language: {language.English} ({language.Code}). Any word you write into the code yourself is in {language.English}.\n");
         foreach (var scene in input.Scenes)
         {
-            text.Append(c, $"Scene {scene.Number}: {scene.StartSeconds:0.##}–{scene.StartSeconds + scene.DurationSeconds:0.##} s; visual «{Clean(scene.Visual)}»; ")
-                .Append(c, $"caption «{Clean(scene.Caption)}»").Append(scene.Image.Length > 0 ? $"; image \"{scene.Image}\"" : string.Empty)
+            // A scene without a caption (subtitles off: the captions are left out on purpose) shows no caption at all.
+            text.Append(c, $"Scene {scene.Number}: {scene.StartSeconds:0.##}–{scene.StartSeconds + scene.DurationSeconds:0.##} s; visual «{Clean(scene.Visual)}»")
+                .Append(scene.Caption.Length > 0 ? $"; caption «{Clean(scene.Caption)}»" : string.Empty)
+                .Append(scene.Image.Length > 0 ? $"; image \"{scene.Image}\"" : string.Empty)
                 .Append(scene.Transition switch
                 {
                     Scenes.SceneTransitions.Cut => "; hard cut",

@@ -77,7 +77,7 @@ public sealed class VideoCostEstimator(ICostCalculator costs)
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(code);
         var system = engine is null ? 0 : costs.Tokens(VideoCodePrompt.System(engine, subtitles), ContentLanguages.English);
-        var user = costs.Tokens(VideoCodePrompt.User(input), language);
+        var user = costs.Tokens(VideoCodePrompt.User(Render.RenderInputBuilder.ForEngine(input, subtitles)), language);
 
         // The high end is the call's whole budget: 14 000 tokens used to be counted, but real answers with thinking were cut at 32 000.
         long most = VideoCodeBudget.For(code);

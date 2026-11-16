@@ -64,15 +64,14 @@ public sealed class StorageFormatTests
         }
 
         (await h.QueryAsync(db => db.SchemaObjects.CountAsync(o => o.Type == "index" && o.Name.StartsWith("IX_")))).ShouldBe(14, "11, the language index of the pronunciations, the profile index of the topic suggestions (by time) and the profile index of the AI-edit wishes");
-        (await h.QueryAsync(db => db.SchemaObjects.CountAsync(o => o.Type == ConceptSchema.TableType))).ShouldBe(15);
+        (await h.QueryAsync(db => db.SchemaObjects.CountAsync(o => o.Type == ConceptSchema.TableType && !o.Name.StartsWith("__EFMigrations")))).ShouldBe(15);
+        (await h.QueryAsync(db => db.Database.GetAppliedMigrationsAsync())).Select(SchemaUpgrader.Name).ShouldBe(["Version0117"],
+            "the file records the schema steps it went through");
 
-        // Opening again leaves an existing schema alone.
-        await h.QueryAsync(async db =>
-        {
-            await ConceptDatabase.EnsureSchemaAsync(db, CancellationToken.None);
-            return 0;
-        });
-        (await h.QueryAsync(db => db.SchemaObjects.CountAsync(o => o.Type == ConceptSchema.TableType))).ShouldBe(15);
-        (await h.QueryAsync(db => db.Settings.CountAsync())).ShouldBe(0, "no schema version or any other row is written for a new file");
+        // Opening again leaves a current schema alone.
+        var again = await h.QueryAsync(db => ConceptDatabase.EnsureSchemaAsync(db, CancellationToken.None));
+        again.Applied.ShouldBeEmpty();
+        (await h.QueryAsync(db => db.SchemaObjects.CountAsync(o => o.Type == ConceptSchema.TableType && !o.Name.StartsWith("__EFMigrations")))).ShouldBe(15);
+        (await h.QueryAsync(db => db.Settings.CountAsync())).ShouldBe(0, "no settings row is written for a new file");
     }
 }

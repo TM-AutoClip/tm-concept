@@ -20,7 +20,8 @@ namespace TMConcept.Desktop.Startup;
 
 /// <summary>
 /// Startup flow: first run (language → new start or restore → protection and backup password) · unlock (automatic keyring, or master
-/// password; a database of another version is not opened, the unlock window offers to set it aside and start fresh) · main window. After the main window opens: old work files are cleaned and the daily backup runs. Closing the main window
+/// password; an older database goes through the schema steps it lacks after a copy of it is kept; one this version cannot open is not
+/// changed: the unlock window says why, and for one made before upgrades were recorded offers to set it aside and start fresh) · main window. After the main window opens: old work files are cleaned and the daily backup runs. Closing the main window
 /// ends the app; while a page works (a generation, a video render) it asks first and stops the work (its Node / Chrome / ffmpeg processes
 /// are ended with it) before the app closes. An exception that reaches the interface thread is logged and shown instead of ending the app.
 /// </summary>
@@ -58,7 +59,7 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
                 _ = OpenAutomaticAsync();
                 break;
             default:
-                ShowUnlock(null);
+                ShowUnlock(null, null);
                 break;
         }
     }
@@ -100,15 +101,25 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
         Present(window);
     }
 
-    private void ShowUnlock(string? error)
+    private void ShowUnlock(string? error, Storage.Database.DatabaseVersionException? version)
     {
         var model = services.GetRequiredService<UnlockViewModel>();
         model.Error = error ?? string.Empty;
+        if (version is not null)
+        {
+            model.Show(version);
+        }
 
         var window = new UnlockWindow { DataContext = model };
         model.Completed += async (_, _) =>
         {
             await StartMainAsync().ConfigureAwait(true);
+            window.Close();
+        };
+        model.StartFresh += (_, _) =>
+        {
+            // The first-run window becomes the active one before the unlock window closes (closing the last one would end the app).
+            ShowFirstRun(FirstRunStep.Choice);
             window.Close();
         };
         Present(window);
@@ -137,11 +148,17 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
             await vault.OpenAsync(CancellationToken.None).ConfigureAwait(true);
             await StartMainAsync().ConfigureAwait(true);
         }
+        catch (Storage.Database.DatabaseVersionException ex)
+        {
+            // The key opened the file, but this version cannot use its schema: the unlock window says why and what can be done.
+            logger.LogCritical(ex, "The database was not opened: {Problem}", ex.Problem);
+            ShowUnlock(null, ex);
+        }
         catch (Exception ex)
         {
             // The keyring (DPAPI / Secret Service) failed: the key store cannot open the database; the master password window is the way left.
             logger.LogCritical(ex, "The database could not be opened automatically (key protection: {Method})", vault.Method);
-            ShowUnlock(text.Format("unlock.automatic_failed", ex.Message));
+            ShowUnlock(text.Format("unlock.automatic_failed", ex.Message), null);
         }
     }
 
@@ -205,6 +222,9 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
             logger.LogError(ex, "The components could not be checked after the version change");
         }
 
+        // A newer version of the app (at most once a day, when it is not turned off): offered in a window, installed only on confirmation.
+        _ = OfferUpdateAsync();
+
         try
         {
             services.GetRequiredService<Core.Videos.VideoPipeline>().CleanWork();
@@ -230,6 +250,24 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
             logger.LogError(LogEvents.OnScreen, ex, "Daily backup failed");
             activity.Add(ActivityLevel.Error, text.Format("backup.failed", ex.Message));
             notifier.Notify(new AppNotification(NotificationKind.Failed, "TM Concept", text.Format("backup.failed", ex.Message)));
+        }
+    }
+
+    /// <summary>Looks for a newer version in the background and offers it; a failure is only logged (the start is never held up).</summary>
+    private async Task OfferUpdateAsync()
+    {
+        try
+        {
+            var updater = services.GetRequiredService<Updates.AppUpdater>();
+            var offer = await Task.Run(() => updater.CheckAtStartAsync(CancellationToken.None)).ConfigureAwait(true);
+            if (offer is not null)
+            {
+                await services.GetRequiredService<Dialogs.IAppUpdateDialog>().ShowAsync(offer).ConfigureAwait(true);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or HttpRequestException)
+        {
+            logger.LogWarning(ex, "The check for a newer version failed");
         }
     }
 

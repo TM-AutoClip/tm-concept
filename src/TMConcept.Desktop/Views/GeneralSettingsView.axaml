@@ -11,6 +11,15 @@
         <Button Content="Türkçe" Command="{Binding TurkishCommand}" />
         <Button Content="English" Command="{Binding EnglishCommand}" />
       </StackPanel>
+      <TextBlock Text="{DynamicResource appupdate.settings}" Classes="h2" Margin="0,10,0,0" />
+      <CheckBox Name="CheckForUpdatesBox" IsChecked="{Binding CheckForUpdates}" Content="{DynamicResource appupdate.settings.start}" />
+      <StackPanel Orientation="Horizontal" Spacing="10">
+        <Button Name="CheckUpdatesButton" Content="{DynamicResource appupdate.check_now}" Command="{Binding CheckUpdatesCommand}"
+                IsEnabled="{Binding !CheckingUpdates}" />
+        <TextBlock Text="{Binding RunningVersion}" Classes="muted" VerticalAlignment="Center" />
+      </StackPanel>
+      <TextBlock Name="UpdateStatusLine" Text="{Binding UpdateStatus}" Classes="muted" TextWrapping="Wrap" />
+      <TextBlock Text="{DynamicResource appupdate.settings.note}" Classes="small muted" TextWrapping="Wrap" />
       <TextBlock Text="{DynamicResource settings.drawing}" Classes="h2" Margin="0,10,0,0" />
       <CheckBox IsChecked="{Binding UseGraphicsCard}" Content="{DynamicResource settings.drawing.gpu}" />
       <TextBlock Text="{DynamicResource settings.drawing.note}" Classes="muted" TextWrapping="Wrap" />

@@ -56,7 +56,7 @@ public abstract class ToolComponentBase(ToolInstaller installer, string code, st
     /// image runtime chooses its build at call time (its constructor list is empty), and a 0.1.15 CUDA install in <c>tools/sd-cpp</c> must
     /// still make the update plan the build chosen now (Vulkan on an AMD card).
     /// </remarks>
-    public bool WasInstalled => FolderTools.Any(t => Directory.Exists(Installer.ToolRoot(t)));
+    public bool WasInstalled => FolderTools.Any(t => ComponentFolders.HasContent(Installer.ToolRoot(t)));
 
     /// <inheritdoc />
     public virtual Task RefreshAsync(CancellationToken cancellationToken) => Task.CompletedTask;

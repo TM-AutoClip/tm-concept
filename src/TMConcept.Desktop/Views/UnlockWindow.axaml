@@ -14,6 +14,8 @@
     <TextBox Classes="secret" Text="{Binding Password}" PlaceholderText="{DynamicResource password.master}" IsVisible="{Binding NeedsPassword}" />
     <TextBlock Text="{Binding Error}" Classes="error" TextWrapping="Wrap" />
     <Button Classes="accent" Content="{DynamicResource unlock.open}" Command="{Binding UnlockCommand}" IsEnabled="{Binding !Busy}" IsDefault="True" />
+    <Button Name="SetAsideButton" Classes="danger" Content="{DynamicResource unlock.set_aside}" Command="{Binding SetAsideCommand}" IsVisible="{Binding CanSetAside}"
+            IsEnabled="{Binding !Busy}" />
     <TextBlock Text="{DynamicResource unlock.forgotten}" Classes="small" TextWrapping="Wrap" />
     <ProgressBar IsIndeterminate="True" IsVisible="{Binding Busy}" />
   </StackPanel>

@@ -14,7 +14,8 @@ internal static class Program
 {
     /// <summary>
     /// Arguments: <c>--speech-worker …</c> runs the speech worker (started by the app itself, see SpeechWorker). <c>--data-dir &lt;folder&gt;</c> (portable mode: data, tools, videos and backups all under that folder; the environment variable
-    /// <c>TMCONCEPT_DATA_DIR</c> does the same). A second start with the same data folder asks the running one to show its window and exits.
+    /// <c>TMCONCEPT_DATA_DIR</c> does the same). <c>--after-update &lt;process id&gt;</c>: started by the old version after an update; waits
+    /// until that process has ended. A second start with the same data folder asks the running one to show its window and exits.
     /// </summary>
     [STAThread]
     public static int Main(string[] args)
@@ -25,6 +26,12 @@ internal static class Program
         }
 
         var options = StartOptions.Parse(args);
+        if (options.WaitForProcess is { } previous)
+        {
+            // Started by the old version after an update: it is closing; the data folder is free once it has ended.
+            WaitForExit(previous);
+        }
+
         var paths = new AppPaths(options.DataDirectory, DesktopServices.CurrentOs);
         using var instance = SingleInstance.Acquire(paths.DataDirectory);
         if (!instance.IsFirst)
@@ -44,6 +51,7 @@ internal static class Program
         logger.LogInformation("TM Concept {Version} starting on {Os} ({Architecture}, {Runtime}); data folder: {Mode}", AppIdentity.Version, AppIdentity.Os,
             AppIdentity.Architecture, AppIdentity.Runtime, options.DataDirectory is null ? "default" : "portable");
         SweepOrphans(children, paths, logger);
+        services.GetRequiredService<Updates.SelfReplacer>().CleanUp();
 
         instance.Logger = services.GetRequiredService<ILogger<SingleInstance>>();
         instance.ShowRequested += (_, _) =>
@@ -93,6 +101,20 @@ internal static class Program
             logger.LogCritical(ex, "The speech worker stopped with an unhandled exception");
             Console.Error.WriteLine("The speech worker stopped: " + ex.GetType().Name + ": " + ex.Message);
             return 1;
+        }
+    }
+
+    /// <summary>Waits (at most a minute) until the process <paramref name="id"/> has ended; a process that is already gone is fine.</summary>
+    private static void WaitForExit(int id)
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(id);
+            process.WaitForExit(TimeSpan.FromMinutes(1));
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            // Already ended.
         }
     }
 

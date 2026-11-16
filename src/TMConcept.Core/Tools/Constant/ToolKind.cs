@@ -44,4 +44,7 @@ public enum ToolKind
 
     /// <summary>stable-diffusion.cpp (sd-cli), the processor build (no graphics card).</summary>
     ImageRuntimeCpu = 12,
+
+    /// <summary>A new version of the app itself (a release asset; its SHA-256 comes from the release notes). Not a component.</summary>
+    AppUpdate = 100,
 }
