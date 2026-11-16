@@ -175,5 +175,7 @@ public sealed class GpuDetectionTests
         }
 
         public bool VulkanLoader() => vulkan;
+
+        public IReadOnlyList<string> MissingVisualCppRuntime() => [];
     }
 }

@@ -13,7 +13,8 @@ namespace TMConcept.Desktop.Startup;
 /// before and components are installed, the user chooses to update them (the default), reinstall them from scratch, or later
 /// (<see cref="IUpdateDialog"/>; the developer, 16 Nov 2026: a new version can pin newer downloads, and a tester's half-installed image
 /// runtime stayed broken across versions). The version is recorded in <c>preferences.json</c> (<see cref="UiPreferences.LastVersion"/>) only
-/// after an update, a reinstall, or when nothing is installed: "later" asks again at the next start. The data is never touched.
+/// after an update or a reinstall that ended ready, or when nothing is installed: "later", a declined or failed download and a kept folder
+/// ask again at the next start. The data is never touched.
 /// </summary>
 public sealed class VersionCheck(UiPreferencesFile preferences, ComponentReinstaller components, IUpdateDialog dialog, IActivityLog activity, Localizer text,
     ILogger<VersionCheck> logger)
@@ -49,12 +50,10 @@ public sealed class VersionCheck(UiPreferencesFile preferences, ComponentReinsta
         switch (choice)
         {
             case UpdateChoice.Update:
-                Report(await components.UpdateAsync(cancellationToken).ConfigureAwait(true), current);
-                Remember(current);
+                Finish(await components.UpdateAsync(cancellationToken).ConfigureAwait(true), current);
                 break;
             case UpdateChoice.Reinstall:
-                Report(await components.ReinstallAsync(cancellationToken).ConfigureAwait(true), current);
-                Remember(current);
+                Finish(await components.ReinstallAsync(cancellationToken).ConfigureAwait(true), current);
                 break;
             default:
                 // Asked again at the next start: the version is not recorded.
@@ -65,13 +64,22 @@ public sealed class VersionCheck(UiPreferencesFile preferences, ComponentReinsta
 
     private static string Shown(string recorded) => recorded.Length > 0 ? recorded : "(not recorded)";
 
-    private void Report(InstallOutcome outcome, string current)
+    /// <summary>
+    /// Says how the update or reinstall ended. The version is recorded only when it ended ready: a declined download, a network failure or
+    /// a folder that was kept leaves the old components in place, so the question comes again at the next start (0.1.16 recorded it in every
+    /// case and a broken component was never offered again).
+    /// </summary>
+    private void Finish(InstallOutcome outcome, string current)
     {
         if (outcome.Ready)
         {
             activity.Add(ActivityLevel.Info, text.Format("update.done", current));
+            Remember(current);
+            return;
         }
-        else if (outcome.Reason.Length > 0)
+
+        logger.LogInformation("The components were not updated; the version is not recorded and the question comes again at the next start");
+        if (outcome.Reason.Length > 0)
         {
             activity.Add(ActivityLevel.Warning, outcome.Reason);
         }

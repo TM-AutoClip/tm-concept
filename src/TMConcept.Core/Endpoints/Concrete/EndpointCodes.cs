@@ -46,7 +46,20 @@ public static class EndpointCodes
             Name = (m.Name.Length > 0 ? m.Name : m.Id) + " · " + endpoint.Name,
             Capabilities = ModelCapability.Chat | (m.Vision ? ModelCapability.Vision : 0) | (m.JsonSchema ? ModelCapability.Schema : 0),
             ContextTokens = m.ContextTokens > 0 ? m.ContextTokens : EndpointDefaults.ContextTokens,
-            MaxOutputTokens = m.MaxOutputTokens > 0 ? m.MaxOutputTokens : EndpointDefaults.MaxOutputTokens,
+            MaxOutputTokens = m.MaxOutputTokens > 0 ? m.MaxOutputTokens : DefaultMaxOutput(m.ContextTokens),
         }).ToList();
+    }
+
+    /// <summary>
+    /// The default answer limit of a model with <paramref name="contextTokens"/> of context: the context minus <see cref="EndpointDefaults.PromptReserveTokens"/>,
+    /// but at least <see cref="EndpointDefaults.MaxOutputTokens"/> or half the context (whichever is less) and at most the video code's
+    /// <see cref="Videos.VideoCodeBudget.MaxOutputTokens"/> (the longest answer any step asks for). 8 192 → 4 096,
+    /// 32 768 → 24 576, 131 072 → 64 000. A call is lowered further to what the context leaves next to its prompt.
+    /// </summary>
+    public static int DefaultMaxOutput(long contextTokens)
+    {
+        var context = contextTokens > 0 ? contextTokens : EndpointDefaults.ContextTokens;
+        var floor = Math.Max(256, Math.Min(EndpointDefaults.MaxOutputTokens, context / 2));
+        return (int)Math.Min(Videos.VideoCodeBudget.MaxOutputTokens, Math.Max(floor, context - EndpointDefaults.PromptReserveTokens));
     }
 }

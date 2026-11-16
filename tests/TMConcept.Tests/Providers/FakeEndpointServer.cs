@@ -44,6 +44,9 @@ internal sealed class FakeEndpointServer : IDisposable
         _loop = Task.Run(LoopAsync);
     }
 
+    /// <summary>llama-server's <c>GET /props</c> answer (null: no such page, a 404 like Lemonade, Ollama and LM Studio).</summary>
+    public string? Props { get; set; }
+
     /// <summary>The address to type (no trailing slash).</summary>
     public string BaseUrl { get; } = string.Empty;
 
@@ -147,7 +150,9 @@ internal sealed class FakeEndpointServer : IDisposable
             ? _models.TryDequeue(out var listed) ? listed : new FakeEndpointAnswer(200, Models, "application/json")
             : path.EndsWith("/chat/completions", StringComparison.Ordinal)
                 ? _chats.TryDequeue(out var chat) ? chat : new FakeEndpointAnswer(500, """{"error":{"message":"no answer queued"}}""", "application/json")
-                : new FakeEndpointAnswer(404, "not found", "text/plain");
+                : path == "/props" && Props is { } props
+                    ? new FakeEndpointAnswer(200, props, "application/json")
+                    : new FakeEndpointAnswer(404, "not found", "text/plain");
         var bytes = Encoding.UTF8.GetBytes(answer.Body);
         try
         {

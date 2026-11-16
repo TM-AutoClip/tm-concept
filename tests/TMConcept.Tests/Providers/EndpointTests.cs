@@ -64,13 +64,71 @@ public sealed class EndpointTests
         var anonymous = await probe.ListModelsAsync(server.BaseUrl, string.Empty, None);
 
         listing.Ok.ShouldBeTrue();
-        listing.Models.ShouldBe([new ListedModel("Bonsai-27B-GGUF", 16384), new ListedModel("vllm-model", 8192), new ListedModel("llama", 131072),
-            new ListedModel("plain", 0)]);
+        listing.Models.ShouldBe([new ListedModel("Bonsai-27B-GGUF", 16384), new ListedModel("vllm-model", 8192), new ListedModel("llama", 0),
+            new ListedModel("plain", 0)], "llama.cpp's n_ctx_train is the training context, not the one the server runs");
         anonymous.Models.Count.ShouldBe(4);
         var requests = server.Requests.ToList();
         requests[0].Uri.AbsolutePath.ShouldBe("/api/v1/models", "the /api/v1 part of the address is kept");
         requests[0].Headers["Authorization"].ShouldBe("Bearer " + Token);
         requests[1].Headers.ContainsKey("Authorization").ShouldBeFalse("no token, no header");
+    }
+
+    [Fact]
+    public async Task ALlamaServerWithOneModelGivesTheContextItRunsWithFromItsProps()
+    {
+        using var server = new FakeEndpointServer();
+        server.Models = """{"object":"list","data":[{"id":"qwen3-8b","meta":{"n_ctx_train":131072}}]}""";
+        server.Props = """{"default_generation_settings":{"n_ctx":8192},"total_slots":1}""";
+        var (_, probe) = Create(server);
+
+        var listing = await probe.ListModelsAsync(server.BaseUrl, Token, None);
+
+        listing.Models.ShouldBe([new ListedModel("qwen3-8b", 8192)]);
+        var props = server.Requests.Single(r => r.Uri.AbsolutePath == "/props");
+        props.Headers["Authorization"].ShouldBe("Bearer " + Token);
+
+        // Without the page (Lemonade, Ollama) the context stays unknown and the editor's default applies; the list still works.
+        server.Props = null;
+        (await probe.ListModelsAsync(server.BaseUrl, string.Empty, None)).Models.ShouldBe([new ListedModel("qwen3-8b", 0)]);
+    }
+
+    [Theory]
+    [InlineData(0, 4096)]
+    [InlineData(8192, 4096)]
+    [InlineData(16384, 8192)]
+    [InlineData(32768, 24576)]
+    [InlineData(131072, 64000)]
+    [InlineData(2048, 1024)]
+    public void TheDefaultAnswerLimitIsTheContextLessRoomForThePrompt(long context, int expected) =>
+        EndpointCodes.DefaultMaxOutput(context).ShouldBe(expected);
+
+    [Fact]
+    public async Task TheAnswerLimitFitsTheContextAndAPromptThatCannotFitIsNotSent()
+    {
+        using var server = new FakeEndpointServer();
+        server.Chat(200, FakeEndpointServer.Plain("{}"));
+        var client = await ChatAsync(server, Endpoint(server, maxOutput: 64_000));
+        var request = new ChatRequest("system", new string('x', 60_000), MaxOutputTokens: 64_000);
+
+        await client.SendAsync(request, None);
+
+        var sent = JsonNode.Parse(server.Chats.Single().Body)!["max_tokens"]!.GetValue<int>();
+        sent.ShouldBe((int)(32768 - OpenAICompatibleChatClient.PromptTokens(request)), "a 32 768 context leaves this much next to a 20 000-token prompt");
+
+        var tooLarge = await Should.ThrowAsync<ProviderException>(() => client.SendAsync(new ChatRequest("system", new string('x', 100_000)), None));
+        tooLarge.Code.ShouldBe("too_large");
+        server.Chats.Count.ShouldBe(1, "a prompt larger than the context is not processed for minutes only to be rejected");
+    }
+
+    [Theory]
+    [InlineData("http://localhost:13305/api/v1", true, false)]
+    [InlineData("http://user:pass@localhost:8080/v1", false, true)]
+    [InlineData("http://user@localhost:8080/v1", false, true)]
+    [InlineData("localhost:8080", false, false)]
+    public void AnAddressWithAUserOrPasswordIsRefusedWithItsOwnReason(string text, bool valid, bool credentials)
+    {
+        EndpointAddress.TryParse(text, out _).ShouldBe(valid);
+        EndpointAddress.HasCredentials(text).ShouldBe(credentials);
     }
 
     [Fact]

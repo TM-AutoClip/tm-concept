@@ -15,8 +15,10 @@ namespace TMConcept.Providers.Endpoints;
 /// The chat transport of every user-added local server (kind <see cref="ModelProviders.Endpoint"/>; a model's code
 /// <c>endpoint:&lt;id&gt;</c> names its server in <see cref="EndpointRegistry"/>) and their connection test: <c>GET {base}/models</c> with a short
 /// wait, reading each model's id and, when the server says, its context window (<c>context_length</c> / <c>max_context_window</c> of
-/// Lemonade, <c>max_model_len</c> of vLLM, <c>meta.n_ctx_train</c> of llama.cpp). Its own HTTP layer (<see cref="EndpointTransport"/>: long
-/// waits). The token is never logged; a failure's detail masks it.
+/// Lemonade, <c>max_model_len</c> of vLLM). llama.cpp lists only <c>meta.n_ctx_train</c>, the context the model was trained with (131 072),
+/// not the one the server runs it with (<c>-c</c>, often 4 096–8 192), so it is not taken: for a server with one model whose list has no
+/// context, <c>GET {root}/props</c> gives llama-server's real one (<c>default_generation_settings.n_ctx</c>); otherwise the editor's default
+/// stands. Its own HTTP layer (<see cref="EndpointTransport"/>: long waits). The token is never logged; a failure's detail masks it.
 /// </summary>
 public sealed class EndpointChatTransport(EndpointRegistry endpoints, EndpointTransport transport, ILoggerFactory loggers)
     : IChatTransport, IEndpointProbe, IDisposable
@@ -87,6 +89,11 @@ public sealed class EndpointChatTransport(EndpointRegistry endpoints, EndpointTr
             return new EndpointListing(false, "unreadable", string.Empty, []);
         }
 
+        if (models.Count == 1 && models[0].ContextTokens == 0 && await ServerContextAsync(address, token, limit.Token).ConfigureAwait(false) is > 0 and var context)
+        {
+            models[0] = models[0] with { ContextTokens = context };
+        }
+
         _logger.LogInformation("Local server model list: {Count} model(s)", models.Count);
         return models.Count == 0 ? new EndpointListing(false, "empty", string.Empty, []) : new EndpointListing(true, "ok", string.Empty, models);
     }
@@ -120,9 +127,42 @@ public sealed class EndpointChatTransport(EndpointRegistry endpoints, EndpointTr
             .ToList();
     }
 
+    /// <summary>
+    /// llama-server's running context from <c>GET {root}/props</c> (the address without its <c>/v1</c>); 0 when the server has no such page
+    /// (Lemonade, Ollama, LM Studio) or does not answer in the probe's time. Read quietly: a missing page is the usual case, not a warning.
+    /// </summary>
+    private async Task<long> ServerContextAsync(Uri address, string token, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var client = new HttpClient(transport.Http.CreateHandler(), disposeHandler: true) { Timeout = transport.ProbeTimeout };
+            using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(address, "../props"));
+            if (token.Length > 0)
+            {
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            }
+
+            using var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                return 0;
+            }
+
+            var props = JsonNode.Parse(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
+            var context = JsonRead.Long(props?["default_generation_settings"]?["n_ctx"]) is > 0 and var running ? running : JsonRead.Long(props?["n_ctx"]);
+            _logger.LogInformation("Local server: llama-server runs its model with a context of {Context} tokens", context);
+            return Math.Max(0, context);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException or InvalidOperationException
+            || (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested))
+        {
+            return 0;
+        }
+    }
+
     private static long Context(JsonObject model)
     {
-        foreach (var value in new[] { model["context_length"], model["max_context_window"], model["max_model_len"], model["meta"]?["n_ctx_train"] })
+        foreach (var value in new[] { model["context_length"], model["max_context_window"], model["max_model_len"] })
         {
             if (JsonRead.Long(value) is > 0 and var tokens)
             {

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
 using TMConcept.Core.Images;
+using TMConcept.Core.Models;
 using TMConcept.Core.Providers;
 using TMConcept.Providers.Common;
 
@@ -15,6 +16,10 @@ public abstract class GenerationsImageEngineBase(ProviderBase provider, Provider
 {
     /// <inheritdoc />
     public string Code => provider.Code;
+
+    /// <inheritdoc />
+    /// <remarks>An online model has nothing to check on this computer: its key and the provider answer for it.</remarks>
+    public ImageEngineProblem? Problem(ResolvedModel model) => null;
 
     /// <summary>The size text the provider accepts for a wanted size.</summary>
     protected abstract string Size(int width, int height);

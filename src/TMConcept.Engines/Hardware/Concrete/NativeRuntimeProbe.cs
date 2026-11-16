@@ -9,11 +9,21 @@ namespace TMConcept.Engines.Hardware;
 /// </summary>
 public sealed class NativeRuntimeProbe : IComputeRuntimeProbe
 {
+    /// <summary>
+    /// The Visual C++ runtime files sd-cli needs on Windows: sd-cli.exe, stable-diffusion.dll and ggml-vulkan.dll import MSVCP140,
+    /// VCRUNTIME140 and VCRUNTIME140_1, the ggml-cpu-*.dll files also VCOMP140 (OpenMP); none of the zips carries them.
+    /// </summary>
+    public static readonly IReadOnlyList<string> VisualCppRuntimeFiles = ["vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll", "vcomp140.dll"];
+
     /// <inheritdoc />
     public bool CudaDriver() => Loads(OperatingSystem.IsWindows() ? System32("nvcuda.dll") : "libcuda.so.1");
 
     /// <inheritdoc />
     public bool VulkanLoader() => Loads(OperatingSystem.IsWindows() ? System32("vulkan-1.dll") : "libvulkan.so.1");
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> MissingVisualCppRuntime() =>
+        OperatingSystem.IsWindows() ? VisualCppRuntimeFiles.Where(f => !Loads(System32(f))).ToList() : [];
 
     private static string System32(string file) => Path.Combine(Environment.SystemDirectory, file);
 

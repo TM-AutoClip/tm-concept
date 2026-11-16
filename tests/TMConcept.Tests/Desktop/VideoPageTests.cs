@@ -693,6 +693,79 @@ public sealed class VideoPageTests
     }
 
     [AvaloniaFact]
+    public async Task AnImageEngineThatCannotRunHereStopsTheVideoBeforeThePaidPromptCall()
+    {
+        var engine = new FakeEngine();
+        var images = new FakeImages { Unready = new ImageEngineProblem(ImageEngineProblems.VisualCppRuntime, "vcruntime140_1.dll, msvcp140.dll") };
+        var chat = new FakeChat().Answer(_ => new ChatResponse("{\"prompts\":[\"a map\",\"burning ships\"]}", new ChatUsage(100, 0, 0, 50), null, "end_turn", "r"))
+            .Answer(_ => Code(engine.SampleCode));
+        using var h = Harness(chat, engine, s =>
+        {
+            s.RemoveAll<IImageEngine>();
+            s.AddSingleton<IImageEngine>(images);
+        });
+        var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
+        var (page, concept) = await OpenAsync(h);
+        await h.Get<IApiKeyStore>().SaveAsync(new ApiKey { Provider = "fal", Label = "k", Secret = "fake-test-key-video-4567" }, CancellationToken.None);
+        await page.ActivateAsync();
+        var imageRow = page.Picker.Row(PipelineSteps.Images)!;
+        imageRow.Selected = imageRow.Options.First(o => o.Model?.Id == "fal-ai/flux-2/flash");
+        await page.EnqueueAsync(page.Approved.Single());
+        var row = page.Queue.Single();
+        var before = h.Get<TMConcept.Core.Activity.IActivityFeed>().Recent().Count;
+
+        await page.ProduceAllAsync();
+
+        // Nothing was asked of any model: the image prompts are a paid call (0.1.16 still paid for it before sd-cli failed).
+        chat.Requests.ShouldBeEmpty();
+        images.Prompts.ShouldBeEmpty();
+        row.Failed.ShouldBeTrue();
+        row.Error.ShouldContain(text["video.error.image_runtime"]);
+        row.Error.ShouldContain("vcruntime140_1.dll, msvcp140.dll");
+        row.Progress!.Stages.Single(s => s.Code == VideoSteps.Prepare).State.ShouldBe(StageState.Failed);
+        (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!.Status.ShouldBe(ConceptStatus.Queued);
+
+        // One red line in the user's language, not the pipeline's and the assembler's log lines as well (the 0.1.16 review).
+        var lines = h.Get<TMConcept.Core.Activity.IActivityFeed>().Recent().Skip(before).Where(l => l.IsError).ToList();
+        lines.ShouldHaveSingleItem().Text.ShouldContain(text["video.error.image_runtime"]);
+    }
+
+    [AvaloniaFact]
+    public async Task ACutOffImagePromptAnswerFallsBackToTheSceneTextsAndTheVideoIsMade()
+    {
+        var engine = new FakeEngine();
+        var images = new FakeImages();
+        var chat = new FakeChat().Answer(_ => throw new TMConcept.Core.Providers.ProviderException("Fake: the answer was cut off.")
+            {
+                Code = "truncated",
+                ChargedUsage = new ChatUsage(100, 0, 0, 4000),
+                PartialText = "{\"prompts\":[\"a map\",\"burn",
+            })
+            .Answer(_ => Code(engine.SampleCode));
+        using var h = Harness(chat, engine, s =>
+        {
+            s.RemoveAll<IImageEngine>();
+            s.AddSingleton<IImageEngine>(images);
+        });
+        var (page, concept) = await OpenAsync(h);
+        await h.Get<IApiKeyStore>().SaveAsync(new ApiKey { Provider = "fal", Label = "k", Secret = "fake-test-key-video-4567" }, CancellationToken.None);
+        await page.ActivateAsync();
+        var imageRow = page.Picker.Row(PipelineSteps.Images)!;
+        imageRow.Selected = imageRow.Options.First(o => o.Model?.Id == "fal-ai/flux-2/flash");
+        await page.EnqueueAsync(page.Approved.Single());
+        var row = page.Queue.Single();
+
+        await page.ProduceAllAsync();
+
+        // The cut is not "the video code was cut off": the scene texts stand in for the prompts and the video code step runs.
+        row.Failed.ShouldBeFalse(row.Error);
+        chat.Requests.Count.ShouldBe(2);
+        images.Prompts.Count.ShouldBe(2);
+        var made = (await h.Get<IVideoStore>().ListAsync(concept.ProfileId, CancellationToken.None)).ShouldHaveSingleItem();
+        made.TotalUsd.ShouldBeGreaterThan(0m, "the cut-off prompt answer was paid for and is counted");
+    }
+
+    [AvaloniaFact]
     public async Task AnImageModelThatIsNotReadyStopsTheVideoAtPrepare()
     {
         var engine = new FakeEngine();
@@ -1020,6 +1093,11 @@ public sealed class VideoPageTests
 
         /// <summary>When set, every image fails with this message (as sd-cli's exit does).</summary>
         public string? Fail { get; init; }
+
+        /// <summary>What the engine reports against running here (a missing Visual C++ runtime, a missing driver).</summary>
+        public ImageEngineProblem? Unready { get; init; }
+
+        public ImageEngineProblem? Problem(ResolvedModel model) => Unready;
 
         public Task<ImageResult> GenerateAsync(ImageRequest request, CancellationToken cancellationToken)
         {

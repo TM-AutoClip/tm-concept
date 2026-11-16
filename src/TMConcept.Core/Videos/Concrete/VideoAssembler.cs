@@ -273,14 +273,14 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         }
         catch (VideoException ex)
         {
-            logger.LogError("Video failed ({Code}): {Message}", ex.Code, ex.Message);
+            logger.LogError(Activity.LogEvents.OnScreen, "Video failed ({Code}): {Message}", ex.Code, ex.Message);
             CleanFailed(work, target);
             await KeepLostAsync(profileId, payer, steps.Spent, ex.Code, RunStatus.Failed, watch.Elapsed).ConfigureAwait(false);
             throw new VideoException(ex.Message, ex) { Code = ex.Code, SpentUsd = steps.SpentUsd };
         }
         catch (Providers.ProviderException ex)
         {
-            logger.LogError("Video failed: provider error ({Code}, request {RequestId}) after {Usd} USD", ex.Code, ex.RequestId.Length > 0 ? ex.RequestId : "-",
+            logger.LogError(Activity.LogEvents.OnScreen, "Video failed: provider error ({Code}, request {RequestId}) after {Usd} USD", ex.Code, ex.RequestId.Length > 0 ? ex.RequestId : "-",
                 steps.SpentUsd);
             CleanFailed(work, target);
             await KeepLostAsync(profileId, payer, steps.Spent, VideoException.ProviderPrefix + ex.Code, RunStatus.Failed, watch.Elapsed).ConfigureAwait(false);
@@ -295,7 +295,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            logger.LogError(ex, "Video failed: a file could not be written");
+            logger.LogError(Activity.LogEvents.OnScreen, ex, "Video failed: a file could not be written");
             CleanFailed(work, target);
             await KeepLostAsync(profileId, payer, steps.Spent, "files", RunStatus.Failed, watch.Elapsed).ConfigureAwait(false);
             throw new VideoException("A file could not be written: " + ex.Message, ex) { Code = "files", SpentUsd = steps.SpentUsd };

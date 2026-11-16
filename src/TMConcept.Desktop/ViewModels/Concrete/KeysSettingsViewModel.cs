@@ -73,6 +73,19 @@ public sealed partial class KeysSettingsViewModel(IEnumerable<IProvider> provide
         await ReloadAsync().ConfigureAwait(true);
     }
 
+    /// <summary>Opens a saved local server in the form (the local server entry is chosen, so its form shows) to change it.</summary>
+    [RelayCommand]
+    public void EditEndpoint(EndpointRowViewModel? row)
+    {
+        if (row is null)
+        {
+            return;
+        }
+
+        Provider = Providers.FirstOrDefault(p => p.IsEndpoint);
+        Endpoint.Edit(row);
+    }
+
     /// <summary>Tests the new key with the provider's free request and saves it only when it works (or when no free test exists: fal).</summary>
     [RelayCommand]
     public async Task AddAsync()

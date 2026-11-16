@@ -37,6 +37,31 @@ public sealed class ChatProgressTests
     }
 
     [Fact]
+    public void TextStillInsideAThinkBlockKeepsTheCallThinking()
+    {
+        var clock = new FakeTimeProvider();
+        var steps = new List<ChatProgress>();
+        var reporter = new ChatProgressReporter(new ForwardProgress<ChatProgress>(steps.Add), clock);
+        var raw = string.Empty;
+        string Visible() => ThinkBlocks.Strip(raw);
+
+        reporter.Sent();
+        raw = "<think>Draft: {\"concepts\":[{\"title\":\"a\"}]}";
+        reporter.Line(Visible);
+        clock.Advance(TimeSpan.FromSeconds(1));
+        raw += " more planning";
+        reporter.Line(Visible);
+        clock.Advance(TimeSpan.FromSeconds(1));
+        raw += "</think>{\"concepts\":[";
+        reporter.Line(Visible);
+
+        Phases(steps).ShouldBe([ChatPhase.Sent, ChatPhase.Thinking, ChatPhase.Writing]);
+        steps.Where(s => s.Phase == ChatPhase.Writing).ShouldAllBe(s => !s.Text.Contains("Draft", StringComparison.Ordinal),
+            "a JSON draft inside the thinking is never shown as the answer");
+        steps[^1].Text.ShouldBe("{\"concepts\":[");
+    }
+
+    [Fact]
     public async Task AnAnthropicCallIsSentThenThinksThenWritesThenIsDone()
     {
         var fake = new FakeHttp().Answer(HttpStatusCode.OK, """

@@ -227,7 +227,7 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Daily backup failed");
+            logger.LogError(LogEvents.OnScreen, ex, "Daily backup failed");
             activity.Add(ActivityLevel.Error, text.Format("backup.failed", ex.Message));
             notifier.Notify(new AppNotification(NotificationKind.Failed, "TM Concept", text.Format("backup.failed", ex.Message)));
         }

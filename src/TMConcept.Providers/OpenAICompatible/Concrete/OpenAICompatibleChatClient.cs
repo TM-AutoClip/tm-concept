@@ -22,14 +22,27 @@ namespace TMConcept.Providers.OpenAICompatible;
 /// the time (a warning when it ended badly; never the prompt or the key). The request's progress gets sent → thinking → writing (a streamed
 /// call; reasoning chunks carry no visible text) → done (<see cref="ChatProgressReporter"/>). A local server's provider
 /// (<see cref="OpenAICompatibleProviderBase.LoadingRetries"/>, <see cref="OpenAICompatibleProviderBase.StripsThinking"/>,
-/// <see cref="OpenAICompatibleProviderBase.ReportsUsage"/>) also gets a 503 retried while its model loads, <c>&lt;think&gt;</c> blocks removed
-/// from the answer and no warning for a stream without usage.
+/// <see cref="OpenAICompatibleProviderBase.ReportsUsage"/>, <see cref="OpenAICompatibleProviderBase.FitsContext"/>) also gets a 503 retried
+/// while its model loads, <c>&lt;think&gt;</c> blocks removed from the answer and from the live progress, no warning for a stream without
+/// usage, and the answer limit fitted into the model's context (a prompt that cannot fit is not sent).
 /// </summary>
 public sealed class OpenAICompatibleChatClient(OpenAICompatibleProviderBase provider, ProviderHttp http, CatalogModel model, string apiKey, ILogger logger)
     : IChatClient
 {
     // Fields a provider may not know: after a 400/422 the request goes once more without the ones it had.
     private static readonly string[] Optional = ["response_format", "stream_options", "max_tokens", "max_completion_tokens", "reasoning_effort", "reasoning"];
+
+    /// <summary>
+    /// Characters per token when a prompt's size is guessed for <see cref="OpenAICompatibleProviderBase.FitsContext"/>: 3 is on the safe
+    /// side (English runs about 4, Turkish and code fewer), so the guess is rather too large than too small.
+    /// </summary>
+    public const int CharactersPerToken = 3;
+
+    /// <summary>Tokens counted for an attached image (a local vision model's image takes several hundred to about a thousand).</summary>
+    public const int TokensPerImage = 1_000;
+
+    /// <summary>The smallest answer room left next to a prompt; with less the prompt does not fit.</summary>
+    public const int SmallestAnswer = 256;
 
     /// <inheritdoc />
     public CatalogModel Model { get; } = model;
@@ -64,7 +77,8 @@ public sealed class OpenAICompatibleChatClient(OpenAICompatibleProviderBase prov
         // thousand tokens), and a long answer was cut off whatever the program asked for.
         if (request.MaxOutputTokens > 0)
         {
-            body[provider.MaxTokensField] = Model.MaxOutputTokens > 0 ? Math.Min(request.MaxOutputTokens, Model.MaxOutputTokens) : request.MaxOutputTokens;
+            var limit = Model.MaxOutputTokens > 0 ? Math.Min(request.MaxOutputTokens, Model.MaxOutputTokens) : request.MaxOutputTokens;
+            body[provider.MaxTokensField] = provider.FitsContext ? Math.Min(limit, Room(request)) : limit;
         }
 
         if (request.Effort.Length > 0)
@@ -87,10 +101,36 @@ public sealed class OpenAICompatibleChatClient(OpenAICompatibleProviderBase prov
         return body;
     }
 
+    /// <summary>
+    /// The guessed size of a request's prompt in tokens (system and user text by <see cref="CharactersPerToken"/>, images by
+    /// <see cref="TokensPerImage"/>).
+    /// </summary>
+    public static long PromptTokens(ChatRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return ((long)request.System.Length + request.User.Length + CharactersPerToken - 1) / CharactersPerToken
+            + (long)(request.Images?.Count ?? 0) * TokensPerImage;
+    }
+
+    /// <summary>What the model's context leaves for the answer next to the request's prompt (unbounded without a known context).</summary>
+    private int Room(ChatRequest request) =>
+        Model.ContextTokens > 0 ? (int)Math.Clamp(Model.ContextTokens - PromptTokens(request), 0, int.MaxValue) : int.MaxValue;
+
     /// <inheritdoc />
     public async Task<ChatResponse> SendAsync(ChatRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+        if (provider.FitsContext && Model.ContextTokens > 0 && Room(request) < SmallestAnswer)
+        {
+            logger.LogWarning("{Provider} {Model}: the prompt (about {Prompt} tokens) does not fit the context of {Context} tokens; not sent", provider.Name,
+                Model.Id, PromptTokens(request), Model.ContextTokens);
+            throw new ProviderException(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                $"{provider.Name}: the prompt (about {PromptTokens(request)} tokens) does not fit the context of {Model.Id} ({Model.ContextTokens} tokens). Give the model a larger context on the server and in Settings → API keys."))
+            {
+                Code = "too_large",
+            };
+        }
+
         var body = Body(request);
         var watch = Stopwatch.StartNew();
         var progress = new ChatProgressReporter(request.Progress, TimeProvider.System);
@@ -258,7 +298,16 @@ public sealed class OpenAICompatibleChatClient(OpenAICompatibleProviderBase prov
         var streamed = await http.StreamAsync(Create, provider.Name, apiKey, line =>
         {
             reader.Add(line);
-            progress.Line(reader.TextLength, () => reader.Text);
+            if (provider.StripsThinking)
+            {
+                // The live text without the thinking: a model still inside <think> is "thinking", not "writing", and a JSON draft in its
+                // thinking is not counted as concepts. Once it writes, read at most a few times a second (the strip runs over the whole text).
+                progress.Line(() => Visible(reader.Text));
+            }
+            else
+            {
+                progress.Line(reader.TextLength, () => reader.Text);
+            }
         }, cancellationToken).ConfigureAwait(false);
         if (reader.Skipped > 0)
         {

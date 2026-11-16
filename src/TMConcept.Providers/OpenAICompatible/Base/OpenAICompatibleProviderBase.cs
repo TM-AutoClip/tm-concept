@@ -52,6 +52,14 @@ public abstract class OpenAICompatibleProviderBase(ProviderHttp http, ILogger lo
     public virtual bool StripsThinking => false;
 
     /// <summary>
+    /// Whether the model's context window (<see cref="Core.Models.CatalogModel.ContextTokens"/>, as the user confirmed it) bounds a call: the
+    /// answer limit is lowered to what the context leaves next to the prompt, and a prompt that does not fit at all fails before it is sent
+    /// (a local server rejects it with a 400 only after processing it, which takes minutes on a consumer card, and the retry without the
+    /// optional fields processed it again). An online provider's catalog context is its own business: false.
+    /// </summary>
+    public virtual bool FitsContext => false;
+
+    /// <summary>
     /// How many times a 503 is retried (a local server answers 503 while it loads the model, which can take minutes); 0 = none (an online
     /// provider's 503 is a failure for the caller).
     /// </summary>

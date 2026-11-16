@@ -2,7 +2,9 @@ namespace TMConcept.Core.Videos;
 
 /// <summary>
 /// Warning codes kept on a video (comma separated). Only expected, chosen situations are warnings: a failed voice or failed images stop the
-/// video since 16 Nov 2026 (<see cref="VideoException"/> "speech" / "images"), so "speech_failed" and "images_failed" are gone.
+/// video since 16 Nov 2026 (<see cref="VideoException"/> "speech" / "images"), so nothing writes <see cref="SpeechFailed"/> or
+/// <see cref="ImagesFailed"/> any more. They stay as codes of videos made by 0.1.15 and earlier (the database is carried over, so those
+/// records still hold them and the Produced page must still name them).
 /// </summary>
 public static class VideoWarnings
 {
@@ -20,4 +22,10 @@ public static class VideoWarnings
 
     /// <summary>The sample images were chosen but the profile has none: the video was made without images.</summary>
     public const string SamplesNone = "samples_none";
+
+    /// <summary>Written by 0.1.15 and earlier only: narration failed and the video was made silent (red). Read, never written.</summary>
+    public const string SpeechFailed = "speech_failed";
+
+    /// <summary>Written by 0.1.15 and earlier only: the images failed and the video was made without them. Read, never written.</summary>
+    public const string ImagesFailed = "images_failed";
 }

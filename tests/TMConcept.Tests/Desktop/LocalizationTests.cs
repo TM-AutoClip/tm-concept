@@ -42,6 +42,21 @@ public sealed partial class LocalizationTests
         used.Where(k => !en.Contains(k)).ShouldBeEmpty();
     }
 
+    [Fact]
+    public void EveryVideoWarningCodeHasABadgeAndANoteAlsoTheOnesOnlyOldVideosCarry()
+    {
+        // The Produced page looks up "produced.badge.<code>" and "produced.note.<code>" for every stored code; a missing key showed the raw
+        // key (0.1.16 removed speech_failed / images_failed while 0.1.15 videos in the kept database still carry them).
+        var codes = typeof(TMConcept.Core.Videos.VideoWarnings).GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .Where(f => f.IsLiteral).Select(f => (string)f.GetRawConstantValue()!).ToList();
+        codes.ShouldContain(TMConcept.Core.Videos.VideoWarnings.ImagesFailed);
+        foreach (var language in Localizer.Supported)
+        {
+            var keys = Localizer.Keys(language).ToHashSet(StringComparer.Ordinal);
+            codes.Where(c => !keys.Contains("produced.badge." + c) || !keys.Contains("produced.note." + c)).ShouldBeEmpty(language);
+        }
+    }
+
     [GeneratedRegex(@"\{DynamicResource ([\w.\-]+)\}")]
     private static partial Regex ResourceKey();
 }

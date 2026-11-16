@@ -90,11 +90,14 @@ API'siyle konuşan her program olur. Ücret yok, anahtar gerekmez; yalnız progr
 2. Ayarlar → **Anahtarlar** → **Yerel sunucu (OpenAI uyumlu)**'yu seç → bir ad ve adresi yaz (`/v1` ya da `/api/v1`'e kadar); jetonu
    yalnız sunucu isterse yaz.
 3. **Bağlan ve modelleri listele** sunucudan modellerini ister. Kullanacaklarını işaretle (ya da model kimliğini yaz). Her biri için
-   **Bağlam**'a (sunucunun modeli çalıştırdığı bağlam boyutu; sunucu söylüyorsa oradan okunur) ve **En uzun yanıt**'a (daha fazlasını
-   isteyen adım bunu alır) bak. Görsel okuyan model için **Görsel okur**'u, **JSON şeması**'nı ise yalnız sunucu
+   **Bağlam**'a (sunucunun modeli çalıştırdığı bağlam boyutu, llama-server'da `-c`; sunucu söylüyorsa oradan okunur) ve **En uzun
+   yanıt**'a (daha fazlasını isteyen adım bunu alır) bak. Video kodu yanıtı on binlerce token tutar, bu yüzden modele geniş bir bağlam
+   ver: En uzun yanıt, bağlamdan istem payı düşülerek başlar ve hiçbir çağrı isteminin yanında bağlamda kalandan fazlasını istemez. Görsel okuyan model için **Görsel okur**'u, **JSON şeması**'nı ise yalnız sunucu
    `response_format: json_schema` kabul ediyorsa işaretle (LM Studio, vLLM, yeni llama.cpp); yoksa JSON kipi istenir, ikisini de
    reddeden sunucuya istek onsuz gönderilir.
 4. **Yerel sunucuyu kaydet**. Modelleri artık model listelerinde "model · ad · yerel sunucu, ücretsiz" olarak görünür; anahtar sorulmaz.
+   Kayıtlı sunucudaki **Düzenle** onu yerinde değiştirir (modellerini kullanan adımlar onları korur). Adrese kullanıcı adı ya da parola
+   yazma; gizli bilginin yeri jeton alanı.
 
 Model yüklendikten sonraki ilk istek dakikalar sürebilir: TM Concept ilk cevabı bir saate kadar bekler ve sunucu 503 (model yükleniyor)
 dedikçe birkaç kez yeniden dener. Modelin düşünmesi (`reasoning_content`, `<think>…</think>`) "düşünüyor" olarak gösterilir, cevap

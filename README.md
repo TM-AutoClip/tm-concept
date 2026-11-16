@@ -139,7 +139,9 @@ the model that describes a sample image. Each step says what it is for:
   **FLUX.2 klein 4B** (fast) or **Z-Image Turbo** (better pictures), both with at least 6 GB of graphics memory (the card they were measured on),
   or **Z-Image Turbo (full quality)** for cards of 16 GB and more. The page shows your card and turns red when it is too small. NVIDIA, AMD and
   Intel cards work: *Settings → General → Image acceleration* picks the build (Automatic: NVIDIA CUDA for an NVIDIA card with its driver,
-  Vulkan for the others, the processor without a card; Linux x64 uses Vulkan or the processor). There is no build for Linux ARM64.
+  Vulkan for AMD and Intel cards, the processor without a card or with only a virtual one; Linux x64 uses Vulkan or the processor). On
+  Windows every build needs the Microsoft Visual C++ 2015–2022 runtime (x64); a video that would need it and does not find it stops before
+  anything is paid for and names the download. There is no build for Linux ARM64.
 - **Images** can also use the profile's own sample images (free).
 - **Narration** — *Off* (silent video, yellow warning), **Supertonic 3** (local, free; every video language; the default
   voice of every language but English), **Kokoro 82M** (local, free; the default for English;

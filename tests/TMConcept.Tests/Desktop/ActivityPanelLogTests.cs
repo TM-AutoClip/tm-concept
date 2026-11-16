@@ -38,6 +38,28 @@ public sealed class ActivityPanelLogTests
     }
 
     [Fact]
+    public void AFailureLoggedFirstAndThenAddedInTheUsersLanguageShowsOnce()
+    {
+        using var h = new DesktopHarness();
+        var feed = h.Get<IActivityFeed>();
+        var activity = h.Get<IActivityLog>();
+        var pipeline = h.Get<ILoggerFactory>().CreateLogger("TMConcept.Core.Videos.VideoPipeline");
+        var assembler = h.Get<ILoggerFactory>().CreateLogger("TMConcept.Core.Videos.VideoAssembler");
+        var before = feed.Recent().Count;
+
+        // The usual order: the pipeline and the assembler log, then the page adds its red line (0.1.16 showed all three).
+        pipeline.LogError(LogEvents.OnScreen, new InvalidOperationException("sd-cli ended with 0xC0000135"), "Scene images failed; the video is stopped");
+        assembler.LogError(LogEvents.OnScreen, "Video failed ({Code}): {Message}", "images", "sd-cli ended with 0xC0000135");
+        activity.Add(ActivityLevel.Error, "Video failed: Greek fire: sd-cli ended with 0xC0000135");
+
+        feed.Recent().Skip(before).ShouldHaveSingleItem().Text.ShouldBe("Video failed: Greek fire: sd-cli ended with 0xC0000135");
+
+        // An error nobody shows otherwise still reaches the panel.
+        pipeline.LogError("The work folder could not be cleaned");
+        feed.Recent().Count.ShouldBe(before + 2);
+    }
+
+    [Fact]
     public void TheActivityLogsOwnLinesAndAHandlerThatLogsDoNotLoop()
     {
         using var h = new DesktopHarness();

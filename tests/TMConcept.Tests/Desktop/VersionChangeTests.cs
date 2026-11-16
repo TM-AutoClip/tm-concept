@@ -14,8 +14,8 @@ namespace TMConcept.Tests.Desktop;
 
 /// <summary>
 /// After a new app version (0.1.16): the installed components are updated, reinstalled from scratch or left for later; the version is recorded
-/// in preferences.json only after an update, a reinstall or when nothing is installed. Fake components, dialog and recycle bin: nothing is
-/// downloaded or moved to the real recycle bin.
+/// in preferences.json only after an update or a reinstall that ended ready, or when nothing is installed. Fake components, dialog and
+/// recycle bin: nothing is downloaded or moved to the real recycle bin.
 /// </summary>
 public sealed class VersionChangeTests
 {
@@ -93,7 +93,8 @@ public sealed class VersionChangeTests
             await h.Get<VersionCheck>().RunAsync("0.1.16", CancellationToken.None);
 
             dialog.Asked.Count.ShouldBe(1);
-            bin.Moved.ShouldBe([h.Paths.ToolsDirectory]);
+            bin.Moved.ShouldHaveSingleItem().ShouldStartWith(h.Paths.ToolsDirectory + TMConcept.Desktop.Components.ComponentReinstaller.AsidePrefix,
+                Case.Sensitive, "the folder is renamed aside in one step first, then that folder goes to the recycle bin");
             Directory.Exists(h.Paths.ToolsDirectory).ShouldBeFalse();
             (used.Installs, unused.Installs).ShouldBe((1, 0));
             Path.GetDirectoryName(database).ShouldBe(h.Paths.DataDirectory, "the database is outside the components folder");
@@ -123,6 +124,47 @@ public sealed class VersionChangeTests
             (await h.Get<TMConcept.Desktop.Components.ComponentReinstaller>().ReinstallAsync(CancellationToken.None)).Ready.ShouldBeTrue();
             Directory.Exists(h.Paths.ToolsDirectory).ShouldBeFalse();
             used.Installs.ShouldBe(1);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task ADeclinedDownloadLeavesTheVersionUnrecordedSoTheQuestionComesBack()
+    {
+        var (h, used, _, dialog, _, confirm) = Setup(UpdateChoice.Update);
+        using (h)
+        {
+            confirm.Answer = false;
+
+            await h.Get<VersionCheck>().RunAsync("0.1.16", CancellationToken.None);
+            await h.Get<VersionCheck>().RunAsync("0.1.16", CancellationToken.None);
+
+            used.Installs.ShouldBe(0);
+            dialog.Asked.Count.ShouldBe(2, "nothing was updated: asked again at the next start");
+            Preferences(h).Read().LastVersion.ShouldBeEmpty();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task ARecycleBinThatTookOnlyPartOfTheFolderIsNotReportedAsNothingChanged()
+    {
+        var (h, used, _, _, bin, confirm) = Setup(UpdateChoice.Reinstall);
+        using (h)
+        {
+            File.WriteAllText(Path.Combine(used.Folder!, "a.bin"), "a");
+            File.WriteAllText(Path.Combine(used.Folder!, "b.bin"), "b");
+            bin.Partial = true;
+            confirm.Answers.Enqueue(false);
+            var text = h.Get<Localizer>();
+            var files = Directory.EnumerateFiles(h.Paths.ToolsDirectory, "*", SearchOption.AllDirectories).Count();
+
+            var outcome = await h.Get<TMConcept.Desktop.Components.ComponentReinstaller>().ReinstallAsync(CancellationToken.None);
+
+            outcome.Ready.ShouldBeFalse();
+            outcome.Reason.ShouldNotBe(text["components.reinstall.kept"]);
+            outcome.Reason.ShouldBe(text.Format("components.reinstall.partial", TMConcept.Desktop.Components.ComponentReinstaller.Location(h.Paths.ToolsDirectory)));
+            Directory.Exists(h.Paths.ToolsDirectory).ShouldBeTrue("what is left is put back in its place");
+            Directory.EnumerateFiles(h.Paths.ToolsDirectory, "*", SearchOption.AllDirectories).Count().ShouldBe(files - 1);
+            used.Installs.ShouldBe(0);
         }
     }
 
@@ -199,11 +241,20 @@ public sealed class VersionChangeTests
 
         public bool Fail { get; set; }
 
+        /// <summary>Takes one file, then fails (a file too big for the bin, declined by the user).</summary>
+        public bool Partial { get; set; }
+
         public Task MoveAsync(string folder, CancellationToken cancellationToken)
         {
             if (Fail)
             {
                 throw new IOException("the recycle bin is not available");
+            }
+
+            if (Partial)
+            {
+                File.Delete(Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories).First());
+                throw new OperationCanceledException("a permanent delete was declined");
             }
 
             Moved.Add(folder);

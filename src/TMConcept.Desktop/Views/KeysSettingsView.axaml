@@ -69,6 +69,7 @@
             </Grid>
             <StackPanel Orientation="Horizontal" Spacing="8">
               <Button Classes="accent" Content="{DynamicResource keys.endpoint.save}" Command="{Binding SaveCommand}" IsEnabled="{Binding !Busy}" />
+              <Button Content="{DynamicResource common.cancel}" Command="{Binding CancelEditCommand}" IsVisible="{Binding Editing}" />
             </StackPanel>
           </StackPanel>
         </Panel>
@@ -100,7 +101,7 @@
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:EndpointRowViewModel">
               <Border Classes="card" Margin="0,4" Padding="10">
-                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+                <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="6">
                   <StackPanel>
                     <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
                     <TextBlock Text="{Binding Address}" Classes="small" FontFamily="Consolas, DejaVu Sans Mono, monospace" />
@@ -110,7 +111,9 @@
                   </StackPanel>
                   <Button Grid.Column="1" Content="{DynamicResource keys.test}" VerticalAlignment="Top"
                           Command="{Binding $parent[ItemsControl].((vm:KeysSettingsViewModel)DataContext).Endpoint.TestCommand}" CommandParameter="{Binding}" />
-                  <Button Grid.Column="2" Classes="danger" Content="✕" VerticalAlignment="Top"
+                  <Button Grid.Column="2" Content="{DynamicResource keys.endpoint.edit}" VerticalAlignment="Top"
+                          Command="{Binding $parent[ItemsControl].((vm:KeysSettingsViewModel)DataContext).EditEndpointCommand}" CommandParameter="{Binding}" />
+                  <Button Grid.Column="3" Classes="danger" Content="✕" VerticalAlignment="Top"
                           Command="{Binding $parent[ItemsControl].((vm:KeysSettingsViewModel)DataContext).Endpoint.DeleteCommand}" CommandParameter="{Binding}" />
                 </Grid>
               </Border>

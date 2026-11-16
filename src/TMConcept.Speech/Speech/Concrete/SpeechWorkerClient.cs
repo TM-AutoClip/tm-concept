@@ -335,6 +335,28 @@ public sealed class SpeechWorkerClient(IChildProcessGuard children, ILogger<Spee
         return process;
     }
 
+    /// <summary>
+    /// Ends a worker that waits for its idle timeout now (it keeps the speech libraries of the components folder open, so the folder could not
+    /// be moved for a reinstall). False when a request is being spoken: then nothing is stopped.
+    /// </summary>
+    public bool StopIfIdle()
+    {
+        if (!_gate.Wait(0))
+        {
+            return false;
+        }
+
+        try
+        {
+            Stop("components reinstall");
+            return true;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     private void StopWhenIdle()
     {
         if (_disposed || !_gate.Wait(0))

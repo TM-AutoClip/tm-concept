@@ -6,8 +6,8 @@ namespace TMConcept.Engines.Images;
 
 /// <summary>
 /// Which stable-diffusion.cpp build runs the local image models here, from the "Image acceleration" setting and the graphics cards found.
-/// Automatic: an NVIDIA card whose CUDA driver loads → CUDA (Windows; Linux has no CUDA download, so Vulkan); otherwise any card with a
-/// Vulkan loader → Vulkan; otherwise the processor. A chosen build that has no download for this computer (CUDA on Linux) falls back to the
+/// Automatic: an NVIDIA card whose CUDA driver loads → CUDA (Windows; Linux has no CUDA download, so Vulkan); otherwise an NVIDIA, AMD or
+/// Intel card with a Vulkan loader → Vulkan; otherwise (no card, or only a virtual or unknown one) the processor. A chosen build that has no download for this computer (CUDA on Linux) falls back to the
 /// automatic choice. The stable-diffusion.cpp component installs, and the image models wait for, exactly the chosen build's files (the CUDA
 /// build with its CUDA runtime libraries): an AMD card got the CUDA build in 0.1.15 and sd-cli ended with 0xC0000135 (DLL missing).
 /// </summary>
@@ -63,6 +63,9 @@ public sealed class ImageBackendSelector(IGpuInfo gpu, IImageAccelerationSetting
             return ImageBackend.Cuda;
         }
 
-        return report.VulkanLoader && report.Adapters.Count > 0 && available(ImageBackend.Vulkan) ? ImageBackend.Vulkan : ImageBackend.Cpu;
+        // Only a card of a known maker: a virtual or unknown adapter (VMware SVGA, a remote desktop's) lists under Vulkan but sd-cli finds no
+        // usable device on it or fails in its driver (sd.cpp issues #2101, #2015), and since 16 Nov 2026 a failed image stops the video.
+        return report.VulkanLoader && report.Adapters.Any(a => a.Vendor is GpuVendor.Nvidia or GpuVendor.Amd or GpuVendor.Intel)
+            && available(ImageBackend.Vulkan) ? ImageBackend.Vulkan : ImageBackend.Cpu;
     }
 }

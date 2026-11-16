@@ -11,7 +11,8 @@ namespace TMConcept.Providers.Endpoints;
 /// the fixed addresses of the online providers). <c>max_tokens</c> carries the output limit (llama.cpp and Ollama ignore
 /// <c>max_completion_tokens</c>); <c>json_schema</c> only for a model the user marked, otherwise <c>json_object</c>, and the client sends the
 /// call once more without either after a 400/422. The token goes in a bearer header only when one is set. A 503 (model loading) is retried,
-/// <c>&lt;think&gt;</c> blocks are removed from the answer, and a stream without usage is no warning (a local call is free).
+/// <c>&lt;think&gt;</c> blocks are removed from the answer (and from the live progress), a stream without usage is no warning (a local call
+/// is free), and the answer limit is fitted into the context the user confirmed for the model.
 /// </summary>
 public sealed class EndpointProvider(LocalEndpoint endpoint, EndpointModel? model, EndpointTransport transport, ProviderHttp http, ILogger logger)
     : OpenAICompatibleProviderBase(http, logger)
@@ -43,6 +44,9 @@ public sealed class EndpointProvider(LocalEndpoint endpoint, EndpointModel? mode
 
     /// <inheritdoc />
     public override bool StripsThinking => true;
+
+    /// <inheritdoc />
+    public override bool FitsContext => true;
 
     /// <inheritdoc />
     public override int LoadingRetries => transport.LoadingRetries;

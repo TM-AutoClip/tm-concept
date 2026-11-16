@@ -55,6 +55,30 @@ public sealed class ChatProgressReporter(IProgress<ChatProgress>? target, TimePr
         }
     }
 
+    /// <summary>
+    /// A line of the answer arrived, for a stream whose visible text must be worked out (thinking removed): <paramref name="visibleText"/>
+    /// is read for every line until the model writes (so the switch to writing is not missed), then at most every <see cref="Gap"/>; an
+    /// empty one keeps the phase at thinking.
+    /// </summary>
+    public void Line(Func<string> visibleText)
+    {
+        ArgumentNullException.ThrowIfNull(visibleText);
+        if (target is null || (_phase == ChatPhase.Writing && Elapsed() - _last < Gap))
+        {
+            return;
+        }
+
+        var text = visibleText();
+        if (text.Length > 0)
+        {
+            Report(ChatPhase.Writing, text);
+        }
+        else if (_phase is null or ChatPhase.Sent)
+        {
+            Report(ChatPhase.Thinking, string.Empty);
+        }
+    }
+
     /// <summary>The whole answer arrived (<paramref name="text"/>: its visible text).</summary>
     public void Done(string text)
     {

@@ -89,10 +89,14 @@ speaks the OpenAI API works. It costs nothing and needs no key; the program only
 2. Settings → **Keys** → choose **Local server (OpenAI-compatible)** → type a name and the address (up to `/v1` or `/api/v1`); a token
    only if the server asks for one.
 3. **Connect and list models** asks the server for its models. Tick the ones to use (or type a model id). For each one check **Context**
-   (the context size the server runs it with; read from the server when it says) and **Max answer** (a step that asks for more gets this).
+   (the context size the server runs it with, llama-server's `-c`; read from the server when it says) and **Max answer** (a step that asks
+   for more gets this). The video code answer runs to tens of thousands of tokens, so give the model a large context: Max answer starts
+   at the context less room for the prompt, and no call asks for more than the context leaves next to its prompt.
    Tick **Reads images** for a vision model and **JSON schema** only if the server accepts `response_format: json_schema`
    (LM Studio, vLLM, recent llama.cpp); otherwise JSON mode is asked, and a server that rejects both gets the request without it.
 4. **Save the local server**. Its models now appear in the model lists as "model · name · local server, free"; no key is asked.
+   **Edit** on a saved server changes it in place (the steps that use its models keep them). Do not put a user name or password in the
+   address; the token field is the place for a secret.
 
 The first request after a model is loaded can take minutes: TM Concept waits up to an hour for the first answer and retries a few times
 while the server answers 503 (model loading). A model's thinking (`reasoning_content`, `<think>…</think>`) is shown as "thinking" and not

@@ -105,7 +105,10 @@ public sealed unsafe partial class DxgiAdapterSource(ILogger<DxgiAdapterSource> 
         }
     }
 
+    // Only System32: the default search also looks in the app's folder, and dxgi.dll is not a KnownDLL, so a dxgi.dll put next to the exe
+    // (run from Downloads) would be loaded and run inside the app (the same rule as NativeRuntimeProbe's full System32 paths).
     [LibraryImport("dxgi.dll")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static partial int CreateDXGIFactory1(Guid* riid, nint* factory);
 
     /// <summary>DXGI_ADAPTER_DESC1 (312 bytes on x64; SIZE_T fields are pointer-sized).</summary>

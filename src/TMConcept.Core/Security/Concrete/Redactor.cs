@@ -9,6 +9,9 @@ namespace TMConcept.Core.Security;
 /// </summary>
 public static partial class Redactor
 {
+    /// <summary>Secret values shorter than this are masked only where they stand as a whole word.</summary>
+    public const int WholeWordBelow = 8;
+
     /// <summary>The text with secrets replaced by <c>***</c>.</summary>
     public static string Redact(string? text)
     {
@@ -25,14 +28,22 @@ public static partial class Redactor
         return result;
     }
 
-    /// <summary>The text with the given secret values masked too (values shorter than 8 characters are ignored).</summary>
+    /// <summary>
+    /// The text with the given secret values masked too, whatever their length: a local server's token is chosen by the user and may be a
+    /// short word (<c>llama-server --api-key secret</c>), which the patterns cannot recognise. A value of
+    /// <see cref="WholeWordBelow"/> characters or more is masked wherever it occurs; a shorter one only as a whole word, so a short
+    /// token does not cut letters out of the words around it.
+    /// </summary>
     public static string Redact(string? text, IEnumerable<string> secrets)
     {
         ArgumentNullException.ThrowIfNull(secrets);
         var result = text ?? string.Empty;
-        foreach (var secret in secrets.Where(s => !string.IsNullOrEmpty(s) && s.Length >= 8))
+        foreach (var secret in secrets.Where(s => !string.IsNullOrEmpty(s)).OrderByDescending(s => s.Length))
         {
-            result = result.Replace(secret, "***", StringComparison.Ordinal);
+            result = secret.Length >= WholeWordBelow
+                ? result.Replace(secret, "***", StringComparison.Ordinal)
+                : Regex.Replace(result, @"(?<![\p{L}\p{N}_])" + Regex.Escape(secret) + @"(?![\p{L}\p{N}_])", "***", RegexOptions.CultureInvariant,
+                    TimeSpan.FromSeconds(1));
         }
 
         return Redact(result);

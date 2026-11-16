@@ -29,6 +29,7 @@ public sealed class ImageBackendTests
     private static readonly GpuAdapter Nvidia = new(GpuVendor.Nvidia, "NVIDIA GeForce RTX 3060", 12 * GiB);
     private static readonly GpuAdapter Amd = new(GpuVendor.Amd, "AMD Radeon RX 7800 XT", 16 * GiB);
     private static readonly GpuAdapter Intel = new(GpuVendor.Intel, "Intel UHD Graphics", 128L * 1024 * 1024);
+    private static readonly GpuAdapter Virtual = new(GpuVendor.Other, "VMware SVGA 3D", 32L * GiB);
 
     public static TheoryData<string, ImageAcceleration, ImageBackend> Matrix() => new()
     {
@@ -41,6 +42,9 @@ public sealed class ImageBackendTests
         { "intel+amd+vulkan win", ImageAcceleration.Automatic, ImageBackend.Vulkan },
         { "none win", ImageAcceleration.Automatic, ImageBackend.Cpu },
         { "none+vulkan win", ImageAcceleration.Automatic, ImageBackend.Cpu },
+        // A virtual or unknown adapter (VMware SVGA) lists under Vulkan but has no usable device: the processor.
+        { "other+vulkan win", ImageAcceleration.Automatic, ImageBackend.Cpu },
+        { "other+amd+vulkan linux", ImageAcceleration.Automatic, ImageBackend.Vulkan },
         // A chosen build is used when it has a download here, even against the card (the user decides); CUDA on Linux falls back.
         { "amd+vulkan win", ImageAcceleration.Cuda, ImageBackend.Cuda },
         { "amd+vulkan linux", ImageAcceleration.Cuda, ImageBackend.Vulkan },
@@ -230,9 +234,17 @@ public sealed class ImageBackendTests
     public void AMissingLibraryAndOtherCodesAreExplained()
     {
         var dll = SdCppImageEngine.Failure("Z-Image Turbo", ImageBackend.Cuda, -1073741515, string.Empty);
-        dll.ShouldContain("a required library (DLL) is missing for the NVIDIA CUDA build");
+        dll.ShouldContain("a required library (DLL) of the NVIDIA CUDA build could not be loaded");
         dll.ShouldContain("0xC0000135");
+        dll.ShouldContain("Visual C++ 2015–2022", Case.Sensitive, "every build imports the runtime: it is the first cause named");
+        dll.ShouldContain(SdCppImageEngine.VisualCppRedistributable);
         dll.ShouldContain("Image acceleration");
+
+        // The processor build fails the same way without the runtime: another build is no advice there.
+        var cpu = SdCppImageEngine.Failure("Z-Image Turbo", ImageBackend.Cpu, -1073741515, string.Empty);
+        cpu.ShouldContain("Visual C++");
+        cpu.ShouldNotContain("Image acceleration");
+        SdCppImageEngine.VisualCppMissing("Z-Image Turbo", ["vcruntime140_1.dll"]).ShouldContain("missing: vcruntime140_1.dll");
 
         var other = SdCppImageEngine.Failure("Z-Image Turbo", ImageBackend.Vulkan, -1, string.Empty);
         other.ShouldContain("0xFFFFFFFF");
@@ -253,7 +265,7 @@ public sealed class ImageBackendTests
         Weights(paths, LocalImageModels.Flux2Klein);
         var selector = new ImageBackendSelector(new FakeGpu(new GpuReport([Amd], false, true)), new FakeSetting(), installer);
         var runner = new PictureRunner(blank ? Png(8, 8, (_, _) => [0, 0, 0]) : Png(8, 8, (x, y) => [(byte)(x * 30), (byte)(y * 30), 7]));
-        var engine = new SdCppImageEngine(installer, store, selector, runner, NullLogger<SdCppImageEngine>.Instance);
+        var engine = new SdCppImageEngine(installer, store, selector, new FakeProbe(), runner, NullLogger<SdCppImageEngine>.Instance);
         var output = Path.Combine(paths.WorkDirectory, "scene-1.png");
         var request = new ImageRequest("a map", 1280, 720, output,
             new ResolvedModel(new CatalogModel { Provider = ModelProviders.Local, Id = LocalImageModels.Flux2Klein.Id }, new ApiKey(), string.Empty));
@@ -286,7 +298,7 @@ public sealed class ImageBackendTests
         Weights(paths, LocalImageModels.Flux2Klein);
         var selector = new ImageBackendSelector(new FakeGpu(new GpuReport([Nvidia], true, true)), new FakeSetting(), installer);
         var runner = new PictureRunner([]);
-        var engine = new SdCppImageEngine(installer, store, selector, runner, NullLogger<SdCppImageEngine>.Instance);
+        var engine = new SdCppImageEngine(installer, store, selector, new FakeProbe(), runner, NullLogger<SdCppImageEngine>.Instance);
         var request = new ImageRequest("a map", 512, 512, Path.Combine(paths.WorkDirectory, "a.png"),
             new ResolvedModel(new CatalogModel { Provider = ModelProviders.Local, Id = LocalImageModels.Flux2Klein.Id }, new ApiKey(), string.Empty));
 
@@ -294,6 +306,64 @@ public sealed class ImageBackendTests
 
         error.Message.ShouldContain(nameof(ToolKind.ImageRuntimeCuda));
         runner.Start.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task AMissingVisualCppRuntimeOrDriverIsFoundBeforeAnythingRuns()
+    {
+        using var paths = new TempPaths();
+        var installer = Installer(paths, "win-x64");
+        Install(installer, ToolKind.ImageRuntimeVulkan);
+        var store = new LocalImageStore(paths, new ToolDownloader(DownloadTransport.Network, NullLogger<ToolDownloader>.Instance), NullLogger<LocalImageStore>.Instance);
+        Weights(paths, LocalImageModels.Flux2Klein);
+        var model = new ResolvedModel(new CatalogModel { Provider = ModelProviders.Local, Id = LocalImageModels.Flux2Klein.Id }, new ApiKey(), string.Empty);
+        var runner = new PictureRunner([]);
+        var selector = new ImageBackendSelector(new FakeGpu(new GpuReport([Amd], false, true)), new FakeSetting(), installer);
+
+        var noRuntime = new SdCppImageEngine(installer, store, selector, new FakeProbe { Missing = ["vcruntime140_1.dll", "msvcp140.dll"] }, runner,
+            NullLogger<SdCppImageEngine>.Instance);
+        noRuntime.Problem(model).ShouldBe(new ImageEngineProblem(ImageEngineProblems.VisualCppRuntime, "vcruntime140_1.dll, msvcp140.dll"));
+        var error = await Should.ThrowAsync<InvalidOperationException>(() =>
+            noRuntime.GenerateAsync(new ImageRequest("a map", 512, 512, Path.Combine(paths.WorkDirectory, "a.png"), model), CancellationToken.None));
+        error.Message.ShouldContain(SdCppImageEngine.VisualCppRedistributable);
+        runner.Start.ShouldBeNull("sd-cli is not started without the runtime");
+
+        // The Vulkan build chosen by hand without a Vulkan driver, the CUDA build on an AMD card: said before anything is paid for.
+        var vulkan = new ImageBackendSelector(new FakeGpu(new GpuReport([Amd], false, false)), new FakeSetting { Value = ImageAcceleration.Vulkan }, installer);
+        var noDriver = new SdCppImageEngine(installer, store, vulkan, new FakeProbe { Vulkan = false }, runner, NullLogger<SdCppImageEngine>.Instance);
+        noDriver.Problem(model).ShouldBe(new ImageEngineProblem(ImageEngineProblems.Images, SdCppImageEngine.DriverMissing(ImageBackend.Vulkan)));
+        new SdCppImageEngine(installer, store, selector, new FakeProbe(), runner, NullLogger<SdCppImageEngine>.Instance).Problem(model).ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task UnderAutomaticAFailedGpuBuildIsFollowedByTheInstalledProcessorBuild()
+    {
+        using var paths = new TempPaths();
+        var installer = Installer(paths, "win-x64");
+        Install(installer, ToolKind.ImageRuntimeVulkan);
+        Install(installer, ToolKind.ImageRuntimeCpu);
+        var store = new LocalImageStore(paths, new ToolDownloader(DownloadTransport.Network, NullLogger<ToolDownloader>.Instance), NullLogger<LocalImageStore>.Instance);
+        Weights(paths, LocalImageModels.Flux2Klein);
+        var selector = new ImageBackendSelector(new FakeGpu(new GpuReport([Amd], false, true)), new FakeSetting(), installer);
+        var vulkan = installer.Status(ToolKind.ImageRuntimeVulkan).ExecutablePath;
+        var runner = new PictureRunner(Png(8, 8, (x, y) => [(byte)(x * 30), (byte)(y * 30), 7])) { FailFor = vulkan };
+        var engine = new SdCppImageEngine(installer, store, selector, new FakeProbe(), runner, NullLogger<SdCppImageEngine>.Instance);
+        var model = new ResolvedModel(new CatalogModel { Provider = ModelProviders.Local, Id = LocalImageModels.Flux2Klein.Id }, new ApiKey(), string.Empty);
+
+        (await engine.GenerateAsync(new ImageRequest("a map", 512, 512, Path.Combine(paths.WorkDirectory, "1.png"), model), CancellationToken.None)).CostUsd.ShouldBe(0);
+        runner.Programs.ShouldBe([vulkan, installer.Status(ToolKind.ImageRuntimeCpu).ExecutablePath]);
+
+        // The next picture of the session goes to the processor build at once.
+        await engine.GenerateAsync(new ImageRequest("ships", 512, 512, Path.Combine(paths.WorkDirectory, "2.png"), model), CancellationToken.None);
+        runner.Programs.Count.ShouldBe(3);
+        runner.Programs[^1].ShouldBe(installer.Status(ToolKind.ImageRuntimeCpu).ExecutablePath);
+
+        // A build chosen by hand is not replaced: its failure is the user's answer.
+        var chosen = new ImageBackendSelector(new FakeGpu(new GpuReport([Amd], false, true)), new FakeSetting { Value = ImageAcceleration.Vulkan }, installer);
+        var manual = new SdCppImageEngine(installer, store, chosen, new FakeProbe(), runner, NullLogger<SdCppImageEngine>.Instance);
+        await Should.ThrowAsync<InvalidOperationException>(() =>
+            manual.GenerateAsync(new ImageRequest("a map", 512, 512, Path.Combine(paths.WorkDirectory, "3.png"), model), CancellationToken.None));
+        runner.Programs.Count.ShouldBe(4);
     }
 
     [Theory]
@@ -334,6 +404,11 @@ public sealed class ImageBackendTests
         if (flags.Contains("amd"))
         {
             adapters.Add(Amd);
+        }
+
+        if (flags.Contains("other"))
+        {
+            adapters.Add(Virtual);
         }
 
         return (new GpuReport(adapters, flags.Contains("cuda"), flags.Contains("vulkan")), parts[1] == "win" ? "win-x64" : "linux-x64");
@@ -455,18 +530,44 @@ public sealed class ImageBackendTests
         public ImageAcceleration Value { get; set; }
     }
 
-    /// <summary>"Runs" sd-cli by writing the given picture to its <c>-o</c> path.</summary>
+    /// <summary>
+    /// "Runs" sd-cli by writing the given picture to its <c>-o</c> path; the program <see cref="FailFor"/> ends with 0xC0000135 and writes
+    /// nothing instead.
+    /// </summary>
     private sealed class PictureRunner(byte[] picture) : IProcessRunner
     {
         public ProcessStart? Start { get; private set; }
 
+        public string? FailFor { get; init; }
+
+        public List<string> Programs { get; } = [];
+
         public Task<ProcessResult> RunAsync(ProcessStart start, Action<string>? onLine, CancellationToken cancellationToken)
         {
             Start = start;
+            Programs.Add(start.Program);
+            if (start.Program == FailFor)
+            {
+                return Task.FromResult(new ProcessResult(SdCppImageEngine.DllNotFound, string.Empty));
+            }
+
             var output = start.Arguments[start.Arguments.ToList().IndexOf("-o") + 1];
             File.WriteAllBytes(output, picture);
             return Task.FromResult(new ProcessResult(0, string.Empty));
         }
+    }
+
+    private sealed class FakeProbe : TMConcept.Engines.Hardware.IComputeRuntimeProbe
+    {
+        public IReadOnlyList<string> Missing { get; init; } = [];
+
+        public bool CudaDriver() => false;
+
+        public bool Vulkan { get; init; } = true;
+
+        public bool VulkanLoader() => Vulkan;
+
+        public IReadOnlyList<string> MissingVisualCppRuntime() => Missing;
     }
 
     private sealed class RidPlatform(string rid) : IToolPlatform

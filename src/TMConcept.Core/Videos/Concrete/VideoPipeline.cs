@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Logging;
+using TMConcept.Core.Activity;
 using TMConcept.Core.Chat;
 using TMConcept.Core.Concepts;
 using TMConcept.Core.Costs;
@@ -24,7 +25,8 @@ namespace TMConcept.Core.Videos;
 /// model; the placeholders of the concept text are read: pauses and speed for the voice, transitions for the scenes) · B narration per scene
 /// with the profile's narration step (<see cref="SceneNarrator"/>, the same as a new version; cached; off = silent video with a warning, a
 /// chosen voice that fails stops the video) · D images (samples, or the profile's images step: off = no image call at all, a failure stops the
-/// video before the code call; the prompts are written by the video code model; generated
+/// video before the code call, and an engine that cannot run here at all (<see cref="IImageEngine.Problem"/>) stops it at A, before the paid
+/// prompt call; the prompts are written by the video code model, a cut-off prompt answer falls back to the scene texts; generated
 /// images and their prompts are kept per concept until the video is made, so a retry does not pay for them again) · C timing in C# after the
 /// clips and images (a pause lengthens its scene) · E
 /// video code from the model, safety check, one repair · F render (processor only), one repair with the error text · H mux into the work
@@ -116,7 +118,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
             }
             catch (SpeechException ex)
             {
-                logger.LogError("The narration model is not ready ({Code}); the video is stopped", ex.Code);
+                logger.LogError(LogEvents.OnScreen, "The narration model is not ready ({Code}); the video is stopped", ex.Code);
                 throw new VideoException(ex.Message, ex) { Code = "speech" };
             }
         }
@@ -130,8 +132,17 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
             }
             catch (ModelNotReadyException ex)
             {
-                logger.LogError("The image model is not ready (no {Missing}); the video is stopped", ex.Missing);
+                logger.LogError(LogEvents.OnScreen, "The image model is not ready (no {Missing}); the video is stopped", ex.Missing);
                 throw new VideoException(ex.Message, ex) { Code = "images" };
+            }
+
+            // A local engine that cannot start here (no Visual C++ runtime, no driver for the chosen build) stops the video now, before the
+            // paid image prompt call (0.1.15's AMD tester paid for it, then sd-cli ended with 0xC0000135).
+            if (images.FirstOrDefault(e => e.Code == imageModel.Model.Provider)?.Problem(imageModel) is { } problem)
+            {
+                logger.LogError(LogEvents.OnScreen, "The image engine cannot run on this computer ({Code}: {Detail}); the video is stopped", problem.Code,
+                    problem.Detail);
+                throw new VideoException(problem.Detail) { Code = problem.Code };
             }
         }
 
@@ -181,7 +192,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
             {
                 // A chosen voice that fails stops the video (16 Nov 2026; 0.1.15 went on silent). An online voice's provider error goes
                 // through as it is: the run's guard names it with the provider's own text.
-                logger.LogError(ex, "Narration failed; the video is stopped");
+                logger.LogError(LogEvents.OnScreen, ex, "Narration failed; the video is stopped");
                 throw new VideoException(ex.Message, ex) { Code = "speech" };
             }
 
@@ -353,7 +364,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                 if (missing > 0)
                 {
                     // A sample image of the profile whose file is gone is not a choice: the video stops before anything is paid for.
-                    logger.LogError("{Missing} scene(s) have no image: their sample image file is missing", missing);
+                    logger.LogError(LogEvents.OnScreen, "{Missing} scene(s) have no image: their sample image file is missing", missing);
                     throw new VideoException(string.Create(CultureInfo.InvariantCulture,
                         $"{missing} scene(s) have no image: their sample image file is missing from the library.")) { Code = "images" };
                 }
@@ -379,11 +390,31 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                 else
                 {
                     var chat = chats.Create(promptModel.Model, promptModel.Key.Secret);
-                    ChatResponse answer;
+                    string answerText;
                     try
                     {
-                        answer = await chat.SendAsync(new ChatRequest(ImagePromptBuilder.System, ImagePromptBuilder.User(job.Profile.Name, visuals),
+                        var answer = await chat.SendAsync(new ChatRequest(ImagePromptBuilder.System, ImagePromptBuilder.User(job.Profile.Name, visuals),
                             Schema: ImagePromptBuilder.Schema(), MaxOutputTokens: 4000, Effort: promptModel.Effort), cancellationToken).ConfigureAwait(false);
+                        steps.Spend(new VideoCost
+                        {
+                            VideoId = id,
+                            Step = PipelineSteps.ImagePromptCost,
+                            Usd = costs.Exact(promptModel.Model, answer.Usage, answer.ReportedCostUsd),
+                            Exact = true,
+                        });
+                        answerText = answer.Text;
+                    }
+                    catch (Providers.ProviderException ex) when (ex.Code is "truncated" or "incomplete")
+                    {
+                        // A cut-off prompt answer is no reason to stop: the prompts before the cut are read and the scene descriptions fill in
+                        // the rest (letting it go up named the video code as cut off, a step that never ran: the 0.1.16 review).
+                        logger.LogWarning("The image prompt answer was cut off ({Code}); the scene descriptions fill in the missing prompts", ex.Code);
+                        if (ex.ChargedUsage is { } cut)
+                        {
+                            steps.Spend(new VideoCost { VideoId = id, Step = PipelineSteps.ImagePromptCost, Usd = costs.Exact(promptModel.Model, cut), Exact = true });
+                        }
+
+                        answerText = ex.PartialText;
                     }
                     catch (Providers.ProviderException ex) when (ex.ChargedUsage is { } charged)
                     {
@@ -391,14 +422,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                         throw;
                     }
 
-                    steps.Spend(new VideoCost
-                    {
-                        VideoId = id,
-                        Step = PipelineSteps.ImagePromptCost,
-                        Usd = costs.Exact(promptModel.Model, answer.Usage, answer.ReportedCostUsd),
-                        Exact = true,
-                    });
-                    prompts = ImagePromptBuilder.Parse(answer.Text, visuals,
+                    prompts = ImagePromptBuilder.Parse(answerText, visuals,
                         problem => logger.LogWarning("The image prompts could not all be read ({Problem}); scene descriptions are used for the rest", problem));
                     await File.WriteAllLinesAsync(promptFile, prompts.Select(p => p.ReplaceLineEndings(" ")), cancellationToken).ConfigureAwait(false);
                 }
@@ -431,7 +455,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
             // Any failure of a chosen image step stops the video before the code call (16 Nov 2026: 0.1.15 went on without images when sd-cli
             // could not start and the user paid for a video he did not want). The engine's own message (sd-cli's exit code and output) is
             // the reason the user sees. A provider's error goes through as it is and is named with the provider's text.
-            logger.LogError(ex, "Scene images failed; the video is stopped");
+            logger.LogError(LogEvents.OnScreen, ex, "Scene images failed; the video is stopped");
             throw new VideoException(ex.Message, ex) { Code = "images" };
         }
 

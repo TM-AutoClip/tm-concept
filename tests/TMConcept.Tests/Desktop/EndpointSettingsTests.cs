@@ -80,7 +80,7 @@ public sealed class EndpointSettingsTests
         await editor.ConnectAsync();
         editor.Failed.ShouldBeFalse();
         editor.Models.Select(m => (m.Id, m.ContextTokens, m.Picked)).ShouldBe([("bonsai-27b", (decimal?)32768m, false), ("qwen3-8b", (decimal?)8192m, false)]);
-        editor.Models[0].MaxOutputTokens.ShouldBe(4096m);
+        editor.Models[0].MaxOutputTokens.ShouldBe(24576m, "a 32 768 context less room for the prompt: the video code answer needs a large one");
         server.Requests.Single().Headers["Authorization"].ShouldBe("Bearer " + Token);
 
         // One listed and one typed model; JSON schema on the first.
@@ -101,6 +101,24 @@ public sealed class EndpointSettingsTests
         var row = editor.Saved.Single();
         row.Token.ShouldNotContain("0123456789");
         h.Get<IModelCatalog>().Find(EndpointCodes.For(saved.Id), "typed-model").ShouldNotBeNull();
+
+        // Edit fills the form and keeps the id on save, so the steps' choices of its models stay (a delete and a new add lost them).
+        keys.Provider = keys.Providers.First(p => !p.IsEndpoint);
+        keys.EditEndpoint(row);
+        keys.IsEndpoint.ShouldBeTrue();
+        editor.Editing.ShouldBeTrue();
+        editor.Status.ShouldBe(text.Format("keys.endpoint.editing", "Lemonade"));
+        (editor.Address, editor.Token).ShouldBe((server.BaseUrl, Token));
+        editor.Models.Select(m => (m.Id, m.MaxOutputTokens, m.JsonSchema, m.Picked))
+            .ShouldBe([("bonsai-27b", (decimal?)6000m, true, true), ("typed-model", (decimal?)4096m, false, true)]);
+        editor.Models[0].MaxOutputTokens = 24000;
+        await editor.SaveAsync();
+        editor.Editing.ShouldBeFalse();
+        var edited = h.Get<EndpointRegistry>().All.Single();
+        (edited.Id, edited.CreatedAtUtc, edited.Token).ShouldBe((saved.Id, saved.CreatedAtUtc, Token));
+        edited.Models[0].MaxOutputTokens.ShouldBe(24000);
+        h.Get<IModelCatalog>().Find(EndpointCodes.For(saved.Id), "bonsai-27b")!.MaxOutputTokens.ShouldBe(24000);
+        row = editor.Saved.Single();
 
         // The test names a kept model the server does not list; a refused token is said in red.
         await editor.TestAsync(row);
@@ -141,6 +159,11 @@ public sealed class EndpointSettingsTests
         editor.Address = "localhost:13305";
         await editor.ConnectAsync();
         (editor.Failed, editor.Status).ShouldBe((true, "✗ " + text["keys.endpoint.fail.address"]));
+
+        // A user and password in the address would be shown and go into a backup without keys: refused, the token field is named.
+        editor.Address = "http://user:secret@localhost:13305/api/v1";
+        await editor.ConnectAsync();
+        (editor.Failed, editor.Status).ShouldBe((true, "✗ " + text["keys.endpoint.fail.credentials"]));
         server.Requests.ShouldBeEmpty("an invalid address is not asked");
 
         editor.Address = gone;

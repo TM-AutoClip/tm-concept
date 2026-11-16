@@ -12,23 +12,31 @@ namespace TMConcept.Desktop.Components;
 /// <summary>
 /// The components after a new app version, or on request (General settings): <see cref="UpdateAsync"/> installs again, through the one
 /// install flow (<see cref="ComponentInstallFlow"/>: one confirmation, the install window), what was installed before and is now missing or
-/// changed; nothing else is touched. <see cref="ReinstallAsync"/> first moves the whole components folder (<c>&lt;data&gt;/tools</c>) to the
-/// recycle bin (when that fails, a permanent delete only after its own confirmation that says so), then installs again what was there.
-/// The database, the profiles, the concepts and the videos are outside that folder and never touched.
+/// changed; nothing else is touched. <see cref="ReinstallAsync"/> first ends the idle speech worker (it keeps the speech libraries open for a
+/// minute after the last scene), renames the whole components folder (<c>&lt;data&gt;/tools</c>) aside in one step (a file in use makes the
+/// rename fail and nothing changes; a half-moved folder cannot happen), moves that folder to the recycle bin (when that fails, a permanent
+/// delete only after its own confirmation that says so; declined, the folder is put back and the message says whether it is still whole),
+/// then installs again what was there. The database, the profiles, the concepts and the videos are outside that folder and never touched.
 /// </summary>
 public sealed class ComponentReinstaller(ComponentPlanner planner, ComponentInstallFlow flow, IRecycleBin bin, IConfirmDialog confirm, AppPaths paths,
-    IActivityLog activity, Localizer text, ILogger<ComponentReinstaller> logger)
+    Speech.Speech.SpeechWorkerClient speech, IActivityLog activity, Localizer text, TimeProvider clock, ILogger<ComponentReinstaller> logger)
 {
     /// <summary>The text of what an install confirmation says a cancel means here.</summary>
     public const string PurposeKey = "install.purpose.update";
+
+    /// <summary>The start of the name the components folder gets while it is being removed (<c>tools.old-20261116-120000</c>).</summary>
+    public const string AsidePrefix = ".old-";
 
     /// <summary>
     /// Where the components live, as the user knows the folder: <c>%LOCALAPPDATA%\TM Concept\tools</c> on Windows,
     /// <c>~/.local/share/tm-concept/tools</c> on Linux (a portable data folder as it is).
     /// </summary>
-    public string Location()
+    public string Location() => Location(paths.ToolsDirectory);
+
+    /// <summary>A folder as the user knows it (<see cref="Location()"/>).</summary>
+    public static string Location(string tools)
     {
-        var tools = paths.ToolsDirectory;
+        ArgumentNullException.ThrowIfNull(tools);
         if (OperatingSystem.IsWindows())
         {
             var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -58,8 +66,9 @@ public sealed class ComponentReinstaller(ComponentPlanner planner, ComponentInst
     }
 
     /// <summary>
-    /// Moves the components folder to the recycle bin and installs again what was installed. When the recycle bin cannot take it, a
-    /// permanent delete is asked for (declined = nothing changed). The outcome says what happened (not ready = kept, failed or declined).
+    /// Sets the components folder aside, moves it to the recycle bin and installs again what was installed. When the recycle bin cannot take
+    /// it, a permanent delete is asked for (declined = the folder is put back). The outcome says what happened (not ready = kept, partly
+    /// moved, failed or declined).
     /// </summary>
     public async Task<InstallOutcome> ReinstallAsync(CancellationToken cancellationToken)
     {
@@ -68,9 +77,31 @@ public sealed class ComponentReinstaller(ComponentPlanner planner, ComponentInst
         logger.LogInformation("Components reinstall: {Count} were installed ({Codes})", codes.Count, string.Join(", ", codes));
         if (Directory.Exists(tools))
         {
+            if (!await Task.Run(speech.StopIfIdle, CancellationToken.None).ConfigureAwait(true))
+            {
+                logger.LogInformation("Components reinstall: the speech worker is speaking; nothing was changed");
+                return new InstallOutcome(false, text["components.reinstall.busy"]);
+            }
+
+            var aside = Path.TrimEndingDirectorySeparator(tools) + AsidePrefix
+                + clock.GetLocalNow().ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture);
+            var files = Count(tools);
             try
             {
-                await bin.MoveAsync(tools, cancellationToken).ConfigureAwait(true);
+                Directory.Move(tools, aside);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // A component in use (a program from the folder still running, an open file): the rename is all or nothing.
+                logger.LogWarning(LogEvents.OnScreen, ex, "The components folder could not be set aside (in use); nothing was changed");
+                var line = text.Format("components.reinstall.in_use", ex.Message);
+                activity.Add(ActivityLevel.Warning, line);
+                return new InstallOutcome(false, line);
+            }
+
+            try
+            {
+                await bin.MoveAsync(aside, cancellationToken).ConfigureAwait(true);
                 logger.LogInformation("The components folder was moved to the recycle bin");
                 activity.Add(ActivityLevel.Info, text["components.reinstall.moved"]);
             }
@@ -78,7 +109,7 @@ public sealed class ComponentReinstaller(ComponentPlanner planner, ComponentInst
                 or OperationCanceledException)
             {
                 logger.LogWarning(ex, "The components folder could not be moved to the recycle bin");
-                if (await DeleteAsync(tools, ex.Message).ConfigureAwait(true) is { } stopped)
+                if (await DeleteAsync(tools, aside, files, ex.Message).ConfigureAwait(true) is { } stopped)
                 {
                     return stopped;
                 }
@@ -89,30 +120,72 @@ public sealed class ComponentReinstaller(ComponentPlanner planner, ComponentInst
         return codes.Count == 0 ? new InstallOutcome(true, string.Empty) : await flow.EnsureAsync(codes, PurposeKey, null, cancellationToken).ConfigureAwait(true);
     }
 
-    /// <summary>The permanent delete after its own confirmation; null when the folder is gone, otherwise why the reinstall stopped.</summary>
-    private async Task<InstallOutcome?> DeleteAsync(string tools, string reason)
+    /// <summary>
+    /// The permanent delete of the set-aside folder after its own confirmation; null when it is gone, otherwise why the reinstall stopped.
+    /// Declined: what is left goes back to its place, and the message says whether all of it was still there.
+    /// </summary>
+    private async Task<InstallOutcome?> DeleteAsync(string tools, string aside, int files, string reason)
     {
-        var answer = await confirm.AskAsync(text["components.reinstall.bin_failed.title"], text.Format("components.reinstall.bin_failed", reason, Location()),
+        var answer = await confirm.AskAsync(text["components.reinstall.bin_failed.title"], text.Format("components.reinstall.bin_failed", reason, Location(tools)),
             text["components.reinstall.delete"], danger: true).ConfigureAwait(true);
         if (!answer.Confirmed)
         {
-            logger.LogInformation("The permanent delete of the components folder was declined; nothing changed");
-            return new InstallOutcome(false, text["components.reinstall.kept"]);
+            return PutBack(tools, aside, files);
         }
 
         try
         {
-            await Task.Run(() => Directory.Delete(tools, recursive: true)).ConfigureAwait(true);
+            if (Directory.Exists(aside))
+            {
+                await Task.Run(() => Directory.Delete(aside, recursive: true)).ConfigureAwait(true);
+            }
+
             logger.LogInformation("The components folder was deleted permanently");
             activity.Add(ActivityLevel.Info, text["components.reinstall.deleted"]);
             return null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            logger.LogError(ex, "The components folder could not be deleted");
+            logger.LogError(LogEvents.OnScreen, ex, "The components folder could not be deleted");
             var line = text.Format("components.reinstall.failed", ex.Message);
             activity.Add(ActivityLevel.Error, line);
             return new InstallOutcome(false, line);
         }
     }
+
+    /// <summary>
+    /// Puts the set-aside folder back after a declined delete. "Nothing was changed" only when every file is back; a recycle bin that took a
+    /// part says so (the missing components are installed again when they are next needed).
+    /// </summary>
+    private InstallOutcome PutBack(string tools, string aside, int files)
+    {
+        try
+        {
+            if (Directory.Exists(aside) && !Directory.Exists(tools))
+            {
+                Directory.Move(aside, tools);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            logger.LogError(LogEvents.OnScreen, ex, "The components folder could not be put back");
+            var line = text.Format("components.reinstall.not_back", Location(aside));
+            activity.Add(ActivityLevel.Error, line);
+            return new InstallOutcome(false, line);
+        }
+
+        var left = Directory.Exists(tools) ? Count(tools) : 0;
+        if (left == files)
+        {
+            logger.LogInformation("The permanent delete of the components folder was declined; nothing changed");
+            return new InstallOutcome(false, text["components.reinstall.kept"]);
+        }
+
+        logger.LogWarning(LogEvents.OnScreen, "The permanent delete was declined after a partial move: {Left} of {Files} files are back", left, files);
+        var partial = text.Format("components.reinstall.partial", Location(tools));
+        activity.Add(ActivityLevel.Warning, partial);
+        return new InstallOutcome(false, partial);
+    }
+
+    private static int Count(string folder) => Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories).Count();
 }
