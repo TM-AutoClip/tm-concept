@@ -39,6 +39,27 @@ public abstract class OpenAICompatibleProviderBase(ProviderHttp http, ILogger lo
     {
     }
 
+    /// <summary>
+    /// Whether a stream is expected to report its usage (a missing one is warned about: the cost would be counted as 0). A free local server
+    /// often sends none, and its cost is 0 anyway.
+    /// </summary>
+    public virtual bool ReportsUsage => true;
+
+    /// <summary>
+    /// Whether the answer may carry the model's thinking as <c>&lt;think&gt;…&lt;/think&gt;</c> text (local servers with some reasoning
+    /// formats): it is removed before the answer is read as JSON (<see cref="ThinkBlocks"/>).
+    /// </summary>
+    public virtual bool StripsThinking => false;
+
+    /// <summary>
+    /// How many times a 503 is retried (a local server answers 503 while it loads the model, which can take minutes); 0 = none (an online
+    /// provider's 503 is a failure for the caller).
+    /// </summary>
+    public virtual int LoadingRetries => 0;
+
+    /// <summary>The wait before retry <paramref name="attempt"/> (1-based) after a 503.</summary>
+    public virtual Task WaitForLoadingAsync(int attempt, CancellationToken cancellationToken) => Task.CompletedTask;
+
     /// <inheritdoc />
     public IChatClient CreateChat(CatalogModel model, string apiKey) => new OpenAICompatibleChatClient(this, Http, model, apiKey, Logger);
 }

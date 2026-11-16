@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using TMConcept.Core.Endpoints;
 using TMConcept.Core.Keys;
 using TMConcept.Core.Providers;
 
@@ -8,10 +9,11 @@ namespace TMConcept.Core.Models;
 /// <summary>
 /// Finds the model and key of a step: a page's explicit choice when given, otherwise the profile's saved choice (the last one used on the
 /// page). A paid model is never picked automatically: no choice means <see cref="ModelNotReadyException"/> (or, for an optional step,
-/// "off"). A local model needs no key. Of several keys of a provider, the chosen one is used, else one that passed its test.
+/// "off"). A local model needs no key; neither does a model of a user-added local server (its optional token comes with the endpoint, see
+/// <see cref="EndpointRegistry"/>). Of several keys of a provider, the chosen one is used, else one that passed its test.
 /// </summary>
 public sealed class StepModelResolver(IStepModelStore steps, IApiKeyStore keys, IModelCatalog catalog, IEnumerable<IProvider> providers,
-    TimeProvider clock, ILogger<StepModelResolver> logger)
+    EndpointRegistry endpoints, TimeProvider clock, ILogger<StepModelResolver> logger)
 {
     private readonly IReadOnlyList<IProvider> _providers = providers.ToList();
 
@@ -51,6 +53,15 @@ public sealed class StepModelResolver(IStepModelStore steps, IApiKeyStore keys, 
             return new ResolvedModel(model, new ApiKey { Provider = ModelProviders.Local, Label = ModelProviders.Local }, options.Effort);
         }
 
+        if (EndpointCodes.TryId(model.Provider, out var endpointId))
+        {
+            // A local server: no API key row; the synthetic key carries the endpoint's optional token (empty = no header) and its name as
+            // the label a run keeps. No effort levels on a local server.
+            var endpoint = endpoints.Find(endpointId)
+                ?? throw new ModelNotReadyException($"The local server of '{choice.Model}' was deleted.") { Step = step, Missing = "unknown" };
+            return new ResolvedModel(model, new ApiKey { Provider = model.Provider, Label = endpoint.Name, Secret = endpoint.Token }, string.Empty);
+        }
+
         var all = await keys.ListAsync(model.Provider, cancellationToken).ConfigureAwait(false);
         var key = all.FirstOrDefault(k => k.Id == choice.KeyId) ?? all.Where(k => k.LastOkAtUtc is not null).MaxBy(k => k.LastOkAtUtc) ?? all.FirstOrDefault()
             ?? throw new ModelNotReadyException($"There is no API key for '{model.Provider}'.") { Step = step, Missing = "key" };
@@ -67,7 +78,7 @@ public sealed class StepModelResolver(IStepModelStore steps, IApiKeyStore keys, 
     {
         ArgumentNullException.ThrowIfNull(models);
         var missing = new List<string>();
-        foreach (var provider in models.Where(m => m.Provider != ModelProviders.Local).Select(m => m.Provider).Distinct(StringComparer.Ordinal))
+        foreach (var provider in models.Where(m => NeedsKey(m.Provider)).Select(m => m.Provider).Distinct(StringComparer.Ordinal))
         {
             if (!await HasWorkingKeyAsync(provider, cancellationToken).ConfigureAwait(false))
             {
@@ -89,7 +100,7 @@ public sealed class StepModelResolver(IStepModelStore steps, IApiKeyStore keys, 
     {
         ArgumentNullException.ThrowIfNull(models);
         var missing = new List<string>();
-        foreach (var provider in models.Where(m => m.Provider != ModelProviders.Local).Select(m => m.Provider).Distinct(StringComparer.Ordinal))
+        foreach (var provider in models.Where(m => NeedsKey(m.Provider)).Select(m => m.Provider).Distinct(StringComparer.Ordinal))
         {
             if ((await keys.ListAsync(provider, cancellationToken).ConfigureAwait(false)).Count == 0)
             {
@@ -139,6 +150,9 @@ public sealed class StepModelResolver(IStepModelStore steps, IApiKeyStore keys, 
 
         return false;
     }
+
+    /// <summary>Whether models of <paramref name="provider"/> need an API key (not the app's own local models, not a local server's).</summary>
+    public static bool NeedsKey(string provider) => provider != ModelProviders.Local && !EndpointCodes.IsEndpoint(provider);
 
     /// <summary>Whether a choice means "no model": none saved, an empty model, or an explicit off.</summary>
     public static bool IsOff(StepModelChoice? choice) => choice is null || choice.Provider == ModelProviders.Off || choice.Model.Length == 0;

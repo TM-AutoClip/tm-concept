@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using TMConcept.Core.Keys;
+using TMConcept.Core.Models;
 using TMConcept.Core.Providers;
 using TMConcept.Desktop.Dialogs;
 using TMConcept.Desktop.Localization;
@@ -14,9 +15,10 @@ namespace TMConcept.Desktop.ViewModels;
 /// API keys: provider (from the registered list), label, masked key; a step-by-step guide per provider (open account → create key → paste →
 /// "Test connection"); the test is a free request and shows ✓ or ✗; a new key is saved only when it passes (or when the provider has no free
 /// test). A provider can have several keys. Keys stay in the encrypted database and go into a password-encrypted backup only when ticked.
+/// The last entry of the provider list adds a local server (OpenAI-compatible) instead of a key (<see cref="Endpoint"/>).
 /// </summary>
 public sealed partial class KeysSettingsViewModel(IEnumerable<IProvider> providers, IApiKeyStore keys, IConfirmDialog confirm, ShellLauncher shell,
-    Localizer text, TimeProvider clock, ILogger<KeysSettingsViewModel> logger) : SettingsSectionBase
+    Localizer text, TimeProvider clock, EndpointEditorViewModel endpoint, ILogger<KeysSettingsViewModel> logger) : SettingsSectionBase
 {
     /// <inheritdoc />
     public override string TitleKey => "settings.keys";
@@ -25,14 +27,24 @@ public sealed partial class KeysSettingsViewModel(IEnumerable<IProvider> provide
     public override int Order => 20;
 
     /// <summary>Providers.</summary>
-    public IReadOnlyList<ProviderOption> Providers { get; } = providers.Select(p => new ProviderOption(p)).ToList();
+    public IReadOnlyList<ProviderOption> Providers { get; } =
+        [.. providers.Select(p => new ProviderOption(p)), new ProviderOption(ModelProviders.Endpoint, text["keys.endpoint.provider"], null)];
+
+    /// <summary>Adding a local server (shown when its entry is chosen).</summary>
+    public EndpointEditorViewModel Endpoint { get; } = endpoint;
+
+    /// <summary>The local server entry is chosen: its form replaces the key fields.</summary>
+    public bool IsEndpoint => Provider?.IsEndpoint ?? false;
+
+    /// <summary>An online provider is chosen: the key fields and its key page are shown.</summary>
+    public bool IsKey => !IsEndpoint;
 
     /// <summary>Saved keys.</summary>
     public ObservableCollection<ApiKeyRowViewModel> Keys { get; } = [];
 
     /// <summary>Provider of the new key.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Guide), nameof(Policy))]
+    [NotifyPropertyChangedFor(nameof(Guide), nameof(Policy), nameof(IsEndpoint), nameof(IsKey))]
     public partial ProviderOption? Provider { get; set; }
 
     /// <summary>Label of the new key.</summary>
@@ -48,15 +60,16 @@ public sealed partial class KeysSettingsViewModel(IEnumerable<IProvider> provide
     public partial bool Busy { get; set; }
 
     /// <summary>Guide of the chosen provider.</summary>
-    public string Guide => Provider is null ? text["keys.guide.pick"] : text["keys.guide." + Provider.Provider.Code];
+    public string Guide => Provider is null ? text["keys.guide.pick"] : text["keys.guide." + Provider.Code];
 
     /// <summary>Data use of the chosen provider (one line).</summary>
-    public string Policy => Provider is null ? string.Empty : text["keys.policy." + Provider.Provider.Code];
+    public string Policy => Provider is null ? string.Empty : text["keys.policy." + Provider.Code];
 
     /// <inheritdoc />
     public override async Task ActivateAsync()
     {
         Provider ??= Providers.FirstOrDefault();
+        Endpoint.Reload();
         await ReloadAsync().ConfigureAwait(true);
     }
 
@@ -64,7 +77,13 @@ public sealed partial class KeysSettingsViewModel(IEnumerable<IProvider> provide
     [RelayCommand]
     public async Task AddAsync()
     {
-        if (Provider is null || Secret.Trim().Length < 8)
+        if (Provider is { IsEndpoint: true })
+        {
+            await Endpoint.SaveAsync().ConfigureAwait(true);
+            return;
+        }
+
+        if (Provider?.Provider is not { } provider || Secret.Trim().Length < 8)
         {
             Status = text["keys.invalid"];
             return;
@@ -75,7 +94,6 @@ public sealed partial class KeysSettingsViewModel(IEnumerable<IProvider> provide
             return;
         }
 
-        var provider = Provider.Provider;
         var key = new ApiKey
         {
             Provider = provider.Code,
@@ -125,7 +143,7 @@ public sealed partial class KeysSettingsViewModel(IEnumerable<IProvider> provide
     [RelayCommand]
     public async Task TestAsync(ApiKeyRowViewModel? row)
     {
-        if (row is null || Providers.FirstOrDefault(p => p.Provider.Code == row.Key.Provider) is not { } provider)
+        if (row is null || Providers.FirstOrDefault(p => p.Code == row.Key.Provider)?.Provider is not { } provider)
         {
             return;
         }
@@ -133,7 +151,7 @@ public sealed partial class KeysSettingsViewModel(IEnumerable<IProvider> provide
         Busy = true;
         try
         {
-            var result = await provider.Provider.TestAsync(row.Key.Secret, CancellationToken.None).ConfigureAwait(true);
+            var result = await provider.TestAsync(row.Key.Secret, CancellationToken.None).ConfigureAwait(true);
             row.Failed = !result.Ok;
             logger.LogInformation("Key test of {Provider}: {Code}", row.Key.Provider, result.Code);
             row.Result = result.Code switch
@@ -182,14 +200,14 @@ public sealed partial class KeysSettingsViewModel(IEnumerable<IProvider> provide
     [RelayCommand]
     private void OpenKeyPage()
     {
-        if (Provider is null)
+        if (Provider?.Provider is not { } provider)
         {
             return;
         }
 
         try
         {
-            shell.Open(Provider.Provider.KeyPage);
+            shell.Open(provider.KeyPage);
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
@@ -202,7 +220,7 @@ public sealed partial class KeysSettingsViewModel(IEnumerable<IProvider> provide
         Keys.Clear();
         foreach (var key in await keys.ListAsync(null, CancellationToken.None).ConfigureAwait(true))
         {
-            var name = Providers.FirstOrDefault(p => p.Provider.Code == key.Provider)?.Name ?? key.Provider;
+            var name = Providers.FirstOrDefault(p => p.Code == key.Provider)?.Name ?? key.Provider;
             Keys.Add(new ApiKeyRowViewModel(key, name)
             {
                 Result = key.LastOkAtUtc is { } ok ? "✓ " + ok.ToLocalTime().ToString("g", text.Culture) : string.Empty,

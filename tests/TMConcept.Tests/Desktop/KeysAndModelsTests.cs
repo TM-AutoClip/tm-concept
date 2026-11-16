@@ -29,7 +29,7 @@ public sealed class KeysAndModelsTests
         await FirstRunTests.CreateAsync(h);
         var keys = h.Get<KeysSettingsViewModel>();
         await keys.ActivateAsync();
-        keys.Provider = keys.Providers.First(p => p.Provider.Code == "anthropic");
+        keys.Provider = keys.Providers.First(p => p.Code == "anthropic");
         keys.Secret = Secret;
 
         await keys.AddAsync();
@@ -176,7 +176,7 @@ public sealed class KeysAndModelsTests
         await FirstRunTests.CreateAsync(h);
         var keys = h.Get<KeysSettingsViewModel>();
         await keys.ActivateAsync();
-        keys.Provider = keys.Providers.First(p => p.Provider.Code == "openai");
+        keys.Provider = keys.Providers.First(p => p.Code == "openai");
         keys.Secret = "fake-wrong-key-0123456789";
 
         await keys.AddAsync();

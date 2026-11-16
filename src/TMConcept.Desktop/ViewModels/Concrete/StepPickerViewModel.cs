@@ -4,6 +4,7 @@ using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using TMConcept.Core.Endpoints;
 using TMConcept.Core.Engines;
 using TMConcept.Core.Hardware;
 using TMConcept.Core.Images;
@@ -421,7 +422,7 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
         }
 
         foreach (var model in catalog.With(step.Capability).Where(m => Usable(step, m))
-            .OrderBy(m => m.Provider == ModelProviders.Local ? 0 : 1).ThenBy(m => m.Provider, StringComparer.Ordinal).ThenBy(m => m.Name, StringComparer.Ordinal))
+            .OrderBy(m => m.Provider == ModelProviders.Local ? 0 : EndpointCodes.IsEndpoint(m.Provider) ? 1 : 2).ThenBy(m => m.Provider, StringComparer.Ordinal).ThenBy(m => m.Name, StringComparer.Ordinal))
         {
             row.Options.Add(new StepOption(StepOptionKind.Model, model, Label(model)));
         }
@@ -474,6 +475,12 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
         if (model.Provider == ModelProviders.Local)
         {
             return model.Name + " · " + text["models.local_free"] + (model.MinVideoMemoryGb > 0 ? " · " + text.Format("models.min_memory", model.MinVideoMemoryGb) : string.Empty);
+        }
+
+        if (EndpointCodes.IsEndpoint(model.Provider))
+        {
+            // A user-added local server: the catalog name already says "model · server name"; free, no key.
+            return model.Name + " · " + text["models.endpoint_free"];
         }
 
         var price = model.Capabilities.HasFlag(ModelCapability.Image)

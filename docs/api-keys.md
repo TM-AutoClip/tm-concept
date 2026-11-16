@@ -69,6 +69,38 @@ API use is billed separately from chat subscriptions (Claude Pro, ChatGPT Plus�
 4. Copy the key and paste it into TM Concept.
 5. fal has no free test request: the key is saved untested and checked at its first image. Prices are per image (FLUX 2 Flash ≈ 0.01 $).
 
+## Local server (OpenAI-compatible, free)
+
+A model that runs on your own computer (or another computer on your network) can be used in every text step: topic suggestions,
+concepts, AI edits of a concept, video code, image prompts, and describing a sample image when the model reads images. Any program that
+speaks the OpenAI API works. It costs nothing and needs no key; the program only has to be running.
+
+1. Start the server and load a model. Common default addresses:
+
+   | Server | Address |
+   |---|---|
+   | Lemonade Server (AMD; runs llama.cpp on ROCm or Vulkan) | `http://localhost:13305/api/v1` (older versions: port 8000) |
+   | Ollama | `http://localhost:11434/v1` |
+   | LM Studio | `http://localhost:1234/v1` |
+   | llama.cpp `llama-server` | `http://localhost:8080/v1` (new builds: port 9931) |
+   | vLLM | `http://localhost:8000/v1` |
+
+   AMD graphics cards: Lemonade Server, or the ROCm or Vulkan builds of llama.cpp, run models on them (no NVIDIA card needed).
+2. Settings → **Keys** → choose **Local server (OpenAI-compatible)** → type a name and the address (up to `/v1` or `/api/v1`); a token
+   only if the server asks for one.
+3. **Connect and list models** asks the server for its models. Tick the ones to use (or type a model id). For each one check **Context**
+   (the context size the server runs it with; read from the server when it says) and **Max answer** (a step that asks for more gets this).
+   Tick **Reads images** for a vision model and **JSON schema** only if the server accepts `response_format: json_schema`
+   (LM Studio, vLLM, recent llama.cpp); otherwise JSON mode is asked, and a server that rejects both gets the request without it.
+4. **Save the local server**. Its models now appear in the model lists as "model · name · local server, free"; no key is asked.
+
+The first request after a model is loaded can take minutes: TM Concept waits up to an hour for the first answer and retries a few times
+while the server answers 503 (model loading). A model's thinking (`reasoning_content`, `<think>…</think>`) is shown as "thinking" and not
+used as the answer. Small local models write weaker video code than the large online ones; try topic suggestions and concepts first.
+
+The server list goes into a backup with the settings; a server's token only when you tick *API keys*. Deleting a server leaves the steps
+that used it with no model until you choose another.
+
 ## After adding a key
 
 Settings → **Models**: choose a model for every step you use (concepts, video code, image prompt, image, online narration, semantic

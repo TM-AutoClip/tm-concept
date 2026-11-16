@@ -156,6 +156,9 @@ public static class DesktopServices
         services.AddSingleton<IConceptWishStore, ConceptWishStore>();
         services.AddSingleton<Core.Concepts.IPromptMemorySource, Core.Concepts.PromptMemorySource>();
         services.AddSingleton<IEmbeddingStore, EmbeddingStore>();
+
+        // Local servers (package B): kept as settings rows, no table of their own.
+        services.AddSingleton<Core.Endpoints.IEndpointStore, EndpointStore>();
     }
 
     private static void AddDesktop(IServiceCollection services)
@@ -195,6 +198,9 @@ public static class DesktopServices
         services.AddTransient<IdeaSectionViewModel>();
         services.AddTransient<ConceptDetailViewModel>();
         services.AddSingleton<Dialogs.IApiKeyDialog, Dialogs.ApiKeyDialog>();
+
+        // Local servers (package B): the form on Settings → API keys that adds them.
+        services.AddSingleton<EndpointEditorViewModel>();
 
         services.AddSingleton<Dialogs.IConfirmDialog, Dialogs.ConfirmDialog>();
         services.AddSingleton<Dialogs.IInstallDialog, Dialogs.InstallDialog>();

@@ -69,6 +69,40 @@ API kullanımı sohbet aboneliklerinden (Claude Pro, ChatGPT Plus…) ayrı ücr
 4. Anahtarı kopyala ve TM Concept'e yapıştır.
 5. fal'da ücretsiz deneme isteği yok: anahtar denenmeden kaydedilir, ilk görselde denetlenir. Fiyat görsel başınadır (FLUX 2 Flash ≈ 0,01 $).
 
+## Yerel sunucu (OpenAI uyumlu, ücretsiz)
+
+Kendi bilgisayarında (ya da ağındaki başka bir bilgisayarda) çalışan bir model her metin adımında kullanılabilir: konu önerileri,
+konseptler, bir konseptin yapay zekâ düzenlemeleri, video kodu, görsel istemleri ve model görsel okuyorsa örnek görsel açıklama. OpenAI
+API'siyle konuşan her program olur. Ücret yok, anahtar gerekmez; yalnız programın çalışıyor olması gerekir.
+
+1. Sunucuyu başlat ve bir model yükle. Sık kullanılan varsayılan adresler:
+
+   | Sunucu | Adres |
+   |---|---|
+   | Lemonade Server (AMD; llama.cpp'yi ROCm ya da Vulkan ile çalıştırır) | `http://localhost:13305/api/v1` (eski sürümler: 8000 portu) |
+   | Ollama | `http://localhost:11434/v1` |
+   | LM Studio | `http://localhost:1234/v1` |
+   | llama.cpp `llama-server` | `http://localhost:8080/v1` (yeni sürümler: 9931 portu) |
+   | vLLM | `http://localhost:8000/v1` |
+
+   AMD ekran kartları: Lemonade Server ya da llama.cpp'nin ROCm veya Vulkan sürümleri modelleri bu kartlarda çalıştırır (NVIDIA kart
+   gerekmez).
+2. Ayarlar → **Anahtarlar** → **Yerel sunucu (OpenAI uyumlu)**'yu seç → bir ad ve adresi yaz (`/v1` ya da `/api/v1`'e kadar); jetonu
+   yalnız sunucu isterse yaz.
+3. **Bağlan ve modelleri listele** sunucudan modellerini ister. Kullanacaklarını işaretle (ya da model kimliğini yaz). Her biri için
+   **Bağlam**'a (sunucunun modeli çalıştırdığı bağlam boyutu; sunucu söylüyorsa oradan okunur) ve **En uzun yanıt**'a (daha fazlasını
+   isteyen adım bunu alır) bak. Görsel okuyan model için **Görsel okur**'u, **JSON şeması**'nı ise yalnız sunucu
+   `response_format: json_schema` kabul ediyorsa işaretle (LM Studio, vLLM, yeni llama.cpp); yoksa JSON kipi istenir, ikisini de
+   reddeden sunucuya istek onsuz gönderilir.
+4. **Yerel sunucuyu kaydet**. Modelleri artık model listelerinde "model · ad · yerel sunucu, ücretsiz" olarak görünür; anahtar sorulmaz.
+
+Model yüklendikten sonraki ilk istek dakikalar sürebilir: TM Concept ilk cevabı bir saate kadar bekler ve sunucu 503 (model yükleniyor)
+dedikçe birkaç kez yeniden dener. Modelin düşünmesi (`reasoning_content`, `<think>…</think>`) "düşünüyor" olarak gösterilir, cevap
+sayılmaz. Küçük yerel modeller büyük çevrim içi modellerden daha zayıf video kodu yazar; önce konu önerileri ve konseptlerle dene.
+
+Sunucu listesi ayarlarla birlikte yedeğe girer; sunucunun jetonu yalnız *API anahtarları*'nı işaretlersen. Bir sunucuyu silmek, onu
+kullanan adımları sen başka bir model seçene kadar modelsiz bırakır.
+
 ## Anahtarı ekledikten sonra
 
 Ayarlar → **Modeller**: kullandığın her adım için bir model seç (konsept, video kodu, görsel istemi, görsel, online seslendirme, anlamsal

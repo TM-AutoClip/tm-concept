@@ -395,6 +395,9 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
         if (!contents.Keys)
         {
             await db.ApiKeys.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+
+            // The tokens of local servers are keys too: the endpoint list goes with the settings, its tokens only with the keys.
+            await db.Settings.Where(s => s.Key == Stores.EndpointStore.TokensSetting).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
         }
 
         if (!contents.Concepts || !contents.Profiles)
