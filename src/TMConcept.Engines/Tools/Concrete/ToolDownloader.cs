@@ -94,7 +94,7 @@ public sealed class ToolDownloader(DownloadTransport transport, ILogger<ToolDown
     /// <inheritdoc />
     public void Dispose() => _http.Dispose();
 
-    private static void Check(Uri address)
+    internal static void Check(Uri address)
     {
         if (address.Scheme != Uri.UriSchemeHttps || !(ToolManifest.AllowedHosts.Contains(address.Host, StringComparer.OrdinalIgnoreCase)
             || ToolManifest.AllowedHostSuffixes.Any(s => address.Host.EndsWith(s, StringComparison.OrdinalIgnoreCase))))

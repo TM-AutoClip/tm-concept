@@ -64,7 +64,7 @@ public sealed class ImageAccelerationTests
         await Until(() => images.NoteIsError);
 
         images.Selected!.Model!.Id.ShouldBe("z-image-turbo-full", "a red note never blocks the choice");
-        images.Note.ShouldContain(text.Format("images.memory.not_enough", 16, "8"));
+        images.Note.ShouldContain(text.Format("images.memory.not_enough", 24, "8"));
         images.Note.ShouldNotContain("CUDA on Windows");
         images.NoteIsWarning.ShouldBeFalse();
         images.NoteIsOk.ShouldBeFalse();
@@ -75,6 +75,77 @@ public sealed class ImageAccelerationTests
         images.Note.ShouldContain(text.Format("images.memory.ok", "8", "AMD Radeon RX 7600", text["settings.image_acceleration.vulkan"]));
         images.NoteIsError.ShouldBeFalse();
         images.NoteIsWarning.ShouldBeFalse();
+    }
+
+    [AvaloniaFact]
+    public async Task EachLocalImageModelShowsItsClassInTheCardsColourAndAHigherOneIsNeverDownloaded()
+    {
+        var weights = new FakeComponent(ComponentCodes.ImagePrefix + "qwen-image-q8", ready: false, ComponentCodes.ImageRuntime);
+        var confirm = new FakeConfirm();
+        // A "16 GB" card that reports 15.8 GiB is of the 16 GB class.
+        using var h = Harness(new GpuReport([new GpuAdapter(GpuVendor.Amd, "AMD Radeon RX 7800 XT", (long)(15.8 * GiB))], false, true), confirm, weights);
+        await FirstRunTests.CreateAsync(h);
+        var profile = new Profile { Name = "P", ContentLanguage = ContentLanguages.English, ConceptText = "x" };
+        await h.Get<IProfileStore>().SaveAsync(profile, CancellationToken.None);
+        var picker = h.Get<StepPickerViewModel>();
+        await picker.LoadAsync(profile.Id, ContentLanguages.English, PipelineSteps.VideoPage);
+        var images = picker.Row(PipelineSteps.Images)!;
+        var text = h.Get<Localizer>();
+        StepOption Option(string id) => images.Options.Single(o => o.Model?.Id == id);
+
+        Option("flux2-klein-4b").IsOk.ShouldBeTrue();
+        Option("flux2-klein-4b").Label.ShouldContain(text.Format("models.tier", 4));
+        Option("qwen-image").IsOk.ShouldBeTrue("its own class");
+        Option("qwen-image-q8").IsError.ShouldBeTrue();
+        Option("qwen-image-q8").Label.ShouldContain(text["models.tier.too_big"]);
+        Option("z-image-turbo-full").IsError.ShouldBeTrue("24 GB is above this card");
+        Option("flux2-klein-9b").IsError.ShouldBeTrue("non-commercial");
+        Option("flux2-klein-9b").Label.ShouldContain(text["models.license.badge.noncommercial"]);
+        Option("sd35-medium").IsWarning.ShouldBeTrue("a license with conditions");
+        Option("sd35-medium").Label.ShouldContain(text["models.license.badge.limited"]);
+
+        // A model above the card's class stays chosen, but a process never downloads it.
+        Choose(images, "qwen-image-q8");
+        await Until(() => images.NoteIsError);
+        (await picker.PrepareAsync([PipelineSteps.Images], "install.purpose.video", CancellationToken.None)).ShouldBeFalse();
+        picker.Status.ShouldBe(text.Format("picker.not_started.memory", "Qwen-Image (Q8)", 32, "15.8"));
+        images.Selected!.Model!.Id.ShouldBe("qwen-image-q8", "the choice is kept");
+        weights.Installs.ShouldBe(0);
+        confirm.Asked.ShouldBeEmpty("nothing is offered for download");
+    }
+
+    [AvaloniaFact]
+    public async Task ANonCommercialModelIsAskedOnceBeforeItsDownloadAndADeclineStartsNothing()
+    {
+        var weights = new FakeComponent(ComponentCodes.ImagePrefix + "flux2-klein-9b", ready: false, ComponentCodes.ImageRuntime);
+        var runtime = new FakeComponent(ComponentCodes.ImageRuntime, ready: true);
+        var confirm = new FakeConfirm();
+        using var h = Harness(new GpuReport([new GpuAdapter(GpuVendor.Amd, "AMD Radeon RX 7800 XT", 16 * GiB)], false, true), confirm, weights, runtime);
+        await FirstRunTests.CreateAsync(h);
+        var profile = new Profile { Name = "P", ContentLanguage = ContentLanguages.English, ConceptText = "x" };
+        await h.Get<IProfileStore>().SaveAsync(profile, CancellationToken.None);
+        var picker = h.Get<StepPickerViewModel>();
+        await picker.LoadAsync(profile.Id, ContentLanguages.English, PipelineSteps.VideoPage);
+        var images = picker.Row(PipelineSteps.Images)!;
+        var text = h.Get<Localizer>();
+        Choose(images, "flux2-klein-9b");
+        await Until(() => images.Note.Contains(text.Format("models.license.note.noncommercial", text["license.flux-non-commercial"]), StringComparison.Ordinal));
+
+        // Declined: nothing is downloaded.
+        confirm.Answers.Enqueue(false);
+        (await picker.PrepareAsync([PipelineSteps.Images], "install.purpose.video", CancellationToken.None)).ShouldBeFalse();
+        confirm.Asked.ShouldBe([text.Format("models.license.title", "FLUX.2 klein 9B")]);
+        confirm.Messages[0].ShouldContain(text["license.flux-non-commercial.terms"]);
+        confirm.Messages[0].ShouldContain("https://huggingface.co/black-forest-labs/FLUX.2-klein-9B");
+        picker.Status.ShouldBe(text.Format("picker.not_started.license", images.Title));
+        weights.Installs.ShouldBe(0);
+
+        // Accepted: kept and never asked again; the download list is confirmed and the weights install.
+        (await picker.PrepareAsync([PipelineSteps.Images], "install.purpose.video", CancellationToken.None)).ShouldBeTrue();
+        weights.Installs.ShouldBe(1);
+        h.Get<TMConcept.Desktop.Startup.AppSession>().Settings.AcceptedModelLicenses.ShouldBe(["local/flux2-klein-9b"]);
+        (await picker.PrepareAsync([PipelineSteps.Images], "install.purpose.video", CancellationToken.None)).ShouldBeTrue();
+        confirm.Asked.Count(t => t == text.Format("models.license.title", "FLUX.2 klein 9B")).ShouldBe(2, "asked at the decline and once more; never after it was accepted");
     }
 
     [AvaloniaFact]

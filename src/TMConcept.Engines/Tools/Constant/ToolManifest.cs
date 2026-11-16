@@ -9,14 +9,18 @@ namespace TMConcept.Engines.Tools;
 /// last one of October 2026). When the pinned archive is gone or its hash does not match, ffmpeg from the system PATH is used if there is
 /// one (<see cref="FallbackToSystem"/>); an unverified download is never run. sherpa-onnx: the official "-lib" archives of the v2.0.1
 /// release (only the shared libraries with ONNX Runtime; Windows: the MT build, which needs no Visual C++ runtime), hashes from the
-/// release's asset digests; the speech worker loads them, the app itself carries no speech library. stable-diffusion.cpp (MIT, leejet): the
-/// master-890-74988b2 release the prototype measured (hashes from the release's asset digests, checked again on 2026-11-16 by downloading
-/// the Vulkan and processor zips), one build per image backend, each in its own tools folder so they can sit side by side: on Windows the
-/// CUDA 12 build with its CUDA runtime libraries (NVIDIA), the Vulkan build (AMD, Intel, NVIDIA; needs only vulkan-1.dll from the graphics
-/// driver) and the processor build (one zip that picks the processor's best variant at run time); on Linux x64 the Vulkan and the processor
-/// build (Ubuntu 24.04). Every zip is flat: sd-cli sits at its top. The release has no Linux CUDA build and nothing for Linux ARM64. The
-/// ROCm builds are not used: their zips carry no HIP runtime (hipblas, rocblas must come from AMD's SDK on the PATH, otherwise sd-cli
-/// ends with 0xC0000135 and prints nothing). Updating a version = new rows here with new hashes.
+/// release's asset digests; the speech worker loads them, the app itself carries no speech library. stable-diffusion.cpp (MIT, leejet;
+/// 0.1.17: a release that knows FLUX.3 Image Klein, build 968 or newer): on Windows master-1106-532d2c1 (the newest on 2026-11-16), on
+/// Linux master-1043-3be2378, the last release built on Ubuntu 24.04 (from master-1044 on the Linux zips are built on Ubuntu 26.04 and need
+/// glibc 2.43, which 24.04 does not have; 1043 needs at most 2.38). Both take the same options (<c>--flash-attn</c>, <c>--max-vram</c>,
+/// <c>--offload-to-cpu</c>, <c>--backend</c>; checked in examples/common/common.cpp at both tags). Hashes and sizes are the GitHub release
+/// asset digests, checked on 2026-11-16 by downloading every processor and Vulkan zip (the CUDA zips' file lists were read from their
+/// central directories). One build per image backend, each in its own tools folder so they can sit side by side: on Windows the CUDA 12
+/// build with its CUDA runtime libraries (NVIDIA), the Vulkan build (AMD, Intel, NVIDIA; needs only vulkan-1.dll from the graphics driver)
+/// and the processor build (one zip that picks the processor's best variant at run time); on Linux x64 the Vulkan and the processor build.
+/// Every zip is flat: sd-cli sits at its top. There is no Linux CUDA build and nothing for Linux ARM64. The ROCm builds are not used: their
+/// zips carry no HIP runtime (hipblas, rocblas must come from AMD's SDK on the PATH, otherwise sd-cli ends with 0xC0000135 and prints
+/// nothing). Updating a version = new rows here with new hashes (and the options checked again).
 /// </summary>
 public static class ToolManifest
 {
@@ -32,8 +36,11 @@ public static class ToolManifest
     /// <summary>sherpa-onnx version (must match the C structures in TMConcept.Speech).</summary>
     public const string SherpaVersion = "2.0.1";
 
-    /// <summary>stable-diffusion.cpp release.</summary>
-    public const string SdCppTag = "master-890-74988b2";
+    /// <summary>stable-diffusion.cpp release of the Windows builds.</summary>
+    public const string SdCppTag = "master-1106-532d2c1";
+
+    /// <summary>stable-diffusion.cpp release of the Linux builds (the last one built on Ubuntu 24.04).</summary>
+    public const string SdCppLinuxTag = "master-1043-3be2378";
 
     /// <summary>
     /// The oldest Node.js major version the engines run on: HyperFrames 0.8 asks for Node 22 or newer (Remotion and Revideo for 18), so a
@@ -85,22 +92,22 @@ public static class ToolManifest
             "15bd737eae467da32ec97e3740a329a535fd21e33caca4f327b0081451d11533", $"sherpa-onnx-v{SherpaVersion}-linux-aarch64-shared-cpu-lib",
             "lib/libsherpa-onnx-c-api.so", 12_500_491),
         new(ToolKind.ImageRuntime, SdCppTag, "win-x64",
-            new Uri($"https://github.com/leejet/stable-diffusion.cpp/releases/download/{SdCppTag}/sd-master-74988b2-bin-win-cuda12-x64.zip"),
-            "e9b86c2166aaf3a89f3e13326312d34b79ec1a2b61101d0ccff2805e7ee7b269", string.Empty, "sd-cli.exe", 333_039_461),
+            new Uri($"https://github.com/leejet/stable-diffusion.cpp/releases/download/{SdCppTag}/sd-master-532d2c1-bin-win-cuda12-x64.zip"),
+            "b087219145a382cc1b1e826318289e1f672b9bb6965977734ef0deb85fe2d03a", string.Empty, "sd-cli.exe", 412_365_497),
         new(ToolKind.ImageRuntimeCuda, SdCppTag, "win-x64",
             new Uri($"https://github.com/leejet/stable-diffusion.cpp/releases/download/{SdCppTag}/cudart-sd-bin-win-cu12-x64.zip"),
             "fe20366827d357c00797eebb58244dddab7fd9a348d70090c3871004c320f38d", string.Empty, "cudart64_12.dll", 563_452_046),
         new(ToolKind.ImageRuntimeVulkan, SdCppTag, "win-x64",
-            new Uri($"https://github.com/leejet/stable-diffusion.cpp/releases/download/{SdCppTag}/sd-master-74988b2-bin-win-vulkan-x64.zip"),
-            "744c8f817c66ecfd02fbb9dc8b122e1f29f7240db1f6086dfde2669403c5d896", string.Empty, "sd-cli.exe", 31_932_748),
+            new Uri($"https://github.com/leejet/stable-diffusion.cpp/releases/download/{SdCppTag}/sd-master-532d2c1-bin-win-vulkan-x64.zip"),
+            "3e66222c87ca27074e1fd8ce79706eef17a8aaf39949906aa1bee7e060f22ecc", string.Empty, "sd-cli.exe", 30_312_081),
         new(ToolKind.ImageRuntimeCpu, SdCppTag, "win-x64",
-            new Uri($"https://github.com/leejet/stable-diffusion.cpp/releases/download/{SdCppTag}/sd-master-74988b2-bin-win-cpu-x64.zip"),
-            "24fcac70fadc41eb3524837893f1cb7ea54895fe4d807f88ef7afdeee8bd484b", string.Empty, "sd-cli.exe", 17_182_628),
-        new(ToolKind.ImageRuntimeVulkan, SdCppTag, "linux-x64",
-            new Uri($"https://github.com/leejet/stable-diffusion.cpp/releases/download/{SdCppTag}/sd-master-74988b2-bin-Linux-Ubuntu-24.04-x86_64-vulkan.zip"),
-            "158d593c803d4e50ad0a93a12811dc4c638b998fd8a4cd43f484d4bba7f780b2", string.Empty, "sd-cli", 38_541_512),
-        new(ToolKind.ImageRuntimeCpu, SdCppTag, "linux-x64",
-            new Uri($"https://github.com/leejet/stable-diffusion.cpp/releases/download/{SdCppTag}/sd-master-74988b2-bin-Linux-Ubuntu-24.04-x86_64.zip"),
-            "04f7b4db880167c1b7b25eefcde27aa301301568eadb17623876eb3b8c938198", string.Empty, "sd-cli", 25_418_220),
+            new Uri($"https://github.com/leejet/stable-diffusion.cpp/releases/download/{SdCppTag}/sd-master-532d2c1-bin-win-cpu-x64.zip"),
+            "abef332cfca7861cc567910e79bedb70bfb2920bb4eedac97fcbb6db477f1596", string.Empty, "sd-cli.exe", 18_358_541),
+        new(ToolKind.ImageRuntimeVulkan, SdCppLinuxTag, "linux-x64",
+            new Uri($"https://github.com/leejet/stable-diffusion.cpp/releases/download/{SdCppLinuxTag}/sd-master-3be2378-bin-Linux-Ubuntu-24.04-x86_64-vulkan.zip"),
+            "7608901016fb4a348bc5b75c46fc971085dadadf44e6f30daa97301844b1ce2e", string.Empty, "sd-cli", 37_675_781),
+        new(ToolKind.ImageRuntimeCpu, SdCppLinuxTag, "linux-x64",
+            new Uri($"https://github.com/leejet/stable-diffusion.cpp/releases/download/{SdCppLinuxTag}/sd-master-3be2378-bin-Linux-Ubuntu-24.04-x86_64.zip"),
+            "01e1c773c1bc2a6276952f6dbd13294e58b7255c659b4a770086934c4e8fad3a", string.Empty, "sd-cli", 27_322_680),
     ];
 }

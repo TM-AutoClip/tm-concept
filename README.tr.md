@@ -70,7 +70,7 @@ gösterir. Kabaca (5 Kas 2026 fiyatları; güncelleri sayfalarda her tahminin ya
 | Yerel bir sesle seslendirme (Supertonic 3 ya da İngilizce için Kokoro) | ücretsiz |
 | Yerel modelle anlamca tekrar denetimi | ücretsiz |
 | Video başına 8 YZ görseli (fal FLUX 2 Flash) | 0,08 $ |
-| Yerel modelle 8 görsel (FLUX.2 klein 4B ya da Z-Image Turbo, kendi ekran kartın) | ücretsiz |
+| Yerel modelle 8 görsel (FLUX.2 klein, FLUX.3 Image Klein, Z-Image Turbo, Qwen-Image…; kendi ekran kartın) | ücretsiz |
 
 ## Windows'a kurulum
 
@@ -133,9 +133,25 @@ adım ne işe yaradığını yazar:
 - **Konsept üretimi** ve **Video kodu** — ücretini ödediğin online modeller. **Çaba** yalnız bunu alan modelde görünür; *Otomatik* çaba
   göndermez (sağlayıcının varsayılanı). **Video kodu**'nda **video motoru** da var: HyperFrames (varsayılan), Remotion (lisansını kabul
   etmeni ister: bireyler ve en çok 3 kişilik şirketler için ücretsiz), Revideo (deneysel). Görsel istemlerini de video kodu modeli yazar.
-- **Görseller** — *Kapalı* (varsayılan: video yalnız koddan çizilir), bir online görsel modeli ya da ekran kartında çalışan bir yerel model:
-  **FLUX.2 klein 4B** (hızlı) ya da **Z-Image Turbo** (daha iyi görsel); ikisi de en az 6 GB ekran kartı belleği ister (ölçüldükleri kart);
-  16 GB ve üstü kartlar için **Z-Image Turbo (tam kalite)**. Sayfa kartını gösterir, kart küçükse kırmızı yazar. NVIDIA, AMD ve Intel kartlar
+- **Görseller** — *Kapalı* (varsayılan: video yalnız koddan çizilir), bir online görsel modeli ya da ekran kartında çalışan 17 yerel
+  modelden biri; her model bir ekran kartı bellek sınıfındadır (listede yazar; yeşil = kartın çalıştırır, kırmızı = "bu kart çalıştıramaz",
+  böyle bir model hiç indirilmez):
+  - **4 GB**: Z-Image Turbo (küçük), FLUX.2 klein 4B (en hızlı), SDXL Lightning
+  - **6 GB**: Z-Image Turbo, FLUX.3 Image Klein, Stable Diffusion 3.5 Medium, SDXL Lightning (Q8)
+  - **8 GB**: FLUX.2 klein 9B (**ticari kullanıma kapalı**)
+  - **12 GB**: Z-Image Turbo (Q8), FLUX.2 klein 4B (Q8), Stable Diffusion 3.5 Medium (Q8)
+  - **16 GB**: Qwen-Image (görsel içinde yazıda güçlü), FLUX.3 Image Klein (Q8)
+  - **24 GB**: Z-Image Turbo (tam kalite), FLUX.2 klein 9B (Q8, **ticari kullanıma kapalı**), Qwen-Image (Q6)
+  - **32 GB**: Qwen-Image (Q8)
+
+  Bir model yalnız sen seçip onaylayınca indirilir. Lisanslar: çoğu Apache-2.0 (her kullanım serbest); **FLUX.2 klein 9B ticari kullanıma
+  kapalı** (kırmızı etiket: para kazandığın videolarda kullanılamaz); FLUX.3 Image Klein (FLUX Kommunity Lisansı: Black Forest Labs'in
+  duyurusuna göre yıllık geliri 5 milyon doların altındakiler için ticari kullanım ücretsiz), Stable Diffusion 3.5 Medium (Stability AI
+  Topluluk Lisansı: 1 milyon doların altı) ve SDXL Lightning (OpenRAIL++ kullanım kısıtları) koşullu (sarı etiket). Bunların her biri ilk
+  indirmeden önce bir kez lisansını kabul etmeni ister. Program her görselden önce kartın **boş** belleğini ölçer: VAE hep parça parça
+  çalışır, belleğin yaklaşık sekizde biri (en az 1 GB) Windows ve öteki programlar için boş bırakılır, ağırlıkları karta sığmayan model
+  onları ana bellekte tutar (daha yavaş), belleği yetmeyen görsel bir kademe aşağıda bir kez daha denenir. Ne kartta ne ana bellekte yer
+  yoksa görsel adımı rakamlarla durur; programları kapatmanı ya da daha küçük bir model seçmeni söyler. NVIDIA, AMD ve Intel kartlar
   çalışır: sürümü *Ayarlar → Genel → Görsel hızlandırma* seçer (Otomatik: sürücüsü kurulu NVIDIA kartta NVIDIA CUDA, AMD ve Intel kartlarda
   Vulkan, kart yoksa ya da yalnız sanal bir kart varsa işlemci; Linux x64'te Vulkan ya da işlemci). Windows'ta her sürüm Microsoft Visual
   C++ 2015–2022 çalışma zamanını (x64) ister; onu bulamayan video hiçbir şey ödenmeden durur ve indirme adresini söyler. Linux ARM64 için
@@ -192,12 +208,11 @@ iki kez daha gönderilir; her deneme ödenir ve maliyete sayılır, üç okunama
 | Pocket TTS int8 (sherpa-onnx gerekir) | github.com (k2-fsa) | 98 MB |
 | Chatterbox Multilingual V3 ONNX (Masterx dönüşümü, 4 bit dil modeli; sherpa-onnx gerekir) | huggingface.co | 1,56 GB |
 | Multilingual MiniLM (paraphrase-multilingual-MiniLM-L12-v2, int8 ONNX + tokenizer; sherpa-onnx gerekir) | huggingface.co | 127 MB |
-| stable-diffusion.cpp master-890, Görsel hızlandırma'nın seçtiği derleme (Windows: CUDA 12 derlemesi + CUDA kitaplıkları, Vulkan ya da işlemci derlemesi; Linux x64: Vulkan ya da işlemci derlemesi) | github.com (leejet) | CUDA 900 MB, Vulkan 32–39 MB, işlemci 17–25 MB |
-| FLUX.2 klein 4B ağırlıkları (model, Qwen3-4B metin kodlayıcı, VAE) | huggingface.co | 5,3 GB |
-| Z-Image Turbo ağırlıkları (model, Qwen3-4B-Instruct metin kodlayıcı, VAE) | huggingface.co | 9,4 GB |
+| stable-diffusion.cpp (Windows master-1106, Linux master-1043), Görsel hızlandırma'nın seçtiği derleme (Windows: CUDA 12 derlemesi + CUDA kitaplıkları, Vulkan ya da işlemci derlemesi; Linux x64: Vulkan ya da işlemci derlemesi) | github.com (leejet) | CUDA 975 MB, Vulkan 30–38 MB, işlemci 18–27 MB |
+| Yerel görsel modeli ağırlıkları (difüzyon modeli, metin kodlayıcı(lar), VAE), yalnız seçtiğin model | huggingface.co | 2,9 GB (SDXL Lightning) ile 30 GB (Qwen-Image Q8) arası; ör. FLUX.2 klein 4B 5,3 GB, Z-Image Turbo 9,4 GB |
 
 Sabitlenen her indirme SHA-256 ile denetlenir (npm paketleri: kilit dosyasının bütünlük değerleri; görsel ağırlıkları sabit bir Hugging Face
-commit'inden gelir) ve programın kendi veri klasörüne gider; sistem PATH'i değişmez. Chrome Headless Shell HTTPS ile Google'dan gelir,
+commit'inden gelir; kopan bir görsel ağırlığı indirmesi yeniden denenir ve kaldığı yerden sürer, program yeniden açılsa da) ve programın kendi veri klasörüne gider; sistem PATH'i değişmez. Chrome Headless Shell HTTPS ile Google'dan gelir,
 Google onun için sağlama değeri yayımlamıyor. Ayarlar → **Genel** → *Kurulu bileşenler* diskte olanları boyutlarıyla listeler (yarım kalan
 ya da artık kullanılamayan *eksik* diye işaretlenir), kaldırabilir ve bir motorun örnek
 videosunu modelsiz, ağsız render edebilir.
@@ -265,8 +280,10 @@ Taşınabilir kip: programı `--data-dir <klasör>` ile başlat; videolar dahil 
 - **Remotion**: açık kaynak değil; bireyler ve en çok 3 kişilik şirketler ücretsiz, daha büyük şirketler Remotion lisansı almalı.
 - **Örnek görseller**: kullanım hakkı sende olmalı.
 - **ffmpeg**: GPL, ayrı bir program olarak indirilir.
-- **Yerel görsel modelleri**: FLUX.2 klein 4B, Z-Image Turbo ve metin kodlayıcıları / VAE'leri Apache-2.0; stable-diffusion.cpp MIT.
-  Yalnız onayından sonra Hugging Face / GitHub'dan indirilir.
+- **Yerel görsel modelleri**: Z-Image Turbo, FLUX.2 klein 4B, Qwen-Image ve kullanılan bütün metin kodlayıcı / VAE'ler Apache-2.0
+  (SDXL VAE'si MIT); **FLUX.2 klein 9B ticari kullanıma kapalı**; FLUX.3 Image Klein (FLUX Kommunity Lisansı), Stable Diffusion 3.5 Medium
+  (Stability AI Topluluk Lisansı) ve SDXL Lightning (OpenRAIL++) koşullu; stable-diffusion.cpp MIT. Yalnız onayından sonra (koşullu
+  lisanslarda lisansı da kabul edince) Hugging Face / GitHub'dan indirilir.
 
 Ayrıntı: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
