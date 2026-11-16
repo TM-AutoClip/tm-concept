@@ -94,8 +94,4 @@ public sealed class CatalogModel
 
     /// <summary>Where the license text is (the model's own page), shown in the license question.</summary>
     public string LicenseUrl { get; set; } = string.Empty;
-
-    /// <summary>The weights may not be used commercially at all (a monetized channel counts).</summary>
-    [JsonIgnore]
-    public bool NonCommercial => LicenseUse == LicenseUse.NonCommercial;
 }

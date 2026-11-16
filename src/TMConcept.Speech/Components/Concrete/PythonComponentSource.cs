@@ -25,7 +25,7 @@ public sealed class PythonComponentSource(IEnumerable<ISpeechEngine> voices, IMo
             new PythonRuntimeComponent(installer, layout),
             .. engines.Select(e => e.Environment).Distinct().Select(e => new PythonEnvironmentComponent(e, installer, layout)),
             .. engines.Select(e => catalog.Find(ModelProviders.Local, e.Code) is { } model
-                ? new PythonVoiceComponent(e, models, model.License.ToUpperInvariant(), model.NonCommercial)
+                ? new PythonVoiceComponent(e, models, model.License.ToUpperInvariant(), model.LicenseUse == LicenseUse.NonCommercial)
                 : new PythonVoiceComponent(e, models, string.Empty, false)),
         ];
     });

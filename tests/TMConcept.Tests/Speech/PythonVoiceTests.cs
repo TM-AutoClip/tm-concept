@@ -50,7 +50,7 @@ public sealed class PythonVoiceTests
         }
 
         string[] nonCommercial = [SpeechEngines.XttsV2, SpeechEngines.F5Turkish, SpeechEngines.MmsTurkish];
-        catalog.With(ModelCapability.Speech).Where(m => m.NonCommercial).Select(m => m.Id).ShouldBe(nonCommercial, ignoreOrder: true);
+        catalog.With(ModelCapability.Speech).Where(m => m.LicenseUse == LicenseUse.NonCommercial).Select(m => m.Id).ShouldBe(nonCommercial, ignoreOrder: true);
         catalog.Find(ModelProviders.Local, SpeechEngines.Trendyol)!.License.ShouldBe("mit");
         catalog.Find(ModelProviders.Local, SpeechEngines.Ahenk)!.License.ShouldBe("cc-by-4.0");
         catalog.Find(ModelProviders.Local, SpeechEngines.VoxCpm2)!.MinVideoMemoryGb.ShouldBe(8);
