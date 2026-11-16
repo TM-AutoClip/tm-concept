@@ -161,7 +161,9 @@ the model that describes a sample image. Each step says what it is for:
 - **Narration** — *Off* (silent video, yellow warning), **Supertonic 3** (local, free; every video language; the default
   voice of every language but English), **Kokoro 82M** (local, free; the default for English;
   English only, American and British voices; a dictionary voice: names and words it does not know are left out of the audio, with a
-  warning), or an online voice. Only voices that speak the profile's video language are listed; when the language changes, a voice that
+  warning), **Ahenk Cep** (local, free, Turkish only; one voice in seven speaking styles: neutral, calm, cheerful, empathetic, sad,
+  angry, surprised; 48 kHz, a 13 MB model on the processor, about 10 s for a minute of speech), or an online voice. Only voices that
+  speak the profile's video language are listed; when the language changes, a voice that
   does not speak the new one is replaced by the language's default voice, with a warning on the step. Voice, speed and ▶ Listen (a
   short sentence in the video language) are in the step.
 - **Your own voice** — **Pocket TTS** (local, free, English only): Settings → Voice and pronunciation → add a clean recording of 3–15 s
@@ -183,7 +185,15 @@ the model that describes a sample image. Each step says what it is for:
   work. Ahenk (CC BY 4.0) must be credited when you publish. While a Python voice speaks on the card it holds the card like any other
   local model; it is unloaded when the narration ends, so the card is free for the images.
 - **Pronunciation** — Settings → Voice and pronunciation: per video language, words the voice should read differently ("Viking" →
-  "Vikink" in Turkish; Turkish comes with a small list, you add your own). Only the voice changes; subtitles keep the written word.
+  "Vikink" in Turkish). Turkish comes with a list of several hundred foreign names, brands, historical people, places, abbreviations
+  and units in categories ("Google" → "Gugıl", "Machu Picchu" → "Maçu Piççu", "Churchill" → "Çörçil"); search it, edit a word (a built-in
+  one becomes yours), add your own, and ▶ Listen to a word or sentence with an installed local voice before you save it. A word
+  starting with "!" matches only as written ("!IT" changes "IT", not "it"). A Turkish suffix after an apostrophe follows the reading
+  ("Google'ın" → "Gugılın"). Turkish narration is also read out by rules before every voice, local or online: numbers, ordinals
+  ("3." → "üçüncü"), dates and times ("14.10.2026", "09:30'da"), years, percentages, currencies ("12,50 TL" → "on iki lira elli
+  kuruş"), units ("120 km/sa" → "saatte yüz yirmi kilometre"), Roman numerals ("II. Mehmed" → "İkinci Mehmed"), abbreviations
+  ("Prof. Dr.", "vb.", "MÖ") and capital abbreviations ("NATO" as a word, "TBMM" letter by letter). Only the voice changes;
+  subtitles keep the written text.
 - **Duplicate check by meaning** — optional: the local **Multilingual MiniLM** (free, on this computer, 50+ languages including Turkish)
   or an online embedding model. **Describe a sample image** — optional, a cheap online helper.
 
@@ -221,6 +231,7 @@ every attempt is paid and counted in the cost, and after three unreadable answer
 | Kokoro 82M v1.0 int8 (needs sherpa-onnx) | github.com (k2-fsa) | 130 MB |
 | Pocket TTS int8 (needs sherpa-onnx) | github.com (k2-fsa) | 98 MB |
 | Chatterbox Multilingual V3 ONNX (Masterx export, 4-bit language model; needs sherpa-onnx) | huggingface.co | 1.56 GB |
+| Ahenk Cep int8 ONNX (Turkish; needs sherpa-onnx) | huggingface.co | 13 MB |
 | Multilingual MiniLM (paraphrase-multilingual-MiniLM-L12-v2, int8 ONNX + tokenizer; needs sherpa-onnx) | huggingface.co | 127 MB |
 | stable-diffusion.cpp (Windows master-1106, Linux master-1043), the build of Image acceleration (Windows: CUDA 12 build + CUDA runtime, Vulkan or processor build; Linux x64: Vulkan or processor build) | github.com (leejet) | CUDA 975 MB, Vulkan 30–38 MB, processor 18–27 MB |
 | Local image model weights (diffusion model, text encoder(s), VAE), only the model you choose | huggingface.co | 2.9 GB (SDXL Lightning) to 30 GB (Qwen-Image Q8); e.g. FLUX.2 klein 4B 5.3 GB, Z-Image Turbo 9.4 GB |
@@ -327,6 +338,7 @@ Portable mode: start the program with `--data-dir <folder>`; then everything, vi
 - **Python voices**: **XTTS-v2** (Coqui Public Model License), **F5-TTS Turkish** and **MMS-TTS Turkish** (CC BY-NC 4.0) are
   **non-commercial only**; the step asks you to accept the licence first. **VoxCPM2** Apache-2.0, **Trendyol-TTS** MIT, **Ahenk** CC BY 4.0
   (credit "Ahenk (github.com/ozguradmin/ahenk-turkish-tts), CC BY 4.0"). PyTorch and the voices' packages have their own (open) licences.
+- **Ahenk Cep**: CC-BY-4.0. Say that the voice is AI-generated and credit "Ahenk Cep (CC BY 4.0)" when you publish.
 - **Remotion**: not open source; free for individuals and companies of up to 3 people, larger companies need a Remotion license.
 - **Sample images**: you must have the right to use them.
 - **ffmpeg**: GPL, downloaded as a separate program.

@@ -15,10 +15,11 @@ namespace TMConcept.Core.Speech;
 /// from the profile's choice made on the video page (off = a silent video). A cache keeps every spoken text: the key is the SHA-256 of
 /// text, engine, model, voice and speed, so a repeated scene is not spoken (or paid) twice. The text is put through the language's
 /// pronunciation dictionary first (<see cref="PronunciationService"/>: "Viking" is read "Vikink" in Turkish); the key is that of the spoken
-/// text, so a changed dictionary word is spoken again. Subtitles never see the spoken text. Every spoken clip is made inside a graphics card
-/// lease (<see cref="IGpuCoordinator"/>): the sherpa-onnx voices run on the processor and never wait; a Python voice on an NVIDIA card takes
-/// the card (the model that was on it is unloaded first). <see cref="ReleaseAsync"/> frees a local voice when the narration step ends, so the
-/// card (and the main memory) is free for the next step.
+/// text, so a changed dictionary word is spoken again. Turkish text is then read out by the Turkish normalizer (numbers, dates,
+/// abbreviations, units; <see cref="TurkishSpeechTextNormalizer"/>) for every voice, local and online. Subtitles never see the spoken text.
+/// Every spoken clip is made inside a graphics card lease (<see cref="IGpuCoordinator"/>): the sherpa-onnx voices (Ahenk Cep included) run
+/// on the processor and never wait; a Python voice on an NVIDIA card takes the card (the model that was on it is unloaded first).
+/// <see cref="ReleaseAsync"/> frees a local voice when the narration step ends, so the card (and the main memory) is free for the next step.
 /// </summary>
 public sealed class SpeechService(IEnumerable<ISpeechEngine> engines, StepModelResolver resolver, IAppPaths paths, PronunciationService pronunciations,
     IGpuCoordinator gpu, IModelDirectory models, ILogger<SpeechService> logger)
@@ -78,11 +79,19 @@ public sealed class SpeechService(IEnumerable<ISpeechEngine> engines, StepModelR
     }
 
     /// <summary>Speaks into <paramref name="outputWav"/> (from the cache when the same text was spoken before).</summary>
-    public async Task<SpeechClip> SynthesizeAsync(SpeechSetup setup, string language, string text, string outputWav, CancellationToken cancellationToken)
+    public Task<SpeechClip> SynthesizeAsync(SpeechSetup setup, string language, string text, string outputWav, CancellationToken cancellationToken) =>
+        SynthesizeAsync(setup, language, text, outputWav, [], cancellationToken);
+
+    /// <summary>
+    /// Speaks into <paramref name="outputWav"/> with <paramref name="extra"/> dictionary words applied first (the settings page listens to a
+    /// word before it is saved).
+    /// </summary>
+    public async Task<SpeechClip> SynthesizeAsync(SpeechSetup setup, string language, string text, string outputWav, IReadOnlyList<PronunciationRule> extra,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(setup);
         var voice = setup.Voice.Length > 0 ? setup.Voice : setup.Engine.Voices(language).FirstOrDefault()?.Id ?? string.Empty;
-        var spoken = await pronunciations.PrepareAsync(text, language, cancellationToken).ConfigureAwait(false);
+        var spoken = await pronunciations.PrepareAsync(text, language, extra, cancellationToken).ConfigureAwait(false);
         var cache = Path.Combine(paths.WorkDirectory, "speech-cache", Key(spoken, setup.Engine.Code, setup.Model.Id, voice, setup.Speed) + ".wav");
         Directory.CreateDirectory(Path.GetDirectoryName(outputWav)!);
         if (File.Exists(cache))

@@ -102,9 +102,11 @@ public static class DesktopServices
                 s.GetRequiredService<Core.Hardware.IGpuInfo>(), s.GetRequiredService<ILogger<Speech.Python.PythonSpeechEngine>>()));
         }
 
+        services.AddSingleton<Core.Speech.ISpeechEngine, Speech.Speech.AhenkCepSpeechEngine>();
         services.AddSingleton<Speech.Embeddings.LocalEmbedder>();
         services.AddSingleton<Core.Duplicates.ILocalEmbedder>(s => s.GetRequiredService<Speech.Embeddings.LocalEmbedder>());
         services.AddSingleton<Core.Speech.ISpeechEngine, Providers.Speech.OpenAISpeechEngine>();
+        services.AddSingleton<Core.Pronunciation.ISpeechTextNormalizer, Core.Pronunciation.TurkishSpeechTextNormalizer>();
         services.AddSingleton<Core.Pronunciation.PronunciationService>();
         services.AddSingleton<Core.Speech.SpeechService>();
         services.AddSingleton<Core.Images.IImageEngine, Providers.Images.FalImageEngine>();

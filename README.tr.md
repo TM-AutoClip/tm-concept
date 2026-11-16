@@ -158,8 +158,9 @@ adım ne işe yaradığını yazar:
   sürüm yok.
 - **Görseller** profilin kendi örnek görsellerini de kullanabilir (ücretsiz).
 - **Seslendirme** — *Kapalı* (sessiz video, sarı uyarı), **Supertonic 3** (yerel, ücretsiz; bütün video dilleri; İngilizce
-  dışındaki her dilin varsayılan sesi), **Kokoro 82M** (yerel, ücretsiz; İngilizcenin varsayılanı; yalnız İngilizce, Amerikan ve İngiliz sesleri; sözlüklü bir ses: bilmediği adları ve kelimeleri seste atlar, uyarı verir) ya da
-  bir online ses. Yalnız profilin video dilini konuşan sesler listelenir; dil değişince yeni dili konuşmayan ses, adımda bir uyarıyla o
+  dışındaki her dilin varsayılan sesi), **Kokoro 82M** (yerel, ücretsiz; İngilizcenin varsayılanı; yalnız İngilizce, Amerikan ve İngiliz sesleri; sözlüklü bir ses: bilmediği adları ve kelimeleri seste atlar, uyarı verir), **Ahenk Cep** (yerel, ücretsiz, yalnız
+  Türkçe; tek sesin yedi okuma tarzı: düz, sakin, neşeli, şefkatli, hüzünlü, kızgın, şaşkın; 48 kHz, işlemcide çalışan 13 MB'lık bir
+  model, bir dakikalık konuşma yaklaşık 10 saniye) ya da bir online ses. Yalnız profilin video dilini konuşan sesler listelenir; dil değişince yeni dili konuşmayan ses, adımda bir uyarıyla o
   dilin varsayılan sesine döner. Ses, hız ve ▶ Dinle (video dilinde kısa bir cümle) adımın içinde.
 - **Kendi sesin** — **Pocket TTS** (yerel, ücretsiz, yalnız İngilizce): Ayarlar → Ses ve telaffuz → 3–15 saniyelik temiz bir kayıt ekle
   (WAV, MP3, M4A, OGG, FLAC; ffmpeg dönüştürür), sonra adımda ses olarak seç. Kayıt şifreli veritabanında kalır. Ağırlıklar CC-BY-4.0:
@@ -179,8 +180,15 @@ adım ne işe yaradığını yazar:
   lisansı gösterir ve bir şey indirilmeden önce kabul etmeni ister; reklamlı, sponsorlu bir kanalda ya da ücretli işte kullanma. Ahenk
   (CC BY 4.0) yayınlarken anılmalıdır. Kartta konuşan bir Python sesi kartı diğer yerel modeller gibi tutar; seslendirme bitince boşaltılır,
   kart görseller için boş kalır.
-- **Telaffuz** — Ayarlar → Ses ve telaffuz: her video dili için sesin farklı okuması gereken kelimeler (Türkçede "Viking" → "Vikink";
-  Türkçe küçük bir hazır listeyle gelir, kendi kelimelerini eklersin). Yalnız ses değişir; altyazı yazıldığı gibi kalır.
+- **Telaffuz** — Ayarlar → Ses ve telaffuz: her video dili için sesin farklı okuması gereken kelimeler (Türkçede "Viking" → "Vikink").
+  Türkçe, kategorilere ayrılmış yüzlerce yabancı ad, marka, tarihî kişi, yer, kısaltma ve birimle gelir ("Google" → "Gugıl", "Machu
+  Picchu" → "Maçu Piççu", "Churchill" → "Çörçil"); listede ara, bir kelimeyi düzenle (hazır bir kelime seninki olur), kendi kelimeni ekle
+  ve kaydetmeden önce kurulu bir yerel sesle ▶ Dinle. Başına "!" koyduğun kelime yalnız yazıldığı gibi eşleşir ("!IT" yalnız "IT"yi
+  değiştirir, "it" kalır). Kesme işaretinden sonraki ek okunuşa uyar ("Google'ın" → "Gugılın"). Türkçe seslendirme ayrıca her sesten
+  önce, yerel ya da online, kurallarla okunur: sayılar, sıra sayıları ("3." → "üçüncü"), tarih ve saatler ("14.10.2026", "09:30'da"),
+  yıllar, yüzdeler, para birimleri ("12,50 TL" → "on iki lira elli kuruş"), birimler ("120 km/sa" → "saatte yüz yirmi kilometre"),
+  Romen rakamları ("II. Mehmed" → "İkinci Mehmed"), kısaltmalar ("Prof. Dr.", "vb.", "MÖ") ve büyük harfli kısaltmalar ("NATO" kelime
+  gibi, "TBMM" harf harf). Yalnız ses değişir; altyazı yazıldığı gibi kalır.
 - **Anlamca tekrar denetimi** — isteğe bağlı: yerel **Multilingual MiniLM** (ücretsiz, bu bilgisayarda, Türkçe dahil 50'den fazla dil) ya
   da bir online model. **Örnek görsel açıklama** — isteğe bağlı, ucuz bir online yardımcı.
 
@@ -218,6 +226,7 @@ iki kez daha gönderilir; her deneme ödenir ve maliyete sayılır, üç okunama
 | Kokoro 82M v1.0 int8 (sherpa-onnx gerekir) | github.com (k2-fsa) | 130 MB |
 | Pocket TTS int8 (sherpa-onnx gerekir) | github.com (k2-fsa) | 98 MB |
 | Chatterbox Multilingual V3 ONNX (Masterx dönüşümü, 4 bit dil modeli; sherpa-onnx gerekir) | huggingface.co | 1,56 GB |
+| Ahenk Cep int8 ONNX (Türkçe; sherpa-onnx gerekir) | huggingface.co | 13 MB |
 | Multilingual MiniLM (paraphrase-multilingual-MiniLM-L12-v2, int8 ONNX + tokenizer; sherpa-onnx gerekir) | huggingface.co | 127 MB |
 | stable-diffusion.cpp (Windows master-1106, Linux master-1043), Görsel hızlandırma'nın seçtiği derleme (Windows: CUDA 12 derlemesi + CUDA kitaplıkları, Vulkan ya da işlemci derlemesi; Linux x64: Vulkan ya da işlemci derlemesi) | github.com (leejet) | CUDA 975 MB, Vulkan 30–38 MB, işlemci 18–27 MB |
 | Yerel görsel modeli ağırlıkları (difüzyon modeli, metin kodlayıcı(lar), VAE), yalnız seçtiğin model | huggingface.co | 2,9 GB (SDXL Lightning) ile 30 GB (Qwen-Image Q8) arası; ör. FLUX.2 klein 4B 5,3 GB, Z-Image Turbo 9,4 GB |
@@ -325,6 +334,7 @@ Taşınabilir kip: programı `--data-dir <klasör>` ile başlat; videolar dahil 
 - **Python sesleri**: **XTTS-v2** (Coqui Public Model License), **F5-TTS Türkçe** ve **MMS-TTS Türkçe** (CC BY-NC 4.0) **yalnız ticari
   olmayan** işler içindir; adım önce lisansı kabul etmeni ister. **VoxCPM2** Apache-2.0, **Trendyol-TTS** MIT, **Ahenk** CC BY 4.0 (atıf:
   "Ahenk (github.com/ozguradmin/ahenk-turkish-tts), CC BY 4.0"). PyTorch'un ve seslerin paketlerinin kendi (açık) lisansları vardır.
+- **Ahenk Cep**: CC-BY-4.0. Yayınlarken sesin yapay zekâ ile üretildiğini belirt ve "Ahenk Cep (CC BY 4.0)" atfını yaz.
 - **Remotion**: açık kaynak değil; bireyler ve en çok 3 kişilik şirketler ücretsiz, daha büyük şirketler Remotion lisansı almalı.
 - **Örnek görseller**: kullanım hakkı sende olmalı.
 - **ffmpeg**: GPL, ayrı bir program olarak indirilir.

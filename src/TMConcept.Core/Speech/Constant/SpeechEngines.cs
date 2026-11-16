@@ -32,4 +32,7 @@ public static class SpeechEngines
 
     /// <summary>Local MMS-TTS Turkish (Meta, Python; CC BY-NC 4.0; small, on the processor).</summary>
     public const string MmsTurkish = "mms-tts-tr";
+
+    /// <summary>Local Ahenk Cep (Turkish only; seven speaking styles, 48 kHz).</summary>
+    public const string AhenkCep = "ahenk-cep";
 }

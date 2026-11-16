@@ -5,11 +5,15 @@ namespace TMConcept.Core.Pronunciation;
 
 /// <summary>
 /// The pronunciation dictionary of each output language: the built-in words (<see cref="BuiltInPronunciations"/>) and the user's own (the
-/// user's word of the same spelling replaces a built-in one). Every narration is put through it right before a voice speaks it
-/// (<see cref="Speech.SpeechService"/>); subtitles and the narration file keep the original text.
+/// user's word of the same spelling replaces a built-in one; a word the user writes as "!WORD" matches only as written). Every narration is
+/// put through it right before a voice speaks it, local or online (<see cref="Speech.SpeechService"/>), and then through the language's
+/// normalizer when it has one (<see cref="ISpeechTextNormalizer"/>: Turkish numbers, dates, abbreviations, units; suffixes agreed with the
+/// spoken form); subtitles and the narration file keep the original text.
 /// </summary>
-public sealed class PronunciationService(IPronunciationStore store, ILogger<PronunciationService> logger)
+public sealed class PronunciationService(IPronunciationStore store, IEnumerable<ISpeechTextNormalizer> normalizers, ILogger<PronunciationService> logger)
 {
+    private readonly IReadOnlyList<ISpeechTextNormalizer> _normalizers = normalizers.ToList();
+
     /// <summary>Most characters of a word or its spoken form.</summary>
     public const int WordMax = 60;
 
@@ -17,17 +21,49 @@ public sealed class PronunciationService(IPronunciationStore store, ILogger<Pron
     public async Task<IReadOnlyList<PronunciationRule>> RulesAsync(string language, CancellationToken cancellationToken)
     {
         var culture = OutputLanguages.Of(language).Culture;
-        var own = (await store.ListAsync(language, cancellationToken).ConfigureAwait(false))
-            .Select(e => new PronunciationRule(e.Word, e.Spoken, e)).ToList();
-        var taken = own.Select(r => PronunciationRewriter.Fold(r.Word, culture)).ToHashSet(StringComparer.Ordinal);
-        return [.. own, .. BuiltInPronunciations.Of(language).Where(r => !taken.Contains(PronunciationRewriter.Fold(r.Word, culture)))];
+        var own = (await store.ListAsync(language, cancellationToken).ConfigureAwait(false)).Select(Own).ToList();
+        var taken = own.Select(r => Key(r, culture)).ToHashSet(StringComparer.Ordinal);
+        return [.. own, .. BuiltInPronunciations.Of(language).Where(r => !taken.Contains(Key(r, culture)))];
     }
 
     /// <summary>The text the voice gets for a narration in <paramref name="language"/>.</summary>
-    public async Task<string> PrepareAsync(string text, string language, CancellationToken cancellationToken)
+    public Task<string> PrepareAsync(string text, string language, CancellationToken cancellationToken) =>
+        PrepareAsync(text, language, [], cancellationToken);
+
+    /// <summary>
+    /// The text the voice gets, with <paramref name="extra"/> rules applied before the dictionary's (the settings page listens to a word
+    /// before it is saved).
+    /// </summary>
+    public async Task<string> PrepareAsync(string text, string language, IReadOnlyList<PronunciationRule> extra, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(extra);
+        var culture = OutputLanguages.Of(language).Culture;
         var rules = await RulesAsync(language, cancellationToken).ConfigureAwait(false);
-        return PronunciationRewriter.Rewrite(text, rules, OutputLanguages.Of(language).Culture);
+        if (extra.Count > 0)
+        {
+            var taken = extra.Select(r => Key(r, culture)).ToHashSet(StringComparer.Ordinal);
+            rules = [.. extra, .. rules.Where(r => !taken.Contains(Key(r, culture)))];
+        }
+
+        var normalizer = _normalizers.FirstOrDefault(n => n.Supports(language));
+        var spoken = PronunciationRewriter.Rewrite(text, rules, culture, normalizer is null ? null : normalizer.Join);
+        return normalizer is null ? spoken : normalizer.Normalize(spoken);
+    }
+
+    /// <summary>A rule of the user's entry: "!WORD" is matched only as written.</summary>
+    public static PronunciationRule Own(PronunciationEntry entry)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        var word = entry.Word.Trim();
+        var exact = word.Length > 1 && word[0] == PronunciationRule.ExactMark;
+        return new PronunciationRule(exact ? word[1..].Trim() : word, entry.Spoken, entry, exact);
+    }
+
+    /// <summary>What makes two rules the same word (a user's word of the same key replaces a built-in one).</summary>
+    public static string Key(PronunciationRule rule, System.Globalization.CultureInfo culture)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+        return rule.ExactCase ? PronunciationRule.ExactMark + rule.Word.Trim() : PronunciationRewriter.Fold(rule.Word.Trim(), culture);
     }
 
     /// <summary>

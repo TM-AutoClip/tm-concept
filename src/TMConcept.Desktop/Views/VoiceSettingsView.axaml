@@ -26,19 +26,39 @@
           <Grid ColumnDefinitions="*,*,Auto" ColumnSpacing="8">
             <TextBox Text="{Binding NewWord}" PlaceholderText="{DynamicResource voices.words.word}" MaxLength="60" />
             <TextBox Grid.Column="1" Text="{Binding NewSpoken}" PlaceholderText="{DynamicResource voices.words.spoken}" MaxLength="60" />
-            <Button Grid.Column="2" Classes="accent" Content="{DynamicResource voices.words.add}" Command="{Binding AddWordCommand}" />
+            <Button Grid.Column="2" Classes="accent" Content="{Binding AddLabel}" Command="{Binding AddWordCommand}" />
           </Grid>
+          <TextBlock Text="{DynamicResource voices.words.exact}" Classes="small muted" TextWrapping="Wrap" />
+          <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+            <TextBox Text="{Binding ListenText}" PlaceholderText="{DynamicResource voices.listen.text}" MaxLength="300" />
+            <ComboBox Grid.Column="1" ItemsSource="{Binding ListenVoices}" SelectedItem="{Binding ListenVoice}" MinWidth="200"
+                      PlaceholderText="{DynamicResource voices.listen.no_voice_short}">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:ChoiceOption">
+                  <TextBlock Text="{Binding Label}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <Button Grid.Column="2" Content="{DynamicResource voices.listen.button}" Command="{Binding ListenCommand}" IsEnabled="{Binding !Listening}" />
+          </Grid>
+          <TextBlock Text="{DynamicResource voices.listen.explain}" Classes="small muted" TextWrapping="Wrap" />
           <TextBlock Text="{Binding Status}" Classes="muted" TextWrapping="Wrap" />
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <TextBox Text="{Binding Search}" PlaceholderText="{DynamicResource voices.words.search}" />
+            <TextBlock Grid.Column="1" Text="{Binding Counts}" Classes="small muted" VerticalAlignment="Center" />
+          </Grid>
           <TextBlock Text="{DynamicResource voices.words.none}" Classes="small" IsVisible="{Binding !Words.Count}" />
           <ItemsControl ItemsSource="{Binding Words}">
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:PronunciationRow">
-                <Grid ColumnDefinitions="*,24,*,80,Auto" Margin="0,2">
-                  <TextBlock Text="{Binding Word}" VerticalAlignment="Center" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                <Grid ColumnDefinitions="*,24,*,180,Auto,Auto" ColumnSpacing="4" Margin="0,2">
+                  <TextBlock Text="{Binding Shown}" VerticalAlignment="Center" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                   <TextBlock Grid.Column="1" Text="→" Classes="muted" VerticalAlignment="Center" HorizontalAlignment="Center" />
                   <TextBlock Grid.Column="2" Text="{Binding Spoken}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                  <TextBlock Grid.Column="3" Text="{Binding Tag}" Classes="small muted" VerticalAlignment="Center" />
-                  <Button Grid.Column="4" Classes="danger" Content="✕" IsVisible="{Binding Own}"
+                  <TextBlock Grid.Column="3" Text="{Binding Tag}" Classes="small muted" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                  <Button Grid.Column="4" Content="✎" ToolTip.Tip="{DynamicResource voices.words.edit}"
+                          Command="{Binding $parent[ItemsControl].((vm:VoiceSettingsViewModel)DataContext).EditWordCommand}" CommandParameter="{Binding}" />
+                  <Button Grid.Column="5" Classes="danger" Content="✕" IsVisible="{Binding Own}"
                           Command="{Binding $parent[ItemsControl].((vm:VoiceSettingsViewModel)DataContext).DeleteWordCommand}" CommandParameter="{Binding}" />
                 </Grid>
               </DataTemplate>

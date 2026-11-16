@@ -12,6 +12,7 @@
     { "id": "trendyol-tts", "name": "Trendyol-TTS (Turkish)", "capabilities": "Speech", "requires": ["voice.trendyol-tts"], "minVideoMemoryGb": 8, "memoryGb": 12, "license": "mit" },
     { "id": "ahenk", "name": "Ahenk (Turkish, emotions)", "capabilities": "Speech", "requires": ["voice.ahenk"], "minVideoMemoryGb": 8, "memoryGb": 12, "license": "cc-by-4.0" },
     { "id": "mms-tts-tr", "name": "MMS-TTS Turkish (non-commercial)", "capabilities": "Speech", "requires": ["voice.mms-tts-tr"], "memoryGb": 2, "license": "cc-by-nc-4.0", "licenseUse": "NonCommercial", "licenseUrl": "https://huggingface.co/facebook/mms-tts-tur" },
+    { "id": "ahenk-cep", "name": "Ahenk Cep (Turkish)", "capabilities": "Speech", "requires": ["voice.ahenk-cep"], "license": "cc-by-4.0" },
     { "id": "paraphrase-multilingual-minilm", "name": "Multilingual MiniLM (meaning check)", "capabilities": "Embedding", "requires": ["embedding.paraphrase-multilingual-minilm"] },
     { "id": "z-image-turbo-q3", "name": "Z-Image Turbo (small)", "capabilities": "Image", "requires": ["image.z-image-turbo-q3"], "minVideoMemoryGb": 4, "license": "apache-2.0" },
     { "id": "flux2-klein-4b", "name": "FLUX.2 klein 4B", "capabilities": "Image", "requires": ["image.flux2-klein-4b"], "minVideoMemoryGb": 4, "license": "apache-2.0" },

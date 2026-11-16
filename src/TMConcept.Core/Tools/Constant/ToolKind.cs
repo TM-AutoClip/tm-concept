@@ -54,6 +54,9 @@ public enum ToolKind
     /// <summary>A file of a Python voice model (one file from Hugging Face, pinned by commit and SHA-256; not an archive).</summary>
     PythonVoiceWeights = 14,
 
+    /// <summary>A file of the Ahenk Cep voice model (Turkish, ONNX graphs, run with the ONNX Runtime of the speech libraries).</summary>
+    AhenkCepVoice = 15,
+
     /// <summary>A new version of the app itself (a release asset; its SHA-256 comes from the release notes). Not a component.</summary>
     AppUpdate = 100,
 }

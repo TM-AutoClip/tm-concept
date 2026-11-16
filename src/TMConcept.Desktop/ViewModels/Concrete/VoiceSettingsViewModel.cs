@@ -3,7 +3,9 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using System.Globalization;
+using TMConcept.Core.Models;
 using TMConcept.Core.Paths;
+using TMConcept.Core.Profiles;
 using TMConcept.Core.Pronunciation;
 using TMConcept.Core.Speech;
 using TMConcept.Core.Tools;
@@ -15,15 +17,21 @@ using TMConcept.Desktop.Startup;
 namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
-/// Voice settings: the pronunciation dictionary of each output language (the built-in words and the user's own; the user's word of the same
-/// spelling replaces a built-in one, removing it brings the built-in one back). A word changes only what the voice reads, never the subtitles.
+/// Voice settings: the pronunciation dictionary of each output language (the built-in words with their categories and the user's own; the
+/// user's word of the same spelling replaces a built-in one, removing it brings the built-in one back), searched by word or reading, a word
+/// edited by putting it back into the boxes (a built-in one becomes the user's own), and listened to with an installed local voice of the
+/// language before or after it is saved. A word changes only what the voice reads, never the subtitles.
 /// The user's own voices for the voice that copies a voice (Pocket TTS): added from a recording (ffmpeg converts it; installed after a
 /// confirmation when missing), played, removed. No consent step (rule 8); the tab says whose voice is the user's responsibility.
 /// </summary>
 public sealed partial class VoiceSettingsViewModel(PronunciationService pronunciations, VoiceSampleLibrary samples, ComponentInstallFlow installs,
-    FileDialogs dialogs, ShellLauncher shell, IAppPaths paths, Localizer text, ILogger<VoiceSettingsViewModel> logger)
+    FileDialogs dialogs, IShellLauncher shell, IAppPaths paths, Localizer text, SpeechService speech, IModelCatalog catalog,
+    ILogger<VoiceSettingsViewModel> logger)
     : SettingsSectionBase
 {
+    private IReadOnlyList<PronunciationRow> _all = [];
+    private PronunciationRow? _editing;
+
     /// <inheritdoc />
     public override string TitleKey => "settings.voices";
 
@@ -39,8 +47,35 @@ public sealed partial class VoiceSettingsViewModel(PronunciationService pronunci
     [ObservableProperty]
     public partial ChoiceOption? Language { get; set; }
 
-    /// <summary>The words of <see cref="Language"/>: the user's first, then the built-in ones.</summary>
+    /// <summary>The words of <see cref="Language"/> that match <see cref="Search"/>: the user's first, then the built-in ones.</summary>
     public ObservableCollection<PronunciationRow> Words { get; } = [];
+
+    /// <summary>Filters the list by the word, its reading or its category.</summary>
+    [ObservableProperty]
+    public partial string Search { get; set; } = string.Empty;
+
+    /// <summary>How many built-in and own words the language has.</summary>
+    [ObservableProperty]
+    public partial string Counts { get; set; } = string.Empty;
+
+    /// <summary>The add button's text: "Add", or "Save" while a word is being edited.</summary>
+    [ObservableProperty]
+    public partial string AddLabel { get; set; } = string.Empty;
+
+    /// <summary>The installed local voices of <see cref="Language"/> the listen button can use.</summary>
+    public ObservableCollection<ChoiceOption> ListenVoices { get; } = [];
+
+    /// <summary>The voice that listens.</summary>
+    [ObservableProperty]
+    public partial ChoiceOption? ListenVoice { get; set; }
+
+    /// <summary>The sentence to listen to (empty: the word in the box).</summary>
+    [ObservableProperty]
+    public partial string ListenText { get; set; } = string.Empty;
+
+    /// <summary>A listen is being spoken.</summary>
+    [ObservableProperty]
+    public partial bool Listening { get; set; }
 
     /// <summary>The word to add as written.</summary>
     [ObservableProperty]
@@ -95,10 +130,87 @@ public sealed partial class VoiceSettingsViewModel(PronunciationService pronunci
             return;
         }
 
+        // An own word edited under another spelling: the old spelling goes.
+        var culture = OutputLanguages.Of(language.Value).Culture;
+        if (_editing?.Entry is { } old && PronunciationRewriter.Fold(old.Word.Trim(), culture) != PronunciationRewriter.Fold(NewWord.Trim(), culture))
+        {
+            await pronunciations.DeleteAsync(old, CancellationToken.None).ConfigureAwait(true);
+        }
+
         Status = text.Format("voices.words.added", NewWord.Trim());
         NewWord = string.Empty;
         NewSpoken = string.Empty;
+        _editing = null;
+        AddLabel = text["voices.words.add"];
         await LoadWordsAsync().ConfigureAwait(true);
+    }
+
+    /// <summary>Puts a word into the boxes to change it (a built-in word becomes the user's own when saved).</summary>
+    [RelayCommand]
+    public void EditWord(PronunciationRow? row)
+    {
+        if (row is null)
+        {
+            return;
+        }
+
+        _editing = row;
+        NewWord = row.Shown;
+        NewSpoken = row.Spoken;
+        AddLabel = text["voices.words.save"];
+        Status = text.Format("voices.words.editing", row.Shown);
+    }
+
+    /// <summary>
+    /// Speaks <see cref="ListenText"/> (or the word in the box) with <see cref="ListenVoice"/> and opens it; the word and reading in the
+    /// boxes apply even before they are saved.
+    /// </summary>
+    [RelayCommand]
+    public async Task ListenAsync()
+    {
+        if (Listening || Language is not { } language)
+        {
+            return;
+        }
+
+        var sentence = ListenText.Trim().Length > 0 ? ListenText.Trim() : NewWord.Trim().TrimStart(PronunciationRule.ExactMark);
+        var engine = speech.Engines.FirstOrDefault(e => e.IsLocal && e.Code == ListenVoice?.Value);
+        var model = catalog.All.FirstOrDefault(m => m.Provider == ModelProviders.Local && m.Id == engine?.Code);
+        if (engine is null || model is null)
+        {
+            Status = text["voices.listen.no_voice"];
+            return;
+        }
+
+        if (sentence.Length == 0)
+        {
+            Status = text["voices.listen.empty"];
+            return;
+        }
+
+        IReadOnlyList<PronunciationRule> extra = [];
+        if (NewWord.Trim().Length > 0 && NewSpoken.Trim().Length > 0)
+        {
+            extra = [PronunciationService.Own(new PronunciationEntry { Language = language.Value, Word = NewWord, Spoken = NewSpoken })];
+        }
+
+        Listening = true;
+        try
+        {
+            var setup = new SpeechSetup(engine, model, null, string.Empty, 1.0);
+            var wav = Path.Combine(paths.WorkDirectory, "listen", "pronunciation.wav");
+            await speech.SynthesizeAsync(setup, language.Value, sentence, wav, extra, CancellationToken.None).ConfigureAwait(true);
+            shell.OpenPath(wav);
+        }
+        catch (Exception ex) when (ex is SpeechException or IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarning(ex, "Listening to a pronunciation failed");
+            Status = text.Format("speech.failed", ex.Message);
+        }
+        finally
+        {
+            Listening = false;
+        }
     }
 
     /// <summary>Removes the user's word.</summary>
@@ -223,6 +335,8 @@ public sealed partial class VoiceSettingsViewModel(PronunciationService pronunci
 
     partial void OnLanguageChanged(ChoiceOption? value) => _ = LoadWordsSafelyAsync();
 
+    partial void OnSearchChanged(string value) => Filter();
+
     private async Task LoadWordsSafelyAsync()
     {
         try
@@ -243,11 +357,49 @@ public sealed partial class VoiceSettingsViewModel(PronunciationService pronunci
             return;
         }
 
-        var rules = await pronunciations.RulesAsync(language.Value, CancellationToken.None).ConfigureAwait(true);
-        Words.Clear();
-        foreach (var rule in rules)
+        if (AddLabel.Length == 0)
         {
-            Words.Add(new PronunciationRow(rule.Word, rule.Spoken, rule.Entry, text[rule.BuiltIn ? "voices.words.builtin" : "voices.words.own"]));
+            AddLabel = text["voices.words.add"];
+        }
+
+        var rules = await pronunciations.RulesAsync(language.Value, CancellationToken.None).ConfigureAwait(true);
+        _all = rules.Select(rule => new PronunciationRow(rule.Word, rule.Spoken, rule.Entry, Tag(rule), rule.ExactCase, rule.Category)).ToList();
+        Counts = text.Format("voices.words.counts", _all.Count(r => !r.Own), _all.Count(r => r.Own));
+        Filter();
+
+        // The local voices of the language that are installed (the listen button never downloads anything).
+        var current = ListenVoice?.Value;
+        ListenVoices.Clear();
+        foreach (var engine in speech.Engines.Where(e => e.IsLocal && e.Ready && e.Supports(language.Value)))
+        {
+            ListenVoices.Add(new ChoiceOption(engine.Code, engine.Name));
+        }
+
+        ListenVoice = ListenVoices.FirstOrDefault(v => v.Value == current) ?? ListenVoices.FirstOrDefault();
+    }
+
+    private string Tag(PronunciationRule rule)
+    {
+        if (!rule.BuiltIn)
+        {
+            return text["voices.words.own"];
+        }
+
+        return rule.Category.Length > 0 ? text["voices.words.builtin"] + " \u00b7 " + rule.Category : text["voices.words.builtin"];
+    }
+
+    private void Filter()
+    {
+        var search = Search.Trim();
+        var culture = Language is { } language ? OutputLanguages.Of(language.Value).Culture : CultureInfo.InvariantCulture;
+        var folded = PronunciationRewriter.Fold(search, culture);
+        Words.Clear();
+        foreach (var row in _all.Where(r => search.Length == 0
+            || PronunciationRewriter.Fold(r.Word, culture).Contains(folded, StringComparison.Ordinal)
+            || PronunciationRewriter.Fold(r.Spoken, culture).Contains(folded, StringComparison.Ordinal)
+            || PronunciationRewriter.Fold(r.Category, culture).Contains(folded, StringComparison.Ordinal)))
+        {
+            Words.Add(row);
         }
     }
 }
