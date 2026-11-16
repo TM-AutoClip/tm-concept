@@ -2,12 +2,14 @@ using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using TMConcept.Core.Chat;
 using TMConcept.Core.Costs;
+using TMConcept.Core.Endpoints;
 using TMConcept.Core.Models;
 using TMConcept.Core.Providers;
 using TMConcept.Providers.Anthropic;
 using TMConcept.Providers.Catalog;
 using TMConcept.Providers.Chat;
 using TMConcept.Providers.Common;
+using TMConcept.Providers.Endpoints;
 using TMConcept.Providers.Fal;
 using TMConcept.Providers.OpenAICompatible;
 
@@ -21,7 +23,6 @@ public static class ProviderServices
     {
         services.AddSingleton(ProviderTransport.Network);
         services.AddSingleton<ProviderHttp>();
-        services.AddSingleton<IModelCatalog, EmbeddedModelCatalog>();
         services.AddSingleton<Providers.Pricing.PriceUpdater>();
         services.AddSingleton<ICostCalculator, CostCalculator>();
         services.AddSingleton<StepModelResolver>();
@@ -36,6 +37,16 @@ public static class ProviderServices
         services.AddSingleton<Providers.Embeddings.IEmbeddingTransport, Providers.Embeddings.OpenAIEmbeddings>();
         services.AddSingleton<Providers.Embeddings.IEmbeddingTransport, Providers.Embeddings.OpenRouterEmbeddings>();
         services.AddSingleton<Core.Duplicates.IEmbeddingService, Providers.Embeddings.EmbeddingService>();
+
+        // Local servers (package B): user-added OpenAI-compatible endpoints. The catalog is the embedded one plus their models; one chat
+        // transport serves every server (codes endpoint:<id>) and also tests a server's address (GET models).
+        services.AddSingleton(EndpointTransport.Network);
+        services.AddSingleton<EndpointRegistry>();
+        services.AddSingleton<EmbeddedModelCatalog>();
+        services.AddSingleton<IModelCatalog, MergedModelCatalog>();
+        services.AddSingleton<EndpointChatTransport>();
+        services.AddSingleton<IChatTransport>(s => s.GetRequiredService<EndpointChatTransport>());
+        services.AddSingleton<IEndpointProbe>(s => s.GetRequiredService<EndpointChatTransport>());
     }
 
     /// <summary>A provider without chat.</summary>

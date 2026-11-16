@@ -20,7 +20,10 @@ namespace TMConcept.Providers.OpenAICompatible;
 /// stream that ended without a finish reason are errors with the billed usage (and the raw finish reason). Every answer writes one log
 /// line: model, raw finish reason, the max_tokens and effort sent ("-" when none, or after a provider refused them), the tokens, the request id and
 /// the time (a warning when it ended badly; never the prompt or the key). The request's progress gets sent → thinking → writing (a streamed
-/// call; reasoning chunks carry no visible text) → done (<see cref="ChatProgressReporter"/>).
+/// call; reasoning chunks carry no visible text) → done (<see cref="ChatProgressReporter"/>). A local server's provider
+/// (<see cref="OpenAICompatibleProviderBase.LoadingRetries"/>, <see cref="OpenAICompatibleProviderBase.StripsThinking"/>,
+/// <see cref="OpenAICompatibleProviderBase.ReportsUsage"/>) also gets a 503 retried while its model loads, <c>&lt;think&gt;</c> blocks removed
+/// from the answer and no warning for a stream without usage.
 /// </summary>
 public sealed class OpenAICompatibleChatClient(OpenAICompatibleProviderBase provider, ProviderHttp http, CatalogModel model, string apiKey, ILogger logger)
     : IChatClient
@@ -96,7 +99,7 @@ public sealed class OpenAICompatibleChatClient(OpenAICompatibleProviderBase prov
         bool streamed;
         try
         {
-            (node, requestId, streamed) = await AnswerAsync(body, request.Stream, progress, cancellationToken).ConfigureAwait(false);
+            (node, requestId, streamed) = await LoadedAnswerAsync(body, request.Stream, progress, cancellationToken).ConfigureAwait(false);
         }
         catch (ProviderException ex) when (ex.Status is 400 or 422 && Optional.Any(body.ContainsKey))
         {
@@ -107,10 +110,10 @@ public sealed class OpenAICompatibleChatClient(OpenAICompatibleProviderBase prov
                 body.Remove(field);
             }
 
-            (node, requestId, streamed) = await AnswerAsync(body, request.Stream, progress, cancellationToken).ConfigureAwait(false);
+            (node, requestId, streamed) = await LoadedAnswerAsync(body, request.Stream, progress, cancellationToken).ConfigureAwait(false);
         }
 
-        if (streamed && node?["usage"] is null)
+        if (streamed && node?["usage"] is null && provider.ReportsUsage)
         {
             logger.LogWarning("{Provider} {Model}: the stream reported no usage; the cost of this call is counted as 0 (request {RequestId})", provider.Name,
                 Model.Id, requestId.Length > 0 ? requestId : "-");
@@ -125,7 +128,7 @@ public sealed class OpenAICompatibleChatClient(OpenAICompatibleProviderBase prov
         // or with finish_reason "error" and a partial message. Both are failures, never an empty success.
         var choice = (node?["choices"] as JsonArray) is { Count: > 0 } choices ? choices[0] : null;
         var finish = JsonRead.Text(choice?["finish_reason"]);
-        progress.Done(JsonRead.Text(choice?["message"]?["content"]));
+        progress.Done(Visible(JsonRead.Text(choice?["message"]?["content"])));
         var bad = node?["error"] is not null || choice is null || finish is "error" or "length" or "content_filter" || (streamed && finish.Length == 0);
         logger.Log(bad ? LogLevel.Warning : LogLevel.Information,
             "{Provider} {Model}: finish reason {FinishReason}, max_tokens {MaxTokens}, effort {Effort}, tokens in {Input} / out {Output} / cache read {CacheRead}, request {RequestId}, {Ms} ms",
@@ -149,7 +152,7 @@ public sealed class OpenAICompatibleChatClient(OpenAICompatibleProviderBase prov
             };
         }
 
-        var text = JsonRead.Text(choice["message"]?["content"]);
+        var text = Visible(JsonRead.Text(choice["message"]?["content"]));
         if (streamed && finish.Length == 0)
         {
             // The stream ended without a finish reason: the answer is not complete (what arrived was billed).
@@ -177,6 +180,31 @@ public sealed class OpenAICompatibleChatClient(OpenAICompatibleProviderBase prov
                 StopReason = finish,
             }
             : new ChatResponse(text, usage, reported, finish, requestId);
+    }
+
+    /// <summary>The answer without the model's thinking blocks when the provider may send them (<see cref="ThinkBlocks"/>).</summary>
+    private string Visible(string text) => provider.StripsThinking ? ThinkBlocks.Strip(text) : text;
+
+    /// <summary>
+    /// <see cref="AnswerAsync"/>, with a 503 retried <see cref="OpenAICompatibleProviderBase.LoadingRetries"/> times (a local server loading
+    /// its model); every other failure goes to the caller at once.
+    /// </summary>
+    private async Task<(JsonNode? Node, string RequestId, bool Streamed)> LoadedAnswerAsync(JsonObject body, bool stream, ChatProgressReporter progress,
+        CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await AnswerAsync(body, stream, progress, cancellationToken).ConfigureAwait(false);
+            }
+            catch (ProviderException ex) when (ex.Status == 503 && attempt <= provider.LoadingRetries)
+            {
+                logger.LogWarning("{Provider} {Model}: HTTP 503 (the model may still be loading); retry {Attempt} of {Retries}", provider.Name, Model.Id,
+                    attempt, provider.LoadingRetries);
+                await provider.WaitForLoadingAsync(attempt, cancellationToken).ConfigureAwait(false);
+            }
+        }
     }
 
     /// <summary>The output limit the body sends (<c>max_completion_tokens</c> or <c>max_tokens</c>), as text; "-" when none is sent.</summary>

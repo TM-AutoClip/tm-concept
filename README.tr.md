@@ -195,6 +195,11 @@ altında *API anahtarları*'nı işaretlersen girer (yedek dosyası yedek parola
 sayfa, başlamadan önce anahtarı sorar. Her sağlayıcı
 için adım adım rehber: [docs/api-keys.tr.md](docs/api-keys.tr.md).
 
+**Yerel sunucu (ücretsiz):** bilgisayarında OpenAI uyumlu bir sunucuyla çalışan bir model (AMD'de Lemonade Server, ROCm ya da Vulkan
+sürümleriyle llama.cpp `llama-server`, Ollama, LM Studio, vLLM) aynı yerden eklenebilir (**Yerel sunucu (OpenAI uyumlu)**: adres,
+isteğe bağlı jeton, modelleri). Modelleri bundan sonra her metin adımında ücretsiz ve anahtarsız sunulur.
+Rehber: [docs/api-keys.tr.md](docs/api-keys.tr.md#yerel-sunucu-openai-uyumlu-ücretsiz).
+
 Sonra modelleri onları kullanan sayfalarda seç (yukarıya bak). Ücretli hiçbir şey senin yerine seçilmez.
 
 ## İlk videonu üret

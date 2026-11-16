@@ -1,3 +1,4 @@
+using TMConcept.Core.Endpoints;
 using TMConcept.Core.Profiles;
 using TMConcept.Core.Settings;
 
@@ -5,9 +6,9 @@ namespace TMConcept.Desktop.Startup;
 
 /// <summary>
 /// State of the running app: settings (loaded once after unlock, saved through here so every reader sees the change) and the selected
-/// profile every page is filtered by.
+/// profile every page is filtered by. Loading also reads the user's local servers, whose models the catalog offers from then on.
 /// </summary>
-public sealed class AppSession(ISettingsStore store, IProfileStore profiles)
+public sealed class AppSession(ISettingsStore store, IProfileStore profiles, EndpointRegistry endpoints)
 {
     /// <summary>Current settings (defaults until loaded).</summary>
     public AppSettings Settings { get; internal set; } = new();
@@ -33,6 +34,7 @@ public sealed class AppSession(ISettingsStore store, IProfileStore profiles)
         Settings = await store.GetAsync(cancellationToken).ConfigureAwait(true);
         var all = await profiles.ListAsync(cancellationToken).ConfigureAwait(true);
         Profile = all.FirstOrDefault(p => p.Id == Settings.SelectedProfileId) ?? all.FirstOrDefault();
+        await endpoints.LoadAsync(cancellationToken).ConfigureAwait(true);
     }
 
     /// <summary>Saves and notifies.</summary>

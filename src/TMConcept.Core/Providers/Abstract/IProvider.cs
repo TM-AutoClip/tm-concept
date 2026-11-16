@@ -2,7 +2,8 @@ namespace TMConcept.Core.Providers;
 
 /// <summary>
 /// An online provider: its fixed address (never taken from the user), where to get a key, the steps of the key guide, and a free connection
-/// test. A new provider = a new class registered in DI; nothing else changes.
+/// test. A new provider = a new class registered in DI; nothing else changes. The one exception to the fixed address is a user-added local
+/// server (OpenAI-compatible, see <see cref="Endpoints.LocalEndpoint"/>): made for each call from the saved address, never registered.
 /// </summary>
 public interface IProvider
 {
