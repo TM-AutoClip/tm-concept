@@ -124,8 +124,10 @@ public sealed class VideoRemaker(IEnumerable<IVideoEngine> engines, SceneNarrato
             var timed = RenderInputBuilder.Build(input.Title, input.Language, sources, input.Width, input.Height, input.Fps, input.Theme);
             steps.Finish(VideoSteps.Timing);
 
-            var rendered = await assembler.RenderKeptAsync(source.Engine, source.Code, timed, work, steps, cancellationToken).ConfigureAwait(false);
+            // The version keeps the video's own subtitles choice: off = the engine gets no captions and nothing is burned in.
             var options = Options(source.Record);
+            var rendered = await assembler.RenderKeptAsync(source.Engine, source.Code, options.Subtitles, timed, work, steps, cancellationToken)
+                .ConfigureAwait(false);
             options.Speech = voice is not null;
             warnings.AddRange(ImageWarnings(source.Record));
             var record = await assembler.SaveAsync(new VersionSave(id, job.Profile, source.Record.ConceptId, source.Record.Title, work, rendered, clips, target,

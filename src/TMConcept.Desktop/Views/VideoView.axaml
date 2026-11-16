@@ -16,7 +16,8 @@
       <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12">
         <views:ModelSummaryBar Name="ModelsBar" Picker="{Binding Picker}" IsOpen="{Binding ModelsOpen}" />
         <views:HelpTip Grid.Column="1" Text="{DynamicResource video.models.tip}" VerticalAlignment="Center" />
-        <CheckBox Name="SubtitlesCheck" Grid.Column="2" IsChecked="{Binding Subtitles}" Content="{DynamicResource video.subtitles}" MinHeight="0" />
+        <CheckBox Name="SubtitlesCheck" Grid.Column="2" IsChecked="{Binding Subtitles}" Content="{DynamicResource video.subtitles}" MinHeight="0"
+                  ToolTip.Tip="{DynamicResource video.subtitles.tip}" />
       </Grid>
     </Border>
 

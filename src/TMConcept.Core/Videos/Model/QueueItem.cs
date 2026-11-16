@@ -1,6 +1,10 @@
 namespace TMConcept.Core.Videos;
 
-/// <summary>An entry of the production queue ("to be produced"). Removed when produced or taken out of the queue.</summary>
+/// <summary>
+/// An entry of the production queue ("to be produced"). Removed when produced or taken out of the queue. It keeps no settings: a queued
+/// video is made with the choices of the moment it starts (the profile's models, the subtitles checkbox). Until 0.1.16 it kept the
+/// subtitles choice of the moment it was added, so turning subtitles off did not reach videos already queued.
+/// </summary>
 public sealed class QueueItem
 {
     /// <summary>Id.</summary>
@@ -14,9 +18,6 @@ public sealed class QueueItem
 
     /// <summary>Order (0 = first).</summary>
     public int Position { get; set; }
-
-    /// <summary>Production settings as JSON.</summary>
-    public string SettingsJson { get; set; } = "{}";
 
     /// <summary>Added (UTC).</summary>
     public DateTimeOffset AddedAtUtc { get; set; } = DateTimeOffset.UtcNow;

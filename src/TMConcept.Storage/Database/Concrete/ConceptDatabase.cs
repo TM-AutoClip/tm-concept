@@ -1,7 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using TMConcept.Core.Paths;
 using TMConcept.Storage.Keys;
 
@@ -55,27 +55,19 @@ public sealed class ConceptDatabase(IAppPaths paths, DatabaseKey key)
     }
 
     /// <summary>
-    /// Creates the tables when the file has none yet (a new database, created by EF Core from the mapping) in one transaction; a file with
-    /// tables is used as it is. Every way a database file comes in goes through here: first start, unlock, and a restored backup. A file of
-    /// another layout is not recognised or upgraded (no backward compatibility): it fails where the mapping does not fit. An SQLite build
-    /// without secure delete is refused.
+    /// Brings this data folder's database file to this version's schema (<see cref="SchemaUpgrader"/>): a new file gets its tables, an older
+    /// one goes through every schema step it lacks after a copy of it is kept under the backup folder, a file that cannot be upgraded throws
+    /// <see cref="DatabaseVersionException"/> and stays as it was. Called before the file is used (unlock, first start).
     /// </summary>
-    internal static async Task EnsureSchemaAsync(ConceptDbContext db, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(db);
-        var secureDelete = await db.SecureDelete.Select(s => s.Value).FirstAsync(cancellationToken).ConfigureAwait(false);
-        if (secureDelete != ConceptSchema.SecureDeleteOn)
-        {
-            throw new InvalidOperationException("This SQLite build does not overwrite deleted data (secure_delete is off); the database is not used.");
-        }
+    public Task<SchemaUpgradeResult> UpgradeAsync(ILogger? logger, CancellationToken cancellationToken) =>
+        new SchemaUpgrader(EfSchemaSteps.Instance, logger ?? NullLogger.Instance).UpgradeFileAsync(paths.DatabaseFile, key.Passphrase(),
+            Path.Combine(paths.BackupDirectory, ConceptSchema.UpgradeBackupFolder), cancellationToken);
 
-        if (await db.SchemaObjects.AnyAsync(o => o.Type == ConceptSchema.TableType, cancellationToken).ConfigureAwait(false))
-        {
-            return;
-        }
-
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-        await db.GetService<IRelationalDatabaseCreator>().CreateTablesAsync(cancellationToken).ConfigureAwait(false);
-        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-    }
+    /// <summary>
+    /// Brings the open <paramref name="db"/> to this version's schema in place: a new file gets its tables; a file that is itself a temporary
+    /// copy (a backup being restored, an older one too) goes through the schema steps it lacks. The same refusals as
+    /// <see cref="UpgradeAsync"/>; an SQLite build without secure delete is refused.
+    /// </summary>
+    internal static Task<SchemaUpgradeResult> EnsureSchemaAsync(ConceptDbContext db, CancellationToken cancellationToken, ILogger? logger = null) =>
+        new SchemaUpgrader(EfSchemaSteps.Instance, logger ?? NullLogger.Instance).UpgradeInPlaceAsync(db, cancellationToken);
 }

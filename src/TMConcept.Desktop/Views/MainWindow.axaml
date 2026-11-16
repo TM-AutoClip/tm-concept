@@ -94,7 +94,7 @@
     <!-- The activity log: folded, one 30-pixel line (toggle, the newest line, the running work's step, Copy, Clear); open, 120 pixels. -->
     <Border Grid.Row="2" Background="{DynamicResource tm-strip-bg}" BorderBrush="{DynamicResource tm-border}" BorderThickness="0,1,0,0">
       <DockPanel>
-        <Grid DockPanel.Dock="Top" Height="30" ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="8" Margin="10,0,8,0">
+        <Grid DockPanel.Dock="Top" Height="30" ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" ColumnSpacing="8" Margin="10,0,8,0">
           <Button Name="LogToggle" Classes="link" Command="{Binding ToggleLogCommand}" VerticalAlignment="Center">
             <StackPanel Orientation="Horizontal" Spacing="6">
               <TextBlock Text="▸" IsVisible="{Binding !LogOpen}" FontSize="12" VerticalAlignment="Center" />
@@ -110,8 +110,10 @@
             <TextBlock Name="CurrentStep" Text="{Binding CurrentStep}" FontSize="12" MaxWidth="520" TextTrimming="CharacterEllipsis"
                        Classes="muted" VerticalAlignment="Center" />
           </StackPanel>
-          <Button Grid.Column="3" Classes="small" Content="{DynamicResource log.copy}" Command="{Binding CopyLogCommand}" VerticalAlignment="Center" />
-          <Button Grid.Column="4" Classes="small" Content="{DynamicResource log.clear}" Command="{Binding ClearLogCommand}" VerticalAlignment="Center" />
+          <Button Grid.Column="3" Name="ShowAllLogsButton" Classes="link" Content="{DynamicResource log.show_all}" Command="{Binding ShowAllLogsCommand}"
+                  VerticalAlignment="Center" FontSize="12" ToolTip.Tip="{DynamicResource log.show_all.tip}" />
+          <Button Grid.Column="4" Classes="small" Content="{DynamicResource log.copy}" Command="{Binding CopyLogCommand}" VerticalAlignment="Center" />
+          <Button Grid.Column="5" Classes="small" Content="{DynamicResource log.clear}" Command="{Binding ClearLogCommand}" VerticalAlignment="Center" />
         </Grid>
         <ScrollViewer Name="LogScroll" Height="90" IsVisible="{Binding LogOpen}" Margin="10,0,8,4">
           <ItemsControl ItemsSource="{Binding Lines}">

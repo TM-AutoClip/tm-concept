@@ -21,7 +21,8 @@ namespace TMConcept.Desktop.ViewModels;
 /// total and, while paid work runs, what it has spent so far; <see cref="SpendingMeter"/>), the page tabs (<see cref="Tabs"/>), and on the
 /// right the profile selector (every page is filtered by it), "Report a problem" and Settings (<see cref="SettingsItem"/>, a page drawn as a
 /// separate tab button). Below: the current page and the activity log. The log's header has the toggle, the last line while it is folded,
-/// the step of the running work (a concept call, "Suggest topics", a video, an install) with a spinner, Copy and Clear; open, it lists the
+/// the step of the running work (a concept call, "Suggest topics", a video, an install) with a spinner, "Show all" (the detailed log page,
+/// <see cref="LogViewerViewModel"/>), Copy and Clear; open, it lists the
 /// last <see cref="ListMax"/> lines newest first (time and text; a warning yellow, an error red; lines about money say what was paid).
 /// Folded by default since 0.1.13 (at 720 pixels the open log took a quarter of the window); the last choice is remembered
 /// (<see cref="UiPreferences.LogOpen"/>).
@@ -34,6 +35,7 @@ public sealed partial class ShellViewModel : ObservableObject
     private readonly INotifier _notifier;
     private readonly ILogger<ShellViewModel> _logger;
     private readonly IReportDialog _report;
+    private readonly ILogViewer? _logs;
     private readonly WorkStatus _work;
     private readonly WindowHost _host;
     private readonly SpendingMeter _spending;
@@ -50,7 +52,7 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>Builds the tabs from every registered page.</summary>
     public ShellViewModel(IEnumerable<PageViewModelBase> pages, Localizer text, AppSession session, IProfileStore profiles, INotifier notifier,
         IReportDialog report, IActivityFeed feed, WorkStatus work, WindowHost host, SpendingMeter spending, ConceptEvents events, IModelCatalog catalog,
-        UiPreferencesFile preferences, ILogger<ShellViewModel> logger)
+        UiPreferencesFile preferences, ILogger<ShellViewModel> logger, ILogViewer? logs = null)
     {
         ArgumentNullException.ThrowIfNull(host);
         ArgumentNullException.ThrowIfNull(feed);
@@ -69,6 +71,7 @@ public sealed partial class ShellViewModel : ObservableObject
         _notifier = notifier;
         _logger = logger;
         _report = report;
+        _logs = logs;
         _host = host;
         Items = new ObservableCollection<NavItemViewModel>(pages.OrderBy(p => p.Order).Select(p => new NavItemViewModel(this, p)));
         Tabs = new ObservableCollection<NavItemViewModel>(Items.Where(i => i.Page.Order < TabOrderMax));
@@ -389,6 +392,10 @@ public sealed partial class ShellViewModel : ObservableObject
             : _text.Usd(_spending.MonthUsd);
         SpendingTip = _text.Format("shell.spending.tip", month, PriceInfo.Date(_catalog));
     }
+
+    /// <summary>Opens the detailed log page (every line of the kept log files, filtered, followed live).</summary>
+    [RelayCommand]
+    private void ShowAllLogs() => _logs?.Show();
 
     /// <summary>Empties the panel; the log file keeps every line.</summary>
     [RelayCommand]

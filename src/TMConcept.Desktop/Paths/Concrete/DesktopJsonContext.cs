@@ -6,4 +6,7 @@ namespace TMConcept.Desktop.Paths;
 [JsonSourceGenerationOptions(WriteIndented = true)]
 [JsonSerializable(typeof(UiPreferences))]
 [JsonSerializable(typeof(Dictionary<string, string>))]
+[JsonSerializable(typeof(List<Core.Components.InstalledComponent>))]
+[JsonSerializable(typeof(Updates.UpdateCheckState))]
+[JsonSerializable(typeof(Updates.GitHubRelease))]
 internal sealed partial class DesktopJsonContext : JsonSerializerContext;

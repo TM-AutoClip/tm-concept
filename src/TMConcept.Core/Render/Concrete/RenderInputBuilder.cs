@@ -72,6 +72,28 @@ public static class RenderInputBuilder
         return input;
     }
 
+    /// <summary>
+    /// What the engine (and the video code prompt) gets: <paramref name="input"/> itself with subtitles on; with subtitles off a copy whose
+    /// captions are empty, so the generated code has no narration text it could draw (16 Nov 2026: with subtitles off the code drew the
+    /// narration on screen). The source input, the .srt and the narration file keep the real captions.
+    /// </summary>
+    public static RenderInput ForEngine(RenderInput input, bool subtitles)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        if (subtitles)
+        {
+            return input;
+        }
+
+        var copy = FromJson(ToJson(input)) ?? throw new InvalidOperationException("The render input could not be copied.");
+        foreach (var scene in copy.Scenes)
+        {
+            scene.Caption = string.Empty;
+        }
+
+        return copy;
+    }
+
     /// <summary>Indented JSON for <c>input.json</c>.</summary>
     public static string ToJson(RenderInput input) => JsonSerializer.Serialize(input, Info(FileJson));
 

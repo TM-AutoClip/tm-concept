@@ -75,7 +75,7 @@ public sealed class ComponentInstallFlow(ComponentPlanner planner, IConfirmDialo
                     await planner.InstallAsync(plan, overall, linked.Token, new Progress<ComponentStep>(m.Apply)).ConfigureAwait(true);
                     return string.Empty;
                 }
-                catch (OperationCanceledException)
+                catch (OperationCanceledException) when (linked.Token.IsCancellationRequested)
                 {
                     // Cancel pressed (in the window or on the page): what was installed before stays; the rest is downloaded the next time.
                     logger.LogInformation("The install of {Components} was cancelled", string.Join(", ", plan.Missing.Select(c => c.Code)));
@@ -85,7 +85,15 @@ public sealed class ComponentInstallFlow(ComponentPlanner planner, IConfirmDialo
                 }
                 catch (ToolInstallException ex)
                 {
-                    var reason = text.Format("install.failed", text.Format("tools.fail." + ex.Code, ex.Code == "unavailable" ? "ffmpeg" : string.Empty));
+                    var reason = text.Format("install.failed", Reason(text, ex));
+                    activity.Add(ActivityLevel.Error, reason);
+                    return reason;
+                }
+                catch (OperationCanceledException ex)
+                {
+                    // Not the user's cancel: something timed out (a download's own time-out is a ToolInstallException "timeout").
+                    logger.LogWarning(ex, "The install of {Components} timed out", string.Join(", ", plan.Missing.Select(c => c.Code)));
+                    var reason = text.Format("install.failed", text.Format("tools.fail.timeout", ex.Message));
                     activity.Add(ActivityLevel.Error, reason);
                     return reason;
                 }
@@ -117,6 +125,19 @@ public sealed class ComponentInstallFlow(ComponentPlanner planner, IConfirmDialo
 
         activity.Add(ActivityLevel.Info, text.Format("install.done", names));
         return new InstallOutcome(unsupported.Length == 0, unsupported);
+    }
+
+    /// <summary>
+    /// Why an install failed, in the user's language, with the system's own reason where there is one (an SSL/TLS or DNS error, a reset
+    /// connection: 0.1.16 showed only "the download failed").
+    /// </summary>
+    public static string Reason(Localizer text, ToolInstallException error)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        ArgumentNullException.ThrowIfNull(error);
+        var detail = error.Code == "unavailable" ? "ffmpeg" : error.Detail.Length > 0 ? error.Detail : error.Message;
+        var key = "tools.fail." + error.Code;
+        return text.Has(key) ? text.Format(key, detail) : text.Format("tools.fail.download", detail);
     }
 
     private string Message(InstallPlan plan, string purposeKey)

@@ -62,6 +62,9 @@ public sealed class Localizer : ILocalizer
         }
     }
 
+    /// <summary>Whether <paramref name="key"/> has a text (in English at least).</summary>
+    public bool Has(string key) => _english.ContainsKey(key) || _current.ContainsKey(key);
+
     /// <summary>Every key with its text in the current language (English where missing).</summary>
     public IReadOnlyDictionary<string, string> Strings
     {

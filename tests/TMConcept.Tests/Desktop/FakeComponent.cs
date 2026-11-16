@@ -31,6 +31,9 @@ internal sealed class FakeComponent(string code, bool ready, params string[] dep
 
     public int Installs { get; private set; }
 
+    /// <summary>Runs inside the install, before it ends (what the test looks at meanwhile).</summary>
+    public Action? OnInstall { get; set; }
+
     public IReadOnlyList<ComponentDownload> Downloads() => Ready ? [] : [new ComponentDownload(Name, "example.org", 1_000_000)];
 
     public IReadOnlyList<string> Folders() => Folder is null ? [] : [Folder];
@@ -45,6 +48,7 @@ internal sealed class FakeComponent(string code, bool ready, params string[] dep
     public Task InstallAsync(IProgress<ToolProgress>? progress, CancellationToken cancellationToken)
     {
         Installs++;
+        OnInstall?.Invoke();
         if (Cancel)
         {
             throw new OperationCanceledException("fake cancel");

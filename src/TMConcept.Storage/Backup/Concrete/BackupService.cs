@@ -24,8 +24,9 @@ namespace TMConcept.Storage.Backup;
 /// database (never in a backup file), so daily backups need no password. Opening a backup always needs the password; changing it needs the
 /// current one. A forgotten backup password cannot be recovered. A restore is possible only while there is no database yet (first start),
 /// says what the file holds before anything is replaced, and brings back exactly that. Only this file format is restored: a file of
-/// format 02 (0.1.1–0.1.5) is refused with <see cref="BackupRefusedException"/> before anything changes. The database inside is not
-/// recognised by version (no backward compatibility): one of another layout fails where the mapping does not fit.
+/// format 02 (0.1.1–0.1.5) is refused with <see cref="BackupRefusedException"/> before anything changes. The database inside records its
+/// schema steps (since 0.1.17): an older one is upgraded through every step it lacks while it is restored; one made before upgrades were
+/// recorded, or by a newer version, is refused.
 /// </summary>
 public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault, ConceptDatabase database, KdfParameters kdf,
     TimeProvider clock, ILogger<BackupService> logger)
@@ -600,10 +601,11 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
     }
 
     /// <summary>
-    /// Opens the temporary copy before anything is installed (the key and the file must fit; secure delete must be on), then reads one row
-    /// of every table through the mapping itself (<see cref="ReadEveryTableAsync"/>). No version is recognised: a database of another
-    /// version simply fails where the mapping does not fit, and that happens here, before anything is installed
-    /// (<see cref="BackupRefusedException"/>), not later on the first page that reads it.
+    /// Opens the temporary copy before anything is installed (the key and the file must fit; secure delete must be on), brings it to this
+    /// version's schema (an older backup goes through the schema steps it lacks, on this temporary copy only), then reads one row of every
+    /// table through the mapping itself (<see cref="ReadEveryTableAsync"/>). A backup made before upgrades were recorded (0.1.16 and
+    /// earlier) or by a newer version is refused here, before anything is installed (<see cref="BackupRefusedException"/>), not later on the
+    /// first page that reads it.
     /// </summary>
     private async Task VerifyAsync(string file, byte[] dek, CancellationToken cancellationToken)
     {
@@ -614,7 +616,7 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
             await db.Settings.CountAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                await ConceptDatabase.EnsureSchemaAsync(db, cancellationToken).ConfigureAwait(false);
+                await ConceptDatabase.EnsureSchemaAsync(db, cancellationToken, logger).ConfigureAwait(false);
             }
             catch (InvalidOperationException ex)
             {

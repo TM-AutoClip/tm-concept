@@ -30,4 +30,19 @@ public sealed class UiPreferences
     /// version at start asks what to do with the installed components. Empty = not recorded (0.1.15 and earlier).
     /// </summary>
     public string LastVersion { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The "Subtitles in the picture" choice of the Concept to video page (on by default). Kept since 0.1.17: until then it came back on
+    /// after every restart, and a queued item kept the choice it was added with, so turning it off did not stop the subtitles.
+    /// </summary>
+    public bool Subtitles { get; set; } = true;
+
+    /// <summary>Look for a newer version of the app at start (once a day at most; Settings → General). On by default.</summary>
+    public bool CheckForUpdates { get; set; } = true;
+
+    /// <summary>The newer version last offered at start (with <see cref="UpdateOfferedAtUtc"/>: not offered again within a day).</summary>
+    public string UpdateOfferedVersion { get; set; } = string.Empty;
+
+    /// <summary>When <see cref="UpdateOfferedVersion"/> was offered (UTC).</summary>
+    public DateTimeOffset? UpdateOfferedAtUtc { get; set; }
 }

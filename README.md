@@ -263,12 +263,38 @@ Then choose the models on the pages that use them (see above). Nothing paid is c
    changes the text; placeholders such as `[pause 1 s]` or `[soft transition]` go in at the cursor and the program applies them in the
    video.
 3. **Concept to video:** press **Add to queue** on approved concepts, check the models on top, press **Produce in order**.
+   *Subtitles in the picture* off means no subtitles and no narration text on screen at all (the video code gets no narration to draw); the
+   choice is kept on this computer and applies to every queued video that has not started yet.
 4. **Produced videos:** watch in the app (sound on Linux through PulseAudio or PipeWire), open the folder. Each video is a version folder (`v1/` inside the concept's folder) with `video.mp4`, `subtitles.srt`, `narration.txt` (always written) and `thumbnail.jpg`, plus `source/` (the engine project as it rendered: the model's code, `input.json`, the scene images) and `audio/` (the narration clip of each scene), kept for a later re-render.
 
 ## Update
 
-Download the new release and replace the program file (Windows: the `.exe`; Linux: unpack over the old folder). Your data, tools and
-videos stay where they are. Engine packages are reinstalled only when the new version pins other versions (you are asked before the next video).
+**From the app:** at start (at most once a day) TM Concept reads the project's latest release on GitHub (no account, nothing about you is
+sent) and, when there is a newer version, shows its version and release notes. **Download and install** downloads the file for your system,
+checks it against the SHA-256 in the release notes (a file without one, or with a different one, is never installed), replaces the program
+file at the same path and starts the new version. Nothing is downloaded before you confirm. Settings → General → *Updates* turns the check at
+start off and has **Check now**. A copy of TM Concept built from source, or one in a folder it cannot write (for example Program Files),
+shows the release page instead.
+
+**By hand:** download the new release and replace the program file (Windows: the `.exe`; Linux: unpack over the old folder).
+
+Either way your data, tools and videos stay where they are. At the first start of a new version:
+
+- **The database is upgraded step by step.** Each version that changes the database brings one upgrade step, and a database from several
+  versions ago goes through every step in order. First a copy of the database file is kept in `backups/before-upgrade/` (the last 5); a
+  step that fails leaves the database exactly as it was. Restoring an older backup upgrades it the same way. A database made by 0.1.16 or
+  earlier (before upgrades were recorded) is not opened: the unlock window offers to set it aside (renamed with its key file, never deleted)
+  and start fresh or restore a backup. One made by a newer version is not opened either: update the app.
+- **The components** (engines, voices, image models) are offered for an update or a reinstall. What was installed is recorded in
+  `installed-components.json` (outside the components folder, with the app version of each), so a cancelled or failed reinstall is asked
+  again at the next start. **Reinstall from scratch** sets the components folder aside, installs again, and only then moves the old folder
+  to the recycle bin; if you cancel the download, the old folder goes back. An empty folder or an unfinished download never counts as
+  installed.
+
+Downloads go on after a bad connection: each file is tried up to 5 times with a growing pause, and the part already received is kept
+(`.part`) so the next try, or the next install, continues from there instead of starting a 12 GB model again. When a download finally
+fails, the message says why in your language, with the system's own reason (secure connection (SSL/TLS), server name not found, connection
+broken, no data for a minute).
 
 ## Uninstall
 
@@ -282,6 +308,7 @@ videos stay where they are. Engine packages are reinstalled only when the new ve
 |---|---|---|---|
 | Database (profiles, concepts, keys) | `%LOCALAPPDATA%\TM Concept\concept.db` | `~/.local/share/tm-concept/concept.db` | yes |
 | Backups (last 10, daily) | `…\TM Concept\backups\*.tmcbak` | `~/.local/share/tm-concept/backups/` | yes (password) |
+| Copies made before a database upgrade (last 5) | `…\TM Concept\backups\before-upgrade\` | `~/.local/share/tm-concept/backups/before-upgrade/` | yes (same key) |
 | Logs (no keys; home and app folders masked; 7 days) | `…\TM Concept\logs\` | `~/.local/share/tm-concept/logs/` | no |
 | Problem report zips (last 5) | `…\TM Concept\reports\` | `~/.local/share/tm-concept/reports/` | no |
 | Tools (Node, ffmpeg, engines, voices, image models) | `…\TM Concept\tools\` | `~/.local/share/tm-concept/tools/` | no |
@@ -325,6 +352,10 @@ TM Concept sends nothing by itself: no telemetry, no crash upload. If something 
 The logs are plain text files, one per day (`app-2026-11-06.log`, and `speech-worker-….log` for the local voice), in the `logs` folder
 of the data folder (table above). Files older than 7 days are deleted automatically; one day's file stops at 20 MB.
 
+**Show all** in the activity panel at the bottom opens the log page: every line of one day's log files (the app's and the local voice's),
+with a level filter (all, warnings and errors, errors), search, *Only since this start*, **Copy shown lines** and **Open logs folder**.
+Today's lines are followed live while the page is open.
+
 ## Known limits
 
 - Videos up to 3 minutes; no long horizontal videos yet.
@@ -337,3 +368,10 @@ of the data folder (table above). Files older than 7 days are deleted automatica
 .NET 10 SDK. `dotnet build TMConcept.slnx` and `dotnet test TMConcept.slnx`. Release files: `tools/publish.ps1` (Windows) or
 `tools/publish.sh`. Before the first commit run `tools/install-hooks.ps1` (or `.sh`): the pre-commit hook blocks keys, tokens and
 personal data.
+
+**Changing the database:** change the mapping in `ConceptDbContext`, then run `tools/database-step.ps1 -Name Version0118` (or
+`tools/database-step.sh Version0118`) once for the version: EF Core's tooling writes the upgrade step and the compiled model. Never edit a
+released step and never write SQL by hand. Details: [docs/database.md](docs/database.md).
+
+**Releases** must list the SHA-256 of every file in the release notes (`tools/package.py` prints the lines); the app's own updater installs
+only a file whose SHA-256 is there.

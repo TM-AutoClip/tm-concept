@@ -41,6 +41,19 @@ public sealed class EngineTests
     }
 
     [Fact]
+    public void NoContractOrSampleCodeTeachesDrawingTheCaption()
+    {
+        // The code never draws the narration (subtitles on: burned in afterwards; off: none on screen), so the contract shown to the model
+        // does not name the caption field and the samples do not draw it (16 Nov 2026: with subtitles off the narration was still drawn).
+        using var paths = new TempPaths();
+        foreach (var engine in All(paths))
+        {
+            engine.Contract.ShouldNotContain("caption", Case.Insensitive, engine.Name);
+            engine.SampleCode.ShouldNotContain("caption", Case.Insensitive, engine.Name);
+        }
+    }
+
+    [Fact]
     public void RejectedCodeWritesNothing()
     {
         using var paths = new TempPaths();

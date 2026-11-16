@@ -47,7 +47,8 @@ public sealed class VersionTests
     });
 
     /// <summary>A profile, a concept and its first video (v1, voiced by the fake voice).</summary>
-    private static async Task<(Profile Profile, VideoRecord First, ResolvedModel Model)> FirstAsync(DesktopHarness h, FakeVoice voice, string content = Content)
+    private static async Task<(Profile Profile, VideoRecord First, ResolvedModel Model)> FirstAsync(DesktopHarness h, FakeVoice voice, string content = Content,
+        bool subtitles = true)
     {
         await FirstRunTests.CreateAsync(h);
         var profile = new Profile { Name = "Byzantium", ContentLanguage = ContentLanguages.English, ConceptText = "x" };
@@ -63,7 +64,7 @@ public sealed class VersionTests
         await h.Get<IConceptStore>().AddAsync([concept], CancellationToken.None);
         var model = new ResolvedModel(h.Get<IModelCatalog>().Find("anthropic", "claude-sonnet-5-5")!, key, string.Empty);
         var stored = (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!;
-        var first = await h.Get<VideoPipeline>().RunAsync(new VideoJob(stored, profile, new VideoOptions { Speech = true, Subtitles = true }, model), null,
+        var first = await h.Get<VideoPipeline>().RunAsync(new VideoJob(stored, profile, new VideoOptions { Speech = true, Subtitles = subtitles }, model), null,
             CancellationToken.None);
         return (profile, first, model);
     }
@@ -164,6 +165,41 @@ public sealed class VersionTests
         VideoRemaker.SilentMs("The walls held [pause 2 s] for months. [soft transition]", ContentLanguages.English).ShouldBe(plain + 2000);
         VideoRemaker.WithTransition(TMConcept.Core.Scenes.SceneTransitions.Fade, "Text.", ContentLanguages.Turkish).ShouldBe("[yumuşak geçiş] Text.");
         VideoRemaker.WithTransition(TMConcept.Core.Scenes.SceneTransitions.None, "Text.", ContentLanguages.Turkish).ShouldBe("Text.");
+    }
+
+    [AvaloniaFact]
+    public async Task VersionsOfAVideoWithoutSubtitlesFollowItsChoiceAndNeverGetTheNarrationToDraw()
+    {
+        var hyper = new FakeEngine();
+        var remotion = new FakeEngine { Kind = EngineKind.Remotion, Name = "Fake Remotion" };
+        var voice = new FakeVoice();
+        var chat = new FakeChat().Answer(_ => Code(hyper.SampleCode)).Answer(_ => Code(RemotionCode));
+        using var h = Harness(chat, voice, hyper, remotion);
+        var (profile, first, model) = await FirstAsync(h, voice, subtitles: false);
+        var media = (FakeMedia)h.Get<IMediaTools>();
+        var remaker = h.Get<VideoRemaker>();
+        hyper.Input!.Scenes.ShouldAllBe(s => s.Caption.Length == 0);
+        remaker.Load(first).Input.Scenes[0].Caption.ShouldBe("In 672 the city was under siege.", "the kept input has the real narration");
+
+        // A new voice: the kept code is rendered again with no captions in its input, nothing burned in, the .srt follows the new text.
+        var setup = await h.Get<SpeechService>().SetupAsync(new StepModelChoice { Step = PipelineSteps.Speech, Provider = ModelProviders.Local, Model = voice.Code },
+            ContentLanguages.English, CancellationToken.None);
+        var second = await remaker.RevoiceAsync(new RevoiceJob(remaker.Load(first), profile, ["The walls held for months.", "A strange fire burned."], setup),
+            null, CancellationToken.None);
+        hyper.Input!.Scenes.ShouldAllBe(s => s.Caption.Length == 0);
+        VideoRemaker.Options(second).Subtitles.ShouldBeFalse();
+        remaker.Load(second).Input.Scenes[0].Caption.ShouldBe("The walls held for months.");
+        File.ReadAllText(Path.Combine(Folder(h, second), VideoFolders.SubtitlesFile)).ShouldContain("The walls held for months.");
+
+        // New code for another engine: the prompt has no narration and says there are no subtitles.
+        var third = await remaker.RecodeAsync(new RecodeJob(remaker.Load(second), profile, remotion, model), null, CancellationToken.None);
+        chat.Requests.Count.ShouldBe(2);
+        chat.Requests[1].System.ShouldContain("There are NO subtitles");
+        chat.Requests[1].User.ShouldNotContain("walls", Case.Insensitive);
+        remotion.Input!.Scenes.ShouldAllBe(s => s.Caption.Length == 0);
+        VideoRemaker.Options(third).Subtitles.ShouldBeFalse();
+        remaker.Load(third).Input.Scenes[0].Caption.ShouldBe("The walls held for months.");
+        media.Ass.ShouldBe([null, null, null], "no version burns subtitles in");
     }
 
     [AvaloniaFact]

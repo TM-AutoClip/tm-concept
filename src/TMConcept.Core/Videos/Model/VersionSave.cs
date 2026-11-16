@@ -14,8 +14,8 @@ public sealed record VersionSave(Guid Id, Profile Profile, Guid? ConceptId, stri
     VersionTarget Target, string TargetFolder, VideoOptions Options, string EngineName, string CodeModel, string SpeechModel, string ImageModel, string PromptVersion,
     IReadOnlyList<string> Warnings, IReadOnlyList<VideoCost> Spent, IReadOnlyList<VideoCost> ExtraCosts, System.Diagnostics.Stopwatch Watch)
 {
-    /// <summary>The input the video was rendered with.</summary>
-    public RenderInput Input => Render.Request.Input;
+    /// <summary>The video's input with its real captions (subtitles, narration file and the kept <c>source/input.json</c> are made from it).</summary>
+    public RenderInput Input => Render.Input;
 
     /// <summary>The edited scene texts with their markers (a new voice), kept as <see cref="VideoFolders.ScriptFile"/>; null = none.</summary>
     public IReadOnlyList<string>? Script { get; init; }

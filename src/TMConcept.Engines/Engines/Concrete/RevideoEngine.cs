@@ -39,7 +39,7 @@ public sealed class RevideoEngine(IAppPaths paths, ToolInstaller tools, ChromeLo
         Allowed imports only: '@revideo/2d', '@revideo/core' and `import type {ConceptInput} from './input';`.
         Read the input with `const input = useScene().variables.get<ConceptInput>('input', {} as ConceptInput)();`
         (fields: width, height, fps, durationSeconds, title, theme {background, accent, text},
-        scenes [{number, startSeconds, durationSeconds, visual, caption, image, transition}]).
+        scenes [{number, startSeconds, durationSeconds, visual, image, transition}]).
         Play the scenes in order with yield* animations and waitFor so each scene lasts exactly its durationSeconds.
         Never hard-code texts or durations. No network, no external fonts.
         """;
@@ -58,15 +58,12 @@ public sealed class RevideoEngine(IAppPaths paths, ToolInstaller tools, ChromeLo
           yield* bar().width(input.width * 0.8, 0.6);
           for (const scene of input.scenes) {
             const title = createRef<Txt>();
-            const caption = createRef<Txt>();
             view.add(<Txt ref={title} text={scene.visual} fill={input.theme.text} fontSize={input.width * 0.06} fontWeight={700} opacity={0} y={40} />);
-            view.add(<Txt ref={caption} text={scene.caption} fill={input.theme.text} fontSize={input.width * 0.035} opacity={0} y={input.height * 0.35} />);
             const hold = Math.max(0, scene.durationSeconds - 0.65 - (scene.number === 1 ? 0.6 : 0));
-            yield* all(title().opacity(1, 0.4), title().y(0, 0.4), caption().opacity(1, 0.4));
+            yield* all(title().opacity(1, 0.4), title().y(0, 0.4));
             yield* waitFor(hold);
-            yield* all(title().opacity(0, 0.25), caption().opacity(0, 0.25));
+            yield* title().opacity(0, 0.25);
             title().remove();
-            caption().remove();
           }
         });
         """;

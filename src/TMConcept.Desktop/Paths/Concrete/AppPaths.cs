@@ -57,4 +57,10 @@ public sealed class AppPaths : IAppPaths
 
     /// <summary>Plain preferences readable before the database is unlocked (only the interface language).</summary>
     public string PreferencesFile => Path.Combine(DataDirectory, "preferences.json");
+
+    /// <summary>What this app installed and with which app version (outside the components folder, so it outlives a reinstall).</summary>
+    public string InstalledComponentsFile => Path.Combine(DataDirectory, "installed-components.json");
+
+    /// <summary>The last look for a newer app version (once a day at most; what was found and the notes).</summary>
+    public string UpdateCheckFile => Path.Combine(DataDirectory, "update-check.json");
 }

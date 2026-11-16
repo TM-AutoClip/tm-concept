@@ -8,9 +8,10 @@ namespace TMConcept.Core.Components;
 /// <summary>
 /// Every component of the app (from the DI sources) and what a set of them needs: <see cref="PlanAsync"/> lists the missing ones with their
 /// dependencies first and what they download; <see cref="InstallAsync"/> installs a plan the user confirmed, one component at a time (one
-/// install at a time in the whole app); <see cref="Size"/> and <see cref="RemoveAsync"/> serve the installed components list.
+/// install at a time in the whole app); <see cref="Size"/> and <see cref="RemoveAsync"/> serve the installed components list. Every
+/// finished install and every removal goes into the install record (<see cref="IInstallRecord"/>, when there is one).
 /// </summary>
-public sealed class ComponentPlanner(IEnumerable<IComponentSource> sources, ILogger<ComponentPlanner> logger)
+public sealed class ComponentPlanner(IEnumerable<IComponentSource> sources, ILogger<ComponentPlanner> logger, IInstallRecord? record = null)
 {
     private readonly Lazy<IReadOnlyList<IComponent>> _all = new(() => sources.SelectMany(s => s.Components).ToList());
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -129,8 +130,9 @@ public sealed class ComponentPlanner(IEnumerable<IComponentSource> sources, ILog
                 {
                     await component.InstallAsync(inner, cancellationToken).ConfigureAwait(false);
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException)
+                catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
                 {
+                    // A time-out that reached here as a cancellation is a failure, not the user's cancel.
                     logger.LogError(ex, "{Component} could not be installed after {Seconds:0.0} s", component.Code, watch.Elapsed.TotalSeconds);
                     failed.Add(component.Code);
                     first ??= ExceptionDispatchInfo.Capture(ex);
@@ -139,6 +141,7 @@ public sealed class ComponentPlanner(IEnumerable<IComponentSource> sources, ILog
                 }
 
                 logger.LogInformation("{Component} installed in {Seconds:0.0} s", component.Code, watch.Elapsed.TotalSeconds);
+                Record(component.Code);
                 steps?.Report(new ComponentStep(i, component.Code, ComponentStepState.Done, 1, string.Empty));
             }
 
@@ -148,6 +151,47 @@ public sealed class ComponentPlanner(IEnumerable<IComponentSource> sources, ILog
         finally
         {
             _gate.Release();
+        }
+    }
+
+    /// <summary>The record of what was installed (empty without one).</summary>
+    public IReadOnlyList<InstalledComponent> Recorded() => record?.List() ?? [];
+
+    /// <summary>
+    /// The codes of the components that were installed: the record's (also when the components folder was set aside or emptied) and those
+    /// whose folders hold an install (from before the record existed; they are recorded now). Looks at the disk first.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> InstalledAsync(CancellationToken cancellationToken)
+    {
+        await RefreshAllAsync(cancellationToken).ConfigureAwait(false);
+        var recorded = Recorded().Select(r => r.Code).ToHashSet(StringComparer.Ordinal);
+        var codes = new List<string>();
+        foreach (var component in All)
+        {
+            if (recorded.Contains(component.Code))
+            {
+                codes.Add(component.Code);
+            }
+            else if (component.WasInstalled)
+            {
+                codes.Add(component.Code);
+                Record(component.Code, string.Empty);
+            }
+        }
+
+        return codes;
+    }
+
+    private void Record(string code, string? appVersion = null)
+    {
+        try
+        {
+            record?.Installed(code, appVersion);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The install itself is done; only the next "update after a new version" may not know it.
+            logger.LogWarning(ex, "The install of {Component} could not be recorded", code);
         }
     }
 
@@ -184,6 +228,14 @@ public sealed class ComponentPlanner(IEnumerable<IComponentSource> sources, ILog
             }
 
             logger.LogInformation("{Component} removed", component.Code);
+            try
+            {
+                record?.Removed(component.Code);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                logger.LogWarning(ex, "The removal of {Component} could not be recorded", component.Code);
+            }
         }
         finally
         {

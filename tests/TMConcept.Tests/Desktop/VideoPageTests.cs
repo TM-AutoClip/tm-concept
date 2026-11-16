@@ -196,6 +196,61 @@ public sealed class VideoPageTests
     }
 
     [AvaloniaFact]
+    public async Task SubtitlesOffAppliesToAnItemQueuedBeforeAndTheCodeGetsNoNarrationToDraw()
+    {
+        var engine = new FakeEngine();
+        var chat = new FakeChat().Answer(_ => Code(engine.SampleCode));
+        using var h = Harness(chat, engine);
+        var (page, concept) = await PrepareAsync(h);
+        page.Subtitles.ShouldBeTrue("on by default");
+
+        // Turned off after the item was queued: the choice of the moment the item starts applies, and it is kept on this computer.
+        page.Subtitles = false;
+        h.Get<TMConcept.Desktop.Paths.UiPreferencesFile>().Read().Subtitles.ShouldBeFalse();
+        await page.ProduceAllAsync();
+
+        var video = (await h.Get<IVideoStore>().ListAsync(concept.ProfileId, CancellationToken.None)).Single();
+        VideoRemaker.Options(video).Subtitles.ShouldBeFalse("the video records its choice; its versions follow it");
+        var request = chat.Requests.Single();
+        request.System.ShouldContain("There are NO subtitles");
+        request.System.ShouldContain("NEVER draw the caption (narration) text");
+        request.User.ShouldNotContain("siege", Case.Insensitive, "no narration in the prompt");
+        request.User.ShouldNotContain("caption");
+        engine.Input!.Scenes.ShouldAllBe(s => s.Caption.Length == 0, "the code reads no narration at render time");
+        ((FakeMedia)h.Get<IMediaTools>()).Ass.ShouldBe([null], "nothing burned in");
+
+        // The kept input, the .srt and the narration file keep the real narration (a later version and the Produced page read them).
+        var folder = LibraryPaths.Resolve(h.Get<IAppPaths>().LibraryDirectory, video.Folder);
+        var kept = TMConcept.Core.Render.RenderInputBuilder.FromJson(File.ReadAllText(Path.Combine(folder, VideoFolders.Source, VideoFolders.InputFile)))!;
+        kept.Scenes[0].Caption.ShouldBe("In 672 the city was under siege.");
+        File.ReadAllText(Path.Combine(folder, VideoFolders.SubtitlesFile)).ShouldContain("siege");
+        File.ReadAllText(Path.Combine(folder, VideoFolders.NarrationFile)).ShouldContain("siege");
+    }
+
+    [AvaloniaFact]
+    public async Task TheSubtitlesChoiceIsKeptAcrossRestartsAndOnStillBurnsThemIn()
+    {
+        var engine = new FakeEngine();
+        var chat = new FakeChat().Answer(_ => Code(engine.SampleCode));
+        using var h = Harness(chat, engine);
+
+        // As after a restart: the kept choice is what the page opens with.
+        h.Get<TMConcept.Desktop.Paths.UiPreferencesFile>().Change(p => p.Subtitles = false);
+        var (page, _) = await OpenAsync(h);
+        page.Subtitles.ShouldBeFalse();
+        page.Subtitles = true;
+        h.Get<TMConcept.Desktop.Paths.UiPreferencesFile>().Read().Subtitles.ShouldBeTrue();
+        await page.EnqueueAsync(page.Approved.Single());
+
+        await page.ProduceAllAsync();
+
+        chat.Requests.Single().User.ShouldContain("caption «In 672 the city was under siege.»");
+        chat.Requests.Single().System.ShouldContain("Subtitles are burned into the bottom");
+        engine.Input!.Scenes[0].Caption.ShouldBe("In 672 the city was under siege.");
+        ((FakeMedia)h.Get<IMediaTools>()).Ass.ShouldBe(["subtitles.ass"]);
+    }
+
+    [AvaloniaFact]
     public async Task EnqueueButtonEnqueues()
     {
         var engine = new FakeEngine();
@@ -212,11 +267,8 @@ public sealed class VideoPageTests
         page.Detail.CanEdit.ShouldBeFalse();
         page.QueueHeader.ShouldContain("1");
 
-        // The item keeps only its subtitles: the models are read when it starts.
-        var stored = (await h.Get<IQueueStore>().ListAsync(concept.ProfileId, CancellationToken.None)).Single();
-        var options = System.Text.Json.JsonSerializer.Deserialize(stored.SettingsJson, TMConcept.Core.Render.CoreJsonContext.Default.VideoOptions)!;
-        options.Subtitles.ShouldBeTrue();
-        options.CodeModel.ShouldBeEmpty();
+        // The item keeps no settings: the models and the subtitles choice are read when it starts.
+        (await h.Get<IQueueStore>().ListAsync(concept.ProfileId, CancellationToken.None)).Single().ConceptId.ShouldBe(concept.Id);
     }
 
     [AvaloniaFact]
@@ -973,7 +1025,7 @@ public sealed class VideoPageTests
             var items = queue.ListAsync(first.ProfileId, CancellationToken.None).GetAwaiter().GetResult();
             queue.RemoveAsync(items.Single(i => i.ConceptId == second.Id).Id, CancellationToken.None).GetAwaiter().GetResult();
             h.Get<IConceptStore>().SetStatusAsync([second.Id], ConceptStatus.Approved, CancellationToken.None).GetAwaiter().GetResult();
-            queue.AddAsync(new QueueItem { ProfileId = first.ProfileId, ConceptId = third.Id, Position = 9, SettingsJson = items[0].SettingsJson },
+            queue.AddAsync(new QueueItem { ProfileId = first.ProfileId, ConceptId = third.Id, Position = 9 },
                 CancellationToken.None).GetAwaiter().GetResult();
             h.Get<IConceptStore>().SetStatusAsync([third.Id], ConceptStatus.Queued, CancellationToken.None).GetAwaiter().GetResult();
             return Code(engine.SampleCode);
@@ -1177,10 +1229,14 @@ public sealed class VideoPageTests
         /// <summary>The fades of every mux, in order.</summary>
         public List<IReadOnlyList<long>> Fades { get; } = [];
 
+        /// <summary>The subtitle file burned in at every mux, in order (null = none).</summary>
+        public List<string?> Ass { get; } = [];
+
         public Task MuxAsync(string folder, string silentVideo, IReadOnlyList<(string Wav, long StartMs)> clips, string? assFile, IReadOnlyList<long> fadesMs,
             string output, CancellationToken cancellationToken)
         {
             Fades.Add(fadesMs);
+            Ass.Add(assFile);
             File.Copy(silentVideo, output, overwrite: true);
             return Task.CompletedTask;
         }

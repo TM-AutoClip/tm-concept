@@ -1,0 +1,35 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="using:TMConcept.Desktop.Dialogs"
+        x:Class="TMConcept.Desktop.Views.AppUpdateWindow"
+        x:DataType="d:AppUpdateViewModel"
+        Title="{DynamicResource appupdate.window}"
+        Width="640" Height="560" MinWidth="420" MinHeight="360"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+  <!-- A newer version of the app: its version and notes; installed only after "Download and install" (then the app restarts). -->
+  <Grid Margin="24" RowDefinitions="Auto,*,Auto,Auto,Auto" RowSpacing="12">
+    <TextBlock Name="UpdateTitle" Text="{Binding Title}" Classes="h2" TextWrapping="Wrap" />
+    <Border Grid.Row="1" BorderBrush="{DynamicResource tm-border}" BorderThickness="1" CornerRadius="4">
+      <ScrollViewer Padding="12,8">
+        <SelectableTextBlock Name="Notes" Text="{Binding Notes}" TextWrapping="Wrap" />
+      </ScrollViewer>
+    </Border>
+    <StackPanel Grid.Row="2" Spacing="6">
+      <TextBlock Text="{Binding Hint}" Classes="small" TextWrapping="Wrap" IsVisible="{Binding CanInstall}" />
+      <TextBlock Name="Problem" Text="{Binding Problem}" Classes="warning" TextWrapping="Wrap" IsVisible="{Binding !CanInstall}" />
+    </StackPanel>
+    <StackPanel Grid.Row="3" Spacing="6" IsVisible="{Binding Busy}">
+      <ProgressBar Minimum="0" Maximum="100" Value="{Binding Percent}" Height="6" MinHeight="6" />
+    </StackPanel>
+    <Grid Grid.Row="4" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+      <SelectableTextBlock Name="Status" Text="{Binding Status}" TextWrapping="Wrap" VerticalAlignment="Center" />
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+        <Button Name="PageButton" Content="{DynamicResource appupdate.page}" Command="{Binding OpenPageCommand}" />
+        <Button Name="CancelButton" Content="{DynamicResource appupdate.cancel}" Command="{Binding CancelCommand}" IsVisible="{Binding Busy}" />
+        <Button Name="LaterButton" Content="{DynamicResource appupdate.later}" Command="{Binding LaterCommand}" IsVisible="{Binding Idle}" IsCancel="True" />
+        <Button Name="InstallButton" Classes="accent" Content="{DynamicResource appupdate.install}" Command="{Binding InstallCommand}"
+                IsVisible="{Binding CanInstall}" IsEnabled="{Binding Idle}" IsDefault="True" />
+      </StackPanel>
+    </Grid>
+  </Grid>
+</Window>

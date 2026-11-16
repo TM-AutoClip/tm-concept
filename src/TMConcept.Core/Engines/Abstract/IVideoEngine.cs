@@ -23,10 +23,13 @@ public interface IVideoEngine
     /// <summary>The model's file inside the work folder.</summary>
     string CodeFile { get; }
 
-    /// <summary>The contract the code model follows (English; part of the video code prompt).</summary>
+    /// <summary>
+    /// The contract the code model follows (English; part of the video code prompt). It names the input fields the code reads and never the
+    /// caption: the code never draws the narration (with subtitles they are burned in afterwards, without them there is none on screen).
+    /// </summary>
     string Contract { get; }
 
-    /// <summary>Hand-written sample code (install check without a model).</summary>
+    /// <summary>Hand-written sample code (install check without a model). Like the model's code it never draws the caption.</summary>
     string SampleCode { get; }
 
     /// <summary>Install state (files only; starts no process, uses no network).</summary>

@@ -36,7 +36,8 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
     /// E + F: the video code from <paramref name="codeModel"/> for <paramref name="input"/> (paid; every call is spent in
     /// <paramref name="steps"/>, also a cut-off one; the call's phase and tokens are reported while it streams), written into
     /// <c>&lt;work&gt;/project</c> after the safety check (a rejected code gets one repair), then the render (a failed render gets one repair with
-    /// its error text, unless the code was repaired already).
+    /// its error text, unless the code was repaired already). Without <paramref name="subtitles"/> the prompt and the engine get the input
+    /// without captions (<see cref="RenderInputBuilder.ForEngine"/>), so the code cannot draw the narration.
     /// </summary>
     public async Task<RenderOutcome> CodeAndRenderAsync(IVideoEngine engine, ResolvedModel codeModel, bool subtitles, RenderInput input, string work,
         Guid id, VideoStepProgress steps, CancellationToken cancellationToken)
@@ -48,8 +49,9 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         var system = VideoCodePrompt.System(engine, subtitles);
         var repaired = false;
         steps.Report(VideoSteps.Code, 0.1);
-        var code = await CodeAsync(chat, codeModel, system, VideoCodePrompt.User(input), steps, id, cancellationToken).ConfigureAwait(false);
-        var request = new EngineRenderRequest(Path.Combine(work, "project"), code, input, Path.Combine(work, "silent.mp4"), Workers());
+        var engineInput = RenderInputBuilder.ForEngine(input, subtitles);
+        var code = await CodeAsync(chat, codeModel, system, VideoCodePrompt.User(engineInput), steps, id, cancellationToken).ConfigureAwait(false);
+        var request = new EngineRenderRequest(Path.Combine(work, "project"), code, engineInput, Path.Combine(work, "silent.mp4"), Workers());
         try
         {
             engine.WriteProject(request);
@@ -106,19 +108,21 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         }
 
         steps.Finish(VideoSteps.Render);
-        return new RenderOutcome(request, repaired);
+        return new RenderOutcome(request, repaired, input);
     }
 
     /// <summary>
     /// F without a model: the kept <paramref name="code"/> is written with the new <paramref name="input"/> into <c>&lt;work&gt;/project</c>
     /// (whatever is already there, the scene images, stays) and rendered once. A failure is not repaired: a repair would be a paid call.
+    /// Without <paramref name="subtitles"/> the engine gets the input without captions, as at the first make.
     /// </summary>
-    public async Task<RenderOutcome> RenderKeptAsync(IVideoEngine engine, string code, RenderInput input, string work, VideoStepProgress steps,
-        CancellationToken cancellationToken)
+    public async Task<RenderOutcome> RenderKeptAsync(IVideoEngine engine, string code, bool subtitles, RenderInput input, string work,
+        VideoStepProgress steps, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(steps);
-        var request = new EngineRenderRequest(Path.Combine(work, "project"), code, input, Path.Combine(work, "silent.mp4"), Workers());
+        var request = new EngineRenderRequest(Path.Combine(work, "project"), code, RenderInputBuilder.ForEngine(input, subtitles),
+            Path.Combine(work, "silent.mp4"), Workers());
         try
         {
             engine.WriteProject(request);
@@ -131,7 +135,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         }
 
         steps.Finish(VideoSteps.Render);
-        return new RenderOutcome(request, false);
+        return new RenderOutcome(request, false, input);
     }
 
     /// <summary>
@@ -180,6 +184,11 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         await File.WriteAllTextAsync(Path.Combine(folder, VideoFolders.NarrationFile), NarrationScript.Text(save.Title, save.Profile.ContentLanguage,
             cueSources), cancellationToken).ConfigureAwait(false);
         KeepSources(save.Render.Request.Folder, folder, clips);
+
+        // The kept input.json has the real captions also when the engine got none (subtitles off): a later version and the Produced page's
+        // narration read them from there.
+        await File.WriteAllTextAsync(Path.Combine(folder, VideoFolders.Source, VideoFolders.InputFile), RenderInputBuilder.ToJson(input), cancellationToken)
+            .ConfigureAwait(false);
         if (save.Script is { } script)
         {
             await File.WriteAllTextAsync(Path.Combine(folder, VideoFolders.ScriptFile), JsonSerializer.Serialize(script.ToList(), CoreJsonContext.Default.ListString),

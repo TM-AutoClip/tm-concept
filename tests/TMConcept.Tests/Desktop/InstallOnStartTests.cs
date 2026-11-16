@@ -153,6 +153,21 @@ public sealed class InstallOnStartTests
     [AvaloniaFact]
     public async Task CancellingAnInstallIsAnOutcomeNotACrash()
     {
+        using var cancel = new CancellationTokenSource();
+        var engine = new FakeComponent(ComponentCodes.EnginePrefix + "hyperframes", ready: false) { Cancel = true, OnInstall = cancel.Cancel };
+        using var h = Installing(new FakeConfirm(), engine);
+        await FirstRunTests.CreateAsync(h);
+
+        var outcome = await h.Get<ComponentInstallFlow>().EnsureAsync([engine.Code], "install.purpose.video", null, cancel.Token);
+
+        outcome.Ready.ShouldBeFalse();
+        outcome.Reason.ShouldBe(h.Get<Localizer>()["install.cancelled"]);
+    }
+
+    [AvaloniaFact]
+    public async Task ACancellationNobodyAskedForIsATimeOutNotACancel()
+    {
+        // 0.1.16: HttpClient's 30-minute limit surfaced as a cancellation and the failed download was shown as "cancelled" (silently).
         var engine = new FakeComponent(ComponentCodes.EnginePrefix + "hyperframes", ready: false) { Cancel = true };
         using var h = Installing(new FakeConfirm(), engine);
         await FirstRunTests.CreateAsync(h);
@@ -160,7 +175,29 @@ public sealed class InstallOnStartTests
         var outcome = await h.Get<ComponentInstallFlow>().EnsureAsync([engine.Code], "install.purpose.video", null, CancellationToken.None);
 
         outcome.Ready.ShouldBeFalse();
-        outcome.Reason.ShouldBe(h.Get<Localizer>()["install.cancelled"]);
+        var text = h.Get<Localizer>();
+        outcome.Reason.ShouldBe(text.Format("install.failed", text.Format("tools.fail.timeout", "fake cancel")));
+    }
+
+    [AvaloniaFact]
+    public async Task ANetworkFailureShowsItsInnerReasonInTheUsersLanguage()
+    {
+        using var h = Installing(new FakeConfirm());
+        var text = h.Get<Localizer>();
+        var tls = TMConcept.Engines.Tools.ToolDownloader.Classify(new HttpRequestException(HttpRequestError.SecureConnectionError,
+            "The SSL connection could not be established, see inner exception.",
+            new System.Security.Authentication.AuthenticationException("The remote certificate is invalid: UntrustedRoot")), 5);
+
+        foreach (var language in new[] { "en", "tr" })
+        {
+            text.Use(language);
+            ComponentInstallFlow.Reason(text, tls).ShouldBe(text.Format("tools.fail.tls", "The remote certificate is invalid: UntrustedRoot"));
+            ComponentInstallFlow.Reason(text, tls).ShouldContain("UntrustedRoot");
+        }
+
+        text.Use("en");
+        ComponentInstallFlow.Reason(text, new TMConcept.Core.Tools.ToolInstallException("x") { Code = "download", Detail = "HTTP 403" }).ShouldContain("HTTP 403");
+        ComponentInstallFlow.Reason(text, new TMConcept.Core.Tools.ToolInstallException("x") { Code = "something-new", Detail = "why" }).ShouldContain("why");
     }
 
     [AvaloniaFact]

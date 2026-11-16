@@ -14,7 +14,10 @@ namespace TMConcept.Desktop.Startup;
 /// (<see cref="IUpdateDialog"/>; the developer, 16 Nov 2026: a new version can pin newer downloads, and a tester's half-installed image
 /// runtime stayed broken across versions). The version is recorded in <c>preferences.json</c> (<see cref="UiPreferences.LastVersion"/>) only
 /// after an update or a reinstall that ended ready, or when nothing is installed: "later", a declined or failed download and a kept folder
-/// ask again at the next start. The data is never touched.
+/// ask again at the next start. What "is installed" comes from the install record (<see cref="Core.Components.IInstallRecord"/>, outside the
+/// components folder, since 0.1.17) and from the folders that hold an install: a reinstall whose download was declined left an empty or no
+/// components folder, and 0.1.16 then recorded the new version without asking. The data is never touched; the database has its own upgrade
+/// chain (Storage, SchemaUpgrader).
 /// </summary>
 public sealed class VersionCheck(UiPreferencesFile preferences, ComponentReinstaller components, IUpdateDialog dialog, IActivityLog activity, Localizer text,
     ILogger<VersionCheck> logger)

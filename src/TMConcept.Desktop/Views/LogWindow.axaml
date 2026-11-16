@@ -1,0 +1,54 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:TMConcept.Desktop.ViewModels"
+        xmlns:log="using:TMConcept.Desktop.Logging"
+        x:Class="TMConcept.Desktop.Views.LogWindow"
+        x:DataType="vm:LogViewerViewModel"
+        Title="{DynamicResource logs.title}"
+        Width="1100" Height="720" MinWidth="560" MinHeight="360"
+        WindowStartupLocation="CenterOwner">
+  <!-- The detailed log: one day of the app's and the speech worker's log files, filtered; today's files are followed live. -->
+  <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="12" RowSpacing="8">
+    <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="6">
+      <ComboBox Name="DayBox" ItemsSource="{Binding Days}" SelectedItem="{Binding Day}" MinWidth="130" ToolTip.Tip="{DynamicResource logs.day}" />
+      <ComboBox Name="LevelBox" ItemsSource="{Binding Levels}" SelectedItem="{Binding Level}" MinWidth="170">
+        <ComboBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:ChoiceOption">
+            <TextBlock Text="{Binding Label}" />
+          </DataTemplate>
+        </ComboBox.ItemTemplate>
+      </ComboBox>
+      <TextBox Name="SearchBox" Text="{Binding Search}" PlaceholderText="{DynamicResource logs.search}" MinWidth="220" />
+      <CheckBox Name="SessionBox" IsChecked="{Binding SessionOnly}" Content="{DynamicResource logs.session}" VerticalAlignment="Center" />
+      <Button Name="RefreshButton" Content="{DynamicResource logs.refresh}" Command="{Binding RefreshCommand}" />
+      <Button Name="CopyButton" Content="{DynamicResource logs.copy}" Click="OnCopy" />
+      <Button Name="FolderButton" Content="{DynamicResource logs.folder}" Command="{Binding OpenFolderCommand}" />
+    </WrapPanel>
+    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="12">
+      <TextBlock Name="SummaryLine" Text="{Binding Summary}" Classes="small muted" VerticalAlignment="Center" />
+      <TextBlock Text="{DynamicResource logs.live}" Classes="small" IsVisible="{Binding Live}" VerticalAlignment="Center" />
+    </StackPanel>
+    <ListBox Grid.Row="2" Name="Entries" ItemsSource="{Binding Lines}" SelectionMode="Multiple" BorderThickness="1"
+             BorderBrush="{DynamicResource tm-border}">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="log:LogEntry">
+          <Grid ColumnDefinitions="96,84,110,*" ColumnSpacing="8">
+            <TextBlock Text="{Binding Time}" FontFamily="Consolas, DejaVu Sans Mono, monospace" FontSize="12" />
+            <TextBlock Grid.Column="1" Text="{Binding Level}" FontSize="12" Classes.warning="{Binding IsWarning}" Classes.error="{Binding IsError}" />
+            <TextBlock Grid.Column="2" Text="{Binding Source}" FontSize="12" Classes="muted" />
+            <StackPanel Grid.Column="3" Spacing="2">
+              <TextBlock FontSize="12" TextWrapping="Wrap" Classes.warning="{Binding IsWarning}" Classes.error="{Binding IsError}">
+                <Run Text="{Binding ShortCategory}" FontWeight="SemiBold" />
+                <Run Text=": " />
+                <Run Text="{Binding Message}" />
+              </TextBlock>
+              <SelectableTextBlock Text="{Binding Detail}" IsVisible="{Binding HasDetail}" FontSize="11" Classes="muted" TextWrapping="Wrap"
+                                   FontFamily="Consolas, DejaVu Sans Mono, monospace" />
+            </StackPanel>
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+    <TextBlock Grid.Row="3" Text="{DynamicResource logs.note}" Classes="small muted" TextWrapping="Wrap" />
+  </Grid>
+</Window>

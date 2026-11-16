@@ -20,7 +20,7 @@ namespace TMConcept.Storage.Database
                 "TMConcept.Core.Videos.QueueItem",
                 typeof(QueueItem),
                 baseEntityType,
-                propertyCount: 9,
+                propertyCount: 8,
                 foreignKeyCount: 2,
                 unnamedIndexCount: 2,
                 keyCount: 1);
@@ -84,12 +84,6 @@ namespace TMConcept.Storage.Database
                 fieldInfo: typeof(QueueItem).GetField("<ProfileId>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
                 valueConverter: new StoredIdConverter());
             profileId.SetSentinelFromProviderValue("00000000-0000-0000-0000-000000000000");
-
-            var settingsJson = runtimeEntityType.AddProperty(
-                "SettingsJson",
-                typeof(string),
-                propertyInfo: typeof(QueueItem).GetProperty("SettingsJson", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
-                fieldInfo: typeof(QueueItem).GetField("<SettingsJson>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly));
 
             var key = runtimeEntityType.AddKey(
                 new[] { id });

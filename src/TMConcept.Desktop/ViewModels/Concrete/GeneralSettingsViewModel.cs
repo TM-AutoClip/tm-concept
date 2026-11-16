@@ -28,9 +28,76 @@ namespace TMConcept.Desktop.ViewModels;
 public sealed partial class GeneralSettingsViewModel(AppSession session, Localizer text, UiPreferencesFile preferences, INotifier notifier,
     ComponentPlanner components, IToolPlatform platform, Engines.Engines.SampleRender sample, IConfirmDialog confirm, ShellLauncher shell,
     IActivityLog activity, PreferencesImageAcceleration acceleration, Engines.Images.ImageBackendSelector backends, ComponentInstallFlow installs,
-    ILogger<GeneralSettingsViewModel> logger, ComponentReinstaller reinstaller)
+    ILogger<GeneralSettingsViewModel> logger, ComponentReinstaller reinstaller, Updates.AppUpdater updater, IAppUpdateDialog updateDialog)
     : SettingsSectionBase
 {
+    /// <summary>Look for a newer version of the app at start (stored at once, per computer).</summary>
+    [ObservableProperty]
+    public partial bool CheckForUpdates { get; set; }
+
+    /// <summary>What "Check now" found ("0.1.18 is available", "You have the newest version").</summary>
+    [ObservableProperty]
+    public partial string UpdateStatus { get; set; } = string.Empty;
+
+    /// <summary>"Check now" is looking.</summary>
+    [ObservableProperty]
+    public partial bool CheckingUpdates { get; set; }
+
+    /// <summary>The running version (shown next to the update settings).</summary>
+    public string RunningVersion => text.Format("appupdate.running", updater.Current);
+
+    /// <summary>Asks GitHub now (also within the day and when the check at start is off) and offers a newer version in its window.</summary>
+    [RelayCommand]
+    public async Task CheckUpdatesAsync()
+    {
+        if (CheckingUpdates)
+        {
+            return;
+        }
+
+        CheckingUpdates = true;
+        UpdateStatus = text["appupdate.checking"];
+        try
+        {
+            var offer = await Task.Run(() => updater.CheckAsync(force: true, CancellationToken.None)).ConfigureAwait(true);
+            if (offer is null)
+            {
+                UpdateStatus = text.Format("appupdate.current", updater.Current);
+                return;
+            }
+
+            UpdateStatus = text.Format("appupdate.found", offer.Version);
+            await updateDialog.ShowAsync(offer).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or HttpRequestException)
+        {
+            logger.LogWarning(ex, "Check now for a newer version failed");
+            UpdateStatus = text.Format("appupdate.check_failed", ex.Message);
+        }
+        finally
+        {
+            CheckingUpdates = false;
+        }
+    }
+
+    partial void OnCheckForUpdatesChanged(bool value)
+    {
+        if (_loading)
+        {
+            return;
+        }
+
+        try
+        {
+            preferences.Change(p => p.CheckForUpdates = value);
+            logger.LogInformation("Setting changed: look for a newer version at start {State}", value ? "on" : "off");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarning(ex, "The update check setting could not be kept");
+        }
+    }
+
     /// <inheritdoc />
     public override string TitleKey => "settings.general";
 
@@ -90,6 +157,7 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
     {
         _loading = true;
         UseGraphicsCard = preferences.Read().UseGraphicsCard;
+        CheckForUpdates = preferences.Read().CheckForUpdates;
         AccelerationOptions.Clear();
         foreach (var value in Enum.GetValues<ImageAcceleration>())
         {

@@ -38,7 +38,7 @@ public sealed class HyperFramesEngine(IAppPaths paths, ToolInstaller tools, Chro
         Engine: HyperFrames (HTML + GSAP 3, captured frame by frame).
         Write ONE plain JavaScript file (scene.js) that runs in the page. GSAP is already loaded as the global `gsap`.
         Read everything from `window.INPUT` (width, height, fps, durationSeconds, title, theme {background, accent, text},
-        scenes [{number, startSeconds, durationSeconds, visual, caption, image, transition}]). Never hard-code texts or durations.
+        scenes [{number, startSeconds, durationSeconds, visual, image, transition}]). Never hard-code texts or durations.
         Build the DOM inside `document.getElementById("root")` with createElement / createElementNS and textContent (never innerHTML).
         Images: only `scene.image` (a relative file name) when it is not empty.
         Create ONE paused timeline: `const tl = gsap.timeline({ paused: true });` place every animation at the scene's startSeconds, and register
@@ -62,15 +62,9 @@ public sealed class HyperFramesEngine(IAppPaths paths, ToolInstaller tools, Chro
             box.style.cssText = "position:absolute;left:8%;right:8%;top:40%;text-align:center;font-weight:700;opacity:0;color:" + input.theme.text +
               ";font-size:" + Math.round(input.width * 0.06) + "px";
             box.textContent = scene.visual;
-            const caption = document.createElement("div");
-            caption.style.cssText = "position:absolute;left:8%;right:8%;bottom:12%;text-align:center;opacity:0;color:" + input.theme.text +
-              ";font-size:" + Math.round(input.width * 0.035) + "px";
-            caption.textContent = scene.caption;
             root.appendChild(box);
-            root.appendChild(caption);
             tl.fromTo(box, { opacity: 0, y: 60 }, { opacity: 1, y: 0, duration: 0.4 }, scene.startSeconds);
-            tl.to(caption, { opacity: 1, duration: 0.3 }, scene.startSeconds + 0.1);
-            tl.to([box, caption], { opacity: 0, duration: 0.25 }, scene.startSeconds + scene.durationSeconds - 0.25);
+            tl.to(box, { opacity: 0, duration: 0.25 }, scene.startSeconds + scene.durationSeconds - 0.25);
           });
           window.__timelines = window.__timelines || {};
           window.__timelines["concept"] = tl;
