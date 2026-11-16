@@ -136,8 +136,10 @@ the model that describes a sample image. Each step says what it is for:
   accept its license: free for individuals and companies of up to 3 people), Revideo (experimental). The video code model also writes
   the image prompts.
 - **Images** — *Off* (default: the video is drawn by its code only), an online image model, or a local one that runs on your graphics card:
-  **FLUX.2 klein 4B** (fast) or **Z-Image Turbo** (better pictures), both with at least 6 GB of graphics memory (the card they were measured on). The page warns when
-  your card looks too small; on Windows they need an NVIDIA card (CUDA), on Linux x64 a Vulkan driver; there is none for Linux ARM64.
+  **FLUX.2 klein 4B** (fast) or **Z-Image Turbo** (better pictures), both with at least 6 GB of graphics memory (the card they were measured on),
+  or **Z-Image Turbo (full quality)** for cards of 16 GB and more. The page shows your card and turns red when it is too small. NVIDIA, AMD and
+  Intel cards work: *Settings → General → Image acceleration* picks the build (Automatic: NVIDIA CUDA for an NVIDIA card with its driver,
+  Vulkan for the others, the processor without a card; Linux x64 uses Vulkan or the processor). There is no build for Linux ARM64.
 - **Images** can also use the profile's own sample images (free).
 - **Narration** — *Off* (silent video, yellow warning), **Supertonic 3** (local, free; every video language; the default
   voice of every language but English), **Kokoro 82M** (local, free; the default for English;
@@ -174,7 +176,7 @@ starts and nothing is paid for; the reason is shown. A kept choice whose compone
 | Pocket TTS int8 (needs sherpa-onnx) | github.com (k2-fsa) | 98 MB |
 | Chatterbox Multilingual V3 ONNX (Masterx export, 4-bit language model; needs sherpa-onnx) | huggingface.co | 1.56 GB |
 | Multilingual MiniLM (paraphrase-multilingual-MiniLM-L12-v2, int8 ONNX + tokenizer; needs sherpa-onnx) | huggingface.co | 127 MB |
-| stable-diffusion.cpp master-890 (Windows: CUDA 12 build + CUDA runtime; Linux x64: Vulkan build) | github.com (leejet) | 900 MB / 40 MB |
+| stable-diffusion.cpp master-890, the build of Image acceleration (Windows: CUDA 12 build + CUDA runtime, Vulkan or processor build; Linux x64: Vulkan or processor build) | github.com (leejet) | CUDA 900 MB, Vulkan 32–39 MB, processor 17–25 MB |
 | FLUX.2 klein 4B weights (model, Qwen3-4B text encoder, VAE) | huggingface.co | 5.3 GB |
 | Z-Image Turbo weights (model, Qwen3-4B-Instruct text encoder, VAE) | huggingface.co | 9.4 GB |
 

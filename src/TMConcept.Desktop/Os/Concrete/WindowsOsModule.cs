@@ -32,5 +32,8 @@ public sealed class WindowsOsModule : IOsModule
         services.AddSingleton<Core.Tools.IToolPlatform, Engines.Tools.WindowsToolPlatform>();
         services.AddSingleton<Core.Playback.IAudioOutputFactory, Playback.AudioOutputFactory<Playback.WaveOutAudioOutput>>();
         services.AddSingleton<Engines.Processes.ChildProcessGuardBase, Engines.Processes.WindowsChildProcessGuard>();
+        // Graphics cards: DXGI first, the registry's 64-bit memory values for what DXGI did not give.
+        services.AddSingleton<Engines.Hardware.IGraphicsAdapterSource, Engines.Hardware.DxgiAdapterSource>();
+        services.AddSingleton<Engines.Hardware.IGraphicsAdapterSource, Engines.Hardware.RegistryAdapterSource>();
     }
 }

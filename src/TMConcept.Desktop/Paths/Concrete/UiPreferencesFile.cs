@@ -39,7 +39,7 @@ public sealed class UiPreferencesFile(AppPaths paths, ILogger<UiPreferencesFile>
     {
         ArgumentNullException.ThrowIfNull(preferences);
         File.WriteAllText(paths.PreferencesFile, JsonSerializer.Serialize(preferences, DesktopJsonContext.Default.UiPreferences));
-        logger.LogInformation("Preferences saved (language {Language}, graphics card {GraphicsCard}, log open {LogOpen})",
-            preferences.Language.Length > 0 ? preferences.Language : "not chosen", preferences.UseGraphicsCard, preferences.LogOpen);
+        logger.LogInformation("Preferences saved (language {Language}, graphics card {GraphicsCard}, log open {LogOpen}, image acceleration {Acceleration})",
+            preferences.Language.Length > 0 ? preferences.Language : "not chosen", preferences.UseGraphicsCard, preferences.LogOpen, preferences.ImageAcceleration);
     }
 }

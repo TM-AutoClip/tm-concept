@@ -4,8 +4,12 @@ using TMConcept.Engines.Images;
 
 namespace TMConcept.Engines.Components;
 
-/// <summary>A local image model's weights (after stable-diffusion.cpp).</summary>
-public sealed class ImageModelComponent(LocalImageModel model, LocalImageStore store, IToolLocator tools) : IComponent
+/// <summary>
+/// A local image model's weights (after stable-diffusion.cpp). Ready only when its weights are there and the stable-diffusion.cpp build of
+/// the current setting is complete (for CUDA with its runtime libraries): 0.1.15 checked only sd-cli, so missing CUDA libraries were never
+/// planned and sd-cli ended with 0xC0000135.
+/// </summary>
+public sealed class ImageModelComponent(LocalImageModel model, LocalImageStore store, IComponent runtime) : IComponent
 {
     /// <inheritdoc />
     public string Code => ComponentCodes.ImagePrefix + model.Id;
@@ -20,7 +24,7 @@ public sealed class ImageModelComponent(LocalImageModel model, LocalImageStore s
     public bool Supported => true;
 
     /// <inheritdoc />
-    public bool Ready => store.Missing(model).Count == 0 && tools.Status(ToolKind.ImageRuntime).Ready;
+    public bool Ready => store.Missing(model).Count == 0 && runtime.Ready;
 
     /// <inheritdoc />
     public IReadOnlyList<ComponentDownload> Downloads() =>

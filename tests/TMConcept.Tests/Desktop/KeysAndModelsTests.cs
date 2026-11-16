@@ -70,7 +70,7 @@ public sealed class KeysAndModelsTests
         using var h = new DesktopHarness(s =>
         {
             s.AddSingleton<IChatClientFactory>(fake);
-            s.AddSingleton<IGpuInfo>(new FakeGpu(null));
+            s.AddSingleton<IGpuInfo>(new FakeGpu(GpuReport.None));
         });
         await FirstRunTests.CreateAsync(h);
         await h.Get<IApiKeyStore>().SaveAsync(new ApiKey { Provider = "anthropic", Label = "k", Secret = Secret }, CancellationToken.None);
@@ -105,7 +105,7 @@ public sealed class KeysAndModelsTests
     [AvaloniaFact]
     public async Task TheEffortPickerStartsWithAutomaticAndShowsOnlyForModelsThatTakeAnEffort()
     {
-        using var h = new DesktopHarness(s => s.AddSingleton<IGpuInfo>(new FakeGpu(null)));
+        using var h = new DesktopHarness(s => s.AddSingleton<IGpuInfo>(new FakeGpu(GpuReport.None)));
         await FirstRunTests.CreateAsync(h);
         var profile = new Profile { Name = "P", ConceptText = "x" };
         await h.Get<IProfileStore>().SaveAsync(profile, CancellationToken.None);

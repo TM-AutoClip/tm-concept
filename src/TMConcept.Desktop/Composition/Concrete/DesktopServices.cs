@@ -94,7 +94,13 @@ public static class DesktopServices
         services.AddSingleton<Engines.Images.LocalImageStore>();
         services.AddSingleton<Core.Images.IImageEngine, Engines.Images.SdCppImageEngine>();
         services.AddSingleton<Core.Images.ImageDescriber>();
-        services.AddSingleton<Core.Hardware.IGpuInfo, Engines.Hardware.NvidiaGpuInfo>();
+        // Package A (graphics cards, image builds): the card detector (its sources come from the OS module), the Image acceleration setting
+        // of preferences.json and the image build choice the image engine and the stable-diffusion.cpp component share.
+        services.AddSingleton<Engines.Hardware.IComputeRuntimeProbe, Engines.Hardware.NativeRuntimeProbe>();
+        services.AddSingleton<Core.Hardware.IGpuInfo, Engines.Hardware.GpuDetector>();
+        services.AddSingleton<PreferencesImageAcceleration>();
+        services.AddSingleton<Core.Hardware.IImageAccelerationSetting>(s => s.GetRequiredService<PreferencesImageAcceleration>());
+        services.AddSingleton<Engines.Images.ImageBackendSelector>();
         services.AddSingleton<Engines.Tools.ToolInstaller>();
         services.AddSingleton<Core.Tools.IToolLocator>(s => s.GetRequiredService<Engines.Tools.ToolInstaller>());
         services.AddSingleton<Core.Processes.IChildProcessGuard>(s => s.GetRequiredService<Engines.Processes.ChildProcessGuardBase>());

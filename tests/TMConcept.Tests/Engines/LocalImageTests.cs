@@ -24,10 +24,23 @@ public sealed class LocalImageTests
             model.Files.ShouldAllBe(f => f.Url.Host == "huggingface.co" && f.Sha256.Length == 64 && f.ApproximateBytes > 100_000_000);
             // Pinned to a commit, never to a branch: a file uploaded again on main would fail its SHA-256 for good.
             model.Files.ShouldAllBe(f => System.Text.RegularExpressions.Regex.IsMatch(f.Url.AbsolutePath, "/resolve/[0-9a-f]{40}/"));
-            entry.MinVideoMemoryGb.ShouldBeGreaterThanOrEqualTo(6, "the memory flags were measured on a 6 GB card");
+            entry.MinVideoMemoryGb.ShouldBeGreaterThanOrEqualTo(6, "the small memory profile was measured on a 6 GB card");
         }
 
-        ToolManifest.Archives.Where(a => a.Tool == TMConcept.Core.Tools.ToolKind.ImageRuntime).Select(a => a.Rid).ShouldBe(["win-x64", "linux-x64"], ignoreOrder: true);
+        // The CUDA build is Windows only; the Vulkan and processor builds are on both systems.
+        ToolManifest.Archives.Where(a => a.Tool == TMConcept.Core.Tools.ToolKind.ImageRuntime).Select(a => a.Rid).ShouldBe(["win-x64"]);
+        ToolManifest.Archives.Where(a => a.Tool == TMConcept.Core.Tools.ToolKind.ImageRuntimeVulkan).Select(a => a.Rid).ShouldBe(["win-x64", "linux-x64"], ignoreOrder: true);
+        ToolManifest.Archives.Where(a => a.Tool == TMConcept.Core.Tools.ToolKind.ImageRuntimeCpu).Select(a => a.Rid).ShouldBe(["win-x64", "linux-x64"], ignoreOrder: true);
+    }
+
+    [Fact]
+    public void TheFullQualityModelAsksForASixteenGigabyteCard()
+    {
+        var entry = new EmbeddedModelCatalog().Find(ModelProviders.Local, LocalImageModels.ZImageTurboFull.Id).ShouldNotBeNull();
+
+        entry.MinVideoMemoryGb.ShouldBe(16);
+        LocalImageModels.ZImageTurboFull.Files.Sum(f => f.ApproximateBytes).ShouldBe(12_309_866_400 + 8_044_982_048 + 335_304_388);
+        LocalImageModels.ZImageTurboFull.Files.ShouldAllBe(f => f.Url.AbsolutePath.StartsWith("/Comfy-Org/Z-Image-Turbo/resolve/6fc90a3b1b653e935a0d175e260736de25b84df5/"));
     }
 
     [Theory]
@@ -42,7 +55,7 @@ public sealed class LocalImageTests
     {
         var model = LocalImageModels.ZImageTurbo;
 
-        var arguments = SdCppImageEngine.Arguments(model, "a map of the city", 576, 1024, 42, "out.png", f => "/w/" + f.ExecutablePath);
+        var arguments = SdCppImageEngine.Arguments(model, "a map of the city", 576, 1024, 42, "out.png", f => "/w/" + f.ExecutablePath, ImageMemoryProfile.Small);
 
         string After(string flag) => arguments[arguments.ToList().IndexOf(flag) + 1];
         After("--diffusion-model").ShouldBe("/w/z_image_turbo-Q8_0.gguf");

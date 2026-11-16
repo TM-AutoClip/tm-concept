@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using TMConcept.Core.Activity;
 using TMConcept.Core.Components;
 using TMConcept.Core.Engines;
+using TMConcept.Core.Hardware;
 using TMConcept.Core.Notifications;
 using TMConcept.Core.Tools;
 using TMConcept.Desktop.Components;
@@ -20,10 +21,13 @@ namespace TMConcept.Desktop.ViewModels;
 /// General settings: interface language (changes at once), drawing (after a restart), the bottom-right notifications, and the installed
 /// components (read-only list with sizes of what is on disk, an incomplete one marked; Remove after a confirmation; a ready engine can
 /// render its sample; on Linux the apt command for Chrome's missing libraries). Components are installed when a process that needs them starts (after one confirmation).
+/// Image acceleration (per computer): which stable-diffusion.cpp build runs the local image models, with what Automatic picks here (the
+/// card found and its memory); a change installs that build at once when a local image model is already on disk (one confirmation).
 /// </summary>
 public sealed partial class GeneralSettingsViewModel(AppSession session, Localizer text, UiPreferencesFile preferences, INotifier notifier,
     ComponentPlanner components, IToolPlatform platform, Engines.Engines.SampleRender sample, IConfirmDialog confirm, ShellLauncher shell,
-    IActivityLog activity, ILogger<GeneralSettingsViewModel> logger)
+    IActivityLog activity, PreferencesImageAcceleration acceleration, Engines.Images.ImageBackendSelector backends, ComponentInstallFlow installs,
+    ILogger<GeneralSettingsViewModel> logger)
     : SettingsSectionBase
 {
     /// <inheritdoc />
@@ -43,6 +47,20 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
     /// <summary>Draw with the graphics card (stored at once, used from the next start).</summary>
     [ObservableProperty]
     public partial bool UseGraphicsCard { get; set; }
+
+    /// <summary>The Image acceleration choices (Automatic, NVIDIA CUDA, Vulkan, Processor) in the current language.</summary>
+    public ObservableCollection<ChoiceOption> AccelerationOptions { get; } = [];
+
+    /// <summary>The chosen Image acceleration.</summary>
+    [ObservableProperty]
+    public partial ChoiceOption? Acceleration { get; set; }
+
+    /// <summary>What Automatic chooses on this computer: "AMD Radeon RX 7800 XT · 16 GB → Vulkan (AMD, Intel, NVIDIA)".</summary>
+    [ObservableProperty]
+    public partial string AccelerationNote { get; set; } = string.Empty;
+
+    /// <summary>The work started by the last Image acceleration change (its install); finished when nothing runs.</summary>
+    public Task AccelerationApplied { get; private set; } = Task.CompletedTask;
 
     /// <summary>Installed components.</summary>
     public ObservableCollection<ComponentRowViewModel> Installed { get; } = [];
@@ -64,7 +82,16 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
     {
         _loading = true;
         UseGraphicsCard = preferences.Read().UseGraphicsCard;
+        AccelerationOptions.Clear();
+        foreach (var value in Enum.GetValues<ImageAcceleration>())
+        {
+            AccelerationOptions.Add(new ChoiceOption(value.ToString(), text[AccelerationKey(value)]));
+        }
+
+        Acceleration = AccelerationOptions.FirstOrDefault(o => o.Value == acceleration.Value.ToString());
         _loading = false;
+        // The first call looks at the graphics cards (native calls; on Linux maybe a short nvidia-smi run): off the UI thread.
+        AccelerationNote = Detected(await Task.Run(backends.Automatic).ConfigureAwait(true));
         NotificationsEnabled = session.Settings.NotificationsEnabled;
         NotificationSeconds = session.Settings.NotificationSeconds;
         await RefreshInstalledAsync().ConfigureAwait(true);
@@ -182,6 +209,78 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
     }
 
     private bool _loading;
+
+    /// <summary>The language key of a setting value.</summary>
+    internal static string AccelerationKey(ImageAcceleration value) => value switch
+    {
+        ImageAcceleration.Cuda => "settings.image_acceleration.cuda",
+        ImageAcceleration.Vulkan => "settings.image_acceleration.vulkan",
+        ImageAcceleration.Cpu => "settings.image_acceleration.cpu",
+        _ => "settings.image_acceleration.automatic",
+    };
+
+    /// <summary>The language key of a build.</summary>
+    internal static string BackendKey(ImageBackend backend) => backend switch
+    {
+        ImageBackend.Cuda => "settings.image_acceleration.cuda",
+        ImageBackend.Vulkan => "settings.image_acceleration.vulkan",
+        _ => "settings.image_acceleration.cpu",
+    };
+
+    /// <summary>"Automatic choice on this computer: AMD Radeon RX 7800 XT · 16 GB → Vulkan (AMD, Intel, NVIDIA)".</summary>
+    internal string Detected(ImageBackendChoice choice)
+    {
+        ArgumentNullException.ThrowIfNull(choice);
+        var card = choice.Device is { } device
+            ? device.Name + " · " + (device.VideoMemoryBytes is { } bytes
+                ? Math.Round(bytes / (1024.0 * 1024 * 1024), 1).ToString("0.#", text.Culture) + " GB"
+                : text["settings.image_acceleration.memory_unknown"])
+            : text["settings.image_acceleration.no_card"];
+        return text.Format("settings.image_acceleration.detected", card, text[BackendKey(choice.Backend)]);
+    }
+
+    partial void OnAccelerationChanged(ChoiceOption? value)
+    {
+        if (_loading || value is null)
+        {
+            return;
+        }
+
+        var chosen = Enum.GetValues<ImageAcceleration>().FirstOrDefault(v => v.ToString() == value.Value);
+        if (chosen == acceleration.Value)
+        {
+            return;
+        }
+
+        acceleration.Change(chosen);
+        AccelerationApplied = ApplyAccelerationAsync(chosen);
+    }
+
+    /// <summary>
+    /// After a change: the build it needs is installed at once when a local image model is already on disk (one confirmation, the usual
+    /// install window); otherwise it comes with the first local image model.
+    /// </summary>
+    private async Task ApplyAccelerationAsync(ImageAcceleration chosen)
+    {
+        var choice = await Task.Run(backends.Choose).ConfigureAwait(true);
+        logger.LogInformation("Setting changed: image acceleration {Setting}; the local image models use the {Backend} build", chosen, choice.Backend);
+        Status = text.Format("settings.image_acceleration.saved", text[BackendKey(choice.Backend)]);
+        var imagesOnDisk = await Task.Run(() => components.All.Any(c => c.Code.StartsWith(ComponentCodes.ImagePrefix, StringComparison.Ordinal) && components.Size(c) > 0))
+            .ConfigureAwait(true);
+        if (!imagesOnDisk)
+        {
+            return;
+        }
+
+        var outcome = await installs.EnsureAsync([ComponentCodes.ImageRuntime], "install.purpose.image_acceleration", null, CancellationToken.None)
+            .ConfigureAwait(true);
+        if (outcome.Reason.Length > 0)
+        {
+            Status = outcome.Reason;
+        }
+
+        await RefreshInstalledAsync().ConfigureAwait(true);
+    }
 
     partial void OnUseGraphicsCardChanged(bool value)
     {

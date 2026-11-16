@@ -134,8 +134,10 @@ adım ne işe yaradığını yazar:
   göndermez (sağlayıcının varsayılanı). **Video kodu**'nda **video motoru** da var: HyperFrames (varsayılan), Remotion (lisansını kabul
   etmeni ister: bireyler ve en çok 3 kişilik şirketler için ücretsiz), Revideo (deneysel). Görsel istemlerini de video kodu modeli yazar.
 - **Görseller** — *Kapalı* (varsayılan: video yalnız koddan çizilir), bir online görsel modeli ya da ekran kartında çalışan bir yerel model:
-  **FLUX.2 klein 4B** (hızlı) ya da **Z-Image Turbo** (daha iyi görsel); ikisi de en az 6 GB ekran kartı belleği ister (ölçüldükleri kart). Kartın küçük görünürse
-  sayfa uyarır; Windows'ta NVIDIA kart (CUDA), Linux x64'te Vulkan sürücüsü ister; Linux ARM64 için yok.
+  **FLUX.2 klein 4B** (hızlı) ya da **Z-Image Turbo** (daha iyi görsel); ikisi de en az 6 GB ekran kartı belleği ister (ölçüldükleri kart);
+  16 GB ve üstü kartlar için **Z-Image Turbo (tam kalite)**. Sayfa kartını gösterir, kart küçükse kırmızı yazar. NVIDIA, AMD ve Intel kartlar
+  çalışır: sürümü *Ayarlar → Genel → Görsel hızlandırma* seçer (Otomatik: sürücüsü kurulu NVIDIA kartta NVIDIA CUDA, diğer kartlarda Vulkan,
+  kart yoksa işlemci; Linux x64'te Vulkan ya da işlemci). Linux ARM64 için sürüm yok.
 - **Görseller** profilin kendi örnek görsellerini de kullanabilir (ücretsiz).
 - **Seslendirme** — *Kapalı* (sessiz video, sarı uyarı), **Supertonic 3** (yerel, ücretsiz; bütün video dilleri; İngilizce
   dışındaki her dilin varsayılan sesi), **Kokoro 82M** (yerel, ücretsiz; İngilizcenin varsayılanı; yalnız İngilizce, Amerikan ve İngiliz sesleri; sözlüklü bir ses: bilmediği adları ve kelimeleri seste atlar, uyarı verir) ya da
@@ -170,7 +172,7 @@ başlamaz, hiçbir şey ödenmez; sebebi görünür. Saklanan bir seçimin bile�
 | Pocket TTS int8 (sherpa-onnx gerekir) | github.com (k2-fsa) | 98 MB |
 | Chatterbox Multilingual V3 ONNX (Masterx dönüşümü, 4 bit dil modeli; sherpa-onnx gerekir) | huggingface.co | 1,56 GB |
 | Multilingual MiniLM (paraphrase-multilingual-MiniLM-L12-v2, int8 ONNX + tokenizer; sherpa-onnx gerekir) | huggingface.co | 127 MB |
-| stable-diffusion.cpp master-890 (Windows: CUDA 12 derlemesi + CUDA kitaplıkları; Linux x64: Vulkan derlemesi) | github.com (leejet) | 900 MB / 40 MB |
+| stable-diffusion.cpp master-890, Görsel hızlandırma'nın seçtiği derleme (Windows: CUDA 12 derlemesi + CUDA kitaplıkları, Vulkan ya da işlemci derlemesi; Linux x64: Vulkan ya da işlemci derlemesi) | github.com (leejet) | CUDA 900 MB, Vulkan 32–39 MB, işlemci 17–25 MB |
 | FLUX.2 klein 4B ağırlıkları (model, Qwen3-4B metin kodlayıcı, VAE) | huggingface.co | 5,3 GB |
 | Z-Image Turbo ağırlıkları (model, Qwen3-4B-Instruct metin kodlayıcı, VAE) | huggingface.co | 9,4 GB |
 

@@ -97,6 +97,14 @@ public sealed partial class StepModelRowViewModel(PipelineStep step, string titl
     [ObservableProperty]
     public partial bool NoteIsWarning { get; set; }
 
+    /// <summary>Whether the note is an error (red: a local image model that needs more graphics memory than this card has).</summary>
+    [ObservableProperty]
+    public partial bool NoteIsError { get; set; }
+
+    /// <summary>Whether the note is good news (green: the graphics card has enough memory for the local image model).</summary>
+    [ObservableProperty]
+    public partial bool NoteIsOk { get; set; }
+
     /// <summary>
     /// Why the saved choice was replaced when the page was shown (a voice that does not speak the profile's language, a voice that is gone);
     /// shown first in the note until the user picks something.
