@@ -171,6 +171,24 @@ public sealed class ImageBackendTests
         runtime.Downloads().Single().Name.ShouldContain("CPU");
     }
 
+    [Fact]
+    public void AnOldCudaInstallCountsAsInstalledSoAVersionUpdatePlansTheBuildChosenNow()
+    {
+        // 0.1.15 put the CUDA build in tools/sd-cpp; on an AMD card the update after a new version must still see the image runtime as
+        // installed before (the update dialog re-plans only those) and then install the Vulkan build.
+        using var paths = new TempPaths();
+        var installer = Installer(paths, "win-x64");
+        var selector = new ImageBackendSelector(new FakeGpu(new GpuReport([Amd], false, true)), new FakeSetting(), installer);
+        var runtime = new ImageRuntimeComponent(installer, selector);
+        runtime.WasInstalled.ShouldBeFalse();
+
+        Directory.CreateDirectory(Path.Combine(installer.ToolRoot(ToolKind.ImageRuntime), "old-version"));
+
+        runtime.WasInstalled.ShouldBeTrue();
+        runtime.Ready.ShouldBeFalse();
+        runtime.Downloads().Single().Name.ShouldContain("Vulkan");
+    }
+
     [Theory]
     [InlineData(ImageBackend.Cpu, 16L * 1024, "")]
     [InlineData(ImageBackend.Vulkan, -1L, "--vae-tiling --max-vram 4")]

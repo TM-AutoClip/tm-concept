@@ -2,14 +2,18 @@ using System.Text.Json.Nodes;
 using Avalonia.Headless.XUnit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Shouldly;
 using TMConcept.Core.Concepts;
 using TMConcept.Core.Endpoints;
+using TMConcept.Core.Engines;
 using TMConcept.Core.Keys;
+using TMConcept.Core.Media;
 using TMConcept.Core.Models;
 using TMConcept.Core.Pipeline;
 using TMConcept.Core.Profiles;
 using TMConcept.Core.Runs;
+using TMConcept.Core.Videos;
 using TMConcept.Desktop.Dialogs;
 using TMConcept.Desktop.Localization;
 using TMConcept.Desktop.Startup;
@@ -250,6 +254,50 @@ public sealed class EndpointSettingsTests
         chats[1].Headers["Authorization"].ShouldBe("Bearer " + Token);
         var run = (await h.Get<IRunStore>().ListAsync(DateTimeOffset.UtcNow.AddHours(-1), None)).Single(r => r.Kind == RunKind.Topics);
         (run.Provider, run.Model, run.KeyLabel, run.ActualUsd, run.Status).ShouldBe((choice.Provider, "bonsai-27b", "Lemonade", 0m, RunStatus.Succeeded));
+    }
+
+    [AvaloniaFact]
+    public async Task ALocalServerThatRefusesTheVideoCodeCallStopsTheVideoAndSaysWhy()
+    {
+        // The stop rule (16 Nov 2026) holds for a local server too: its failure fails the queue row in red with the server's reason, the
+        // activity panel gets a red line, no video is kept and the concept stays queued for a retry.
+        using var server = new FakeEndpointServer();
+        server.Chat(401, """{"error":{"message":"bad token"}}""");
+        var engine = new VideoPageTests.FakeEngine();
+        using var h = Harness(server, s =>
+        {
+            s.RemoveAll<IVideoEngine>();
+            s.AddSingleton<IVideoEngine>(engine);
+            s.AddSingleton<IMediaTools, VideoPageTests.FakeMedia>();
+        });
+        await FirstRunTests.CreateAsync(h);
+        var endpoint = await SaveAsync(h, server);
+        var profile = new Profile { Name = "Byzantium", ContentLanguage = ContentLanguages.English, ConceptText = "x" };
+        await h.Get<IProfileStore>().SaveAsync(profile, None);
+        await h.Get<AppSession>().SelectProfileAsync(profile, None);
+        var concept = new Concept
+        {
+            ProfileId = profile.Id, Title = "Greek fire", Summary = "s", Content = "[on screen: a map]\nIn 672 the city was under siege.", Language = "en",
+            Status = ConceptStatus.Approved,
+        };
+        await h.Get<IConceptStore>().AddAsync([concept], None);
+        await h.Get<IStepModelStore>().SaveAsync(new StepModelChoice
+        {
+            Step = PipelineSteps.VideoCode, ProfileId = profile.Id, Provider = EndpointCodes.For(endpoint.Id), Model = "bonsai-27b",
+        }, None);
+        var page = h.Get<VideoViewModel>();
+        await page.ActivateAsync();
+        await page.EnqueueAsync(page.Approved.Single());
+        var row = page.Queue.Single();
+
+        await page.ProduceAllAsync();
+
+        server.Chats.Count.ShouldBe(1, "a refused token is not retried");
+        row.Failed.ShouldBeTrue();
+        row.Error.ShouldNotBeNullOrWhiteSpace();
+        h.Get<TMConcept.Core.Activity.IActivityFeed>().Recent().ShouldContain(l => l.IsError && l.Text.Contains("Greek fire", StringComparison.Ordinal));
+        (await h.Get<IVideoStore>().ListAsync(profile.Id, None)).ShouldBeEmpty();
+        (await h.Get<IConceptStore>().GetAsync(concept.Id, None))!.Status.ShouldBe(ConceptStatus.Queued);
     }
 
     private static async Task<T> QueryAsync<T>(DesktopHarness h, Func<ConceptDbContext, Task<T>> query)
