@@ -20,4 +20,13 @@ public sealed class EndpointModel
 
     /// <summary>The server accepts <c>response_format: json_schema</c> for it (otherwise <c>json_object</c> is asked).</summary>
     public bool JsonSchema { get; set; }
+
+    /// <summary>The model can think before it answers (Ollama's <c>thinking</c> capability): the app then sends <c>think</c> as <see cref="Think"/>.</summary>
+    public bool CanThink { get; set; }
+
+    /// <summary>Let a model that <see cref="CanThink"/> think (slower, often better); off by default.</summary>
+    public bool Think { get; set; }
+
+    /// <summary>Its size on disk in bytes as the server reports it (0 = not said); shown only.</summary>
+    public long SizeBytes { get; set; }
 }

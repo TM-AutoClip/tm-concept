@@ -220,7 +220,10 @@ için adım adım rehber: [docs/api-keys.tr.md](docs/api-keys.tr.md).
 **Özel sunucu:** OpenAI uyumlu her sunucu; bilgisayarında (AMD'de Lemonade Server, ROCm ya da Vulkan sürümleriyle llama.cpp
 `llama-server`, Ollama, LM Studio, vLLM), ağında ya da internette, aynı yerden eklenebilir (**Özel sunucu (OpenAI uyumlu)**: herhangi
 bir http/https adresi, isteğe bağlı API anahtarı, modelleri). Modelleri bundan sonra her metin adımında sunulur.
-Rehber: [docs/api-keys.tr.md](docs/api-keys.tr.md#özel-sunucu-openai-uyumlu).
+Bu bilgisayarda çalışan Ollama ve LM Studio kendiliğinden bulunur (**Bu bilgisayarda bulunanlar** → **Ekle**): program yüklü modellerini
+listeler, her birini senin ayarladığın bağlamla yükler ve bir görsel ya da ses modeli ekran kartını isteyince karttan indirir; Ollama'da
+deneme, bir modelin ne kadarının kartta, ne kadarının ana bellekte olduğunu gösterir.
+Rehber: [docs/api-keys.tr.md](docs/api-keys.tr.md#özel-sunucu-openai-uyumlu), [Ollama ve LM Studio](docs/api-keys.tr.md#ollama-ve-lm-studio).
 
 Sonra modelleri onları kullanan sayfalarda seç (yukarıya bak). Ücretli hiçbir şey senin yerine seçilmez.
 

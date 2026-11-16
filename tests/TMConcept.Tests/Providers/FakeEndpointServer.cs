@@ -18,6 +18,7 @@ internal sealed class FakeEndpointServer : IDisposable
     private readonly ConcurrentQueue<FakeEndpointAnswer> _models = new();
     private readonly ConcurrentQueue<FakeEndpointAnswer> _chats = new();
     private readonly Task _loop;
+    private readonly string _basePath = string.Empty;
 
     public FakeEndpointServer(string basePath = "v1")
     {
@@ -33,6 +34,7 @@ internal sealed class FakeEndpointServer : IDisposable
             {
                 _listener.Start();
                 BaseUrl = $"http://127.0.0.1:{port}/{basePath}";
+                _basePath = "/" + basePath;
                 break;
             }
             catch (HttpListenerException) when (attempt < 5)
@@ -146,7 +148,8 @@ internal sealed class FakeEndpointServer : IDisposable
         var headers = request.Headers.AllKeys.OfType<string>().ToDictionary(k => k, k => request.Headers[k] ?? string.Empty, StringComparer.OrdinalIgnoreCase);
         Requests.Enqueue(new RecordedRequest(new HttpMethod(request.HttpMethod), request.Url!, headers, body));
         var path = request.Url!.AbsolutePath;
-        var answer = path.EndsWith("/models", StringComparison.Ordinal)
+        // Only the list under the base path: LM Studio's /api/v1/models probe of a /v1 server is a 404 here, like on a plain server.
+        var answer = path == _basePath + "/models"
             ? _models.TryDequeue(out var listed) ? listed : new FakeEndpointAnswer(200, Models, "application/json")
             : path.EndsWith("/chat/completions", StringComparison.Ordinal)
                 ? _chats.TryDequeue(out var chat) ? chat : new FakeEndpointAnswer(500, """{"error":{"message":"no answer queued"}}""", "application/json")

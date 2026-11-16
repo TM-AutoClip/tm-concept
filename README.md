@@ -223,7 +223,10 @@ Step-by-step guides for every provider: [docs/api-keys.md](docs/api-keys.md).
 **Custom server:** any OpenAI-compatible server, on your computer (Lemonade Server on AMD, llama.cpp `llama-server` with its ROCm or
 Vulkan builds, Ollama, LM Studio, vLLM), on your network or on the internet, can be added in the same place (**Custom server
 (OpenAI-compatible)**: any http/https address, an optional API key, its models). Its models are then offered in every text step.
-Guide: [docs/api-keys.md](docs/api-keys.md#custom-server-openai-compatible).
+Ollama and LM Studio running on this computer are found by themselves (**Found on this computer** → **Add**): the app lists their
+installed models, loads each one with the context you set, and unloads it when an image or voice model needs the graphics card; for Ollama
+the test shows how much of a model sits on the card and how much in main memory.
+Guide: [docs/api-keys.md](docs/api-keys.md#custom-server-openai-compatible), [Ollama and LM Studio](docs/api-keys.md#ollama-and-lm-studio).
 
 Then choose the models on the pages that use them (see above). Nothing paid is chosen for you.
 

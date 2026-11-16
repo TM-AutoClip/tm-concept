@@ -16,8 +16,15 @@ public sealed class LocalEndpoint
     /// <summary>The user's name for it ("Lemonade on this PC").</summary>
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>Base address up to the API version (<c>http://localhost:13305/api/v1</c>); requests go to <c>{base}/chat/completions</c>.</summary>
+    /// <summary>
+    /// Base address up to the API version (<c>http://localhost:13305/api/v1</c>); requests go to <c>{base}/chat/completions</c>. For Ollama and
+    /// LM Studio (<see cref="Kind"/>) the server's own address without <c>/v1</c> (<c>http://127.0.0.1:11434</c>).
+    /// </summary>
     public string BaseUrl { get; set; } = string.Empty;
+
+    /// <summary>What the server is (found when its models are listed): a plain OpenAI-compatible one, Ollama or LM Studio.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter<EndpointKind>))]
+    public EndpointKind Kind { get; set; } = EndpointKind.Generic;
 
     /// <summary>Optional bearer token (empty = no Authorization header). Stored apart from the endpoint JSON.</summary>
     [JsonIgnore]

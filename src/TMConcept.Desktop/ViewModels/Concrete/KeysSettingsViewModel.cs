@@ -71,6 +71,20 @@ public sealed partial class KeysSettingsViewModel(IEnumerable<IProvider> provide
         Provider ??= Providers.FirstOrDefault();
         Endpoint.Reload();
         await ReloadAsync().ConfigureAwait(true);
+        await Endpoint.DetectAsync().ConfigureAwait(true);
+    }
+
+    /// <summary>Opens a server found on this computer (Ollama, LM Studio) in the form and lists its models.</summary>
+    [RelayCommand]
+    public async Task UseDetectedAsync(DetectedServerViewModel? row)
+    {
+        if (row is null)
+        {
+            return;
+        }
+
+        Provider = Providers.FirstOrDefault(p => p.IsEndpoint);
+        await Endpoint.UseDetectedAsync(row).ConfigureAwait(true);
     }
 
     /// <summary>Opens a saved local server in the form (the local server entry is chosen, so its form shows) to change it.</summary>
