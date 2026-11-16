@@ -202,10 +202,10 @@ you tick *API keys* in Settings → Backup (the backup file is encrypted with yo
 key asks for one before it starts.
 Step-by-step guides for every provider: [docs/api-keys.md](docs/api-keys.md).
 
-**Local server (free):** a model running on your computer through an OpenAI-compatible server (Lemonade Server on AMD, llama.cpp
-`llama-server` with its ROCm or Vulkan builds, Ollama, LM Studio, vLLM) can be added in the same place (**Local server
-(OpenAI-compatible)**: address, optional token, its models). Its models are then offered in every text step, free and without a key.
-Guide: [docs/api-keys.md](docs/api-keys.md#local-server-openai-compatible-free).
+**Custom server:** any OpenAI-compatible server, on your computer (Lemonade Server on AMD, llama.cpp `llama-server` with its ROCm or
+Vulkan builds, Ollama, LM Studio, vLLM), on your network or on the internet, can be added in the same place (**Custom server
+(OpenAI-compatible)**: any http/https address, an optional API key, its models). Its models are then offered in every text step.
+Guide: [docs/api-keys.md](docs/api-keys.md#custom-server-openai-compatible).
 
 Then choose the models on the pages that use them (see above). Nothing paid is chosen for you.
 

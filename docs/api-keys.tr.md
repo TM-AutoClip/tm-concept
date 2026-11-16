@@ -69,11 +69,12 @@ API kullanımı sohbet aboneliklerinden (Claude Pro, ChatGPT Plus…) ayrı ücr
 4. Anahtarı kopyala ve TM Concept'e yapıştır.
 5. fal'da ücretsiz deneme isteği yok: anahtar denenmeden kaydedilir, ilk görselde denetlenir. Fiyat görsel başınadır (FLUX 2 Flash ≈ 0,01 $).
 
-## Yerel sunucu (OpenAI uyumlu, ücretsiz)
+## Özel sunucu (OpenAI uyumlu)
 
-Kendi bilgisayarında (ya da ağındaki başka bir bilgisayarda) çalışan bir model her metin adımında kullanılabilir: konu önerileri,
-konseptler, bir konseptin yapay zekâ düzenlemeleri, video kodu, görsel istemleri ve model görsel okuyorsa örnek görsel açıklama. OpenAI
-API'siyle konuşan her program olur. Ücret yok, anahtar gerekmez; yalnız programın çalışıyor olması gerekir.
+OpenAI API'siyle konuşan her sunucu her metin adımında kullanılabilir: konu önerileri, konseptler, bir konseptin yapay zekâ
+düzenlemeleri, video kodu, görsel istemleri ve model görsel okuyorsa örnek görsel açıklama. Sunucu kendi bilgisayarında, ağındaki başka
+bir bilgisayarda ya da internette (kendi sunucun ya da OpenAI uyumlu adres veren bir hizmet) olabilir. API anahtarı isteğe bağlıdır:
+yalnız sunucu istiyorsa yaz. Program bu modellere ücret yazmaz; uzak bir hizmet ücret alıyorsa harcamayı o hizmetin panelinden izle.
 
 1. Sunucuyu başlat ve bir model yükle. Sık kullanılan varsayılan adresler:
 
@@ -84,20 +85,22 @@ API'siyle konuşan her program olur. Ücret yok, anahtar gerekmez; yalnız progr
    | LM Studio | `http://localhost:1234/v1` |
    | llama.cpp `llama-server` | `http://localhost:8080/v1` (yeni sürümler: 9931 portu) |
    | vLLM | `http://localhost:8000/v1` |
+   | Ağındaki başka bir bilgisayar | `http://192.168.1.20:8080/v1` |
+   | Uzak sunucu ya da hizmet | `https://sunucun.ornek.com/v1` + API anahtarı |
 
    AMD ekran kartları: Lemonade Server ya da llama.cpp'nin ROCm veya Vulkan sürümleri modelleri bu kartlarda çalıştırır (NVIDIA kart
    gerekmez).
-2. Ayarlar → **Anahtarlar** → **Yerel sunucu (OpenAI uyumlu)**'yu seç → bir ad ve adresi yaz (`/v1` ya da `/api/v1`'e kadar); jetonu
-   yalnız sunucu isterse yaz.
+2. Ayarlar → **Anahtarlar** → **Özel sunucu (OpenAI uyumlu)**'yu seç → bir ad ve adresi yaz (`/v1` ya da `/api/v1`'e kadar, http ya da
+   https); API anahtarını yalnız sunucu isterse yaz.
 3. **Bağlan ve modelleri listele** sunucudan modellerini ister. Kullanacaklarını işaretle (ya da model kimliğini yaz). Her biri için
    **Bağlam**'a (sunucunun modeli çalıştırdığı bağlam boyutu, llama-server'da `-c`; sunucu söylüyorsa oradan okunur) ve **En uzun
    yanıt**'a (daha fazlasını isteyen adım bunu alır) bak. Video kodu yanıtı on binlerce token tutar, bu yüzden modele geniş bir bağlam
    ver: En uzun yanıt, bağlamdan istem payı düşülerek başlar ve hiçbir çağrı isteminin yanında bağlamda kalandan fazlasını istemez. Görsel okuyan model için **Görsel okur**'u, **JSON şeması**'nı ise yalnız sunucu
    `response_format: json_schema` kabul ediyorsa işaretle (LM Studio, vLLM, yeni llama.cpp); yoksa JSON kipi istenir, ikisini de
    reddeden sunucuya istek onsuz gönderilir.
-4. **Yerel sunucuyu kaydet**. Modelleri artık model listelerinde "model · ad · yerel sunucu, ücretsiz" olarak görünür; anahtar sorulmaz.
+4. **Özel sunucuyu kaydet**. Modelleri artık model listelerinde "model · ad · özel sunucu, ücret yazılmaz" olarak görünür.
    Kayıtlı sunucudaki **Düzenle** onu yerinde değiştirir (modellerini kullanan adımlar onları korur). Adrese kullanıcı adı ya da parola
-   yazma; gizli bilginin yeri jeton alanı.
+   yazma; gizli bilginin yeri API anahtarı alanı.
 
 Model yüklendikten sonraki ilk istek dakikalar sürebilir: TM Concept ilk cevabı bir saate kadar bekler ve sunucu 503 (model yükleniyor)
 dedikçe birkaç kez yeniden dener. Modelin düşünmesi (`reasoning_content`, `<think>…</think>`) "düşünüyor" olarak gösterilir, cevap

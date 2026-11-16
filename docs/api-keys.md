@@ -69,11 +69,13 @@ API use is billed separately from chat subscriptions (Claude Pro, ChatGPT Plus�
 4. Copy the key and paste it into TM Concept.
 5. fal has no free test request: the key is saved untested and checked at its first image. Prices are per image (FLUX 2 Flash ≈ 0.01 $).
 
-## Local server (OpenAI-compatible, free)
+## Custom server (OpenAI-compatible)
 
-A model that runs on your own computer (or another computer on your network) can be used in every text step: topic suggestions,
-concepts, AI edits of a concept, video code, image prompts, and describing a sample image when the model reads images. Any program that
-speaks the OpenAI API works. It costs nothing and needs no key; the program only has to be running.
+Any server that speaks the OpenAI API can be used in every text step: topic suggestions, concepts, AI edits of a concept, video code,
+image prompts, and describing a sample image when the model reads images. It can run on your own computer, on another computer on your
+network, or anywhere on the internet (your own server, or a service that offers an OpenAI-compatible address). The API key is optional:
+type it only if the server asks for one. The app records no price for these models; if a remote service charges, watch the spending
+in its own dashboard.
 
 1. Start the server and load a model. Common default addresses:
 
@@ -84,19 +86,21 @@ speaks the OpenAI API works. It costs nothing and needs no key; the program only
    | LM Studio | `http://localhost:1234/v1` |
    | llama.cpp `llama-server` | `http://localhost:8080/v1` (new builds: port 9931) |
    | vLLM | `http://localhost:8000/v1` |
+   | Another computer on your network | `http://192.168.1.20:8080/v1` |
+   | A remote server or service | `https://your-server.example.com/v1` + its API key |
 
    AMD graphics cards: Lemonade Server, or the ROCm or Vulkan builds of llama.cpp, run models on them (no NVIDIA card needed).
-2. Settings → **Keys** → choose **Local server (OpenAI-compatible)** → type a name and the address (up to `/v1` or `/api/v1`); a token
-   only if the server asks for one.
+2. Settings → **Keys** → choose **Custom server (OpenAI-compatible)** → type a name and the address (up to `/v1` or `/api/v1`, http or
+   https); the API key only if the server asks for one.
 3. **Connect and list models** asks the server for its models. Tick the ones to use (or type a model id). For each one check **Context**
    (the context size the server runs it with, llama-server's `-c`; read from the server when it says) and **Max answer** (a step that asks
    for more gets this). The video code answer runs to tens of thousands of tokens, so give the model a large context: Max answer starts
    at the context less room for the prompt, and no call asks for more than the context leaves next to its prompt.
    Tick **Reads images** for a vision model and **JSON schema** only if the server accepts `response_format: json_schema`
    (LM Studio, vLLM, recent llama.cpp); otherwise JSON mode is asked, and a server that rejects both gets the request without it.
-4. **Save the local server**. Its models now appear in the model lists as "model · name · local server, free"; no key is asked.
+4. **Save the custom server**. Its models now appear in the model lists as "model · name · custom server, no price recorded".
    **Edit** on a saved server changes it in place (the steps that use its models keep them). Do not put a user name or password in the
-   address; the token field is the place for a secret.
+   address; the API key field is the place for a secret.
 
 The first request after a model is loaded can take minutes: TM Concept waits up to an hour for the first answer and retries a few times
 while the server answers 503 (model loading). A model's thinking (`reasoning_content`, `<think>…</think>`) is shown as "thinking" and not
