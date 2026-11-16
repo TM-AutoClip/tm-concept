@@ -211,6 +211,24 @@ public sealed class AppUpdateTests
     }
 
     [Fact]
+    public async Task AnInstalledUpdateWhoseProgramCannotStartSaysSoAndKeepsThePreviousProgram()
+    {
+        var restarter = new FakeRestarter { Fail = true };
+        using var h = Harness(new FakeGitHub(Release("v0.1.18", Notes(NewProgram))), out var program, out _, restarter, new FlakyServer(NewProgram));
+        var updater = Updater(h);
+        var offer = (await updater.CheckAsync(true, CancellationToken.None))!;
+
+        var error = await Should.ThrowAsync<AppUpdateException>(() => updater.InstallAsync(offer, null, CancellationToken.None));
+
+        error.Code.ShouldBe("restart", "installed, but not started: the user starts the app again (not a generic crash text)");
+        File.ReadAllBytes(program).ShouldBe(NewProgram);
+        if (OperatingSystem.IsWindows())
+        {
+            h.Get<SelfReplacer>().PreviousProgram.ShouldBe(program + UpdateRules.OldSuffix, "kept until the new version has started");
+        }
+    }
+
+    [Fact]
     public async Task NothingIsReplacedWhileWorkRuns()
     {
         var restarter = new FakeRestarter();
@@ -354,7 +372,16 @@ public sealed class AppUpdateTests
     {
         public List<string> Started { get; } = [];
 
-        public void Restart(string program) => Started.Add(program);
+        public bool Fail { get; init; }
+
+        public void Restart(string program)
+        {
+            Started.Add(program);
+            if (Fail)
+            {
+                throw new System.ComponentModel.Win32Exception(5, "Access is denied.");
+            }
+        }
     }
 
     /// <summary>GitHub's latest-release endpoint: the release with ETag "r1" (304 for it), or a rate-limit refusal.</summary>

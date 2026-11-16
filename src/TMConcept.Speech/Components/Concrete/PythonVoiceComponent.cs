@@ -45,9 +45,6 @@ public sealed class PythonVoiceComponent(PythonSpeechEngine engine, PythonModelS
     public IReadOnlyList<string> Folders() => [models.Folder(engine.Voice)];
 
     /// <inheritdoc />
-    public bool WasInstalled => Directory.Exists(models.Folder(engine.Voice));
-
-    /// <inheritdoc />
     public Task RefreshAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     /// <inheritdoc />

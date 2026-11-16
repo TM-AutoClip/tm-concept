@@ -112,6 +112,14 @@ public sealed class ImageAccelerationTests
         images.Selected!.Model!.Id.ShouldBe("qwen-image-q8", "the choice is kept");
         weights.Installs.ShouldBe(0);
         confirm.Asked.ShouldBeEmpty("nothing is offered for download");
+
+        // A non-commercial model above the card's class: refused before its licence is asked, so no acceptance is kept for it.
+        Choose(images, "flux2-klein-9b-q8");
+        await Until(() => images.NoteIsError);
+        (await picker.PrepareAsync([PipelineSteps.Images], "install.purpose.video", CancellationToken.None)).ShouldBeFalse();
+        picker.Status.ShouldBe(text.Format("picker.not_started.memory", "FLUX.2 klein 9B (Q8)", 24, "15.8"));
+        confirm.Asked.ShouldBeEmpty("no licence dialog for a model this card cannot run");
+        h.Get<TMConcept.Desktop.Startup.AppSession>().Settings.AcceptedModelLicenses.ShouldBeEmpty();
     }
 
     [AvaloniaFact]

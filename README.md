@@ -179,7 +179,7 @@ the model that describes a sample image. Each step says what it is for:
   **Trendyol-TTS** (Turkish), **Ahenk** (Turkish, seven moods) and **MMS-TTS Turkish** (small, on the processor). With an NVIDIA card and
   its driver they run on the card through CUDA (the step shows whether your card is big enough: 4 GB for XTTS-v2 and F5, 8 GB for
   VoxCPM2, Trendyol-TTS and Ahenk); with an AMD or Intel card, or none, they run on the processor, which the step says is slow. The first
-  use installs Python 3.11, the voice's packages with PyTorch (about 4 GB for NVIDIA cards, under 1 GB otherwise) and the model (0.15–5 GB);
+  use installs Python 3.11, the voice's packages with PyTorch (about 4 GB for NVIDIA cards from the GTX 16 / RTX 20 series on with a driver of 570 or newer, under 1 GB otherwise: older NVIDIA cards and drivers run the voices on the processor) and the model (0.15–5 GB);
   the confirmation lists every download with its size. **XTTS-v2, F5-TTS Turkish and MMS-TTS Turkish have NON-COMMERCIAL licences**: the
   step shows the licence and asks you to accept it before anything is downloaded; do not use them for a channel with ads, sponsors or paid
   work. Ahenk (CC BY 4.0) must be credited when you publish. While a Python voice speaks on the card it holds the card like any other
@@ -212,10 +212,12 @@ now* with the reason; nothing starts with it until it is back or you choose anot
 **One local model on the graphics card at a time.** Models of a local server on this computer (Ollama, LM Studio, llama-server,
 Lemonade…) and the local image models share the graphics card: before a local model starts, the one used before it is unloaded (when its
 server can be asked to) and the app waits until the card's memory is free again; online models and the sherpa-onnx voices (they run on the
-processor) never wait; a Python voice on an NVIDIA card takes the card like the image models. The free memory is measured each time: on Windows the smaller of what Task Manager shows and what Windows lets
+processor) never wait; a Python voice on an NVIDIA card takes the card like the image models. The free memory is measured each time: on Windows the smaller of what Task Manager shows and what Windows lets (the latter alone never refuses a picture: it may only make sd-cli offload)
 the app use, on Linux the AMD driver's files or `nvidia-smi`. Graphics memory classes are 4, 6, 8, 12, 16, 24 and 32 GB: a card counts in
-the class it reports within about an eighth (a "16 GB" card that reports 15.8 GB is a 16 GB card) and can use its own class and every
-lower one; a model of a higher class is shown in red.
+the class it reports within 8 % (a "16 GB" card that reports 15.8 GB is a 16 GB card; an 11 GB card is an 8 GB card) and can use its own class and every
+lower one; a model of a higher class is shown in red. What Ollama or LM Studio on this computer still holds from before (an earlier run;
+LM Studio keeps a loaded model with no time limit) is unloaded before the first local model of a run, and the last local model is unloaded
+when the video queue ends and when the app closes. A model its server would not unload is asked again at the next change.
 
 **Answers that must be JSON.** Concepts, topics, the AI edit and the image prompts are read tolerantly (thinking, code fences and text
 around the answer are skipped, small mistakes repaired). An answer that still cannot be read is asked for once more, at most twice;
@@ -286,7 +288,9 @@ Then choose the models on the pages that use them (see above). Nothing paid is c
 **From the app:** at start (at most once a day) TM Concept reads the project's latest release on GitHub (no account, nothing about you is
 sent) and, when there is a newer version, shows its version and release notes. **Download and install** downloads the file for your system,
 checks it against the SHA-256 in the release notes (a file without one, or with a different one, is never installed), replaces the program
-file at the same path and starts the new version. Nothing is downloaded before you confirm. Settings → General → *Updates* turns the check at
+file at the same path and starts the new version. Closing the window (also with its X) cancels a running download. On Windows the previous
+program stays next to the new one as `TMConcept.exe.old` until the new version has opened its database and main window: if its database
+upgrade fails, the unlock window says how to go back to it. Nothing is downloaded before you confirm. Settings → General → *Updates* turns the check at
 start off and has **Check now**. A copy of TM Concept built from source, or one in a folder it cannot write (for example Program Files),
 shows the release page instead.
 

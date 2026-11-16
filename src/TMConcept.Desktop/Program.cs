@@ -51,7 +51,6 @@ internal static class Program
         logger.LogInformation("TM Concept {Version} starting on {Os} ({Architecture}, {Runtime}); data folder: {Mode}", AppIdentity.Version, AppIdentity.Os,
             AppIdentity.Architecture, AppIdentity.Runtime, options.DataDirectory is null ? "default" : "portable");
         SweepOrphans(children, paths, logger);
-        services.GetRequiredService<Updates.SelfReplacer>().CleanUp();
 
         instance.Logger = services.GetRequiredService<ILogger<SingleInstance>>();
         instance.ShowRequested += (_, _) =>
@@ -75,8 +74,26 @@ internal static class Program
             return 1;
         }
 
+        FreeGraphicsCard(services, logger);
         logger.LogInformation("TM Concept stopped (exit code {Exit})", exit);
         return exit;
+    }
+
+    /// <summary>
+    /// At exit: the local model the app left on the graphics card is unloaded (a local server would keep it for its own idle time, LM Studio
+    /// for good); at most 10 seconds, a failure is only logged.
+    /// </summary>
+    private static void FreeGraphicsCard(ServiceProvider services, ILogger logger)
+    {
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            services.GetRequiredService<Core.Models.IGpuCoordinator>().FreeAsync(timeout.Token).GetAwaiter().GetResult();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            logger.LogWarning(ex, "The graphics card could not be freed at exit");
+        }
     }
 
     /// <summary>

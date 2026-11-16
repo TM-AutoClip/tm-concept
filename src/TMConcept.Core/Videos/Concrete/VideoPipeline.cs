@@ -265,6 +265,12 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
     }
 
     /// <summary>
+    /// The end of the video queue: the local model still on the graphics card (a language model, an image model, a voice) is unloaded, so the
+    /// card is free again for the user's own programs; nothing when another page uses it. A failure is only logged by the coordinator.
+    /// </summary>
+    public Task FreeCardAsync(CancellationToken cancellationToken) => gpu.FreeAsync(cancellationToken);
+
+    /// <summary>
     /// Called once at start, before any video runs (no run can own a work folder then). A run's work folder left by an app that was closed
     /// or killed mid-run is an orphan: it is emptied at once, except a rejected code kept for reading (the folder goes with it after
     /// <see cref="WorkKeep"/>). Scene images that were paid for stay for a retry until <see cref="WorkKeep"/>.

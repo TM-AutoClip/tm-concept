@@ -405,7 +405,21 @@ public sealed partial class VideoViewModel : PageViewModelBase
         {
             _cancel = null;
             Busy = false;
+            await FreeCardAsync().ConfigureAwait(true);
             await ReloadAsync().ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>After the queue: the last local model leaves the graphics card (a server would otherwise keep it for its own idle time, LM Studio for good).</summary>
+    private async Task FreeCardAsync()
+    {
+        try
+        {
+            await _pipeline.FreeCardAsync(CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _logger.LogWarning(ex, "The graphics card could not be freed after the queue");
         }
     }
 

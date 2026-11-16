@@ -17,6 +17,13 @@ public sealed record VramReading(long TotalBytes, long FreeBytes, bool Measured,
     /// </summary>
     public static long Estimate(long totalBytes) => Math.Max(0, (totalBytes / 8 * 7) - (512L * 1024 * 1024));
 
+    /// <summary>
+    /// Free memory by the sources that count every process (Windows' performance counter, sysfs, nvidia-smi), when it is larger than
+    /// <see cref="FreeBytes"/>: the smaller figure came from this app's own budget (DXGI), which Windows may lower while the window is in the
+    /// background. A plan may be careful with <see cref="FreeBytes"/> but must not refuse a run on it alone. Null when no such source read more.
+    /// </summary>
+    public long? SystemFreeBytes { get; init; }
+
     /// <summary>The class of the card (<see cref="VramTiers.ForCard"/>).</summary>
     public VramTier Tier => VramTiers.ForCard(TotalBytes);
 }

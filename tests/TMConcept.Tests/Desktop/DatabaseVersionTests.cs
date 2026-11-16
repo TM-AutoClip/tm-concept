@@ -35,5 +35,10 @@ public sealed class DatabaseVersionTests
         failed.Text.ShouldContain("Version0118");
         failed.Text.ShouldContain("disk full");
         failed.Text.ShouldContain("before-upgrade");
+
+        // Just after a self-update the previous program is still there: the text says how to go back to it.
+        var error = new DatabaseVersionException("x") { Problem = DatabaseVersionProblem.UpgradeFailed, Step = "Version0118" };
+        UnlockViewModel.Describe(error, text, Path.Combine("folder", "TMConcept.exe.old")).Text.ShouldContain("TMConcept.exe.old");
+        UnlockViewModel.Describe(error, text, null).Text.ShouldBe(UnlockViewModel.Describe(error, text).Text);
     }
 }

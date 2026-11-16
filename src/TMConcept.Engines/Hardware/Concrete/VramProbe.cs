@@ -6,7 +6,8 @@ namespace TMConcept.Engines.Hardware;
 /// <summary>
 /// Free graphics card memory now: every memory source of this computer (<see cref="IVideoMemorySource"/>; Windows: the performance counter
 /// of the whole system and this process's DXGI budget, Linux: amdgpu sysfs and nvidia-smi) is asked, and the smallest figure wins (the AMD
-/// Vulkan budget of one process can be well below "total − used"). A card whose memory no source can read gets
+/// Vulkan budget of one process can be well below "total − used"); the smallest figure of the sources that count every process is kept
+/// beside it (<see cref="VramReading.SystemFreeBytes"/>), so this app's own budget alone never refuses a run. A card whose memory no source can read gets
 /// <see cref="VramReading.Estimate"/> (total × 7/8 − 0.5 GiB). The card is the one asked for, or the one with the most memory. Each reading
 /// is logged at debug level (sources and figures, no names).
 /// </summary>
@@ -24,6 +25,7 @@ public sealed class VramProbe(IGpuInfo gpu, IEnumerable<IVideoMemorySource> sour
         }
 
         long? smallest = null;
+        long? system = null;
         var from = string.Empty;
         foreach (var source in _sources)
         {
@@ -39,15 +41,26 @@ public sealed class VramProbe(IGpuInfo gpu, IEnumerable<IVideoMemorySource> sour
                 continue;
             }
 
-            if (free is { } bytes && (smallest is null || bytes < smallest))
+            if (free is not { } bytes)
             {
-                smallest = Math.Clamp(bytes, 0, total);
+                continue;
+            }
+
+            bytes = Math.Clamp(bytes, 0, total);
+            if (smallest is null || bytes < smallest)
+            {
+                smallest = bytes;
                 from = source.Name;
+            }
+
+            if (!source.PerProcess && (system is null || bytes < system))
+            {
+                system = bytes;
             }
         }
 
         var reading = smallest is { } measured
-            ? new VramReading(total, measured, true, from)
+            ? new VramReading(total, measured, true, from) { SystemFreeBytes = system > measured ? system : null }
             : new VramReading(total, VramReading.Estimate(total), false, "estimate");
         logger.LogDebug("Graphics card memory: {Free:0.00} of {Total:0.00} GiB free ({Source})", reading.FreeBytes / 1073741824.0, total / 1073741824.0,
             reading.Source);

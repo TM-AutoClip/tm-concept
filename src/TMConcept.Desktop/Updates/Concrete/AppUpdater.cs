@@ -144,8 +144,20 @@ public sealed class AppUpdater(ReleaseFeed feed, SelfReplacer replacer, Engines.
             throw new AppUpdateException("Work is running.") { Code = "busy" };
         }
 
+        // The last moment a cancel (the window closed) still keeps the running version: after this the program file is the new one.
+        cancellationToken.ThrowIfCancellationRequested();
         replacer.Replace(program);
         logger.LogInformation("Update to {Version} installed; restarting", offer.Version);
-        restarter.Restart(replacer.ProgramPath);
+        try
+        {
+            restarter.Restart(replacer.ProgramPath);
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            // Installed, but the new program did not start (a virus scanner holding it, for example): this one keeps running from the old
+            // file until it is closed; the next start is the new version.
+            logger.LogError(ex, "Update to {Version} installed, but the new version could not be started", offer.Version);
+            throw new AppUpdateException("The update was installed, but the new version could not be started.", ex) { Code = "restart" };
+        }
     }
 }

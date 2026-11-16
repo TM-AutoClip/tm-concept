@@ -230,13 +230,13 @@ public sealed class LocalServerTests
         var (_, transport) = Create();
         var control = new OllamaModelControl(transport);
 
-        (await control.UnloadAsync(Ollama(server), "qwen3:8b", None)).ShouldBeTrue();
+        (await control.UnloadAsync(Ollama(server), "qwen3:8b", None)).ShouldBe(EndpointUnload.Unloaded);
 
         var unload = JsonNode.Parse(server.To("/api/generate").Single().Body)!;
         (unload["model"]!.GetValue<string>(), unload["keep_alive"]!.GetValue<int>()).ShouldBe(("qwen3:8b", 0));
         server.To("/api/ps").Count.ShouldBe(4, "read first, then until the model is gone");
         server.Loaded.ShouldBeEmpty();
-        (await control.UnloadAsync(LmStudio(new FakeLmStudioServer()), "qwen/qwen3-8b", None)).ShouldBeFalse("another kind of server is not Ollama's");
+        (await control.UnloadAsync(LmStudio(new FakeLmStudioServer()), "qwen/qwen3-8b", None)).ShouldBe(EndpointUnload.NotMine, "another kind of server is not Ollama's");
     }
 
     [Fact]
@@ -246,7 +246,7 @@ public sealed class LocalServerTests
         server.Load("qwen3:8b");
         var (_, transport) = Create();
 
-        (await new OllamaModelControl(transport).UnloadAsync(Ollama(server), "qwen3:8b", None)).ShouldBeFalse();
+        (await new OllamaModelControl(transport).UnloadAsync(Ollama(server), "qwen3:8b", None)).ShouldBe(EndpointUnload.Failed);
         server.To("/api/ps").Count.ShouldBe(11, "read first, then through the unload wait (1 s / 100 ms)");
     }
 
@@ -256,7 +256,7 @@ public sealed class LocalServerTests
         using var server = new FakeOllamaServer();
         var (_, transport) = Create();
 
-        (await new OllamaModelControl(transport).UnloadAsync(Ollama(server), "qwen3:8b", None)).ShouldBeTrue();
+        (await new OllamaModelControl(transport).UnloadAsync(Ollama(server), "qwen3:8b", None)).ShouldBe(EndpointUnload.Unloaded);
 
         server.To("/api/generate").ShouldBeEmpty("an unload request never makes Ollama load a model");
     }
@@ -318,12 +318,12 @@ public sealed class LocalServerTests
         var (_, transport) = Create();
         var control = new LmStudioModelControl(transport);
 
-        (await control.UnloadAsync(LmStudio(server), "qwen/qwen3-8b", None)).ShouldBeTrue();
+        (await control.UnloadAsync(LmStudio(server), "qwen/qwen3-8b", None)).ShouldBe(EndpointUnload.Unloaded);
 
         server.To("/api/v1/models/unload").Count.ShouldBe(2);
         server.Instances.Keys.ToList().ShouldBe(["google/gemma-3-12b"], "another model is left alone");
         using var ollama = new FakeOllamaServer();
-        (await control.UnloadAsync(Ollama(ollama), "qwen3:8b", None)).ShouldBeFalse("another kind of server is not LM Studio's");
+        (await control.UnloadAsync(Ollama(ollama), "qwen3:8b", None)).ShouldBe(EndpointUnload.NotMine, "another kind of server is not LM Studio's");
     }
 
     [Fact]

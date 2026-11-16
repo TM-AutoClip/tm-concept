@@ -3,7 +3,7 @@ namespace TMConcept.Desktop.Updates;
 /// <summary>
 /// The update was not installed (<see cref="Code"/>: "busy" (work or the speech worker is running), "not_writable" (the program's folder
 /// cannot be written), "not_installable" (the offer cannot be installed by the app, see <see cref="UpdateOffer.Problem"/>)). Nothing was
-/// replaced.
+/// replaced, except for "restart": the new version is installed but could not be started (the user starts the app again).
 /// </summary>
 public sealed class AppUpdateException : Exception
 {

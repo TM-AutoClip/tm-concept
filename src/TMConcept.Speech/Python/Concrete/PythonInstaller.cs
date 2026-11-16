@@ -57,20 +57,59 @@ public sealed class PythonInstaller(PythonLayout layout, IToolLocator tools, IPr
     /// <summary>Whether the pinned Python is installed.</summary>
     public bool PythonReady => Interpreter is not null;
 
-    /// <summary>Whether <paramref name="environment"/> is installed for this computer's PyTorch build.</summary>
+    /// <summary>
+    /// Whether <paramref name="environment"/> is installed for this computer's PyTorch build and still points at the installed Python. A CUDA
+    /// build counts as ready also when this run finds no usable NVIDIA card (the CUDA build runs on the processor too: a driver being
+    /// reinstalled, or a card that changed, must not cost a 4 GB download); a processor build is installed again when a usable NVIDIA card
+    /// appears. An environment whose base Python is no longer where it was made (a portable data folder moved, a new drive letter) is not
+    /// ready: it is made again with the Python installed now.
+    /// </summary>
     public bool EnvironmentReady(PythonEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(environment);
         try
         {
             var marker = layout.EnvironmentMarker(environment.Key);
-            return File.Exists(layout.EnvironmentPython(environment.Key)) && File.Exists(marker)
-                && File.ReadAllText(marker).Trim() == Fingerprint(environment, Backend(environment));
+            if (!File.Exists(layout.EnvironmentPython(environment.Key)) || !File.Exists(marker) || !HomeIsCurrent(environment))
+            {
+                return false;
+            }
+
+            var recorded = File.ReadAllText(marker).Trim();
+            var backend = Backend(environment);
+            return recorded == Fingerprint(environment, backend)
+                || (backend == PythonPins.CpuBackend && PythonFiles.HasLock(environment, PythonPins.CudaBackend)
+                    && recorded == Fingerprint(environment, PythonPins.CudaBackend));
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Whether the base Python the environment's <c>pyvenv.cfg</c> names as its <c>home</c> is still there (and the Python is installed); true
+    /// when the file names none.
+    /// </summary>
+    private bool HomeIsCurrent(PythonEnvironment environment)
+    {
+        var config = Path.Combine(layout.EnvironmentFolder(environment.Key), "pyvenv.cfg");
+        if (!File.Exists(config))
+        {
+            return true;
+        }
+
+        var home = File.ReadLines(config).Select(l => l.Split('=', 2)).Where(p => p.Length == 2 && p[0].Trim().Equals("home", StringComparison.OrdinalIgnoreCase))
+            .Select(p => p[1].Trim()).FirstOrDefault();
+        if (string.IsNullOrEmpty(home))
+        {
+            return true;
+        }
+
+        // Not compared with the interpreter's path itself: uv may name its Python by a version link folder. A moved data folder leaves a home
+        // that no longer holds a Python at all.
+        return Interpreter is not null && Directory.Exists(home)
+            && Directory.EnumerateFiles(home, "python*").Any();
     }
 
     /// <summary>The fingerprint of an environment: Python version, PyTorch build, the lock's date and its whole text.</summary>

@@ -203,6 +203,10 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
         windows.Active = window;
         _desktop!.MainWindow = window;
         window.Show();
+
+        // Only now (the database is open and upgraded, the main window is up) is the previous version's program file of an update removed:
+        // until here a failed start could still go back to it.
+        services.GetRequiredService<Updates.SelfReplacer>().CleanUp();
         await shell.StartAsync().ConfigureAwait(true);
         if (session.PendingMessage is { } message)
         {

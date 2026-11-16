@@ -56,6 +56,9 @@ public static class ProviderServices
         // Ollama and LM Studio (0.1.17): their models leave the graphics card when another local model needs it.
         services.AddSingleton<IEndpointModelControl, OllamaModelControl>();
         services.AddSingleton<IEndpointModelControl, LmStudioModelControl>();
+
+        // What they still hold from before (an earlier run, LM Studio's untimed load) is freed before the first graphics card lease.
+        services.AddSingleton<IResidentModelSweep, EndpointResidentSweep>();
     }
 
     /// <summary>A provider without chat.</summary>

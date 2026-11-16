@@ -58,9 +58,23 @@ public sealed class GpuDetector(IEnumerable<IGraphicsAdapterSource> sources, ICo
             vulkan = false;
         }
 
-        var report = new GpuReport(adapters, cuda, vulkan);
-        logger.LogInformation("Graphics cards: {Cards}; CUDA driver {Cuda}, Vulkan loader {Vulkan} ({Milliseconds} ms)", Describe(report),
-            cuda ? "found" : "not found", vulkan ? "found" : "not found", watch.ElapsedMilliseconds);
+        var details = CudaDetails.Unknown;
+        if (cuda && adapters.Any(a => a.Vendor == GpuVendor.Nvidia))
+        {
+            try
+            {
+                details = runtimes.Cuda();
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                logger.LogWarning(ex, "The CUDA driver could not be asked for its version");
+            }
+        }
+
+        var report = new GpuReport(adapters, cuda, vulkan) { Cuda = details };
+        logger.LogInformation("Graphics cards: {Cards}; CUDA driver {Cuda} (CUDA {Version}, compute capability {Compute}), Vulkan loader {Vulkan} ({Milliseconds} ms)",
+            Describe(report), cuda ? "found" : "not found", details.DriverVersion, details.ComputeCapability, vulkan ? "found" : "not found",
+            watch.ElapsedMilliseconds);
         return report;
     }
 

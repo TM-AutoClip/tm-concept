@@ -108,6 +108,25 @@ public sealed class PythonVoiceTests
     }
 
     [Fact]
+    public void AVoiceWhoseDownloadOnlyLeftAPartIsNotCountedAsInstalled()
+    {
+        using var paths = new TempPaths();
+        var gpu = new FakeGpu(Nvidia12);
+        var layout = new PythonLayout(paths);
+        var models = new PythonModelStore(layout, null!, NullLogger<PythonModelStore>.Instance);
+        IComponent component = new PythonVoiceComponent(PythonWorkerTests.Engine(paths, null!, gpu, PythonVoices.XttsV2), models, "CPML", nonCommercial: true);
+        var folder = models.Folder(PythonVoices.XttsV2);
+
+        component.WasInstalled.ShouldBeFalse();
+        Directory.CreateDirectory(folder);
+        File.WriteAllBytes(Path.Combine(folder, "model.pth.part"), [1, 2, 3]);
+        component.WasInstalled.ShouldBeFalse("a cancelled or failed download leaves the folder with only a .part file (0.1.16 recorded it as installed)");
+
+        File.WriteAllBytes(Path.Combine(folder, "config.json"), [1]);
+        component.WasInstalled.ShouldBeTrue("a finished file of an earlier install counts, so a new version offers to update it");
+    }
+
+    [Fact]
     public void AVoiceRunsOnAnNvidiaCardOrOnTheProcessor()
     {
         using var paths = new TempPaths();
@@ -224,8 +243,17 @@ public sealed class PythonVoiceTests
             var picker = h.Get<StepPickerViewModel>();
             await picker.LoadAsync(profile.Id, ContentLanguages.Turkish, PipelineSteps.VideoPage);
             var speech = picker.Row(PipelineSteps.Speech)!;
-            speech.Selected = speech.Options.First(o => o.Model?.Id == SpeechEngines.VoxCpm2);
             var text = h.Get<Localizer>();
+
+            // The list itself shows the same before anything is picked (0.1.17: a card sees its own class and lower; others red).
+            var entry = speech.Options.First(o => o.Model?.Id == SpeechEngines.VoxCpm2);
+            (entry.IsWarning, entry.IsError, entry.IsOk).ShouldBe((warning, error, ok), "list: " + report.Adapters[0].Name);
+            if (warning)
+            {
+                entry.Label.ShouldContain(text["models.tier.processor"]);
+            }
+
+            speech.Selected = entry;
             var clock = System.Diagnostics.Stopwatch.StartNew();
             while (!speech.Note.Contains(text["speech.voxcpm2.note"], StringComparison.Ordinal) && clock.Elapsed < TimeSpan.FromSeconds(5))
             {

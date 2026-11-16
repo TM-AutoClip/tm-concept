@@ -13,7 +13,7 @@ public static class PythonPins
     /// <summary>The lock files hold only packages uploaded before this moment.</summary>
     public const string ExcludeNewer = "2026-11-01T00:00:00Z";
 
-    /// <summary>PyTorch with CUDA 12.8 (NVIDIA cards from the GTX 10 series to the RTX 50 series; needs an NVIDIA driver of 570 or newer).</summary>
+    /// <summary>PyTorch with CUDA 12.8 (NVIDIA cards of compute capability 7.0 or higher, GTX 16 / RTX 20 to RTX 50: PyTorch 2.8 dropped Maxwell and Pascal from this build; needs an NVIDIA driver of 570 or newer; see SpeechDevices).</summary>
     public const string CudaBackend = "cu128";
 
     /// <summary>PyTorch for the processor (AMD, Intel or no graphics card).</summary>

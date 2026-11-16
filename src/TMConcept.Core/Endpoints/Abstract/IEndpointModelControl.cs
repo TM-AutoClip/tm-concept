@@ -8,8 +8,9 @@ namespace TMConcept.Core.Endpoints;
 public interface IEndpointModelControl
 {
     /// <summary>
-    /// Asks <paramref name="endpoint"/> to unload <paramref name="modelId"/> and waits until it is gone; false when this control does not know
-    /// the server (the next control is asked). Throws only for cancellation; a failed call is false with a log line.
+    /// Asks <paramref name="endpoint"/> to unload <paramref name="modelId"/> and waits until it is gone: <see cref="EndpointUnload.NotMine"/>
+    /// when this control does not know the server (the next control is asked), <see cref="EndpointUnload.Failed"/> (with a log line) when the
+    /// server refused or still holds it. Throws only for cancellation.
     /// </summary>
-    Task<bool> UnloadAsync(LocalEndpoint endpoint, string modelId, CancellationToken cancellationToken);
+    Task<EndpointUnload> UnloadAsync(LocalEndpoint endpoint, string modelId, CancellationToken cancellationToken);
 }

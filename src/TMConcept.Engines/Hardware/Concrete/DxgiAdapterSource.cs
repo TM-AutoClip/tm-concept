@@ -35,6 +35,9 @@ public sealed unsafe partial class DxgiAdapterSource(ILogger<DxgiAdapterSource> 
     string IVideoMemorySource.Name => "DXGI budget";
 
     /// <inheritdoc />
+    bool IVideoMemorySource.PerProcess => true;
+
+    /// <inheritdoc />
     public IReadOnlyList<GpuAdapter> Read()
     {
         if (!OperatingSystem.IsWindows())

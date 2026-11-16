@@ -175,7 +175,7 @@ adım ne işe yaradığını yazar:
   oluşturulan bir anlatıcı), **Trendyol-TTS** (Türkçe), **Ahenk** (Türkçe, yedi duygu) ve **MMS-TTS Türkçe** (küçük, işlemcide). Sürücüsüyle
   birlikte bir NVIDIA kartın varsa CUDA ile kartta çalışırlar (adım, kartının yetip yetmediğini gösterir: XTTS-v2 ve F5 için 4 GB, VoxCPM2,
   Trendyol-TTS ve Ahenk için 8 GB); AMD ya da Intel kartta, ya da kart yoksa işlemcide çalışırlar ve adım bunun yavaş olduğunu söyler. İlk
-  kullanımda Python 3.11, sesin PyTorch'lu paketleri (NVIDIA kartlar için yaklaşık 4 GB, diğerlerinde 1 GB'tan az) ve model (0,15–5 GB)
+  kullanımda Python 3.11, sesin PyTorch'lu paketleri (GTX 16 / RTX 20 serisinden itibaren, 570 ya da daha yeni sürücülü NVIDIA kartlar için yaklaşık 4 GB, diğerlerinde 1 GB'tan az: daha eski NVIDIA kartlar ve sürücüler sesleri işlemcide çalıştırır) ve model (0,15–5 GB)
   kurulur; onay penceresi her indirmeyi boyutuyla listeler. **XTTS-v2, F5-TTS Türkçe ve MMS-TTS Türkçe TİCARİ OLMAYAN lisanslıdır**: adım
   lisansı gösterir ve bir şey indirilmeden önce kabul etmeni ister; reklamlı, sponsorlu bir kanalda ya da ücretli işte kullanma. Ahenk
   (CC BY 4.0) yayınlarken anılmalıdır. Kartta konuşan bir Python sesi kartı diğer yerel modeller gibi tutar; seslendirme bitince boşaltılır,
@@ -207,10 +207,12 @@ kullanılamıyor* diye görünür; geri gelene ya da başka bir model seçene ka
 **Ekran kartında aynı anda tek yerel model.** Bu bilgisayardaki bir yerel sunucunun modelleri (Ollama, LM Studio, llama-server,
 Lemonade…) ve yerel görsel modelleri ekran kartını paylaşır: bir yerel model başlamadan önce ondan önce kullanılan boşaltılır (sunucusuna
 sorulabiliyorsa) ve program kartın belleği yeniden boşalana kadar bekler; online modeller ve sherpa-onnx sesleri (işlemcide çalışırlar) hiç
-beklemez; NVIDIA kartta konuşan bir Python sesi kartı görsel modelleri gibi alır. Boş bellek her seferinde ölçülür: Windows'ta Görev Yöneticisi'nin gösterdiğiyle Windows'un programa izin verdiğinden küçük
+beklemez; NVIDIA kartta konuşan bir Python sesi kartı görsel modelleri gibi alır. Boş bellek her seferinde ölçülür: Windows'ta Görev Yöneticisi'nin gösterdiğiyle Windows'un programa izin verdiğinden (ikincisi tek başına hiçbir görseli reddettirmez, yalnızca sd-cli'ye yükü ana belleğe aktarttırabilir) küçük
 olanı, Linux'ta AMD sürücüsünün dosyaları ya da `nvidia-smi`. Ekran belleği sınıfları 4, 6, 8, 12, 16, 24 ve 32 GB'tır: bir kart
-bildirdiği belleğe sekizde bir payla en yakın sınıfta sayılır (15,8 GB bildiren "16 GB" kart 16 GB'lık karttır), kendi sınıfını ve
-altındakileri kullanabilir; daha yüksek sınıftaki model kırmızı görünür.
+bildirdiği belleğe yüzde 8 payla en yakın sınıfta sayılır (15,8 GB bildiren "16 GB" kart 16 GB'lık, 11 GB'lık kart 8 GB'lık karttır), kendi sınıfını ve
+altındakileri kullanabilir; daha yüksek sınıftaki model kırmızı görünür. Bu bilgisayardaki Ollama ya da LM Studio'nun önceden (önceki bir
+çalıştırmadan; LM Studio yüklenen modeli süresiz tutar) tuttuğu modeller bir çalıştırmanın ilk yerel modelinden önce boşaltılır; son yerel
+model de video kuyruğu bitince ve program kapanırken boşaltılır. Sunucusunun boşaltmadığı bir model bir sonraki değişimde yeniden istenir.
 
 **JSON olması gereken cevaplar.** Konseptler, konu önerileri, yapay zekâ düzenlemesi ve görsel istemleri hoşgörüyle okunur (düşünme
 blokları, kod çitleri ve cevabın etrafındaki metin atlanır, küçük hatalar onarılır). Yine de okunamayan cevap için aynı istek en çok
@@ -281,7 +283,9 @@ Sonra modelleri onları kullanan sayfalarda seç (yukarıya bak). Ücretli hiçb
 **Programın içinden:** TM Concept açılışta (günde en çok bir kez) projenin GitHub'daki son sürümüne bakar (hesap gerekmez, sana dair hiçbir
 şey gönderilmez) ve daha yeni bir sürüm varsa sürüm numarasını ve sürüm notlarını gösterir. **İndir ve kur**, sistemine uygun dosyayı
 indirir, sürüm notlarındaki SHA-256 ile karşılaştırır (SHA-256'sı olmayan ya da tutmayan dosya asla kurulmaz), program dosyasını aynı yerde
-değiştirir ve yeni sürümü açar. Sen onaylamadan hiçbir şey indirilmez. Ayarlar → Genel → *Güncellemeler* altında açılıştaki kontrolü
+değiştirir ve yeni sürümü açar. Pencereyi kapatmak (X ile de) süren indirmeyi iptal eder. Windows'ta önceki program, yeni sürüm
+veritabanını ve ana penceresini açana kadar yenisinin yanında `TMConcept.exe.old` olarak kalır: veritabanı yükseltmesi başarısız olursa
+kilit açma penceresi ona nasıl döneceğini söyler. Sen onaylamadan hiçbir şey indirilmez. Ayarlar → Genel → *Güncellemeler* altında açılıştaki kontrolü
 kapatabilir, **Şimdi bak** ile hemen bakabilirsin. Kaynaktan derlenmiş bir kopya ya da yazılamayan bir klasördeki kopya (örneğin Program
 Files) bunun yerine sürüm sayfasını gösterir.
 

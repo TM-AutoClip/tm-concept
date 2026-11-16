@@ -206,6 +206,19 @@ public sealed class LocalImageTests
     }
 
     [Fact]
+    public void ALowBudgetOfThisAppAloneOffloadsButNeverRefuses()
+    {
+        var model = LocalImageModels.All.Single(m => m.Id == "flux2-klein-4b");
+
+        // The window in the background: Windows lowered this app's budget to 2 GiB, while 12 GiB of the card are free across all processes.
+        var budget = new VramReading(16 * GiB, 2 * GiB, true, "DXGI budget") { SystemFreeBytes = 12 * GiB };
+        ImageMemoryPlanner.Plan(model, ImageBackend.Vulkan, budget, 32 * GiB).Level.ShouldBe(ImageMemoryLevel.Offload);
+
+        // The same 2 GiB measured across all processes is a real shortage: refused.
+        ImageMemoryPlanner.Plan(model, ImageBackend.Vulkan, new VramReading(16 * GiB, 2 * GiB, true, "PDH"), 32 * GiB).Level.ShouldBe(ImageMemoryLevel.Refused);
+    }
+
+    [Fact]
     public void TheProcessorBuildGetsNoMemoryOptionsAndAnUnknownCardIsOffloaded()
     {
         var processor = ImageMemoryPlanner.Plan(LocalImageModels.ZImageTurbo, ImageBackend.Cpu, VramReading.None, null);

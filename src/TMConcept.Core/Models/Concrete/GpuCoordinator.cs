@@ -5,10 +5,14 @@ namespace TMConcept.Core.Models;
 
 /// <summary>
 /// The app's one graphics card queue (see <see cref="IGpuCoordinator"/>). The model on the card stays after its lease ends (the next batch of
-/// the same model needs no reload); it is unloaded only when another local model asks for the card, or by <see cref="FreeAsync"/>. Waiting
-/// leases are not ordered. Each change is logged (model codes and memory figures only).
+/// the same model needs no reload); it is unloaded only when another local model asks for the card, or by <see cref="FreeAsync"/>. Before the
+/// first card lease of a run, every <see cref="IResidentModelSweep"/> frees what local servers still hold from before. A model whose unload
+/// could not be confirmed (<see cref="ModelUnloadException"/>, or any other failure) is not forgotten: it is asked again at every later change
+/// of model and by <see cref="FreeAsync"/>; meanwhile the next model gets the card with the memory measured after the failed unload (sd-cli
+/// and the voices plan from that reading). Waiting leases are not ordered. Each change is logged (model codes and memory figures only).
 /// </summary>
-public sealed class GpuCoordinator(IModelDirectory directory, IVramProbe probe, TimeProvider clock, GpuCoordinatorOptions options, ILogger<GpuCoordinator> logger)
+public sealed class GpuCoordinator(IModelDirectory directory, IVramProbe probe, TimeProvider clock, GpuCoordinatorOptions options, ILogger<GpuCoordinator> logger,
+    IEnumerable<IResidentModelSweep>? sweeps = null)
     : IGpuCoordinator
 {
     private const double Gibibyte = 1024.0 * 1024 * 1024;
@@ -17,8 +21,13 @@ public sealed class GpuCoordinator(IModelDirectory directory, IVramProbe probe, 
     private static readonly AsyncLocal<List<string>?> Held = new();
 
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly IReadOnlyList<IResidentModelSweep> _sweeps = sweeps?.ToList() ?? [];
+
+    // Models whose unload failed: they may still hold memory, so they are asked again later (never the one about to be used).
+    private readonly List<ILocalModel> _stuck = [];
     private ILocalModel? _loaded;
     private int _users;
+    private bool _swept;
     private TaskCompletionSource _idle = Completed();
 
     /// <inheritdoc />
@@ -62,11 +71,18 @@ public sealed class GpuCoordinator(IModelDirectory directory, IVramProbe probe, 
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (_loaded is { } loaded && _users == 0)
+            if (_users > 0)
             {
-                await UnloadAsync(loaded, cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            var loaded = _loaded;
+            if (loaded is not null && await UnloadAsync(loaded, cancellationToken).ConfigureAwait(false))
+            {
                 logger.LogInformation("Graphics card freed: {Model} unloaded", loaded.Key);
             }
+
+            await RetryStuckAsync(null, loaded, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -99,38 +115,21 @@ public sealed class GpuCoordinator(IModelDirectory directory, IVramProbe probe, 
                     {
                         var previous = _loaded;
                         await UnloadAsync(previous, cancellationToken).ConfigureAwait(false);
+                        await RetryStuckAsync(model, previous, cancellationToken).ConfigureAwait(false);
                         var freed = await WaitForMemoryAsync(need, cancellationToken).ConfigureAwait(false);
                         logger.LogInformation("Graphics card: {Previous} unloaded for {Model}; {Free:0.0} of {Total:0.0} GiB free ({Source})", previous.Key, model.Key,
                             freed.FreeBytes / Gibibyte, freed.TotalBytes / Gibibyte, freed.Source);
                     }
                 }
+                else if (_loaded is null)
+                {
+                    await SweepOnceAsync(model, cancellationToken).ConfigureAwait(false);
+                    await RetryStuckAsync(model, null, cancellationToken).ConfigureAwait(false);
+                }
 
                 if (busy is null)
                 {
-                    var changed = _loaded is null;
-                    if (!model.IsLoaded)
-                    {
-                        await model.LoadAsync(cancellationToken).ConfigureAwait(false);
-                    }
-
-                    _loaded = model;
-                    if (_users++ == 0)
-                    {
-                        _idle = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-                    }
-
-                    var memory = await probe.MeasureAsync(null, cancellationToken).ConfigureAwait(false);
-                    lock (held)
-                    {
-                        held.Add(model.Key);
-                    }
-
-                    if (changed)
-                    {
-                        Changed?.Invoke(this, EventArgs.Empty);
-                    }
-
-                    return new GpuLease(model, true, memory, lease => ReleaseAsync(lease, held));
+                    return await GrantNowAsync(model, held, cancellationToken).ConfigureAwait(false);
                 }
             }
             finally
@@ -140,6 +139,40 @@ public sealed class GpuCoordinator(IModelDirectory directory, IVramProbe probe, 
 
             await busy.WaitAsync(cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Loads <paramref name="model"/>, reads the memory it may use and hands out the lease (called with the gate held). The user count goes up
+    /// only after the last step that can fail or be cancelled: a Stop during the load or the reading leaves no count behind (a count without a
+    /// lease would keep every other local model waiting until the app is restarted).
+    /// </summary>
+    private async Task<IGpuLease> GrantNowAsync(ILocalModel model, List<string> held, CancellationToken cancellationToken)
+    {
+        var changed = _loaded is null;
+        if (!model.IsLoaded)
+        {
+            await model.LoadAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        _loaded = model;
+        _stuck.Remove(model);
+        if (changed)
+        {
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+
+        var memory = await probe.MeasureAsync(null, cancellationToken).ConfigureAwait(false);
+        if (_users++ == 0)
+        {
+            _idle = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+
+        lock (held)
+        {
+            held.Add(model.Key);
+        }
+
+        return new GpuLease(model, true, memory, lease => ReleaseAsync(lease, held));
     }
 
     private async ValueTask ReleaseAsync(GpuLease lease, List<string> held)
@@ -163,20 +196,74 @@ public sealed class GpuCoordinator(IModelDirectory directory, IVramProbe probe, 
         }
     }
 
-    /// <summary>Unloads <paramref name="model"/> (a failure is logged: the card is taken as free anyway); called with the gate held.</summary>
-    private async Task UnloadAsync(ILocalModel model, CancellationToken cancellationToken)
+    /// <summary>
+    /// Unloads <paramref name="model"/>; true when it is gone. A failure is logged and the model is kept to be asked again later; the card no
+    /// longer counts it as the loaded model, and the next model measures what is really free. Called with the gate held.
+    /// </summary>
+    private async Task<bool> UnloadAsync(ILocalModel model, CancellationToken cancellationToken)
     {
+        var gone = true;
         try
         {
             await model.UnloadAsync(cancellationToken).ConfigureAwait(false);
+            _stuck.Remove(model);
         }
         catch (Exception ex) when (ex is not OperationCanceledException and not OutOfMemoryException)
         {
-            logger.LogWarning(ex, "{Model} could not be unloaded from the graphics card", model.Key);
+            gone = false;
+            if (!_stuck.Contains(model))
+            {
+                _stuck.Add(model);
+            }
+
+            logger.LogWarning("{Model} could not be unloaded and may still hold graphics memory ({Reason}); the next model runs with the memory that is free, "
+                + "and the unload is asked again at the next change", model.Key, ex.Message);
         }
 
-        _loaded = null;
-        Changed?.Invoke(this, EventArgs.Empty);
+        if (ReferenceEquals(_loaded, model))
+        {
+            _loaded = null;
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+
+        return gone;
+    }
+
+    /// <summary>
+    /// Asks the models whose unload failed once more, except <paramref name="keep"/> (about to be used) and <paramref name="justAsked"/> (its
+    /// unload was asked a moment ago: a server that waits out its unload time is not waited for twice). Called with the gate held.
+    /// </summary>
+    private async Task RetryStuckAsync(ILocalModel? keep, ILocalModel? justAsked, CancellationToken cancellationToken)
+    {
+        foreach (var stuck in _stuck.Where(m => (keep is null || m.Key != keep.Key) && !ReferenceEquals(m, justAsked)).ToList())
+        {
+            if (await UnloadAsync(stuck, cancellationToken).ConfigureAwait(false))
+            {
+                logger.LogInformation("{Model} was unloaded on a later try", stuck.Key);
+            }
+        }
+    }
+
+    /// <summary>The first card lease of the run: what local servers hold from before is freed (once; a failure is logged and the lease goes on).</summary>
+    private async Task SweepOnceAsync(ILocalModel model, CancellationToken cancellationToken)
+    {
+        if (_swept)
+        {
+            return;
+        }
+
+        _swept = true;
+        foreach (var sweep in _sweeps)
+        {
+            try
+            {
+                await sweep.SweepAsync(model, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException and not OutOfMemoryException)
+            {
+                logger.LogWarning(ex, "What local servers held from before could not be freed");
+            }
+        }
     }
 
     /// <summary>

@@ -160,15 +160,67 @@ public sealed class DownloadResumeTests : IDisposable
     }
 
     [Fact]
-    public async Task APartThatIsNotTheFilesBeginningFailsTheHashAndIsDeleted()
+    public async Task APartThatIsNotTheFilesBeginningIsDownloadedOnceMoreFromTheStart()
     {
         var server = new FlakyServer(_body);
         System.IO.File.WriteAllBytes(File + ".part", RandomNumberGenerator.GetBytes(7_000));
 
+        // A part left by an older pin of the same file name: continued, the whole file fails its hash, then the file comes again from byte 0.
+        await Downloader(server).DownloadAsync(Archive, File, null, CancellationToken.None);
+
+        server.Ranges.ShouldBe([7_000, null]);
+        System.IO.File.ReadAllBytes(File).ShouldBe(_body);
+    }
+
+    [Fact]
+    public async Task AFreshDownloadWithTheWrongHashFailsAtOnceAndIsDeleted()
+    {
+        var server = new FlakyServer(RandomNumberGenerator.GetBytes(50_000));
+
         var error = await Should.ThrowAsync<ToolInstallException>(() => Downloader(server).DownloadAsync(Archive, File, null, CancellationToken.None));
 
         error.Code.ShouldBe("hash");
+        server.Ranges.ShouldBe([null], "a whole file that does not match is not fetched again");
         System.IO.File.Exists(File + ".part").ShouldBeFalse("a wrong part is not continued again");
+    }
+
+    [Fact]
+    public async Task AWholePartThatWasNeverMovedIntoPlaceIsCheckedNotDeleted()
+    {
+        var server = new FlakyServer(_body);
+        server.Script.Enqueue(FlakyServer.Status(HttpStatusCode.RequestedRangeNotSatisfiable));
+        System.IO.File.WriteAllBytes(File + ".part", _body);
+
+        await Downloader(server).DownloadAsync(Archive, File, null, CancellationToken.None);
+
+        server.Ranges.ShouldBe([50_000], "the server had nothing more to send; the part was the whole file");
+        System.IO.File.ReadAllBytes(File).ShouldBe(_body);
+    }
+
+    [Fact]
+    public async Task AFullDiskIsNotRetriedAndNotCalledANetworkFailure()
+    {
+        var server = new FlakyServer(_body);
+        server.Script.Enqueue((_, _) => throw new IOException("There is not enough space on the disk.") { HResult = unchecked((int)0x80070070) });
+
+        var error = await Should.ThrowAsync<ToolInstallException>(() => Downloader(server).DownloadAsync(Archive, File, null, CancellationToken.None));
+
+        error.Code.ShouldBe("disk");
+        server.Ranges.Count.ShouldBe(1, "another try cannot make room");
+        ToolDownloader.DiskFull(new IOException("No space left on device")).ShouldBeTrue();
+        ToolDownloader.DiskFull(new IOException("The connection ended after 10 of 20 bytes.")).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task ADownloadLargerThanTheFreeSpaceIsRefusedBeforeItStarts()
+    {
+        var server = new FlakyServer(_body);
+        var huge = Archive with { ApproximateBytes = long.MaxValue / 2 };
+
+        var error = await Should.ThrowAsync<ToolInstallException>(() => Downloader(server).DownloadAsync(huge, File, null, CancellationToken.None));
+
+        error.Code.ShouldBe("disk");
+        server.Ranges.ShouldBeEmpty("nothing is downloaded that cannot fit");
     }
 
     [Fact]

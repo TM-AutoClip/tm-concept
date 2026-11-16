@@ -47,6 +47,7 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
 
     // The image build chosen when the page was loaded (the graphics card and its class), for the colour of each local image model.
     private ImageBackendChoice? _imageChoice;
+    private GpuReport? _speechCards;
 
     /// <summary>Raised when a choice changes (the page updates its estimate).</summary>
     public event EventHandler? Changed;
@@ -123,6 +124,7 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
 
         // The graphics cards are looked at once per load (native calls; on Linux maybe a short nvidia-smi run): off the UI thread.
         _imageChoice = stepCodes.Contains(PipelineSteps.Images) ? await Task.Run(backends.Choose).ConfigureAwait(true) : null;
+        _speechCards = stepCodes.Contains(PipelineSteps.Speech) ? await Task.Run(gpu.Detect).ConfigureAwait(true) : null;
         foreach (var old in Rows)
         {
             old.PropertyChanged -= OnRowChanged;
@@ -239,25 +241,26 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
 
             foreach (var row in rows)
             {
-                if (!await LicensesAsync(row).ConfigureAwait(true))
+                if (row.Selected?.Model is { } chosen && TooBig(chosen) is { } card)
                 {
-                    row.Note = text["models.license_declined"];
-                    row.NoteIsWarning = true;
-                    logger.LogInformation("Process not started: the license of the step {Step} was declined", row.Step.Code);
-                    Status = text.Format("picker.not_started.license", row.Title);
+                    // A model of a higher memory class than this card's is never downloaded (several GB for nothing): it cannot run here.
+                    // Checked before the licences, so no licence is asked for (and kept as accepted) for a model that is refused anyway.
+                    row.NoteIsError = true;
+                    logger.LogWarning("Process not started: {Model} needs a {Class} GB class graphics card; this one is of the {Card} GB class", chosen.Id,
+                        chosen.MinVideoMemoryGb, (int)VramTiers.ForCard(card));
+                    Status = text.Format("picker.not_started.memory", chosen.Name, chosen.MinVideoMemoryGb, Gigabytes(card));
                     return false;
                 }
             }
 
             foreach (var row in rows)
             {
-                if (row.Selected?.Model is { } chosen && TooBig(chosen) is { } card)
+                if (!await LicensesAsync(row).ConfigureAwait(true))
                 {
-                    // A model of a higher memory class than this card's is never downloaded (several GB for nothing): it cannot run here.
-                    row.NoteIsError = true;
-                    logger.LogWarning("Process not started: {Model} needs a {Class} GB class graphics card; this one is of the {Card} GB class", chosen.Id,
-                        chosen.MinVideoMemoryGb, (int)VramTiers.ForCard(card));
-                    Status = text.Format("picker.not_started.memory", chosen.Name, chosen.MinVideoMemoryGb, Gigabytes(card));
+                    row.Note = text["models.license_declined"];
+                    row.NoteIsWarning = true;
+                    logger.LogInformation("Process not started: the license of the step {Step} was declined", row.Step.Code);
+                    Status = text.Format("picker.not_started.license", row.Title);
                     return false;
                 }
             }
@@ -532,7 +535,8 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
 
     /// <summary>
     /// A model's entry: a local model with a graphics card class shows its class, green when this card's class sees it (its own class and
-    /// every lower one), red with "this card cannot run it" above, yellow when the processor build runs it or the card's memory is unknown;
+    /// every lower one), red with "this card cannot run it" above, yellow when the processor build runs it or the card's memory is unknown
+    /// (the same for a Python voice with a class: yellow "runs on the processor" without a usable NVIDIA card);
     /// a license with conditions adds a yellow badge, a non-commercial one a red badge.
     /// </summary>
     private StepOption Option(CatalogModel model)
@@ -553,6 +557,30 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
             else
             {
                 warning = true;
+            }
+        }
+        else if (model.Provider == ModelProviders.Local && model.MinVideoMemoryGb > 0 && model.Capabilities.HasFlag(ModelCapability.Speech)
+            && _speechCards is { } cards)
+        {
+            // The same rule as the voice's note (SpeechMemoryNote): no usable NVIDIA card → the processor (yellow); a card of a lower class →
+            // red; its own class or lower → green; the card's memory unknown → yellow.
+            if (SpeechDevices.CudaCard(cards) is not { } card)
+            {
+                label += " · " + text["models.tier.processor"];
+                warning = true;
+            }
+            else if (card.VideoMemoryBytes is not { } bytes)
+            {
+                warning = true;
+            }
+            else if (!VramTiers.Sees(VramTiers.ForCard(bytes), VramTiers.ForModel(model.MinVideoMemoryGb)))
+            {
+                label += " · " + text["models.tier.too_big"];
+                error = true;
+            }
+            else
+            {
+                ok = true;
             }
         }
 

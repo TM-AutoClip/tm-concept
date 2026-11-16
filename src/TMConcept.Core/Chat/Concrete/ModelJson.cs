@@ -8,13 +8,17 @@ namespace TMConcept.Core.Chat;
 /// <summary>
 /// Reads the JSON of a model's answer tolerantly (0.1.17: small local models wrap it in thinking, code fences and prose, or write it
 /// slightly wrong). Steps: thinking blocks (<c>&lt;think&gt;…&lt;/think&gt;</c>, <c>&lt;thinking&gt;</c>) are removed; a code fence that holds
-/// JSON is preferred; the first balanced <c>{…}</c> or <c>[…]</c> is taken (text before and after is ignored; strings and escapes are
+/// JSON is preferred; each <c>{</c> or <c>[</c> is tried in order and the first balanced block that reads wins, an object before an array
+/// (text before and after is ignored, brackets in the prose too; strings and escapes are
 /// respected); then it is parsed with trailing commas and comments allowed, and once more after <see cref="Repair"/> (raw line breaks and tabs
 /// inside strings escaped, typographic quotes around keys and values made plain, trailing commas removed). The answer is untrusted data:
 /// nothing here runs or follows it. Used by topics, concepts, the AI edit and the image prompts, together with <see cref="JsonAnswerRetry"/>.
 /// </summary>
 public static partial class ModelJson
 {
+    // At most this many bracket starts are tried (a long answer full of brackets in its prose stays cheap).
+    private const int MaxCandidates = 64;
+
     private static readonly JsonDocumentOptions Lenient = new() { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip, MaxDepth = 64 };
 
     /// <summary>The answer without its thinking blocks; an unclosed block at the start (an answer cut while thinking) leaves nothing.</summary>
@@ -26,30 +30,74 @@ public static partial class ModelJson
     }
 
     /// <summary>
-    /// The JSON part of an answer: the first balanced object or array (inside the first code fence that holds one, when there is such a fence);
+    /// The JSON part of an answer: the first balanced block that reads, an object before an array (inside the first
+    /// code fence that holds one, when there is such a fence);
     /// when it never closes (a cut answer), everything from its start. Null when the answer holds no <c>{</c> or <c>[</c>.
     /// </summary>
-    public static string? Extract(string? text)
+    public static string? Extract(string? text) => Pick(text, objectOnly: false).Json;
+
+    /// <summary>
+    /// The JSON of an answer and its node: every <c>{</c> or <c>[</c> is tried in order (prose before the JSON may hold brackets of its own:
+    /// "Step [1] done.", "[as JSON]"), and the first balanced block that parses (after <see cref="Repair"/> if needed) as an object wins; a
+    /// parsed array is taken only when no object follows it (a block inside an array that parsed is not tried again). When nothing parses,
+    /// the text is the first block that never closes (a cut answer), else the first balanced one, and the node is null.
+    /// </summary>
+    private static (string? Json, JsonNode? Node) Pick(string? text, bool objectOnly)
     {
         var value = StripThinking(text).Replace("\0", string.Empty, StringComparison.Ordinal);
         foreach (Match fence in Fence().Matches(value))
         {
             var inner = fence.Groups["body"].Value;
-            if (Start(inner) >= 0)
+            if (Start(inner, 0) >= 0)
             {
                 value = inner;
                 break;
             }
         }
 
-        var start = Start(value);
-        if (start < 0)
+        string? cut = null;
+        string? firstClosed = null;
+        (string Json, JsonNode Node)? array = null;
+        var skipUntil = -1;
+        var tried = 0;
+        for (var start = Start(value, 0); start >= 0 && tried < MaxCandidates; start = Start(value, start + 1))
         {
-            return null;
+            if (start <= skipUntil)
+            {
+                continue;
+            }
+
+            tried++;
+            var end = End(value, start);
+            if (end < 0)
+            {
+                // Every later start lies inside this unclosed block: the answer was cut here.
+                cut = value[start..];
+                break;
+            }
+
+            var json = value[start..(end + 1)];
+            firstClosed ??= json;
+            var node = Parse(json) ?? Parse(Repair(json));
+            if (node is JsonObject)
+            {
+                return (json, node);
+            }
+
+            if (node is not null)
+            {
+                array ??= (json, node);
+                skipUntil = end;
+            }
         }
 
-        var end = End(value, start);
-        return end < 0 ? value[start..] : value[start..(end + 1)];
+        if (array is { } found && !objectOnly && cut is null)
+        {
+            // A cut block after a small array in the prose ("Step [1] done. {"topics": [… cut) is the answer, not the array.
+            return (found.Json, found.Node);
+        }
+
+        return (cut ?? firstClosed, null);
     }
 
     /// <summary>Whether the JSON of the answer closes (false: it was cut off, or there is none).</summary>
@@ -60,18 +108,10 @@ public static partial class ModelJson
     }
 
     /// <summary>The answer's JSON as a node; null when it cannot be read even after <see cref="Repair"/>.</summary>
-    public static JsonNode? TryParse(string? text)
-    {
-        if (Extract(text) is not { } json)
-        {
-            return null;
-        }
+    public static JsonNode? TryParse(string? text) => Pick(text, objectOnly: false).Node;
 
-        return Parse(json) ?? Parse(Repair(json));
-    }
-
-    /// <summary>The answer's JSON object; null when it is not readable or not an object.</summary>
-    public static JsonObject? TryParseObject(string? text) => TryParse(text) as JsonObject;
+    /// <summary>The answer's first readable JSON object; null when there is none.</summary>
+    public static JsonObject? TryParseObject(string? text) => Pick(text, objectOnly: true).Node as JsonObject;
 
     /// <summary>
     /// Repairs what small models often get wrong: raw line breaks and tabs inside strings (escaped), typographic double quotes used as JSON
@@ -197,13 +237,8 @@ public static partial class ModelJson
         }
     }
 
-    /// <summary>The first <c>{</c> or <c>[</c>; -1 when there is none.</summary>
-    private static int Start(string text)
-    {
-        var brace = text.IndexOf('{', StringComparison.Ordinal);
-        var bracket = text.IndexOf('[', StringComparison.Ordinal);
-        return brace < 0 ? bracket : bracket < 0 ? brace : Math.Min(brace, bracket);
-    }
+    /// <summary>The first <c>{</c> or <c>[</c> at or after <paramref name="from"/>; -1 when there is none.</summary>
+    private static int Start(string text, int from) => from >= text.Length ? -1 : text.IndexOfAny(['{', '['], from);
 
     /// <summary>The index of the bracket that closes the one at <paramref name="start"/>; -1 when it never closes.</summary>
     private static int End(string text, int start)

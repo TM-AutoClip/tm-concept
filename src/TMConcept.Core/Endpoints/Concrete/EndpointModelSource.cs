@@ -21,7 +21,7 @@ public sealed class EndpointModelSource(EndpointRegistry registry, IEnumerable<I
             return null;
         }
 
-        return new EndpointLocalModel(model, registry, _controls, logger);
+        return new EndpointLocalModel(model, endpoint, registry, _controls, logger);
     }
 
     /// <summary>Whether <paramref name="address"/> points at this computer (a loopback name or address).</summary>

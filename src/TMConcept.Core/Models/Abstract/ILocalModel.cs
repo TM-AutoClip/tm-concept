@@ -33,7 +33,8 @@ public interface ILocalModel : IModel
 
     /// <summary>
     /// Frees what it holds (graphics card and main memory): stops its process, asks its server to unload it. Safe to call when it is not
-    /// loaded; never throws for a model that cannot be unloaded (it logs and returns).
+    /// loaded. Throws <see cref="ModelUnloadException"/> when the unload cannot be confirmed (the model may still hold memory): it then still
+    /// counts as loaded, and <see cref="IGpuCoordinator"/> asks again later.
     /// </summary>
     Task UnloadAsync(CancellationToken cancellationToken);
 }

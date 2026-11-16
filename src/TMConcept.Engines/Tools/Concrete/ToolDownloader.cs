@@ -18,12 +18,16 @@ namespace TMConcept.Engines.Tools;
 /// check covers the whole file; a server that ignores the range sends the whole file and the part starts again). A try ends when no data
 /// arrives for <see cref="DownloadPolicy.ReadTimeout"/>, never because the whole file takes long. What finally failed says why
 /// (<see cref="ToolInstallException.Code"/> "tls", "dns", "connection", "timeout" with the system's own reason in
-/// <see cref="ToolInstallException.Detail"/>); a cancel by the user stays an <see cref="OperationCanceledException"/>, a time-out never is one.
+/// <see cref="ToolInstallException.Detail"/>), or "disk" when the drive is full (checked before the first try, and not retried: it is not the
+/// network). A kept part that does not fit (the server refuses the range, or the whole file then fails its SHA-256) is checked as a whole file
+/// first, then downloaded once more from byte 0 before a mismatch counts. A cancel by the user stays an <see cref="OperationCanceledException"/>,
+/// a time-out never is one.
 /// </para>
 /// </summary>
 public sealed class ToolDownloader : IArchiveDownloader, IDisposable
 {
     private const int MaxRedirects = 5;
+    private const long SpareBytes = 64L * 1024 * 1024;
 
     private readonly ILogger<ToolDownloader> _logger;
     private readonly DownloadPolicy _policy;
@@ -46,6 +50,7 @@ public sealed class ToolDownloader : IArchiveDownloader, IDisposable
         ArgumentNullException.ThrowIfNull(archive);
         ArgumentException.ThrowIfNullOrEmpty(file);
         var part = file + ".part";
+        CheckSpace(archive, file, part);
         for (var attempt = 1; ; attempt++)
         {
             try
@@ -58,6 +63,12 @@ public sealed class ToolDownloader : IArchiveDownloader, IDisposable
                 // The user's cancel: the part stays for the next install.
                 _logger.LogInformation("{Tool} {Version}: download cancelled; the part received so far is kept", archive.Tool, archive.Version);
                 throw;
+            }
+            catch (IOException ex) when (DiskFull(ex))
+            {
+                // Another try cannot help, and it is not the network: the user is told the disk is full.
+                _logger.LogError(ex, "{Tool} {Version}: the disk is full; the part received so far is kept", archive.Tool, archive.Version);
+                throw new ToolInstallException("The disk is full.", ex) { Code = "disk", Detail = ex.Message.Trim() };
             }
             catch (Exception ex) when (Transient(ex))
             {
@@ -129,8 +140,16 @@ public sealed class ToolDownloader : IArchiveDownloader, IDisposable
                     throw new ToolInstallException($"The pinned download is no longer available (HTTP {(int)response.StatusCode}).") { Code = "gone" };
                 }
 
-                if (response.StatusCode == HttpStatusCode.RequestedRangeNotSatisfiable && !restarted)
+                if (response.StatusCode == HttpStatusCode.RequestedRangeNotSatisfiable && have > 0 && !restarted)
                 {
+                    // The whole file may already be there (the app ended before moving it into place): the hash decides.
+                    if (await PartMatchesAsync(archive, part, cancellationToken).ConfigureAwait(false))
+                    {
+                        File.Move(part, file, overwrite: true);
+                        _logger.LogInformation("{Tool} {Version}: the kept part was the whole file; verified", archive.Tool, archive.Version);
+                        return;
+                    }
+
                     // The part is not a beginning of this file (or already longer): start it again, at once.
                     _logger.LogWarning("{Tool} {Version}: the server refused to continue at byte {Bytes}; the part starts again", archive.Tool, archive.Version, have);
                     File.Delete(part);
@@ -166,7 +185,22 @@ public sealed class ToolDownloader : IArchiveDownloader, IDisposable
                     _logger.LogInformation("{Tool} {Version}: continuing the download at byte {Bytes}", archive.Tool, archive.Version, have);
                 }
 
-                await ReceiveAsync(archive, part, have, response, progress, cancellationToken).ConfigureAwait(false);
+                if (!await ReceiveAsync(archive, part, have, response, progress, cancellationToken).ConfigureAwait(false))
+                {
+                    if (have > 0 && !restarted)
+                    {
+                        // The kept part was not the beginning of this file (an older pin of the same name, a write cut short): once more
+                        // from byte 0 before the mismatch counts.
+                        _logger.LogWarning("{Tool} {Version}: the continued file did not match its SHA-256; downloading it again from the start",
+                            archive.Tool, archive.Version);
+                        restarted = true;
+                        address = archive.Url;
+                        hop = -1;
+                        continue;
+                    }
+
+                    throw new ToolInstallException("The downloaded file does not match its pinned SHA-256; it was deleted.") { Code = "hash" };
+                }
             }
 
             File.Move(part, file, overwrite: true);
@@ -175,8 +209,11 @@ public sealed class ToolDownloader : IArchiveDownloader, IDisposable
         }
     }
 
-    /// <summary>Writes the body after the <paramref name="have"/> bytes already in the part, then checks the hash of the whole part.</summary>
-    private async Task ReceiveAsync(ToolArchive archive, string part, long have, HttpResponseMessage response, IProgress<ToolProgress>? progress,
+    /// <summary>
+    /// Writes the body after the <paramref name="have"/> bytes already in the part, then checks the hash of the whole part: false (the part
+    /// deleted) when it does not match.
+    /// </summary>
+    private async Task<bool> ReceiveAsync(ToolArchive archive, string part, long have, HttpResponseMessage response, IProgress<ToolProgress>? progress,
         CancellationToken cancellationToken)
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
@@ -235,10 +272,71 @@ public sealed class ToolDownloader : IArchiveDownloader, IDisposable
         if (!string.Equals(actual, archive.Sha256, StringComparison.OrdinalIgnoreCase))
         {
             File.Delete(part);
-            _logger.LogError("{Tool} {Version}: SHA-256 mismatch (expected {Expected}, got {Actual}); the file was deleted",
-                archive.Tool, archive.Version, archive.Sha256, actual);
-            throw new ToolInstallException("The downloaded file does not match its pinned SHA-256; it was deleted.") { Code = "hash" };
+            _logger.LogError("{Tool} {Version}: SHA-256 mismatch (expected {Expected}, got {Actual}, {Bytes} bytes kept from before); the file was deleted",
+                archive.Tool, archive.Version, archive.Sha256, actual, have);
+            return false;
         }
+
+        return true;
+    }
+
+    /// <summary>Whether the part as it is has the pinned SHA-256 (a whole file that was never moved into place).</summary>
+    private static async Task<bool> PartMatchesAsync(ToolArchive archive, string part, CancellationToken cancellationToken)
+    {
+        await using var stream = new FileStream(part, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20, useAsync: true);
+        var actual = Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false));
+        return string.Equals(actual, archive.Sha256, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Before the first try: refuses at once ("disk") when the drive cannot hold what is still to come (the file's size less the part already
+    /// there, plus 64 MB to spare); an unknown size or a drive that cannot be asked is not held against it.
+    /// </summary>
+    private void CheckSpace(ToolArchive archive, string file, string part)
+    {
+        var missing = archive.ApproximateBytes - Length(part);
+        if (missing <= 0)
+        {
+            return;
+        }
+
+        long free;
+        try
+        {
+            var root = Path.GetPathRoot(Path.GetFullPath(file));
+            if (string.IsNullOrEmpty(root))
+            {
+                return;
+            }
+
+            free = new DriveInfo(root).AvailableFreeSpace;
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
+        {
+            return;
+        }
+
+        if (free < missing + SpareBytes)
+        {
+            _logger.LogError("{Tool} {Version}: {Missing} MB to download but only {Free} MB free on the disk", archive.Tool, archive.Version, missing / 1_000_000,
+                free / 1_000_000);
+            throw new ToolInstallException($"Not enough free disk space: {missing / 1_000_000} MB needed, {free / 1_000_000} MB free.")
+            {
+                Code = "disk",
+                Detail = $"{(missing + SpareBytes) / 1_000_000} MB needed, {free / 1_000_000} MB free",
+            };
+        }
+    }
+
+    /// <summary>Whether an I/O error means the disk is full (Windows ERROR_DISK_FULL / ERROR_HANDLE_DISK_FULL, Linux and macOS ENOSPC).</summary>
+    internal static bool DiskFull(IOException ex)
+    {
+        ArgumentNullException.ThrowIfNull(ex);
+        const int DiskFullWindows = unchecked((int)0x80070070);
+        const int HandleDiskFullWindows = unchecked((int)0x80070027);
+        const int NoSpace = 28;
+        return ex.HResult is DiskFullWindows or HandleDiskFullWindows or NoSpace
+            || ex.Message.Contains("No space left on device", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>A token for one wait on the network: the caller's, plus the read time-out (armed with CancelAfter).</summary>

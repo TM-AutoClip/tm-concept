@@ -19,6 +19,14 @@ public sealed class TopicParserTests
     }
 
     [Fact]
+    public void ACutOffAnswerOfAReasoningModelIgnoresTheDraftInItsThinking()
+    {
+        const string answer = "<think>Draft: {\"topics\": [\"draft A\", \"draft B\"]} looks fine.</think>{\"scope\": \"Byzantium\", \"topics\": [\"Real one\", \"Real two\", \"Real thr";
+
+        TopicSuggester.ParsePartial(answer, Max).ShouldBe(["Real one", "Real two"]);
+    }
+
+    [Fact]
     public void NothingReadableGivesNoTopics()
     {
         TopicSuggester.ParsePartial(string.Empty, Max).ShouldBeEmpty();

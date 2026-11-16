@@ -249,7 +249,8 @@ public sealed class TopicSuggester(IConceptStore concepts, ITopicSuggestionStore
     /// </summary>
     public static IReadOnlyList<string> ParsePartial(string answer, int count)
     {
-        var text = answer ?? string.Empty;
+        // Thinking first: a reasoning model often drafts the list inside it, and the real answer comes after.
+        var text = ModelJson.StripThinking(answer);
         var key = text.IndexOf("\"topics\"", StringComparison.Ordinal);
         var start = key < 0 ? -1 : text.IndexOf('[', key);
         if (start < 0)
@@ -362,7 +363,8 @@ public sealed class TopicSuggester(IConceptStore concepts, ITopicSuggestionStore
     /// </summary>
     private static string Scope(string answer)
     {
-        var text = answer ?? string.Empty;
+        // Thinking first: a reasoning model often drafts the list inside it, and the real answer comes after.
+        var text = ModelJson.StripThinking(answer);
         var key = text.IndexOf("\"scope\"", StringComparison.Ordinal);
         var colon = key < 0 ? -1 : text.IndexOf(':', key);
         var start = colon < 0 ? -1 : text.IndexOf('"', colon);

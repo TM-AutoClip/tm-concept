@@ -24,6 +24,19 @@ public sealed class VramProbeTests
     }
 
     [Fact]
+    public async Task ThisAppsOwnBudgetIsKeptApartFromTheMemoryFreeAcrossAllProcesses()
+    {
+        var probe = new VramProbe(new FakeGpu(new GpuReport([Card], false, true)),
+            [new FixedSource("PDH", 13 * GiB), new FixedSource("DXGI budget", 3 * GiB, perProcess: true)], NullLogger<VramProbe>.Instance);
+
+        var reading = await probe.MeasureAsync(null, CancellationToken.None);
+
+        reading.FreeBytes.ShouldBe(3 * GiB, "the smallest figure still plans the run");
+        reading.Source.ShouldBe("DXGI budget");
+        reading.SystemFreeBytes.ShouldBe(13 * GiB, "what every process leaves free: the budget alone must not refuse a picture");
+    }
+
+    [Fact]
     public async Task NothingMeasurableGivesTheEstimateAndABrokenSourceIsSkipped()
     {
         var probe = new VramProbe(new FakeGpu(new GpuReport([Card], false, true)), [new FixedSource("broken", null, fail: true)], NullLogger<VramProbe>.Instance);
@@ -95,9 +108,11 @@ public sealed class VramProbeTests
         }
     }
 
-    private sealed class FixedSource(string name, long? free, bool fail = false) : IVideoMemorySource
+    private sealed class FixedSource(string name, long? free, bool fail = false, bool perProcess = false) : IVideoMemorySource
     {
         public string Name { get; } = name;
+
+        public bool PerProcess { get; } = perProcess;
 
         public Task<long?> FreeBytesAsync(GpuAdapter adapter, CancellationToken cancellationToken) =>
             fail ? throw new InvalidOperationException("broken") : Task.FromResult(free);

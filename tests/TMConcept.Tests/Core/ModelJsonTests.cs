@@ -15,12 +15,26 @@ public sealed class ModelJsonTests
     [InlineData("{\"topics\":[\"a\",\"b\",],}")]
     [InlineData("{\"topics\":[\"a\", // first\n\"b\"]}")]
     [InlineData("{\u201Ctopics\u201D: [\u201Ca\u201D, \u201Cb\u201D]}")]
+    [InlineData("Here are 2 topics [as JSON]: {\"scope\":\"x\",\"topics\":[\"a\",\"b\"]}")]
+    [InlineData("Step [1] done. {\"topics\":[\"a\",\"b\"]}")]
+    [InlineData("Step {one} and [two] done:\n{\"topics\":[\"a\",\"b\"]}")]
     public void TheJsonIsFoundAndRead(string answer)
     {
         var json = ModelJson.TryParseObject(answer);
 
         json.ShouldNotBeNull();
         json["topics"]!.AsArray().Select(t => t!.GetValue<string>()).ShouldBe(["a", "b"]);
+    }
+
+    [Fact]
+    public void BracketsInTheProseDoNotHideTheAnswer()
+    {
+        ModelJson.TryParse("Step [1] done. {\"topics\":[\"a\"]}").ShouldBeOfType<System.Text.Json.Nodes.JsonObject>("an object after a small array in the prose");
+        ModelJson.TryParse("Here: [{\"a\": 1}, {\"a\": 2}]")!.AsArray().Count.ShouldBe(2, "a bare list of objects stays the list");
+        ModelJson.TryParse("[\"a\", \"b\"] and nothing else").ShouldBeOfType<System.Text.Json.Nodes.JsonArray>();
+        ModelJson.TryParse("Step [1] done. {\"topics\": [\"a\", \"b").ShouldBeNull("the answer after the prose was cut");
+        ModelJson.IsComplete("Step [1] done. {\"topics\": [\"a\", \"b").ShouldBeFalse();
+        ModelJson.IsComplete("Step [1] done. {\"topics\": [\"a\"]}").ShouldBeTrue();
     }
 
     [Fact]
@@ -35,7 +49,8 @@ public sealed class ModelJsonTests
     public void BracesInsideStringsDoNotEndTheJson()
     {
         ModelJson.Extract("x {\"a\": \"} and ] and \\\" quote\"} tail").ShouldBe("{\"a\": \"} and ] and \\\" quote\"}");
-        ModelJson.Extract("[1, [2, 3]] and {\"b\": 1}").ShouldBe("[1, [2, 3]]", "a bare array counts too");
+        ModelJson.Extract("[1, [2, 3]] and nothing else").ShouldBe("[1, [2, 3]]", "a bare array counts too");
+        ModelJson.Extract("[1, [2, 3]] and {\"b\": 1}").ShouldBe("{\"b\": 1}", "an object after an array in the prose is the answer (\"Step [1] done. {...}\")");
     }
 
     [Fact]

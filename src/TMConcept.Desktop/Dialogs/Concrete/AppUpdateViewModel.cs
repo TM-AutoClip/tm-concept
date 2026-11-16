@@ -67,7 +67,8 @@ public sealed partial class AppUpdateViewModel(UpdateOffer offer, AppUpdater upd
 
         Busy = true;
         Status = text["appupdate.downloading"];
-        _cancel = new CancellationTokenSource();
+        var cancel = new CancellationTokenSource();
+        _cancel = cancel;
         try
         {
             var progress = new Progress<ToolProgress>(p =>
@@ -75,10 +76,10 @@ public sealed partial class AppUpdateViewModel(UpdateOffer offer, AppUpdater upd
                 Percent = Math.Round(p.Share * 100);
                 Status = text.Format("appupdate.progress", Percent);
             });
-            await updater.InstallAsync(Offer, progress, _cancel.Token).ConfigureAwait(true);
+            await updater.InstallAsync(Offer, progress, cancel.Token).ConfigureAwait(true);
             Status = text["appupdate.restarting"];
         }
-        catch (OperationCanceledException) when (_cancel.IsCancellationRequested)
+        catch (OperationCanceledException) when (cancel.IsCancellationRequested)
         {
             logger.LogInformation("The update download was cancelled; the part downloaded so far is kept until the next start");
             Status = text["appupdate.cancelled"];
@@ -101,7 +102,7 @@ public sealed partial class AppUpdateViewModel(UpdateOffer offer, AppUpdater upd
         finally
         {
             Busy = false;
-            _cancel.Dispose();
+            cancel.Dispose();
             _cancel = null;
         }
     }
@@ -123,5 +124,10 @@ public sealed partial class AppUpdateViewModel(UpdateOffer offer, AppUpdater upd
     }
 
     /// <inheritdoc />
-    public void Dispose() => _cancel?.Dispose();
+    public void Dispose()
+    {
+        // A download still running when the window goes away is stopped, not left to replace the program unseen (InstallAsync disposes its
+        // own token source when it ends).
+        _cancel?.Cancel();
+    }
 }

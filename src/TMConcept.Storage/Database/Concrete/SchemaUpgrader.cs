@@ -13,7 +13,8 @@ namespace TMConcept.Storage.Database;
 /// before it, and a file from several versions ago goes through every step in order. The file records its steps, so it says itself which
 /// version of the schema it has.
 /// <list type="bullet">
-/// <item>A new, empty file gets every step at once (nothing to lose, no copy).</item>
+/// <item>A new, empty file gets every step at once (nothing to lose, no copy kept), on a working copy like an upgrade, so a start killed in
+/// the middle never leaves a half-made schema or EF Core's migration lock in the file.</item>
 /// <item>An existing file with steps to go: first a copy of it is kept (<see cref="ConceptSchema.UpgradeBackupFolder"/>, the newest
 /// <see cref="ConceptSchema.UpgradeBackupsKept"/>), then the steps run on a working copy next to it, and only when every step went through
 /// does the working copy replace the file. A failed step leaves the file exactly as it was (<see cref="DatabaseVersionProblem.UpgradeFailed"/>).</item>
@@ -46,17 +47,26 @@ internal sealed partial class SchemaUpgrader(ISchemaSteps steps, ILogger logger,
         await using (var db = await ConceptDatabase.OpenAsync(ConceptDatabase.ConnectionString(file, passphrase), cancellationToken).ConfigureAwait(false))
         {
             state = await ReadAsync(db, cancellationToken).ConfigureAwait(false);
-            if (state.Pending.Count == 0 || !state.HasTables)
+            if (state.Pending.Count == 0)
             {
-                // Current, or a new file: nothing in it can be lost, the steps run on it directly.
-                return await ApplyAsync(db, state, null, cancellationToken).ConfigureAwait(false);
+                return new SchemaUpgradeResult(state.Last, [], null);
             }
         }
 
+        // Every step runs on a working copy, a new file's too: a process killed in the middle (EF Core's migration lock row left behind, a
+        // half-made schema) leaves only the working copy, which the next start replaces; the file itself is never migrated in place.
         SqliteConnection.ClearAllPools();
-        var backup = backupFolder is null ? null : Backup(file, backupFolder, state.Last);
+        var backup = backupFolder is null || !state.HasTables ? null : Backup(file, backupFolder, state.Last);
         var work = file + ConceptSchema.UpgradingSuffix;
-        File.Copy(file, work, overwrite: true);
+        if (File.Exists(file))
+        {
+            File.Copy(file, work, overwrite: true);
+        }
+        else
+        {
+            Delete(work);
+        }
+
         try
         {
             await using (var db = await ConceptDatabase.OpenAsync(ConceptDatabase.ConnectionString(work, passphrase), cancellationToken).ConfigureAwait(false))

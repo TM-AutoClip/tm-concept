@@ -39,6 +39,22 @@ public sealed class SchemaUpgradeTests
     }
 
     [Fact]
+    public async Task ANewFileIsMadeOnAWorkingCopySoAStopInTheMiddleLeavesItUntouched()
+    {
+        using var paths = new TempPaths();
+        var failing = new FakeSchemaSteps("v1", "v2") { Fail = "v2" };
+
+        await Should.ThrowAsync<DatabaseVersionException>(() => Upgrader(failing).UpgradeFileAsync(paths.DatabaseFile, Passphrase, Backups(paths), None));
+
+        (await AppliedAsync(paths.DatabaseFile)).ShouldBeEmpty("the half-made schema (and any migration lock) stayed in the working copy");
+        File.Exists(paths.DatabaseFile + ConceptSchema.UpgradingSuffix).ShouldBeFalse();
+
+        var steps = new FakeSchemaSteps("v1", "v2");
+        (await Upgrader(steps).UpgradeFileAsync(paths.DatabaseFile, Passphrase, Backups(paths), None)).Applied.ShouldBe(["v1", "v2"]);
+        steps.Ran.ShouldBe(["v1", "v2"], "the next start makes it from the beginning");
+    }
+
+    [Fact]
     public async Task AFileSeveralVersionsOldGoesThroughEveryStepItLacksInOrderAfterACopy()
     {
         using var paths = new TempPaths();

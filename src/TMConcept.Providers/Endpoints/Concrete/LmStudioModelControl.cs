@@ -9,12 +9,17 @@ namespace TMConcept.Providers.Endpoints;
 public sealed class LmStudioModelControl(EndpointChatTransport transport) : IEndpointModelControl
 {
     /// <inheritdoc />
-    public Task<bool> UnloadAsync(LocalEndpoint endpoint, string modelId, CancellationToken cancellationToken)
+    public async Task<EndpointUnload> UnloadAsync(LocalEndpoint endpoint, string modelId, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(endpoint);
-        return endpoint.Kind != EndpointKind.LmStudio
-            ? Task.FromResult(false)
-            : transport.LmStudio.UnloadAsync(LocalServerAddress.Root(endpoint), endpoint.Token, modelId,
-                endpoint.Name.Length > 0 ? endpoint.Name : LmStudioServer.DefaultName, cancellationToken);
+        if (endpoint.Kind != EndpointKind.LmStudio)
+        {
+            return EndpointUnload.NotMine;
+        }
+
+        return await transport.LmStudio.UnloadAsync(LocalServerAddress.Root(endpoint), endpoint.Token, modelId,
+            endpoint.Name.Length > 0 ? endpoint.Name : LmStudioServer.DefaultName, cancellationToken).ConfigureAwait(false)
+            ? EndpointUnload.Unloaded
+            : EndpointUnload.Failed;
     }
 }

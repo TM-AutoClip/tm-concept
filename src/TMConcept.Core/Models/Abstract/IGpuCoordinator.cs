@@ -30,6 +30,9 @@ public interface IGpuCoordinator
     /// <summary>A lease for the model of a catalog entry (<see cref="IModelDirectory.Get"/>).</summary>
     Task<IGpuLease> AcquireAsync(CatalogModel model, CancellationToken cancellationToken);
 
-    /// <summary>Unloads the model on the card when nobody uses it (end of the video queue, app exit); nothing when it is in use.</summary>
+    /// <summary>
+    /// Unloads the model on the card, and any model whose earlier unload failed, when nobody uses the card (end of the video queue, app exit);
+    /// nothing when it is in use.
+    /// </summary>
     Task FreeAsync(CancellationToken cancellationToken);
 }

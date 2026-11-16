@@ -110,11 +110,38 @@ public sealed class PythonInstallTests
             Path.GetFullPath(run.Program).ShouldStartWith(Path.GetFullPath(paths.ToolsDirectory), Case.Insensitive, "the app's own uv, never the system's");
         }
 
-        // Another computer (or the card is gone): the marker no longer matches, the environment is installed again (the processor build).
+        // The card is gone (or its driver failed to load this run): the CUDA build runs on the processor too, so it is not downloaded again.
         var onAmd = new PythonInstaller(layout, new FakeTools(string.Empty), runner, new FakeGpu(Amd), NullLogger<PythonInstaller>.Instance);
-        onAmd.EnvironmentReady(PythonEnvironments.Xtts).ShouldBeFalse();
+        onAmd.EnvironmentReady(PythonEnvironments.Xtts).ShouldBeTrue("a detection change alone must not cost a 4 GB reinstall");
         onAmd.Backend(PythonEnvironments.Xtts).ShouldBe("cpu");
+
+        // The other way round: a processor build is installed again once a usable NVIDIA card is there.
+        var amdWithUv = new PythonInstaller(layout, new FakeTools(Path.Combine(paths.ToolsDirectory, "uv", "uv.exe")), runner, new FakeGpu(Amd),
+            NullLogger<PythonInstaller>.Instance);
+        await amdWithUv.InstallEnvironmentAsync(PythonEnvironments.F5, null, CancellationToken.None);
+        onAmd.EnvironmentReady(PythonEnvironments.F5).ShouldBeTrue();
+        installer.EnvironmentReady(PythonEnvironments.F5).ShouldBeFalse("the processor build gives way to the CUDA build");
+
+        // A moved portable data folder: the environment's base Python is no longer where pyvenv.cfg says.
+        File.WriteAllText(Path.Combine(layout.EnvironmentFolder("xtts"), "pyvenv.cfg"), "home = " + Path.Combine(paths.ToolsDirectory, "gone", "python") + "\n");
+        installer.EnvironmentReady(PythonEnvironments.Xtts).ShouldBeFalse("its launcher would point at a Python that is gone");
+        var home = Path.GetDirectoryName(installer.Interpreter!)!;
+        File.WriteAllText(Path.Combine(layout.EnvironmentFolder("xtts"), "pyvenv.cfg"), "home = " + home + "\n");
+        installer.EnvironmentReady(PythonEnvironments.Xtts).ShouldBeTrue();
     }
+
+    [Fact]
+    public void AnNvidiaCardTooOldForTheCudaBuildGetsTheProcessorBuild()
+    {
+        var pascal = Nvidia with { Cuda = new CudaDetails(12090, 61) };
+        PythonInstaller.Backend(PythonEnvironments.Xtts, pascal).ShouldBe("cpu", "PyTorch 2.8's CUDA 12.8 build dropped Maxwell and Pascal");
+        PythonInstaller.Backend(PythonEnvironments.Xtts, Nvidia with { Cuda = new CudaDetails(12060, 86) }).ShouldBe("cpu", "a driver older than 570");
+        PythonInstaller.Backend(PythonEnvironments.Xtts, Nvidia with { Cuda = new CudaDetails(12080, 75) }).ShouldBe("cu128");
+        PythonInstaller.Backend(PythonEnvironments.Xtts, Nvidia with { Cuda = CudaDetails.Unknown }).ShouldBe("cu128", "what the driver did not say is not held against it");
+        SpeechDevicesOf(pascal).ShouldBeNull();
+    }
+
+    private static GpuAdapter? SpeechDevicesOf(GpuReport report) => TMConcept.Core.Speech.SpeechDevices.CudaCard(report);
 
     [Fact]
     public async Task AFailingUvEndsTheInstallWithItsOwnReasonAndNoMarker()

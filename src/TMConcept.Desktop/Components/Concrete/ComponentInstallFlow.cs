@@ -19,7 +19,7 @@ namespace TMConcept.Desktop.Components;
 /// downloaded without the confirmation. A cancellation during the install is an outcome, not an error. Every step goes to the log file.
 /// </summary>
 public sealed class ComponentInstallFlow(ComponentPlanner planner, IConfirmDialog confirm, IInstallDialog window, IActivityLog activity, Localizer text,
-    Work.WorkStatus work, ILogger<ComponentInstallFlow> logger)
+    Work.WorkStatus work, Core.Paths.IAppPaths paths, ILogger<ComponentInstallFlow> logger)
 {
     /// <summary>The planner.</summary>
     public ComponentPlanner Planner => planner;
@@ -149,7 +149,33 @@ public sealed class ComponentInstallFlow(ComponentPlanner planner, IConfirmDialo
         }
 
         message.Append('\n').Append(text.Format("install.total", Megabytes(plan.TotalBytes))).Append(' ').Append(text[purposeKey]);
+        if (FreeSpace() is { } free && free < SpaceNeeded(plan.TotalBytes))
+        {
+            logger.LogWarning("The tools drive has {Free} MB free; the install needs about {Needed} MB", free / 1_000_000, SpaceNeeded(plan.TotalBytes) / 1_000_000);
+            message.Append("\n\n").Append(text.Format("install.disk_short", Megabytes(free), Megabytes(SpaceNeeded(plan.TotalBytes))));
+        }
+
         return message.ToString();
+    }
+
+    /// <summary>
+    /// What an install takes on the disk: the downloads twice (an archive and what is unpacked from it; the Python packages unpack to about
+    /// twice their wheels), plus 1 GB to spare.
+    /// </summary>
+    public static long SpaceNeeded(long downloadBytes) => (downloadBytes * 2) + 1_000_000_000;
+
+    /// <summary>The free space of the drive that holds the tools folder; null when it cannot be read.</summary>
+    private long? FreeSpace()
+    {
+        try
+        {
+            var root = Path.GetPathRoot(Path.GetFullPath(paths.ToolsDirectory));
+            return string.IsNullOrEmpty(root) ? null : new DriveInfo(root).AvailableFreeSpace;
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     /// <summary>Megabytes, rounded (at least 1).</summary>

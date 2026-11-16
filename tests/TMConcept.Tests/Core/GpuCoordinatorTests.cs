@@ -170,16 +170,83 @@ public sealed class GpuCoordinatorTests
     }
 
     [Fact]
-    public async Task AFailedUnloadIsLoggedAndTheCardIsTakenAnyway()
+    public async Task AFailedUnloadIsNotForgottenItIsAskedAgainLater()
     {
         var gpu = Coordinator();
         var stuck = new FakeLocalModel("server-model") { FailUnload = true };
         await (await gpu.AcquireAsync(stuck, null, CancellationToken.None)).DisposeAsync();
 
-        await using var lease = await gpu.AcquireAsync(new FakeLocalModel("image"), null, CancellationToken.None);
-
+        // The next model still gets the card (it plans with the memory measured now), but the server model stays on the list.
+        var image = new FakeLocalModel("image");
+        var lease = await gpu.AcquireAsync(image, null, CancellationToken.None);
         lease.OnCard.ShouldBeTrue();
         stuck.Unloads.ShouldBe(1);
+        stuck.IsLoaded.ShouldBeTrue("an unconfirmed unload leaves the model counted as loaded");
+        await lease.DisposeAsync();
+
+        stuck.FailUnload = false;
+        await gpu.FreeAsync(CancellationToken.None);
+        image.Unloads.ShouldBe(1);
+        stuck.Unloads.ShouldBe(2, "freeing the card asks the model that would not unload once more");
+        stuck.IsLoaded.ShouldBeFalse();
+
+        await gpu.FreeAsync(CancellationToken.None);
+        stuck.Unloads.ShouldBe(2, "once gone, it is not asked again");
+    }
+
+    [Fact]
+    public async Task AStopWhileTheMemoryIsReadLeavesNoUserBehind()
+    {
+        var probe = new CancelingProbe();
+        var gpu = new GpuCoordinator(new ModelDirectory([]), probe, TimeProvider.System, Fast, NullLogger<GpuCoordinator>.Instance);
+        var llm = new FakeLocalModel("llm");
+
+        // Stop pressed during the short memory reading after the load (nvidia-smi runs with the caller's token).
+        await Should.ThrowAsync<OperationCanceledException>(() => gpu.AcquireAsync(llm, null, CancellationToken.None));
+
+        // 0.1.17 kept a user count without a lease: every other local model waited for good. Now the next one gets the card at once.
+        using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await using var lease = await gpu.AcquireAsync(new FakeLocalModel("image"), null, limit.Token);
+        lease.OnCard.ShouldBeTrue();
+        llm.Unloads.ShouldBe(1, "the loaded model was still known and was unloaded first");
+    }
+
+    [Fact]
+    public async Task WhatServersHoldFromBeforeIsSweptOnceBeforeTheFirstCardLease()
+    {
+        var sweep = new CountingSweep();
+        var gpu = new GpuCoordinator(new ModelDirectory([]), new FakeVramProbe(new VramReading(16 * GiB, 14 * GiB, true, "test")), TimeProvider.System, Fast,
+            NullLogger<GpuCoordinator>.Instance, [sweep]);
+        var llm = new FakeLocalModel("llm");
+
+        await (await gpu.AcquireAsync(new OnlineModel(new CatalogModel { Provider = "openai", Id = "gpt" }, true), null, CancellationToken.None)).DisposeAsync();
+        sweep.Kept.ShouldBeEmpty("an online model takes no card");
+
+        await (await gpu.AcquireAsync(llm, null, CancellationToken.None)).DisposeAsync();
+        await (await gpu.AcquireAsync(new FakeLocalModel("image"), null, CancellationToken.None)).DisposeAsync();
+        await gpu.FreeAsync(CancellationToken.None);
+        await (await gpu.AcquireAsync(llm, null, CancellationToken.None)).DisposeAsync();
+
+        sweep.Kept.ShouldBe([llm.Key], "once per run, keeping the model about to be used");
+    }
+
+    private sealed class CancelingProbe : IVramProbe
+    {
+        private int _reads;
+
+        public Task<VramReading> MeasureAsync(GpuAdapter? adapter, CancellationToken cancellationToken) =>
+            ++_reads == 1 ? throw new OperationCanceledException() : Task.FromResult(new VramReading(16 * GiB, 14 * GiB, true, "test"));
+    }
+
+    private sealed class CountingSweep : IResidentModelSweep
+    {
+        public List<string> Kept { get; } = [];
+
+        public Task SweepAsync(IModel keep, CancellationToken cancellationToken)
+        {
+            Kept.Add(keep.Key);
+            return Task.CompletedTask;
+        }
     }
 
     [Fact]

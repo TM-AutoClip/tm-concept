@@ -16,7 +16,7 @@ namespace TMConcept.Desktop.ViewModels;
 /// one made before upgrades were recorded (0.1.16 or earlier) can be set aside after a confirmation (renamed with its key file, never
 /// deleted), and the first start follows (new start or restore).
 /// </summary>
-public sealed partial class UnlockViewModel(Vault vault, UiMasterPassword masterPassword, IConfirmDialog confirm, Localizer text,
+public sealed partial class UnlockViewModel(Vault vault, UiMasterPassword masterPassword, IConfirmDialog confirm, Localizer text, Updates.SelfReplacer replacer,
     ILogger<UnlockViewModel> logger)
     : ObservableObject
 {
@@ -61,7 +61,19 @@ public sealed partial class UnlockViewModel(Vault vault, UiMasterPassword master
     /// <summary>Shows why the database was not opened.</summary>
     public void Show(DatabaseVersionException error)
     {
-        (Error, CanSetAside) = Describe(error, text);
+        (Error, CanSetAside) = Describe(error, text, replacer.PreviousProgram);
+    }
+
+    /// <summary>
+    /// The text for a database that could not be opened, and whether it can be set aside; <paramref name="previousProgram"/> (the program
+    /// file an update just replaced, still kept) adds how to go back to it when this version cannot use the database.
+    /// </summary>
+    public static (string Text, bool CanSetAside) Describe(DatabaseVersionException error, Localizer text, string? previousProgram)
+    {
+        var (message, canSetAside) = Describe(error, text);
+        return previousProgram is { Length: > 0 } && error.Problem != DatabaseVersionProblem.Unrecorded
+            ? (message + "\n" + text.Format("database.previous_program", Path.GetFileName(previousProgram)), canSetAside)
+            : (message, canSetAside);
     }
 
     /// <summary>Opens.</summary>

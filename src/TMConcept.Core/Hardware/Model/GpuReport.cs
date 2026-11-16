@@ -6,6 +6,9 @@ namespace TMConcept.Core.Hardware;
 /// <param name="VulkanLoader">Whether the Vulkan loader loads (Windows vulkan-1.dll, Linux libvulkan.so.1).</param>
 public sealed record GpuReport(IReadOnlyList<GpuAdapter> Adapters, bool CudaDriver, bool VulkanLoader)
 {
+    /// <summary>The CUDA driver's version and its cards' compute capability (<see cref="CudaDetails.Unknown"/> when not asked or no driver).</summary>
+    public CudaDetails Cuda { get; init; } = CudaDetails.Unknown;
+
     /// <summary>Nothing found (no card, no runtime).</summary>
     public static GpuReport None { get; } = new([], false, false);
 

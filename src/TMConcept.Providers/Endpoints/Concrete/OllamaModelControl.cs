@@ -9,12 +9,17 @@ namespace TMConcept.Providers.Endpoints;
 public sealed class OllamaModelControl(EndpointChatTransport transport) : IEndpointModelControl
 {
     /// <inheritdoc />
-    public Task<bool> UnloadAsync(LocalEndpoint endpoint, string modelId, CancellationToken cancellationToken)
+    public async Task<EndpointUnload> UnloadAsync(LocalEndpoint endpoint, string modelId, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(endpoint);
-        return endpoint.Kind != EndpointKind.Ollama
-            ? Task.FromResult(false)
-            : transport.Ollama.UnloadAsync(LocalServerAddress.Root(endpoint), endpoint.Token, modelId,
-                endpoint.Name.Length > 0 ? endpoint.Name : OllamaServer.DefaultName, cancellationToken);
+        if (endpoint.Kind != EndpointKind.Ollama)
+        {
+            return EndpointUnload.NotMine;
+        }
+
+        return await transport.Ollama.UnloadAsync(LocalServerAddress.Root(endpoint), endpoint.Token, modelId,
+            endpoint.Name.Length > 0 ? endpoint.Name : OllamaServer.DefaultName, cancellationToken).ConfigureAwait(false)
+            ? EndpointUnload.Unloaded
+            : EndpointUnload.Failed;
     }
 }

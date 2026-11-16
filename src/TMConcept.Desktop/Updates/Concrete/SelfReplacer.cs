@@ -6,7 +6,7 @@ namespace TMConcept.Desktop.Updates;
 
 /// <summary>
 /// Puts a downloaded, verified new version in the place of the running program. A running program file cannot be overwritten on Windows but
-/// can be renamed: the running file becomes <c>&lt;name&gt;.old</c> (removed at the next start), the new one takes its name; if that second
+/// can be renamed: the running file becomes <c>&lt;name&gt;.old</c> (removed once the next start has opened its main window), the new one takes its name; if that second
 /// step fails the old name comes back. On Linux a rename over the running file is allowed (the running process keeps the old file open), and
 /// the other files of the release folder (icon, notices, licences) are replaced too. The new version starts from the same path, so
 /// shortcuts and the desktop entry keep working. Only the published single-file program replaces itself (a build from source does not).
@@ -165,7 +165,16 @@ public sealed class SelfReplacer(ILogger<SelfReplacer> logger)
         logger.LogInformation("The program file was replaced by the new version");
     }
 
-    /// <summary>At start: removes what an update left (the old program file on Windows, the download folder). Failures are only logged.</summary>
+    /// <summary>
+    /// The previous version's program file an update left (Windows: <c>&lt;name&gt;.old</c>); null when there is none. It is kept until the new
+    /// version has opened the database and shown its main window, so a failed database upgrade can still go back to it.
+    /// </summary>
+    public string? PreviousProgram => ProgramPath.Length > 0 && File.Exists(ProgramPath + UpdateRules.OldSuffix) ? ProgramPath + UpdateRules.OldSuffix : null;
+
+    /// <summary>
+    /// After the main window opened (the database is unlocked and upgraded): removes what an update left (the old program file on Windows, the
+    /// download folder). Failures are only logged.
+    /// </summary>
     public void CleanUp()
     {
         if (ProgramPath.Length == 0)

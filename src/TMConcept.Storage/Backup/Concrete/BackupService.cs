@@ -613,7 +613,9 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
         {
             await using var db = await ConceptDatabase.OpenAsync(ConceptDatabase.ConnectionString(file, Convert.ToHexString(dek)), cancellationToken)
                 .ConfigureAwait(false);
-            await db.Settings.CountAsync(cancellationToken).ConfigureAwait(false);
+
+            // No table is read through the mapping before the schema steps: a later version may change it, and an older backup must still
+            // reach its upgrade. A wrong key or a damaged file fails the first read of the upgrade itself (SqliteException below).
             try
             {
                 await ConceptDatabase.EnsureSchemaAsync(db, cancellationToken, logger).ConfigureAwait(false);

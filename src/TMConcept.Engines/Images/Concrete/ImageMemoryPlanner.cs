@@ -66,8 +66,11 @@ public static class ImageMemoryPlanner
             return For(ImageMemoryLevel.Card, reserveGib);
         }
 
+        // This app's own budget (DXGI) alone never refuses: Windows may lower it while the window is in the background, and sd-cli has its
+        // own. When the memory free across all processes is larger, the offload level is tried; an out-of-memory end still steps down.
         var mainNeed = model.TotalBytes + MainMemoryHeadroomBytes;
-        if (usable >= WorkingBytes && (freeMainMemory is null || freeMainMemory >= mainNeed))
+        var offloadUsable = Math.Max(usable, (memory.SystemFreeBytes ?? 0) - ((long)reserveGib * Gibibyte));
+        if (offloadUsable >= WorkingBytes && (freeMainMemory is null || freeMainMemory >= mainNeed))
         {
             return For(ImageMemoryLevel.Offload, reserveGib);
         }
