@@ -34,7 +34,7 @@ namespace TMConcept.Desktop.ViewModels;
 /// Anything declined, missing, unavailable or failed stops the process before anything is paid for, with the reason on the page and in the log.
 /// </summary>
 public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepModelStore steps, StepModelResolver resolver, IEnumerable<IVideoEngine> engines,
-    SpeechService speech, VoiceSampleLibrary voiceSamples, ComponentInstallFlow installs, AppSession session, IConfirmDialog confirm, IApiKeyDialog keyDialog, Engines.Images.ImageBackendSelector backends, IAppPaths paths,
+    SpeechService speech, VoiceSampleLibrary voiceSamples, ComponentInstallFlow installs, AppSession session, IConfirmDialog confirm, IApiKeyDialog keyDialog, Engines.Images.ImageBackendSelector backends, IGpuInfo gpu, IAppPaths paths,
     ShellLauncher shell, Localizer text, ILogger<StepPickerViewModel> logger) : ObservableObject
 {
     /// <summary>The "saved" mark of a row whose saved choice is not offered any more: never equal to a row's key, so it is saved again.</summary>
@@ -737,7 +737,13 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
             row.NoteIsWarning = true;
         }
 
-        if (model.MinVideoMemoryGb > 0)
+        if (model.MinVideoMemoryGb > 0 && row.IsVoiceStep)
+        {
+            // A Python voice: CUDA on an NVIDIA card, otherwise the processor (there is no AMD or Intel build of PyTorch for it).
+            var report = await Task.Run(gpu.Detect).ConfigureAwait(true);
+            SpeechMemoryNote(row, parts, model.MinVideoMemoryGb, report);
+        }
+        else if (model.MinVideoMemoryGb > 0)
         {
             // The first call looks at the graphics cards (native calls; on Linux maybe a short nvidia-smi run): off the UI thread.
             var choice = await Task.Run(backends.Choose).ConfigureAwait(true);
@@ -807,6 +813,37 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
 
     /// <summary>The display name of a license code.</summary>
     private string LicenseName(string code) => text["license." + code];
+    /// <summary>
+    /// The memory part of a Python voice's note: no NVIDIA card with its CUDA driver (an AMD or Intel card, or none) means the processor
+    /// (yellow: slow); the card's memory unknown (yellow); a voice of a higher memory class than the card's (red); enough (green).
+    /// </summary>
+    private void SpeechMemoryNote(StepModelRowViewModel row, List<string> parts, int minimumGb, GpuReport report)
+    {
+        if (SpeechDevices.CudaCard(report) is not { } card)
+        {
+            parts.Add(text.Format("speech.memory.cpu", minimumGb));
+            row.NoteIsWarning = true;
+            return;
+        }
+
+        if (card.VideoMemoryBytes is not { } bytes)
+        {
+            parts.Add(text["images.memory.unknown"]);
+            row.NoteIsWarning = true;
+            return;
+        }
+
+        var shown = Math.Round(bytes / (1024.0 * 1024 * 1024), 1).ToString("0.#", text.Culture);
+        if (!VramTiers.Sees(VramTiers.ForCard(bytes), VramTiers.ForModel(minimumGb)))
+        {
+            parts.Add(text.Format("speech.memory.not_enough", minimumGb, shown));
+            row.NoteIsError = true;
+            return;
+        }
+
+        parts.Add(text.Format("speech.memory.ok", shown, card.Name));
+        row.NoteIsOk = true;
+    }
 
     /// <summary>The language key part of a build (<c>cuda</c>, <c>vulkan</c>, <c>cpu</c>).</summary>
     internal static string BackendKey(ImageBackend backend) => backend switch
@@ -816,7 +853,10 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
         _ => "cpu",
     };
 
-    /// <summary>Asks for the licenses a row needs and has not got yet (Remotion; the Supertonic voice's OpenRAIL-M terms); false when declined.</summary>
+    /// <summary>
+    /// Asks for the licenses a row needs and has not got yet (Remotion; the Supertonic voice's OpenRAIL-M terms; a non-commercial model's
+    /// licence); false when declined.
+    /// </summary>
     private async Task<bool> LicensesAsync(StepModelRowViewModel row)
     {
         var settings = session.Settings;

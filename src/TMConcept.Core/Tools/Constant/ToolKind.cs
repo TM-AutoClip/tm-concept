@@ -44,4 +44,13 @@ public enum ToolKind
 
     /// <summary>stable-diffusion.cpp (sd-cli), the processor build (no graphics card).</summary>
     ImageRuntimeCpu = 12,
+
+    /// <summary>
+    /// uv (Astral, MIT/Apache-2.0): installs the pinned Python and the packages of the Python voices into the tools folder (never the system's
+    /// copy, never the system PATH).
+    /// </summary>
+    Uv = 13,
+
+    /// <summary>A file of a Python voice model (one file from Hugging Face, pinned by commit and SHA-256; not an archive).</summary>
+    PythonVoiceWeights = 14,
 }

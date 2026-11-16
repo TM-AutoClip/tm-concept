@@ -59,6 +59,20 @@ models) or the first video needs them and you confirm the list of downloads. TM 
 | Stable Diffusion 3.5 Medium (GGUF Q4_0 / Q8_0 with CLIP-L, CLIP-G and T5-XXL GGUF by second-state) | **Stability AI Community License** | Free, also commercially, for individuals and organizations under 1 million USD annual revenue; above that an enterprise license from Stability AI. Asked before the first download. huggingface.co (stabilityai/stable-diffusion-3.5-medium) |
 | SDXL Lightning 4-step (GGUF q4_0 / q8_0 by mzwing) | **OpenRAIL++** (ByteDance) | Commercial use allowed with the license's use restrictions. Asked before the first download. With the SDXL fp16-fix VAE (madebyollin, MIT). huggingface.co |
 | Qwen-Image (GGUF Q4_0 / Q6_K / Q8_0 by QuantStack) | Apache-2.0 | Qwen. With its VAE (Comfy-Org, Apache-2.0) and Qwen2.5-VL-7B-Instruct (Qwen, Apache-2.0; GGUF by mradermacher). huggingface.co |
+| uv 0.13.6 | MIT or Apache-2.0 (Astral) | github.com/astral-sh/uv releases. Installs the Python voices' Python and packages into the tools folder (no launcher on the PATH, no registry entry, the user's uv/pip settings ignored). |
+| CPython 3.11.18 (python-build-standalone, installed by uv) | PSF License 2.0 (plus the licences of its bundled parts: OpenSSL Apache-2.0, SQLite public domain, zlib, libffi MIT, Tcl/Tk BSD-style …) | github.com/astral-sh/python-build-standalone. Runs only the app's Python voice worker. |
+| PyTorch 2.8.0 and torchaudio 2.8.0 (CUDA 12.8 build for NVIDIA cards, processor build otherwise) | BSD-3-Clause; the CUDA build pulls NVIDIA's CUDA libraries (NVIDIA software licence) | download.pytorch.org. The packages of each Python voice environment are pinned to exact versions by lock files in `src/TMConcept.Speech/Python/Files/Locks` (each package keeps its own licence: MIT, BSD, Apache-2.0, MPL-2.0, PSF, LGPL and others). |
+| coqui-tts 0.28.0 (XTTS-v2 code) | MPL-2.0 | pypi.org (idiap's maintained fork of Coqui TTS). |
+| f5-tts 1.1.22 | MIT | pypi.org (SWivid/F5-TTS). |
+| voxcpm 2.0.3 | Apache-2.0 | pypi.org (OpenBMB/VoxCPM). |
+| trnorm (Ahenk's Turkish text normaliser), commit 8981df9 | Apache-2.0 | github.com/ozguradmin/ahenk-turkish-tts (archive of that commit). |
+| transformers 4.56.2 (MMS-TTS) | Apache-2.0 | pypi.org. |
+| XTTS-v2 voice model (coqui/XTTS-v2 at commit 6c2b0d7: config, model, vocab, speakers, mel stats) | **Coqui Public Model License 1.0.0 — non-commercial** | huggingface.co, each file with its SHA-256. Offered only after the user accepted the licence in the app; the model may not be used commercially (a channel with ads or sponsors, paid work). Built-in speakers or the user's own sample. |
+| F5-TTS Turkish (marduk-ra/F5-TTS-Turkish at commit 219efea, checkpoint 1 000 000) with the Vocos vocoder (charactr/vocos-mel-24khz at 0feb3fd) | **CC BY-NC 4.0 — non-commercial** (fine-tune); Vocos MIT | huggingface.co, each file with its SHA-256; offered only after the user accepted the licence. Speaks in the voice of `f5_ref_tr.wav`, a 6.7 s Turkish reference clip that comes with the app (spoken by the Supertonic 3 voice M1; the OpenRAIL-M restrictions apply to it). |
+| VoxCPM2 (openbmb/VoxCPM2 at commit 7936080) | Apache-2.0 | OpenBMB. huggingface.co, each file with its SHA-256. OpenBMB forbids impersonation, fraud and disinformation and asks to label AI-generated content. |
+| Trendyol-TTS (Trendyol/Trendyol-TTS at commit 66a8018) | MIT | Trendyol; VoxCPM2 with a merged Turkish LoRA. huggingface.co, each file with its SHA-256. |
+| Ahenk (ozgurguler/ahenk-tts-tr at commit 6bcef95: LoRA weights and its helper scripts) | CC BY 4.0 (weights), Apache-2.0 (scripts) | **Attribution:** "Ahenk (https://github.com/ozguradmin/ahenk-turkish-tts), Özgür Güler, licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)"; its training data (the Alania datasets) is CC BY 4.0 as well. A LoRA on VoxCPM2 (downloaded with it); one designed voice (f022), no real person. Label the output as AI-generated. |
+| MMS-TTS Turkish (facebook/mms-tts-tur at commit 7e36447) | **CC BY-NC 4.0 — non-commercial** | Meta. huggingface.co, each file with its SHA-256; offered only after the user accepted the licence. |
 
 ### Supertonic 3 (OpenRAIL-M) use restrictions, short form
 
@@ -71,6 +85,6 @@ when publishing" note.
 
 ### Not used
 
-No reference voice other than the user's own voice samples (Pocket TTS, Chatterbox), no reading of other channels (no yt-dlp), no Piper GPL program. The optional Piper Turkish voice of
+No reference voice other than the user's own voice samples (Pocket TTS, Chatterbox, XTTS-v2, VoxCPM2) and F5-TTS's reference clip above, no reading of other channels (no yt-dlp), no Piper GPL program. The optional Piper Turkish voice of
 0.1.0 was removed in 0.1.1 (sherpa-onnx 2.x has no espeak-ng to turn text into its phonemes). On Linux the player uses the system's
 libpulse-simple (PulseAudio / PipeWire, LGPL-2.1, a system library that is not distributed with TM Concept).

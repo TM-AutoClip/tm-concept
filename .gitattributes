@@ -14,3 +14,4 @@
 *.exe   binary
 *.dll   binary
 *.db    binary
+*.wav   binary

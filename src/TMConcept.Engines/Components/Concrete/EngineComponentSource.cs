@@ -9,7 +9,7 @@ using TMConcept.Engines.Tools;
 
 namespace TMConcept.Engines.Components;
 
-/// <summary>The components of this project: Node.js, ffmpeg, the local voice's libraries, the engines and their browser, stable-diffusion.cpp and the local image models.</summary>
+/// <summary>The components of this project: Node.js, ffmpeg, the local voice's libraries, uv (the Python voices' installer), the engines and their browser, stable-diffusion.cpp and the local image models.</summary>
 public sealed class EngineComponentSource(ToolInstaller installer, IEnumerable<IVideoEngine> engines, ChromeLocator chrome, LocalImageStore images,
     ImageBackendSelector backends, IProcessRunner runner, ILoggerFactory loggers) : IComponentSource
 {
@@ -22,6 +22,7 @@ public sealed class EngineComponentSource(ToolInstaller installer, IEnumerable<I
             new NodeComponent(installer, runner, loggers.CreateLogger<NodeComponent>()),
             new ToolComponent(installer, ComponentCodes.Ffmpeg, "ffmpeg", [ToolKind.Ffmpeg], []),
             new ToolComponent(installer, ComponentCodes.SpeechRuntime, "sherpa-onnx", [ToolKind.SpeechRuntime], []),
+            new ToolComponent(installer, ComponentCodes.Uv, "uv", [ToolKind.Uv], []),
             .. engines.OrderBy(e => e.Kind).Select(e => new EngineComponent(e)),
             new BrowserComponent(chrome),
             imageRuntime,

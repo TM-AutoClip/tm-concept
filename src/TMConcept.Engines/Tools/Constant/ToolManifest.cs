@@ -20,7 +20,10 @@ namespace TMConcept.Engines.Tools;
 /// and the processor build (one zip that picks the processor's best variant at run time); on Linux x64 the Vulkan and the processor build.
 /// Every zip is flat: sd-cli sits at its top. There is no Linux CUDA build and nothing for Linux ARM64. The ROCm builds are not used: their
 /// zips carry no HIP runtime (hipblas, rocblas must come from AMD's SDK on the PATH, otherwise sd-cli ends with 0xC0000135 and prints
-/// nothing). Updating a version = new rows here with new hashes (and the options checked again).
+/// nothing). uv (Astral, MIT or Apache-2.0): the 0.13.6 release (26 Oct 2026), hashes from the release's asset digests,
+/// checked on 2026-11-16 by downloading the Windows zip (flat: uv.exe at its top) and listing the Linux archive (one folder); it installs the
+/// Python of the Python voices and their packages into the tools folder, and is never taken from the system. Updating a version = new rows
+/// here with new hashes (and the sd-cli options checked again).
 /// </summary>
 public static class ToolManifest
 {
@@ -42,6 +45,9 @@ public static class ToolManifest
     /// <summary>stable-diffusion.cpp release of the Linux builds (the last one built on Ubuntu 24.04).</summary>
     public const string SdCppLinuxTag = "master-1043-3be2378";
 
+    /// <summary>uv release (installs the Python voices' Python and packages).</summary>
+    public const string UvVersion = "0.13.6";
+
     /// <summary>
     /// The oldest Node.js major version the engines run on: HyperFrames 0.8 asks for Node 22 or newer (Remotion and Revideo for 18), so a
     /// Node.js of at least this version already on the PATH, with npm next to it, is used instead of downloading one.
@@ -50,7 +56,7 @@ public static class ToolManifest
 
     /// <summary>Tools that are libraries, not programs: never looked for on the system PATH.</summary>
     public static readonly IReadOnlyList<ToolKind> Libraries = [ToolKind.SpeechRuntime, ToolKind.ImageRuntime, ToolKind.ImageRuntimeCuda, ToolKind.ImageRuntimeVulkan,
-        ToolKind.ImageRuntimeCpu, ToolKind.ImageWeights, ToolKind.EmbeddingWeights];
+        ToolKind.ImageRuntimeCpu, ToolKind.ImageWeights, ToolKind.EmbeddingWeights, ToolKind.Uv, ToolKind.PythonVoiceWeights];
 
     /// <summary>Tools that may come from the system PATH when their pinned download is gone (404) or does not match its hash.</summary>
     public static readonly IReadOnlyList<ToolKind> FallbackToSystem = [ToolKind.Ffmpeg];
@@ -109,5 +115,11 @@ public static class ToolManifest
         new(ToolKind.ImageRuntimeCpu, SdCppLinuxTag, "linux-x64",
             new Uri($"https://github.com/leejet/stable-diffusion.cpp/releases/download/{SdCppLinuxTag}/sd-master-3be2378-bin-Linux-Ubuntu-24.04-x86_64.zip"),
             "01e1c773c1bc2a6276952f6dbd13294e58b7255c659b4a770086934c4e8fad3a", string.Empty, "sd-cli", 27_322_680),
+        new(ToolKind.Uv, UvVersion, "win-x64", new Uri($"https://github.com/astral-sh/uv/releases/download/{UvVersion}/uv-x86_64-pc-windows-msvc.zip"),
+            "a2a8820d5eea32f08ef467ef3b7f66883a9b076d5737a2fc2fbb5f458d1bb50f", string.Empty, "uv.exe", 15_239_500),
+        new(ToolKind.Uv, UvVersion, "linux-x64", new Uri($"https://github.com/astral-sh/uv/releases/download/{UvVersion}/uv-x86_64-unknown-linux-gnu.tar.gz"),
+            "f29c3e94ffabd7e6f3ba521dba169a9b7ec12100bf3257087f0f24f6123f3645", "uv-x86_64-unknown-linux-gnu", "uv", 16_799_024),
+        new(ToolKind.Uv, UvVersion, "linux-arm64", new Uri($"https://github.com/astral-sh/uv/releases/download/{UvVersion}/uv-aarch64-unknown-linux-gnu.tar.gz"),
+            "229e194255c7958d86d56e8790d969a6f74736592133f0dfd0076f754c642c1d", "uv-aarch64-unknown-linux-gnu", "uv", 15_794_886),
     ];
 }

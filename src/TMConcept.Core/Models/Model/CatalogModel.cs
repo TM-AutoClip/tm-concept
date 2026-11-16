@@ -79,13 +79,23 @@ public sealed class CatalogModel
     /// <summary>Main memory (GB) a local model needs besides (0 = unknown or small); used when its weights move off the graphics card.</summary>
     public int MemoryGb { get; set; }
 
-    /// <summary>A local model's license code (<c>apache-2.0</c>, <c>flux-non-commercial</c>…; empty = nothing to say); the picker names it.</summary>
+    /// <summary>
+    /// A local model's license code (<c>apache-2.0</c>, <c>flux-non-commercial</c>, <c>cpml</c>, <c>cc-by-nc-4.0</c>…; empty = nothing to say);
+    /// the picker names it (<c>license.{code}</c> in the language files).
+    /// </summary>
     public string License { get; set; } = string.Empty;
 
-    /// <summary>What a local model's license allows (<see cref="Models.LicenseUse"/>): anything but commercial use is asked before the download.</summary>
+    /// <summary>
+    /// What a local model's license allows (<see cref="Models.LicenseUse"/>): anything but commercial use is offered WITH a clear warning and
+    /// asked before the first download (0.1.17, the developer), images and voices alike.
+    /// </summary>
     [JsonConverter(typeof(JsonStringEnumConverter<LicenseUse>))]
     public LicenseUse LicenseUse { get; set; }
 
     /// <summary>Where the license text is (the model's own page), shown in the license question.</summary>
     public string LicenseUrl { get; set; } = string.Empty;
+
+    /// <summary>The weights may not be used commercially at all (a monetized channel counts).</summary>
+    [JsonIgnore]
+    public bool NonCommercial => LicenseUse == LicenseUse.NonCommercial;
 }

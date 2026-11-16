@@ -11,11 +11,11 @@ namespace TMConcept.Desktop.Reports;
 
 /// <summary>
 /// <c>system.txt</c> of a problem report (also what "Copy details" copies): the program, its version and commit, the operating system,
-/// architecture and .NET, the interface language, how the window is drawn, whether the data folder is portable, and which tools, local voices
-/// and engines are installed. No setting values, no keys, no paths, no names of profiles or accounts, nothing from the database.
+/// architecture and .NET, the interface language, how the window is drawn, whether the data folder is portable, which tools, local voices
+/// and engines are installed, and where the Python voices run (NVIDIA card or processor). No setting values, no keys, no paths, no names of profiles or accounts, nothing from the database.
 /// </summary>
 public sealed class SystemReport(Localizer text, UiPreferencesFile preferences, IToolLocator tools, IEnumerable<IVideoEngine> engines,
-    IEnumerable<ISpeechEngine> voices, AppPaths paths, TimeProvider clock)
+    IEnumerable<ISpeechEngine> voices, AppPaths paths, Core.Hardware.IGpuInfo gpu, TimeProvider clock)
 {
     /// <summary>The text.</summary>
     public string Build()
@@ -34,7 +34,7 @@ public sealed class SystemReport(Localizer text, UiPreferencesFile preferences, 
         report.AppendLine("Tools:");
         // Voice models are installed by their voice (listed below), not as tools: the tool locator never knows them.
         foreach (var tool in Enum.GetValues<ToolKind>().Where(t => t is not (ToolKind.ImageWeights or ToolKind.EmbeddingWeights or ToolKind.SupertonicVoice
-            or ToolKind.KokoroVoice or ToolKind.PocketVoice or ToolKind.ChatterboxVoice)))
+            or ToolKind.KokoroVoice or ToolKind.PocketVoice or ToolKind.ChatterboxVoice or ToolKind.PythonVoiceWeights)))
         {
             var status = tools.Status(tool);
             var state = !status.Ready ? "not installed"
@@ -49,6 +49,8 @@ public sealed class SystemReport(Localizer text, UiPreferencesFile preferences, 
             report.AppendLine(c, $"  {voice.Name}: {(voice.Ready ? "installed" : "not installed")}");
         }
 
+        // Where the Python voices would run (the PyTorch build their environments get): the CUDA build needs an NVIDIA card and its driver.
+        report.AppendLine(c, $"Python voices run on: {(SpeechDevices.CudaCard(gpu.Detect()) is null ? "the processor (PyTorch processor build)" : "the NVIDIA card (PyTorch CUDA 12.8 build)")}");
         report.AppendLine("Engines:");
         foreach (var engine in engines.OrderBy(e => e.Name, StringComparer.Ordinal))
         {

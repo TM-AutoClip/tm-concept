@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!--
-    Local text-to-speech through sherpa-onnx in a separate worker process. No package: the native libraries are a downloaded tool (official
+    Local text-to-speech through sherpa-onnx in a separate worker process, and the Python voices (PyTorch, installed by uv) in a
+    Python worker of their own. No package: the native libraries are a downloaded tool (official
     release files, pinned SHA-256) and the few C API calls are declared here (LibraryImport). Depends on Core only.
   -->
   <PropertyGroup>
@@ -12,6 +13,12 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\TMConcept.Core\TMConcept.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The Python voices: the worker and its adapters (written to the tools folder before a worker starts), F5's reference clip and the
+         lock files of the environments (every package pinned). -->
+    <EmbeddedResource Include="Python/Files/*.py;Python/Files/*.wav" LogicalName="TMConcept.Python.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Python/Files/Locks/*.txt" LogicalName="TMConcept.Python.Locks.%(Filename)%(Extension)" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="TMConcept.Tests" />
