@@ -95,7 +95,11 @@ public static class DesktopServices
         services.AddSingleton<Core.Images.IImageEngine, Providers.Images.FalImageEngine>();
         services.AddSingleton<Core.Images.IImageEngine, Providers.Images.OpenAIImageEngine>();
         services.AddSingleton<Core.Images.IImageEngine, Providers.Images.ZaiImageEngine>();
-        services.AddSingleton<Engines.Images.LocalImageStore>();
+        // 0.1.17: image model weights (several GB each) come through the downloader that retries and resumes a broken transfer.
+        services.AddSingleton<Engines.Tools.ResumingDownloader>();
+        services.AddSingleton(s => new Engines.Images.LocalImageStore(s.GetRequiredService<Core.Paths.IAppPaths>(), s.GetRequiredService<Engines.Tools.ResumingDownloader>(),
+            s.GetRequiredService<ILogger<Engines.Images.LocalImageStore>>()));
+        services.AddSingleton<Core.Hardware.ISystemMemory, Engines.Hardware.SystemMemory>();
         services.AddSingleton<Core.Images.IImageEngine, Engines.Images.SdCppImageEngine>();
         services.AddSingleton<Core.Images.ImageDescriber>();
         // Package A (graphics cards, image builds): the card detector (its sources come from the OS module), the Image acceleration setting

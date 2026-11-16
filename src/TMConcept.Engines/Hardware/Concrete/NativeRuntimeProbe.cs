@@ -11,9 +11,11 @@ public sealed class NativeRuntimeProbe : IComputeRuntimeProbe
 {
     /// <summary>
     /// The Visual C++ runtime files sd-cli needs on Windows: sd-cli.exe, stable-diffusion.dll and ggml-vulkan.dll import MSVCP140,
-    /// VCRUNTIME140 and VCRUNTIME140_1, the ggml-cpu-*.dll files also VCOMP140 (OpenMP); none of the zips carries them.
+    /// VCRUNTIME140 and VCRUNTIME140_1, the ggml-cpu-*.dll files also VCOMP140 (OpenMP), and since master-1106 sd-cli.exe and
+    /// stable-diffusion.dll also MSVCP140_CODECVT_IDS (all part of the same redistributable); none of the zips carries them.
     /// </summary>
-    public static readonly IReadOnlyList<string> VisualCppRuntimeFiles = ["vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll", "vcomp140.dll"];
+    public static readonly IReadOnlyList<string> VisualCppRuntimeFiles =
+        ["vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll", "vcomp140.dll", "msvcp140_codecvt_ids.dll"];
 
     /// <inheritdoc />
     public bool CudaDriver() => Loads(OperatingSystem.IsWindows() ? System32("nvcuda.dll") : "libcuda.so.1");

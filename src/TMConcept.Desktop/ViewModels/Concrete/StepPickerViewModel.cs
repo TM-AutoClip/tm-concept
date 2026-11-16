@@ -45,6 +45,9 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
     private string _language = ContentLanguages.English;
     private bool _languageFollowed;
 
+    // The image build chosen when the page was loaded (the graphics card and its class), for the colour of each local image model.
+    private ImageBackendChoice? _imageChoice;
+
     /// <summary>Raised when a choice changes (the page updates its estimate).</summary>
     public event EventHandler? Changed;
 
@@ -117,6 +120,9 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
         // The user's own voices (a voice that copies a voice lists them): added or removed on the settings page meanwhile.
         await voiceSamples.RefreshAsync(CancellationToken.None).ConfigureAwait(true);
         var saved = profileId is { } id ? await steps.ListAsync(id, CancellationToken.None).ConfigureAwait(true) : [];
+
+        // The graphics cards are looked at once per load (native calls; on Linux maybe a short nvidia-smi run): off the UI thread.
+        _imageChoice = stepCodes.Contains(PipelineSteps.Images) ? await Task.Run(backends.Choose).ConfigureAwait(true) : null;
         foreach (var old in Rows)
         {
             old.PropertyChanged -= OnRowChanged;
@@ -239,6 +245,19 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
                     row.NoteIsWarning = true;
                     logger.LogInformation("Process not started: the license of the step {Step} was declined", row.Step.Code);
                     Status = text.Format("picker.not_started.license", row.Title);
+                    return false;
+                }
+            }
+
+            foreach (var row in rows)
+            {
+                if (row.Selected?.Model is { } chosen && TooBig(chosen) is { } card)
+                {
+                    // A model of a higher memory class than this card's is never downloaded (several GB for nothing): it cannot run here.
+                    row.NoteIsError = true;
+                    logger.LogWarning("Process not started: {Model} needs a {Class} GB class graphics card; this one is of the {Card} GB class", chosen.Id,
+                        chosen.MinVideoMemoryGb, (int)VramTiers.ForCard(card));
+                    Status = text.Format("picker.not_started.memory", chosen.Name, chosen.MinVideoMemoryGb, Gigabytes(card));
                     return false;
                 }
             }
@@ -446,7 +465,7 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
         foreach (var model in catalog.With(step.Capability).Where(m => Usable(step, m))
             .OrderBy(m => m.Provider == ModelProviders.Local ? 0 : EndpointCodes.IsEndpoint(m.Provider) ? 1 : 2).ThenBy(m => m.Provider, StringComparer.Ordinal).ThenBy(m => m.Name, StringComparer.Ordinal))
         {
-            row.Options.Add(new StepOption(StepOptionKind.Model, model, Label(model)));
+            row.Options.Add(Option(model));
         }
 
         foreach (var engine in _engines)
@@ -511,11 +530,69 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
     private bool Usable(PipelineStep step, CatalogModel model) =>
         step.Capability != ModelCapability.Speech || speech.EngineOf(model) is { } engine && engine.Supports(_language);
 
+    /// <summary>
+    /// A model's entry: a local model with a graphics card class shows its class, green when this card's class sees it (its own class and
+    /// every lower one), red with "this card cannot run it" above, yellow when the processor build runs it or the card's memory is unknown;
+    /// a license with conditions adds a yellow badge, a non-commercial one a red badge.
+    /// </summary>
+    private StepOption Option(CatalogModel model)
+    {
+        var label = Label(model);
+        bool ok = false, warning = false, error = false;
+        if (model.Provider == ModelProviders.Local && model.MinVideoMemoryGb > 0 && model.Capabilities.HasFlag(ModelCapability.Image))
+        {
+            if (TooBig(model) is not null)
+            {
+                label += " · " + text["models.tier.too_big"];
+                error = true;
+            }
+            else if (_imageChoice is { Backend: not ImageBackend.Cpu, Device.VideoMemoryBytes: > 0 })
+            {
+                ok = true;
+            }
+            else
+            {
+                warning = true;
+            }
+        }
+
+        switch (model.LicenseUse)
+        {
+            case LicenseUse.NonCommercial:
+                label += " · " + text["models.license.badge.noncommercial"];
+                error = true;
+                break;
+            case LicenseUse.Limited:
+                label += " · " + text["models.license.badge.limited"];
+                warning = true;
+                break;
+        }
+
+        return new StepOption(StepOptionKind.Model, model, label) { IsOk = ok && !warning && !error, IsWarning = warning && !error, IsError = error };
+    }
+
+    /// <summary>
+    /// The card's memory when <paramref name="model"/> is of a higher graphics card class than the card the image build runs on (it cannot run
+    /// here); null when it can, the build is the processor's, or the card's memory is unknown.
+    /// </summary>
+    private long? TooBig(CatalogModel model)
+    {
+        if (model.Provider != ModelProviders.Local || model.MinVideoMemoryGb <= 0 || !model.Capabilities.HasFlag(ModelCapability.Image)
+            || _imageChoice is not { Backend: not ImageBackend.Cpu, Device.VideoMemoryBytes: { } bytes } || bytes <= 0)
+        {
+            return null;
+        }
+
+        return VramTiers.Sees(VramTiers.ForCard(bytes), VramTiers.ForModel(model.MinVideoMemoryGb)) ? null : bytes;
+    }
+
+    private string Gigabytes(long bytes) => Math.Round(bytes / (1024.0 * 1024 * 1024), 1).ToString("0.#", text.Culture);
+
     private string Label(CatalogModel model)
     {
         if (model.Provider == ModelProviders.Local)
         {
-            return model.Name + " · " + text["models.local_free"] + (model.MinVideoMemoryGb > 0 ? " · " + text.Format("models.min_memory", model.MinVideoMemoryGb) : string.Empty);
+            return model.Name + " · " + text["models.local_free"] + (model.MinVideoMemoryGb > 0 ? " · " + text.Format("models.tier", model.MinVideoMemoryGb) : string.Empty);
         }
 
         if (EndpointCodes.IsEndpoint(model.Provider))
@@ -653,6 +730,13 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
             }
         }
 
+        if (model.LicenseUse != LicenseUse.Commercial)
+        {
+            parts.Add(text.Format(model.LicenseUse == LicenseUse.NonCommercial ? "models.license.note.noncommercial" : "models.license.note.limited",
+                LicenseName(model.License)));
+            row.NoteIsWarning = true;
+        }
+
         if (model.MinVideoMemoryGb > 0)
         {
             // The first call looks at the graphics cards (native calls; on Linux maybe a short nvidia-smi run): off the UI thread.
@@ -721,6 +805,9 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
         row.NoteIsOk = true;
     }
 
+    /// <summary>The display name of a license code.</summary>
+    private string LicenseName(string code) => text["license." + code];
+
     /// <summary>The language key part of a build (<c>cuda</c>, <c>vulkan</c>, <c>cpu</c>).</summary>
     internal static string BackendKey(ImageBackend backend) => backend switch
     {
@@ -750,6 +837,25 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
             settings.RemotionLicenseAccepted = true;
             await session.SaveAsync(settings, CancellationToken.None).ConfigureAwait(true);
             logger.LogInformation("Setting changed: the Remotion license was accepted");
+        }
+
+        var key = model.Provider + "/" + model.Id;
+        if (model.LicenseUse != LicenseUse.Commercial && !settings.AcceptedModelLicenses.Contains(key))
+        {
+            // Asked once per model, before its first download (0.1.17: non-commercial and conditional licenses are offered with a clear warning).
+            var message = text.Format(model.LicenseUse == LicenseUse.NonCommercial ? "models.license.message.noncommercial" : "models.license.message.limited",
+                model.Name, LicenseName(model.License), text["license." + model.License + ".terms"], model.LicenseUrl);
+            var license = await confirm.AskAsync(text.Format("models.license.title", model.Name), message, text["engines.license.accept"],
+                danger: model.LicenseUse == LicenseUse.NonCommercial).ConfigureAwait(true);
+            if (!license.Confirmed)
+            {
+                logger.LogInformation("The license of {Model} ({License}) was declined", key, model.License);
+                return false;
+            }
+
+            settings.AcceptedModelLicenses.Add(key);
+            await session.SaveAsync(settings, CancellationToken.None).ConfigureAwait(true);
+            logger.LogInformation("Setting changed: the license of {Model} ({License}) was accepted", key, model.License);
         }
 
         if (model.Provider == ModelProviders.Local && model.Id == SpeechEngines.Supertonic && !settings.SupertonicLicenseAccepted)

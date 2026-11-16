@@ -71,7 +71,7 @@ Rough numbers (prices of 5 Nov 2026; the pages show the current ones next to eac
 | Narration with a local voice (Supertonic 3, or Kokoro for English) | free |
 | Duplicate check by meaning with the local model | free |
 | 8 AI images per video (fal FLUX 2 Flash) | about 0.08 $ |
-| 8 images with a local model (FLUX.2 klein 4B or Z-Image Turbo, your graphics card) | free |
+| 8 images with a local model (FLUX.2 klein, FLUX.3 Image Klein, Z-Image Turbo, Qwen-Image…; your graphics card) | free |
 
 ## Install on Windows
 
@@ -135,10 +135,25 @@ the model that describes a sample image. Each step says what it is for:
   sends no effort (the provider's default). **Video code** also has the **video engine**: HyperFrames (default), Remotion (asks you to
   accept its license: free for individuals and companies of up to 3 people), Revideo (experimental). The video code model also writes
   the image prompts.
-- **Images** — *Off* (default: the video is drawn by its code only), an online image model, or a local one that runs on your graphics card:
-  **FLUX.2 klein 4B** (fast) or **Z-Image Turbo** (better pictures), both with at least 6 GB of graphics memory (the card they were measured on),
-  or **Z-Image Turbo (full quality)** for cards of 16 GB and more. The page shows your card and turns red when it is too small. NVIDIA, AMD and
-  Intel cards work: *Settings → General → Image acceleration* picks the build (Automatic: NVIDIA CUDA for an NVIDIA card with its driver,
+- **Images** — *Off* (default: the video is drawn by its code only), an online image model, or one of 17 local ones that run on your
+  graphics card, each in a graphics memory class (the list shows it; green = your card runs it, red = "this card cannot run it", and such a
+  model is never downloaded):
+  - **4 GB**: Z-Image Turbo (small), FLUX.2 klein 4B (fastest), SDXL Lightning
+  - **6 GB**: Z-Image Turbo, FLUX.3 Image Klein, Stable Diffusion 3.5 Medium, SDXL Lightning (Q8)
+  - **8 GB**: FLUX.2 klein 9B (**non-commercial**)
+  - **12 GB**: Z-Image Turbo (Q8), FLUX.2 klein 4B (Q8), Stable Diffusion 3.5 Medium (Q8)
+  - **16 GB**: Qwen-Image (strong at text in pictures), FLUX.3 Image Klein (Q8)
+  - **24 GB**: Z-Image Turbo (full quality), FLUX.2 klein 9B (Q8, **non-commercial**), Qwen-Image (Q6)
+  - **32 GB**: Qwen-Image (Q8)
+
+  A model is downloaded only when you choose it and confirm. Licenses: most are Apache-2.0 (free for any use); **FLUX.2 klein 9B is
+  non-commercial** (red badge: not for monetized videos); FLUX.3 Image Klein (FLUX Kommunity License: by Black Forest Labs' announcement free
+  commercial use under 5 million USD annual revenue), Stable Diffusion 3.5 Medium (Stability AI Community License: under 1 million USD) and
+  SDXL Lightning (OpenRAIL++ use restrictions) have conditions (yellow badge). Each of these asks you to accept its license once, before its
+  first download. Before every picture the app measures the card's **free** memory: the VAE is always tiled, about an eighth (at least
+  1 GB) is kept free for Windows and other programs, a model whose weights do not fit on the card keeps them in main memory (slower), and a
+  picture that runs out of memory is tried once more one step lower. When neither the card nor main memory has room, the image step stops
+  with the figures and asks you to close programs or choose a smaller model. NVIDIA, AMD and Intel cards work: *Settings → General → Image acceleration* picks the build (Automatic: NVIDIA CUDA for an NVIDIA card with its driver,
   Vulkan for AMD and Intel cards, the processor without a card or with only a virtual one; Linux x64 uses Vulkan or the processor). On
   Windows every build needs the Microsoft Visual C++ 2015–2022 runtime (x64); a video that would need it and does not find it stops before
   anything is paid for and names the download. There is no build for Linux ARM64.
@@ -196,12 +211,11 @@ every attempt is paid and counted in the cost, and after three unreadable answer
 | Pocket TTS int8 (needs sherpa-onnx) | github.com (k2-fsa) | 98 MB |
 | Chatterbox Multilingual V3 ONNX (Masterx export, 4-bit language model; needs sherpa-onnx) | huggingface.co | 1.56 GB |
 | Multilingual MiniLM (paraphrase-multilingual-MiniLM-L12-v2, int8 ONNX + tokenizer; needs sherpa-onnx) | huggingface.co | 127 MB |
-| stable-diffusion.cpp master-890, the build of Image acceleration (Windows: CUDA 12 build + CUDA runtime, Vulkan or processor build; Linux x64: Vulkan or processor build) | github.com (leejet) | CUDA 900 MB, Vulkan 32–39 MB, processor 17–25 MB |
-| FLUX.2 klein 4B weights (model, Qwen3-4B text encoder, VAE) | huggingface.co | 5.3 GB |
-| Z-Image Turbo weights (model, Qwen3-4B-Instruct text encoder, VAE) | huggingface.co | 9.4 GB |
+| stable-diffusion.cpp (Windows master-1106, Linux master-1043), the build of Image acceleration (Windows: CUDA 12 build + CUDA runtime, Vulkan or processor build; Linux x64: Vulkan or processor build) | github.com (leejet) | CUDA 975 MB, Vulkan 30–38 MB, processor 18–27 MB |
+| Local image model weights (diffusion model, text encoder(s), VAE), only the model you choose | huggingface.co | 2.9 GB (SDXL Lightning) to 30 GB (Qwen-Image Q8); e.g. FLUX.2 klein 4B 5.3 GB, Z-Image Turbo 9.4 GB |
 
 Every pinned download is checked against its SHA-256 (npm packages: the lock file's integrity values; the image weights are fetched at a
-fixed Hugging Face commit) and goes into the app's own data folder; the system PATH is never changed. Chrome Headless Shell comes over
+fixed Hugging Face commit; a broken image weights download is tried again and continues where it stopped, also after a restart) and goes into the app's own data folder; the system PATH is never changed. Chrome Headless Shell comes over
 HTTPS from Google, which publishes no checksum for it. Settings → **General** → *Installed components* lists what is on disk with its size
 (an unfinished or no longer usable one is marked *incomplete*), can remove it, and can render an engine's sample without any model or network.
 
@@ -269,8 +283,10 @@ Portable mode: start the program with `--data-dir <folder>`; then everything, vi
 - **Remotion**: not open source; free for individuals and companies of up to 3 people, larger companies need a Remotion license.
 - **Sample images**: you must have the right to use them.
 - **ffmpeg**: GPL, downloaded as a separate program.
-- **Local image models**: FLUX.2 klein 4B, Z-Image Turbo and their text encoders / VAEs are Apache-2.0; stable-diffusion.cpp is MIT.
-  They are downloaded from Hugging Face / GitHub only after you confirm.
+- **Local image models**: Z-Image Turbo, FLUX.2 klein 4B, Qwen-Image and every text encoder / VAE used are Apache-2.0 (the SDXL VAE MIT);
+  **FLUX.2 klein 9B is non-commercial**; FLUX.3 Image Klein (FLUX Kommunity License), Stable Diffusion 3.5 Medium (Stability AI Community
+  License) and SDXL Lightning (OpenRAIL++) have conditions; stable-diffusion.cpp is MIT. They are downloaded from Hugging Face / GitHub only
+  after you confirm (and accept the license where it has conditions).
 
 Details: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 

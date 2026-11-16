@@ -22,6 +22,12 @@ public sealed class AppSettings
     public bool SupertonicLicenseAccepted { get; set; }
 
     /// <summary>
+    /// The local models ("provider/id") whose license (non-commercial, or commercial only under conditions) the user accepted before their
+    /// first download (asked once per model).
+    /// </summary>
+    public List<string> AcceptedModelLicenses { get; set; } = [];
+
+    /// <summary>
     /// Answer limit (max_tokens, thinking included) of "Suggest topics" (default 16 000; Settings → General; kept within the topic limits and
     /// lowered to the model's own limit). Only what the model writes is paid for.
     /// </summary>

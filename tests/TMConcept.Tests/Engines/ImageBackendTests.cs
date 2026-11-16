@@ -86,16 +86,16 @@ public sealed class ImageBackendTests
     }
 
     [Fact]
-    public void EveryBuildIsPinnedToTheSameReleaseWithItsHashAndSize()
+    public void EveryBuildIsPinnedToItsReleaseWithItsHashAndSize()
     {
         var expected = new Dictionary<(ToolKind, string), (string File, string Sha256, long Bytes, string Cli)>
         {
-            [(ToolKind.ImageRuntime, "win-x64")] = ("sd-master-74988b2-bin-win-cuda12-x64.zip", "e9b86c2166aaf3a89f3e13326312d34b79ec1a2b61101d0ccff2805e7ee7b269", 333_039_461, "sd-cli.exe"),
+            [(ToolKind.ImageRuntime, "win-x64")] = ("sd-master-532d2c1-bin-win-cuda12-x64.zip", "b087219145a382cc1b1e826318289e1f672b9bb6965977734ef0deb85fe2d03a", 412_365_497, "sd-cli.exe"),
             [(ToolKind.ImageRuntimeCuda, "win-x64")] = ("cudart-sd-bin-win-cu12-x64.zip", "fe20366827d357c00797eebb58244dddab7fd9a348d70090c3871004c320f38d", 563_452_046, "cudart64_12.dll"),
-            [(ToolKind.ImageRuntimeVulkan, "win-x64")] = ("sd-master-74988b2-bin-win-vulkan-x64.zip", "744c8f817c66ecfd02fbb9dc8b122e1f29f7240db1f6086dfde2669403c5d896", 31_932_748, "sd-cli.exe"),
-            [(ToolKind.ImageRuntimeCpu, "win-x64")] = ("sd-master-74988b2-bin-win-cpu-x64.zip", "24fcac70fadc41eb3524837893f1cb7ea54895fe4d807f88ef7afdeee8bd484b", 17_182_628, "sd-cli.exe"),
-            [(ToolKind.ImageRuntimeVulkan, "linux-x64")] = ("sd-master-74988b2-bin-Linux-Ubuntu-24.04-x86_64-vulkan.zip", "158d593c803d4e50ad0a93a12811dc4c638b998fd8a4cd43f484d4bba7f780b2", 38_541_512, "sd-cli"),
-            [(ToolKind.ImageRuntimeCpu, "linux-x64")] = ("sd-master-74988b2-bin-Linux-Ubuntu-24.04-x86_64.zip", "04f7b4db880167c1b7b25eefcde27aa301301568eadb17623876eb3b8c938198", 25_418_220, "sd-cli"),
+            [(ToolKind.ImageRuntimeVulkan, "win-x64")] = ("sd-master-532d2c1-bin-win-vulkan-x64.zip", "3e66222c87ca27074e1fd8ce79706eef17a8aaf39949906aa1bee7e060f22ecc", 30_312_081, "sd-cli.exe"),
+            [(ToolKind.ImageRuntimeCpu, "win-x64")] = ("sd-master-532d2c1-bin-win-cpu-x64.zip", "abef332cfca7861cc567910e79bedb70bfb2920bb4eedac97fcbb6db477f1596", 18_358_541, "sd-cli.exe"),
+            [(ToolKind.ImageRuntimeVulkan, "linux-x64")] = ("sd-master-3be2378-bin-Linux-Ubuntu-24.04-x86_64-vulkan.zip", "7608901016fb4a348bc5b75c46fc971085dadadf44e6f30daa97301844b1ce2e", 37_675_781, "sd-cli"),
+            [(ToolKind.ImageRuntimeCpu, "linux-x64")] = ("sd-master-3be2378-bin-Linux-Ubuntu-24.04-x86_64.zip", "01e1c773c1bc2a6276952f6dbd13294e58b7255c659b4a770086934c4e8fad3a", 27_322_680, "sd-cli"),
         };
         var rows = ToolManifest.Archives.Where(a => ImageBackendSelector.AllTools.Contains(a.Tool)).ToList();
 
@@ -103,9 +103,12 @@ public sealed class ImageBackendTests
         foreach (var row in rows)
         {
             var (file, sha256, bytes, cli) = expected[(row.Tool, row.Rid)];
-            row.Version.ShouldBe(ToolManifest.SdCppTag);
+            // Windows: the newest release; Linux: the last one built on Ubuntu 24.04 (later ones need glibc 2.43). Both know FLUX.3 (build 968+).
+            var tag = row.Rid.StartsWith("win", StringComparison.Ordinal) ? ToolManifest.SdCppTag : ToolManifest.SdCppLinuxTag;
+            row.Version.ShouldBe(tag);
+            SdCppImageEngine.BuildNumber(row.Version).ShouldBeGreaterThanOrEqualTo(LocalImageModels.Flux3Build);
             row.Url.Scheme.ShouldBe("https");
-            row.Url.ToString().ShouldBe($"https://github.com/leejet/stable-diffusion.cpp/releases/download/{ToolManifest.SdCppTag}/{file}");
+            row.Url.ToString().ShouldBe($"https://github.com/leejet/stable-diffusion.cpp/releases/download/{tag}/{file}");
             row.Sha256.ShouldBe(sha256);
             row.ApproximateBytes.ShouldBe(bytes);
             row.ExecutablePath.ShouldBe(cli, "the zips are flat");
@@ -193,30 +196,16 @@ public sealed class ImageBackendTests
         runtime.Downloads().Single().Name.ShouldContain("Vulkan");
     }
 
-    [Theory]
-    [InlineData(ImageBackend.Cpu, 16L * 1024, "")]
-    [InlineData(ImageBackend.Vulkan, -1L, "--vae-tiling --max-vram 4")]
-    [InlineData(ImageBackend.Cuda, 6L * 1024, "--vae-tiling --max-vram 4")]
-    [InlineData(ImageBackend.Vulkan, 8176L, "--vae-tiling --max-vram 4")]
-    [InlineData(ImageBackend.Vulkan, 10L * 1024, "--vae-tiling --max-vram 8")]
-    [InlineData(ImageBackend.Cuda, 12282L, "")]
-    [InlineData(ImageBackend.Vulkan, 16L * 1024, "")]
-    public void TheMemoryFlagsFollowTheCardsSize(ImageBackend backend, long mebibytes, string flags)
-    {
-        var device = backend == ImageBackend.Cpu ? null : new GpuAdapter(GpuVendor.Amd, "card", mebibytes < 0 ? null : mebibytes * 1024 * 1024);
-
-        string.Join(' ', ImageMemoryProfile.Flags(new ImageBackendChoice(backend, ImageAcceleration.Automatic, device))).ShouldBe(flags);
-    }
-
     [Fact]
     public void TheCommandLineAlwaysHasFlashAttentionAndTheCardsFlags()
     {
-        var arguments = SdCppImageEngine.Arguments(LocalImageModels.ZImageTurbo, "a map", 576, 1024, 42, "out.png", f => "/w/" + f.ExecutablePath, []);
+        var arguments = SdCppImageEngine.Arguments(LocalImageModels.ZImageTurbo, "a map", null, 576, 1024, 42, "out.png", f => "/w/" + f.ExecutablePath, []);
 
-        arguments.ShouldContain("--diffusion-fa");
+        arguments.ShouldNotContain("--diffusion-fa", "deprecated since master-1043");
+        arguments[arguments.ToList().IndexOf("--flash-attn") + 1].ShouldBe("auto,diffusion=on");
         arguments.ShouldNotContain("--max-vram");
-        SdCppImageEngine.Arguments(LocalImageModels.ZImageTurbo, "a map", 576, 1024, 42, "out.png", f => f.ExecutablePath, ImageMemoryProfile.Small)
-            .TakeLast(3).ShouldBe(["--vae-tiling", "--max-vram", "4"]);
+        SdCppImageEngine.Arguments(LocalImageModels.ZImageTurbo, "a map", null, 576, 1024, 42, "out.png", f => f.ExecutablePath, ["--vae-tiling", "--max-vram", "-1"])
+            .TakeLast(3).ShouldBe(["--vae-tiling", "--max-vram", "-1"]);
     }
 
     [Fact]
@@ -265,7 +254,7 @@ public sealed class ImageBackendTests
         Weights(paths, LocalImageModels.Flux2Klein);
         var selector = new ImageBackendSelector(new FakeGpu(new GpuReport([Amd], false, true)), new FakeSetting(), installer);
         var runner = new PictureRunner(blank ? Png(8, 8, (_, _) => [0, 0, 0]) : Png(8, 8, (x, y) => [(byte)(x * 30), (byte)(y * 30), 7]));
-        var engine = new SdCppImageEngine(installer, store, selector, new FakeProbe(), runner, NullLogger<SdCppImageEngine>.Instance);
+        var engine = Engine(installer, store, selector, new FakeProbe(), runner);
         var output = Path.Combine(paths.WorkDirectory, "scene-1.png");
         var request = new ImageRequest("a map", 1280, 720, output,
             new ResolvedModel(new CatalogModel { Provider = ModelProviders.Local, Id = LocalImageModels.Flux2Klein.Id }, new ApiKey(), string.Empty));
@@ -283,8 +272,11 @@ public sealed class ImageBackendTests
 
         var start = runner.Start.ShouldNotBeNull();
         start.Program.ShouldBe(installer.Status(ToolKind.ImageRuntimeVulkan).ExecutablePath);
-        start.Arguments.ShouldContain("--diffusion-fa");
-        start.Arguments.ShouldNotContain("--max-vram", "a 16 GB card gets no memory limit");
+        start.Arguments.ShouldContain("--flash-attn");
+        // A 16 GB card with 13 GiB free holds the 2.5 GB FLUX.2 klein: on the card, tiled VAE, 1 GiB kept free.
+        string.Join(' ', start.Arguments.TakeLast(3)).ShouldBe("--vae-tiling --max-vram -1");
+        start.Arguments.ShouldNotContain("--offload-to-cpu");
+        runner.InsideLease.ShouldBe([true], "sd-cli runs inside the model's graphics card lease");
         start.Environment.Keys.ShouldBe([OperatingSystem.IsWindows() ? "PATH" : "LD_LIBRARY_PATH"]);
     }
 
@@ -298,7 +290,7 @@ public sealed class ImageBackendTests
         Weights(paths, LocalImageModels.Flux2Klein);
         var selector = new ImageBackendSelector(new FakeGpu(new GpuReport([Nvidia], true, true)), new FakeSetting(), installer);
         var runner = new PictureRunner([]);
-        var engine = new SdCppImageEngine(installer, store, selector, new FakeProbe(), runner, NullLogger<SdCppImageEngine>.Instance);
+        var engine = Engine(installer, store, selector, new FakeProbe(), runner);
         var request = new ImageRequest("a map", 512, 512, Path.Combine(paths.WorkDirectory, "a.png"),
             new ResolvedModel(new CatalogModel { Provider = ModelProviders.Local, Id = LocalImageModels.Flux2Klein.Id }, new ApiKey(), string.Empty));
 
@@ -320,8 +312,7 @@ public sealed class ImageBackendTests
         var runner = new PictureRunner([]);
         var selector = new ImageBackendSelector(new FakeGpu(new GpuReport([Amd], false, true)), new FakeSetting(), installer);
 
-        var noRuntime = new SdCppImageEngine(installer, store, selector, new FakeProbe { Missing = ["vcruntime140_1.dll", "msvcp140.dll"] }, runner,
-            NullLogger<SdCppImageEngine>.Instance);
+        var noRuntime = Engine(installer, store, selector, new FakeProbe { Missing = ["vcruntime140_1.dll", "msvcp140.dll"] }, runner);
         noRuntime.Problem(model).ShouldBe(new ImageEngineProblem(ImageEngineProblems.VisualCppRuntime, "vcruntime140_1.dll, msvcp140.dll"));
         var error = await Should.ThrowAsync<InvalidOperationException>(() =>
             noRuntime.GenerateAsync(new ImageRequest("a map", 512, 512, Path.Combine(paths.WorkDirectory, "a.png"), model), CancellationToken.None));
@@ -330,9 +321,9 @@ public sealed class ImageBackendTests
 
         // The Vulkan build chosen by hand without a Vulkan driver, the CUDA build on an AMD card: said before anything is paid for.
         var vulkan = new ImageBackendSelector(new FakeGpu(new GpuReport([Amd], false, false)), new FakeSetting { Value = ImageAcceleration.Vulkan }, installer);
-        var noDriver = new SdCppImageEngine(installer, store, vulkan, new FakeProbe { Vulkan = false }, runner, NullLogger<SdCppImageEngine>.Instance);
+        var noDriver = Engine(installer, store, vulkan, new FakeProbe { Vulkan = false }, runner);
         noDriver.Problem(model).ShouldBe(new ImageEngineProblem(ImageEngineProblems.Images, SdCppImageEngine.DriverMissing(ImageBackend.Vulkan)));
-        new SdCppImageEngine(installer, store, selector, new FakeProbe(), runner, NullLogger<SdCppImageEngine>.Instance).Problem(model).ShouldBeNull();
+        Engine(installer, store, selector, new FakeProbe(), runner).Problem(model).ShouldBeNull();
     }
 
     [Fact]
@@ -347,7 +338,7 @@ public sealed class ImageBackendTests
         var selector = new ImageBackendSelector(new FakeGpu(new GpuReport([Amd], false, true)), new FakeSetting(), installer);
         var vulkan = installer.Status(ToolKind.ImageRuntimeVulkan).ExecutablePath;
         var runner = new PictureRunner(Png(8, 8, (x, y) => [(byte)(x * 30), (byte)(y * 30), 7])) { FailFor = vulkan };
-        var engine = new SdCppImageEngine(installer, store, selector, new FakeProbe(), runner, NullLogger<SdCppImageEngine>.Instance);
+        var engine = Engine(installer, store, selector, new FakeProbe(), runner);
         var model = new ResolvedModel(new CatalogModel { Provider = ModelProviders.Local, Id = LocalImageModels.Flux2Klein.Id }, new ApiKey(), string.Empty);
 
         (await engine.GenerateAsync(new ImageRequest("a map", 512, 512, Path.Combine(paths.WorkDirectory, "1.png"), model), CancellationToken.None)).CostUsd.ShouldBe(0);
@@ -360,10 +351,93 @@ public sealed class ImageBackendTests
 
         // A build chosen by hand is not replaced: its failure is the user's answer.
         var chosen = new ImageBackendSelector(new FakeGpu(new GpuReport([Amd], false, true)), new FakeSetting { Value = ImageAcceleration.Vulkan }, installer);
-        var manual = new SdCppImageEngine(installer, store, chosen, new FakeProbe(), runner, NullLogger<SdCppImageEngine>.Instance);
+        var manual = Engine(installer, store, chosen, new FakeProbe(), runner);
         await Should.ThrowAsync<InvalidOperationException>(() =>
             manual.GenerateAsync(new ImageRequest("a map", 512, 512, Path.Combine(paths.WorkDirectory, "3.png"), model), CancellationToken.None));
         runner.Programs.Count.ShouldBe(4);
+    }
+
+    [Fact]
+    public async Task ARunThatEndsOutOfMemoryIsTriedOnceMoreOneLevelLower()
+    {
+        using var paths = new TempPaths();
+        var installer = Installer(paths, "win-x64");
+        Install(installer, ToolKind.ImageRuntimeVulkan);
+        var store = new LocalImageStore(paths, new ToolDownloader(DownloadTransport.Network, NullLogger<ToolDownloader>.Instance), NullLogger<LocalImageStore>.Instance);
+        Weights(paths, LocalImageModels.Flux2Klein);
+        var selector = new ImageBackendSelector(new FakeGpu(new GpuReport([Amd], false, true)), new FakeSetting { Value = ImageAcceleration.Vulkan }, installer);
+        var runner = new PictureRunner(Png(8, 8, (x, y) => [(byte)(x * 30), (byte)(y * 30), 7])) { OutOfMemoryRuns = 1 };
+        var engine = Engine(installer, store, selector, new FakeProbe(), runner);
+        var model = new ResolvedModel(new CatalogModel { Provider = ModelProviders.Local, Id = LocalImageModels.Flux2Klein.Id }, new ApiKey(), string.Empty);
+
+        await engine.GenerateAsync(new ImageRequest("a map", 512, 512, Path.Combine(paths.WorkDirectory, "1.png"), model), CancellationToken.None);
+
+        runner.Runs.Count.ShouldBe(2);
+        runner.Runs[0].ShouldNotContain("--offload-to-cpu");
+        runner.Runs[1].ShouldContain("--offload-to-cpu", "one level lower: the weights stay in main memory");
+        runner.InsideLease.ShouldBe([true, true]);
+
+        // Out of memory twice: the second failure is the answer (only one more try), with sd-cli's own words.
+        var twice = new PictureRunner([]) { OutOfMemoryRuns = 2 };
+        var failing = Engine(installer, store, selector, new FakeProbe(), twice);
+        var error = await Should.ThrowAsync<InvalidOperationException>(() =>
+            failing.GenerateAsync(new ImageRequest("a map", 512, 512, Path.Combine(paths.WorkDirectory, "2.png"), model), CancellationToken.None));
+        error.Message.ShouldContain("cannot make enough memory available");
+        twice.Runs.Count.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task AModelThatFitsNeitherOnTheCardNorInMainMemoryIsRefusedWithTheFigures()
+    {
+        using var paths = new TempPaths();
+        var installer = Installer(paths, "win-x64");
+        Install(installer, ToolKind.ImageRuntimeVulkan);
+        var store = new LocalImageStore(paths, new ToolDownloader(DownloadTransport.Network, NullLogger<ToolDownloader>.Instance), NullLogger<LocalImageStore>.Instance);
+        Weights(paths, LocalImageModels.QwenImage);
+        var selector = new ImageBackendSelector(new FakeGpu(new GpuReport([Amd], false, true)), new FakeSetting { Value = ImageAcceleration.Vulkan }, installer);
+        var runner = new PictureRunner([]);
+        // 16 GB card, 13 GiB free (the 11.9 GB diffusion model and its working memory do not fit), 8 GiB of main memory free.
+        var engine = Engine(installer, store, selector, new FakeProbe(), runner, mainMemory: 8 * GiB);
+        var model = new ResolvedModel(new CatalogModel { Provider = ModelProviders.Local, Id = LocalImageModels.QwenImage.Id }, new ApiKey(), string.Empty);
+
+        var error = await Should.ThrowAsync<InvalidOperationException>(() =>
+            engine.GenerateAsync(new ImageRequest("a map", 512, 512, Path.Combine(paths.WorkDirectory, "1.png"), model), CancellationToken.None));
+
+        error.Message.ShouldContain("Qwen-Image cannot run on this computer now");
+        error.Message.ShouldContain("main memory");
+        error.Message.ShouldContain("online image model");
+        runner.Runs.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void ACardOfALowerClassAndABuildTooOldAreFoundBeforeAnythingIsPaid()
+    {
+        using var paths = new TempPaths();
+        var installer = Installer(paths, "win-x64");
+        var store = new LocalImageStore(paths, new ToolDownloader(DownloadTransport.Network, NullLogger<ToolDownloader>.Instance), NullLogger<LocalImageStore>.Instance);
+        var selector = new ImageBackendSelector(new FakeGpu(new GpuReport([Amd], false, true)), new FakeSetting(), installer);
+        var engine = Engine(installer, store, selector, new FakeProbe(), new PictureRunner([]));
+        ResolvedModel Model(LocalImageModel m) => new(new CatalogModel { Provider = ModelProviders.Local, Id = m.Id }, new ApiKey(), string.Empty);
+
+        // A 16 GB card runs every model up to its class; the 32 GB Qwen-Image Q8 is above it.
+        engine.Problem(Model(LocalImageModels.Flux3KleinQ8)).ShouldBeNull();
+        var problem = engine.Problem(Model(LocalImageModels.QwenImageQ8)).ShouldNotBeNull();
+        problem.Code.ShouldBe(ImageEngineProblems.Images);
+        problem.Detail.ShouldContain("32 GB class");
+
+        // FLUX.3 needs build 968: an older release is named, an unknown one is not held against it.
+        SdCppImageEngine.TooOld(LocalImageModels.Flux3Klein, "master-890-74988b2").ShouldNotBeNull().ShouldContain("968");
+        SdCppImageEngine.TooOld(LocalImageModels.Flux3Klein, ToolManifest.SdCppTag).ShouldBeNull();
+        SdCppImageEngine.TooOld(LocalImageModels.Flux3Klein, ToolManifest.SdCppLinuxTag).ShouldBeNull();
+        SdCppImageEngine.TooOld(LocalImageModels.Flux3Klein, null).ShouldBeNull();
+        SdCppImageEngine.TooOld(LocalImageModels.ZImageTurbo, "master-890-74988b2").ShouldBeNull();
+        SdCppImageEngine.BuildNumber("master-1106-532d2c1").ShouldBe(1106);
+        SdCppImageEngine.BuildNumber("v1").ShouldBe(0);
+
+        // The processor build or an unknown card size never blocks.
+        SdCppImageEngine.TooSmall(LocalImageModels.QwenImageQ8, new ImageBackendChoice(ImageBackend.Cpu, ImageAcceleration.Cpu, null)).ShouldBeNull();
+        SdCppImageEngine.TooSmall(LocalImageModels.QwenImageQ8, new ImageBackendChoice(ImageBackend.Vulkan, ImageAcceleration.Automatic,
+            new GpuAdapter(GpuVendor.Amd, "card", null))).ShouldBeNull();
     }
 
     [Theory]
@@ -525,6 +599,69 @@ public sealed class ImageBackendTests
         png.Write(new byte[4]);
     }
 
+    /// <summary>The engine with a coordinator that grants every lease at once, a 16 GB card with 13 GiB free and 24 GiB of free main memory.</summary>
+    private static SdCppImageEngine Engine(ToolInstaller installer, LocalImageStore store, ImageBackendSelector selector,
+        TMConcept.Engines.Hardware.IComputeRuntimeProbe probe, PictureRunner runner, VramReading? memory = null, long? mainMemory = 24 * GiB)
+    {
+        var gpu = new FakeCoordinator();
+        runner.Coordinator = gpu;
+        return new SdCppImageEngine(installer, store, selector, probe, runner, gpu, new FakeVram(memory ?? new VramReading(16 * GiB, 13 * GiB, true, "test")),
+            new FakeMainMemory(mainMemory), NullLogger<SdCppImageEngine>.Instance);
+    }
+
+    /// <summary>Grants every lease at once and counts the leases held now.</summary>
+    internal sealed class FakeCoordinator : IGpuCoordinator
+    {
+        public int Held { get; private set; }
+
+        public List<string> Leased { get; } = [];
+
+        public ILocalModel? Loaded => null;
+
+        public event EventHandler? Changed
+        {
+            add { }
+            remove { }
+        }
+
+        public Task<IGpuLease> AcquireAsync(IModel model, ModelMemoryNeed? need, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<IGpuLease> AcquireAsync(CatalogModel model, CancellationToken cancellationToken)
+        {
+            Held++;
+            Leased.Add(model.Provider + "/" + model.Id);
+            return Task.FromResult<IGpuLease>(new Lease(this));
+        }
+
+        public Task FreeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+        private sealed class Lease(FakeCoordinator owner) : IGpuLease
+        {
+            public IModel Model => throw new NotSupportedException();
+
+            public bool OnCard => true;
+
+            public VramReading Memory => VramReading.None;
+
+            public ValueTask DisposeAsync()
+            {
+                owner.Held--;
+                return ValueTask.CompletedTask;
+            }
+        }
+    }
+
+    internal sealed class FakeVram(VramReading reading) : IVramProbe
+    {
+        public Task<VramReading> MeasureAsync(GpuAdapter? adapter, CancellationToken cancellationToken) => Task.FromResult(reading);
+    }
+
+    internal sealed class FakeMainMemory(long? bytes) : ISystemMemory
+    {
+        public long? AvailableBytes() => bytes;
+    }
+
     private sealed class FakeSetting : IImageAccelerationSetting
     {
         public ImageAcceleration Value { get; set; }
@@ -540,15 +677,33 @@ public sealed class ImageBackendTests
 
         public string? FailFor { get; init; }
 
+        /// <summary>The first this many runs end out of memory (sd-cli's own message) and write nothing.</summary>
+        public int OutOfMemoryRuns { get; set; }
+
         public List<string> Programs { get; } = [];
+
+        public List<IReadOnlyList<string>> Runs { get; } = [];
+
+        public List<bool> InsideLease { get; } = [];
+
+        public FakeCoordinator? Coordinator { get; set; }
 
         public Task<ProcessResult> RunAsync(ProcessStart start, Action<string>? onLine, CancellationToken cancellationToken)
         {
             Start = start;
             Programs.Add(start.Program);
+            Runs.Add(start.Arguments);
+            InsideLease.Add(Coordinator is { Held: > 0 });
             if (start.Program == FailFor)
             {
                 return Task.FromResult(new ProcessResult(SdCppImageEngine.DllNotFound, string.Empty));
+            }
+
+            if (OutOfMemoryRuns > 0)
+            {
+                OutOfMemoryRuns--;
+                return Task.FromResult(new ProcessResult(1,
+                    "[ERROR] model manager cannot make enough memory available on Vulkan0: need 3666.57 MB device / 3154.57 MB budget"));
             }
 
             var output = start.Arguments[start.Arguments.ToList().IndexOf("-o") + 1];

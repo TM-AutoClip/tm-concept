@@ -78,4 +78,14 @@ public sealed class CatalogModel
 
     /// <summary>Main memory (GB) a local model needs besides (0 = unknown or small); used when its weights move off the graphics card.</summary>
     public int MemoryGb { get; set; }
+
+    /// <summary>A local model's license code (<c>apache-2.0</c>, <c>flux-non-commercial</c>…; empty = nothing to say); the picker names it.</summary>
+    public string License { get; set; } = string.Empty;
+
+    /// <summary>What a local model's license allows (<see cref="Models.LicenseUse"/>): anything but commercial use is asked before the download.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter<LicenseUse>))]
+    public LicenseUse LicenseUse { get; set; }
+
+    /// <summary>Where the license text is (the model's own page), shown in the license question.</summary>
+    public string LicenseUrl { get; set; } = string.Empty;
 }
