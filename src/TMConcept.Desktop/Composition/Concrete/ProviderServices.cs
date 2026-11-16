@@ -26,7 +26,9 @@ public static class ProviderServices
         services.AddSingleton<Providers.Pricing.PriceUpdater>();
         services.AddSingleton<ICostCalculator, CostCalculator>();
         services.AddSingleton<StepModelResolver>();
-        services.AddSingleton<IChatClientFactory, ChatClientFactory>();
+        // Every chat call goes through a graphics card lease (one local model on the card at a time, 0.1.17).
+        services.AddSingleton<ChatClientFactory>();
+        services.AddSingleton<IChatClientFactory>(s => new LeasedChatClientFactory(s.GetRequiredService<ChatClientFactory>(), s.GetRequiredService<IGpuCoordinator>()));
         AddChat<AnthropicProvider>(services);
         AddChat<OpenAIProvider>(services);
         AddChat<OpenRouterProvider>(services);
@@ -36,7 +38,9 @@ public static class ProviderServices
         AddProvider<FalProvider>(services);
         services.AddSingleton<Providers.Embeddings.IEmbeddingTransport, Providers.Embeddings.OpenAIEmbeddings>();
         services.AddSingleton<Providers.Embeddings.IEmbeddingTransport, Providers.Embeddings.OpenRouterEmbeddings>();
-        services.AddSingleton<Core.Duplicates.IEmbeddingService, Providers.Embeddings.EmbeddingService>();
+        services.AddSingleton<Providers.Embeddings.EmbeddingService>();
+        services.AddSingleton<Core.Duplicates.IEmbeddingService>(s => new Core.Duplicates.LeasedEmbeddingService(
+            s.GetRequiredService<Providers.Embeddings.EmbeddingService>(), s.GetRequiredService<IGpuCoordinator>()));
 
         // Local servers (package B): user-added OpenAI-compatible endpoints. The catalog is the embedded one plus their models; one chat
         // transport serves every server (codes endpoint:<id>) and also tests a server's address (GET models).
@@ -47,6 +51,7 @@ public static class ProviderServices
         services.AddSingleton<EndpointChatTransport>();
         services.AddSingleton<IChatTransport>(s => s.GetRequiredService<EndpointChatTransport>());
         services.AddSingleton<IEndpointProbe>(s => s.GetRequiredService<EndpointChatTransport>());
+        services.AddSingleton<ILocalModelSource, EndpointModelSource>();
     }
 
     /// <summary>A provider without chat.</summary>

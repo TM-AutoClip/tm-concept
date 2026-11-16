@@ -152,13 +152,14 @@ public sealed class KeysAndModelsTests
         row.Selected = row.Options.First(o => o.Model?.Provider == "openai" && o.Model.Capabilities.HasFlag(ModelCapability.Chat));
         page.Ideas.Count = 2;
 
-        // No key and the dialog closed without one: nothing is sent, the reason names the provider, the choice is not stored.
+        // No key and the dialog closed without one: nothing is sent, the reason names the provider; the choice stays as the user made it
+        // (saved when it was made, 0.1.17: adding the key later must not bring an older choice back).
         await page.Ideas.GenerateAsync();
         dialog!.Asked.ShouldBe(["openai"]);
         fake.Requests.ShouldBeEmpty();
         page.Ideas.Status.ShouldContain("openai");
         row.NoteIsWarning.ShouldBeTrue();
-        (await h.Get<IStepModelStore>().GetAsync(PipelineSteps.Concepts, profile.Id, CancellationToken.None)).ShouldBeNull();
+        (await h.Get<IStepModelStore>().GetAsync(PipelineSteps.Concepts, profile.Id, CancellationToken.None))!.Provider.ShouldBe("openai");
 
         // A working key is added in the dialog: the same press goes on.
         dialog.Secret = Secret;

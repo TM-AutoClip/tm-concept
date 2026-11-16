@@ -241,12 +241,13 @@ public sealed class EndpointSettingsTests
         dialog!.Asked.ShouldBeEmpty();
         (await h.Get<IStepModelStore>().GetAsync(PipelineSteps.Topics, profile.Id, None))!.Provider.ShouldBe(code);
 
-        // Deleted: the saved choice is not ready any more and the picker shows none.
+        // Deleted: the saved choice is not ready any more; the picker shows it as unavailable and keeps it (0.1.17).
         await h.Get<EndpointRegistry>().DeleteAsync(endpoint.Id, None);
         var missing = await Should.ThrowAsync<ModelNotReadyException>(() => resolver.ResolveForAsync(PipelineSteps.Topics, profile.Id, None));
         missing.Missing.ShouldBe("unknown");
         await page.ActivateAsync();
         picker.Row(PipelineSteps.Topics)!.Selected!.Model.ShouldBeNull();
+        picker.Row(PipelineSteps.Topics)!.Selected!.Kind.ShouldBe(StepOptionKind.Unavailable);
     }
 
     [AvaloniaFact]

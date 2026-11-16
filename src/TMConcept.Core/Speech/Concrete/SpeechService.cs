@@ -15,10 +15,11 @@ namespace TMConcept.Core.Speech;
 /// from the profile's choice made on the video page (off = a silent video). A cache keeps every spoken text: the key is the SHA-256 of
 /// text, engine, model, voice and speed, so a repeated scene is not spoken (or paid) twice. The text is put through the language's
 /// pronunciation dictionary first (<see cref="PronunciationService"/>: "Viking" is read "Vikink" in Turkish); the key is that of the spoken
-/// text, so a changed dictionary word is spoken again. Subtitles never see the spoken text.
+/// text, so a changed dictionary word is spoken again. Subtitles never see the spoken text. Every spoken clip is made inside a graphics card
+/// lease (<see cref="IGpuCoordinator"/>): today's local voices run on the processor and never wait, a voice on the card would.
 /// </summary>
 public sealed class SpeechService(IEnumerable<ISpeechEngine> engines, StepModelResolver resolver, IAppPaths paths, PronunciationService pronunciations,
-    ILogger<SpeechService> logger)
+    IGpuCoordinator gpu, ILogger<SpeechService> logger)
 {
     /// <summary>Every engine.</summary>
     public IReadOnlyList<ISpeechEngine> Engines { get; } = engines.ToList();
@@ -88,8 +89,14 @@ public sealed class SpeechService(IEnumerable<ISpeechEngine> engines, StepModelR
             return new SpeechClip(outputWav, WaveFile.DurationMs(outputWav), spoken.Length, 0, setup.Engine.Code);
         }
 
-        var clip = await setup.Engine.SynthesizeAsync(new SpeechRequest(spoken, language, voice, setup.Speed, outputWav, setup.Online), cancellationToken)
-            .ConfigureAwait(false);
+        SpeechClip clip;
+        var lease = await gpu.AcquireAsync(setup.Model, cancellationToken).ConfigureAwait(false);
+        await using (lease.ConfigureAwait(false))
+        {
+            clip = await setup.Engine.SynthesizeAsync(new SpeechRequest(spoken, language, voice, setup.Speed, outputWav, setup.Online), cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         Directory.CreateDirectory(Path.GetDirectoryName(cache)!);
         File.Copy(outputWav, cache, overwrite: true);
         logger.LogInformation("Spoke {Characters} characters with {Engine} ({Ms} ms)", clip.Characters, setup.Engine.Code, clip.DurationMs);

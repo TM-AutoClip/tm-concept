@@ -25,11 +25,13 @@ namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
 /// The model pickers of one page (Generate concepts, Concept → video, Profile): only the steps that page uses, shown with the selected
-/// profile's last choices (a new profile starts with nothing paid chosen; the "Recommended" chips stay). There is no Save button: before the
-/// page starts a process, <see cref="PrepareAsync"/> makes the choices ready and saves them for the profile — licenses (Remotion,
-/// Supertonic) are asked, a provider without an API key is offered a key right there (tested; only a working key is kept), then ONE
-/// confirmation lists every download, the install runs with progress, and only then the choices are saved and the process may start.
-/// Anything declined, missing or failed stops the process before anything is paid for, with the reason on the page and in the log.
+/// profile's last choices (a new profile starts with nothing paid chosen; the "Recommended" chips stay). There is no Save button: every
+/// change the user makes is saved for the profile at once (0.1.17, the developer: a choice stays exactly as the user last chose it, also
+/// after a page switch, a restart, a new key or a new server). A saved model that is not offered now (its server gone, a model removed) is
+/// never replaced on its own: it is shown as unavailable with the reason and kept. Before the page starts a process,
+/// <see cref="PrepareAsync"/> makes the choices ready — licenses (Remotion, Supertonic) are asked, a provider without an API key is offered
+/// a key right there (tested; only a working key is kept), then ONE confirmation lists every download and the install runs with progress.
+/// Anything declined, missing, unavailable or failed stops the process before anything is paid for, with the reason on the page and in the log.
 /// </summary>
 public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepModelStore steps, StepModelResolver resolver, IEnumerable<IVideoEngine> engines,
     SpeechService speech, VoiceSampleLibrary voiceSamples, ComponentInstallFlow installs, AppSession session, IConfirmDialog confirm, IApiKeyDialog keyDialog, Engines.Images.ImageBackendSelector backends, IAppPaths paths,
@@ -147,9 +149,15 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
                 stale = true;
             }
 
-            // A saved model that is not offered any more (catalog, or a voice that does not speak the profile's language now) shows "none":
-            // the row is not counted as saved, so the next prepare writes what the page shows and a process never uses the hidden choice.
+            // A saved model that is not offered now is shown as unavailable and counts as saved (it is kept). A voice replaced because it
+            // does not speak the profile's language (said on the step) is not counted as saved, so the next prepare writes the shown voice
+            // and a process never uses the old one.
             row.Saved = stale ? StaleChoice : Key(row);
+            if (row.IsVoiceStep && row.Selected?.Model is not null && (row.Voice?.Value ?? string.Empty) != options.Voice)
+            {
+                // The shown voice is not the saved one (none was saved yet: the model's first voice is shown): written at the next prepare.
+                row.Saved = StaleChoice;
+            }
             row.PropertyChanged += OnRowChanged;
             Rows.Add(row);
             await NoteAsync(row).ConfigureAwait(true);
@@ -195,6 +203,15 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
         try
         {
             var rows = Rows.Where(r => needed.Contains(r.Step.Code)).ToList();
+            foreach (var row in rows.Where(r => r.Selected?.Kind == StepOptionKind.Unavailable))
+            {
+                // The saved model is not offered now: kept as chosen, and the process waits until it is back or the user picks another.
+                row.NoteIsError = true;
+                logger.LogWarning("Process not started: the saved model of the step {Step} is not available now", row.Step.Code);
+                Status = text.Format("picker.not_started.unavailable", row.Title);
+                return false;
+            }
+
             foreach (var row in rows.Where(r => !r.Step.Optional && r.Selected?.Model is null))
             {
                 row.Note = text["picker.choose_model"];
@@ -250,7 +267,7 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
                 }
             }
 
-            await SaveAsync().ConfigureAwait(true);
+            await SaveRowsAsync(rows).ConfigureAwait(true);
             return true;
         }
         finally
@@ -261,14 +278,17 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
     }
 
     /// <summary>Saves the rows that changed since they were loaded or last saved (the profile's last choices).</summary>
-    public async Task SaveAsync()
+    public Task SaveAsync() => SaveRowsAsync(Rows.ToList());
+
+    /// <summary>Saves those of <paramref name="rows"/> that changed since they were loaded or last saved.</summary>
+    private async Task SaveRowsAsync(IReadOnlyList<StepModelRowViewModel> rows)
     {
         if (_profile is not { } profile)
         {
             return;
         }
 
-        foreach (var row in Rows.Where(r => Key(r) != r.Saved))
+        foreach (var row in rows.Where(r => Key(r) != r.Saved))
         {
             var choice = Desired(row);
             if (choice is null)
@@ -465,9 +485,28 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
             return fallback;
         }
 
-        logger.LogWarning("The saved model of the step {Step} is not offered any more (catalog or content language); the step shows no model", row.Step.Code);
-        return row.Options[0];
+        // Never replaced on its own (0.1.17): the saved model stays chosen, shown as unavailable with the reason, and is saved back unchanged.
+        stale = false;
+        var known = catalog.All.FirstOrDefault(m => m.Provider == choice!.Provider && m.Id == choice.Model);
+        var reason = text[EndpointCodes.IsEndpoint(choice!.Provider) ? "models.unavailable.server"
+            : known is not null ? "models.unavailable.language" : "models.unavailable.catalog"];
+        var unavailable = new StepOption(StepOptionKind.Unavailable, null, text.Format("models.unavailable.label", known?.Name ?? choice.Model), Clone(choice));
+        row.Options.Insert(1, unavailable);
+        row.Unavailable = reason;
+        logger.LogWarning("The saved model {Provider}/{Model} of the step {Step} is not offered now; it stays chosen and is shown as unavailable", choice.Provider,
+            choice.Model, row.Step.Code);
+        return unavailable;
     }
+
+    private static StepModelChoice Clone(StepModelChoice choice) => new()
+    {
+        Step = choice.Step,
+        ProfileId = choice.ProfileId,
+        Provider = choice.Provider,
+        Model = choice.Model,
+        KeyId = choice.KeyId,
+        OptionsJson = choice.OptionsJson,
+    };
 
     private bool Usable(PipelineStep step, CatalogModel model) =>
         step.Capability != ModelCapability.Speech || speech.EngineOf(model) is { } engine && engine.Supports(_language);
@@ -513,8 +552,14 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
     private async void OnRowChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (sender is not StepModelRowViewModel row || e.PropertyName is not (nameof(StepModelRowViewModel.Selected) or nameof(StepModelRowViewModel.Engine)
-            or nameof(StepModelRowViewModel.Effort) or nameof(StepModelRowViewModel.Voice)))
+            or nameof(StepModelRowViewModel.Effort) or nameof(StepModelRowViewModel.Voice) or nameof(StepModelRowViewModel.Speed)))
         {
+            return;
+        }
+
+        if (row.Selected is null || (e.PropertyName == nameof(StepModelRowViewModel.Effort) && row.Effort is null && row.HasEfforts))
+        {
+            // A picker whose list is being replaced pushes null for a moment: not a choice, nothing is saved or shown.
             return;
         }
 
@@ -531,9 +576,22 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
                 FillVoices(row, row.Voice?.Value ?? string.Empty);
             }
 
+            if (e.PropertyName == nameof(StepModelRowViewModel.Selected) && row.Selected.Kind != StepOptionKind.Unavailable && row.Unavailable.Length > 0)
+            {
+                // The user picked another entry: the unavailable one leaves the list.
+                row.Unavailable = string.Empty;
+                if (row.Options.FirstOrDefault(o => o.Kind == StepOptionKind.Unavailable) is { } gone)
+                {
+                    row.Options.Remove(gone);
+                }
+            }
+
             OnPropertyChanged(nameof(Summary));
             Changed?.Invoke(this, EventArgs.Empty);
-            if (e.PropertyName != nameof(StepModelRowViewModel.Effort))
+
+            // Saved at once (0.1.17): the next page switch, restart, key or server never brings an older choice back.
+            await SaveRowsAsync([row]).ConfigureAwait(true);
+            if (e.PropertyName is not (nameof(StepModelRowViewModel.Effort) or nameof(StepModelRowViewModel.Speed)))
             {
                 await NoteAsync(row).ConfigureAwait(true);
             }
@@ -560,6 +618,13 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
         if (selected.Kind == StepOptionKind.Samples)
         {
             row.Note = text["step.images.samples.note"];
+            return;
+        }
+
+        if (selected.Kind == StepOptionKind.Unavailable)
+        {
+            row.Note = row.Unavailable;
+            row.NoteIsError = true;
             return;
         }
 
@@ -621,8 +686,8 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
 
     /// <summary>
     /// The memory part of a local image model's note for the build chosen now: the processor build (yellow: slow); the card's memory unknown
-    /// (yellow); less than the model needs (red: it will not run here; still selectable, the user decides); enough (green, with the card
-    /// and the build).
+    /// (yellow); a model of a higher memory class than the card's (<see cref="VramTiers"/>; red: it will not run here; still selectable, the
+    /// user decides); enough (green, with the card and the build).
     /// </summary>
     private void MemoryNote(StepModelRowViewModel row, List<string> parts, int minimumGb, ImageBackendChoice choice)
     {
@@ -642,7 +707,10 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
 
         var gigabytes = Math.Round(bytes / (1024.0 * 1024 * 1024), 1);
         var shown = gigabytes.ToString("0.#", text.Culture);
-        if (gigabytes + 0.25 < minimumGb)
+
+        // One rule for every local model (0.1.17): the card's class (a "16 GB" card reporting 15.8 GB is in the 16 GB class) sees its own
+        // class and every lower one; a model of a higher class is red.
+        if (!VramTiers.Sees(VramTiers.ForCard(bytes), VramTiers.ForModel(minimumGb)))
         {
             parts.Add(text.Format("images.memory.not_enough", minimumGb, shown));
             row.NoteIsError = true;
@@ -731,6 +799,9 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
         var choice = new StepModelChoice { Step = row.Step.Code, ProfileId = _profile, OptionsJson = StepModelResolver.OptionsJson(options) };
         switch (row.Selected?.Kind)
         {
+            case StepOptionKind.Unavailable when row.Selected.Kept is { } kept:
+                // Kept exactly as it was saved (model, effort, voice…): never rewritten from what the row shows now.
+                return Clone(kept);
             case StepOptionKind.Model:
                 choice.Provider = row.Selected.Model!.Provider;
                 choice.Model = row.Selected.Model.Id;
@@ -757,6 +828,7 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
         var model = row.Selected switch
         {
             { Kind: StepOptionKind.Samples } => text["step.images.samples"],
+            { Kind: StepOptionKind.Unavailable } option => option.Label,
             { Model: { } m } => m.Name + (row.HasEfforts && row.Effort is { Value.Length: > 0 } effort ? " (" + effort.Label + ")" : string.Empty),
             _ => text[row.Step.Optional ? "steps.off" : "steps.none"],
         };
@@ -778,6 +850,7 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
         var model = row.Selected switch
         {
             { Kind: StepOptionKind.Samples } => "the sample images",
+            { Kind: StepOptionKind.Unavailable, Kept: { } kept } => kept.Provider + "/" + kept.Model + " (kept, not available now)",
             { Model: { } m } => m.Provider + "/" + m.Id,
             _ => row.Step.Optional ? "nothing (off)" : "no model",
         };
@@ -795,7 +868,7 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
     });
 
     private static string Key(StepModelRowViewModel row) => string.Join('|', row.Selected?.Kind.ToString() ?? string.Empty,
-        row.Selected?.Model is { } m ? m.Provider + "/" + m.Id : string.Empty, row.Effort?.Value ?? string.Empty,
+        row.Selected?.Model is { } m ? m.Provider + "/" + m.Id : row.Selected?.Kept is { } kept ? kept.Provider + "/" + kept.Model : string.Empty, row.Effort?.Value ?? string.Empty,
         row.IsEngineStep ? row.Engine?.Kind.ToString() ?? string.Empty : string.Empty,
         row.IsVoiceStep ? row.Voice?.Value ?? string.Empty : string.Empty,
         row.IsVoiceStep ? (row.Speed ?? 1).ToString("0.00", CultureInfo.InvariantCulture) : string.Empty);

@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text;
-using System.Text.Json;
 using System.Text.Json.Nodes;
+using TMConcept.Core.Chat;
 
 namespace TMConcept.Core.Images;
 
@@ -43,26 +43,32 @@ public static class ImagePromptBuilder
     };
 
     /// <summary>
-    /// Reads the prompts (a missing one falls back to the scene description itself); an unreadable answer is reported to
+    /// The prompts an answer holds, in order (fewer than asked, or none): its JSON read tolerantly (<see cref="ModelJson"/>: thinking, a code
+    /// fence and text before or after the JSON are skipped; 0.1.16 read from the first brace to the END of the text, so a sentence after the
+    /// JSON lost every prompt), or, when the answer was cut off, every complete prompt before the cut.
+    /// </summary>
+    public static IReadOnlyList<string> Read(string? answer)
+    {
+        if (ModelJson.TryParseObject(answer)?["prompts"] is JsonArray array)
+        {
+            return array.Select(p => p is JsonValue value && value.TryGetValue<string>(out var text) ? text.Trim() : string.Empty).ToList();
+        }
+
+        return ModelJson.StringItems(answer, "prompts").Select(p => p.Trim()).ToList();
+    }
+
+    /// <summary>
+    /// Reads the prompts (a missing one falls back to the scene description itself); an unreadable answer or missing prompts are reported to
     /// <paramref name="onProblem"/> (for the log).
     /// </summary>
     public static IReadOnlyList<string> Parse(string? answer, IReadOnlyList<string> visuals, Action<string>? onProblem = null)
     {
         ArgumentNullException.ThrowIfNull(visuals);
-        var prompts = new List<string>();
-        try
-        {
-            var text = Engines.EngineCodeCheck.ExtractCode(answer);
-            var start = text.IndexOf('{', StringComparison.Ordinal);
-            if (start >= 0 && JsonNode.Parse(text[start..]) is JsonObject node && node["prompts"] is JsonArray array)
-            {
-                prompts.AddRange(array.Select(p => p?.ToString().Trim() ?? string.Empty));
-            }
-        }
-        catch (JsonException ex)
+        var prompts = Read(answer);
+        if (prompts.Count == 0)
         {
             // Not JSON: every scene uses its own description.
-            onProblem?.Invoke(ex.Message);
+            onProblem?.Invoke("no prompt could be read from the answer");
             return visuals.Select(Cut).ToList();
         }
 
@@ -73,7 +79,6 @@ public static class ImagePromptBuilder
 
         return visuals.Select((v, i) => i < prompts.Count && prompts[i].Length > 0 ? Cut(prompts[i]) : Cut(v)).ToList();
     }
-
     private static string Clean(string? text) => Text.TextClean.OneLine(text, 600).Replace("«", "\"", StringComparison.Ordinal).Replace("»", "\"", StringComparison.Ordinal);
 
     private static string Cut(string text) => text.Length <= 400 ? text : text[..400];

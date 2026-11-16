@@ -18,7 +18,8 @@ using TMConcept.Desktop.Startup;
 namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
-/// General settings: interface language (changes at once), drawing (after a restart), the bottom-right notifications, and the installed
+/// General settings: interface language (changes at once), drawing (after a restart), the bottom-right notifications, the answer limit of
+/// "Suggest topics" (saved with the notifications' Save button), and the installed
 /// components (read-only list with sizes of what is on disk, an incomplete one marked; Remove after a confirmation; a ready engine can
 /// render its sample; on Linux the apt command for Chrome's missing libraries). Components are installed when a process that needs them starts (after one confirmation).
 /// Image acceleration (per computer): which stable-diffusion.cpp build runs the local image models, with what Automatic picks here (the
@@ -43,6 +44,13 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
     /// <summary>How long a notification stays (seconds).</summary>
     [ObservableProperty]
     public partial decimal? NotificationSeconds { get; set; }
+
+    /// <summary>Answer limit (max_tokens) of "Suggest topics" (saved with the Save button, default 16 000).</summary>
+    [ObservableProperty]
+    public partial decimal? TopicMaxOutputTokens { get; set; }
+
+    /// <summary>The field's range: <see cref="Core.Concepts.TopicLimits.OutputMin"/>-<see cref="Core.Concepts.TopicLimits.OutputLimit"/> (the view holds the same numbers).</summary>
+    public static (int Min, int Max) TopicOutputRange => (Core.Concepts.TopicLimits.OutputMin, Core.Concepts.TopicLimits.OutputLimit);
 
     /// <summary>Draw with the graphics card (stored at once, used from the next start).</summary>
     [ObservableProperty]
@@ -94,6 +102,7 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
         AccelerationNote = Detected(await Task.Run(backends.Automatic).ConfigureAwait(true));
         NotificationsEnabled = session.Settings.NotificationsEnabled;
         NotificationSeconds = session.Settings.NotificationSeconds;
+        TopicMaxOutputTokens = Core.Concepts.TopicSuggester.ClampOutput(session.Settings.TopicMaxOutputTokens);
         await RefreshInstalledAsync().ConfigureAwait(true);
     }
 
@@ -359,9 +368,11 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
         var settings = session.Settings;
         settings.NotificationsEnabled = NotificationsEnabled;
         settings.NotificationSeconds = (int)Math.Clamp(NotificationSeconds ?? 60, 3, 3600);
+        settings.TopicMaxOutputTokens = Core.Concepts.TopicSuggester.ClampOutput((int)(TopicMaxOutputTokens ?? Core.Concepts.TopicSuggester.OutputMax));
+        TopicMaxOutputTokens = settings.TopicMaxOutputTokens;
         await session.SaveAsync(settings, CancellationToken.None).ConfigureAwait(true);
-        logger.LogInformation("Setting changed: notifications {State}, shown for {Seconds} s", settings.NotificationsEnabled ? "on" : "off",
-            settings.NotificationSeconds);
+        logger.LogInformation("Setting changed: notifications {State}, shown for {Seconds} s; topic answer limit {Tokens} tokens",
+            settings.NotificationsEnabled ? "on" : "off", settings.NotificationSeconds, settings.TopicMaxOutputTokens);
         Status = text["common.saved"];
     }
 

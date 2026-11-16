@@ -9,9 +9,10 @@ namespace TMConcept.Engines.Hardware;
 
 /// <summary>
 /// Linux, after sysfs: NVIDIA cards with their memory from <c>nvidia-smi</c> (installed with NVIDIA's driver; sysfs has no memory file for
-/// them). Asked only when a card's memory is still unknown; at most 10 seconds. Nothing when the tool is not on the PATH.
+/// them). Asked only when a card's memory is still unknown; at most 10 seconds. Nothing when the tool is not on the PATH. As a memory source it
+/// reads <c>memory.free</c> of the NVIDIA card with the same name (or the only one), at most 10 seconds per reading.
 /// </summary>
-public sealed class NvidiaSmiAdapterSource(ToolInstaller tools, IProcessRunner runner, ILogger<NvidiaSmiAdapterSource> logger) : IGraphicsAdapterSource
+public sealed class NvidiaSmiAdapterSource(ToolInstaller tools, IProcessRunner runner, ILogger<NvidiaSmiAdapterSource> logger) : IGraphicsAdapterSource, IVideoMemorySource
 {
     /// <inheritdoc />
     public string Name => "nvidia-smi";
@@ -45,6 +46,39 @@ public sealed class NvidiaSmiAdapterSource(ToolInstaller tools, IProcessRunner r
         }
 
         return Parse(lines);
+    }
+
+    /// <inheritdoc />
+    public async Task<long?> FreeBytesAsync(GpuAdapter adapter, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(adapter);
+        if (adapter.Vendor != GpuVendor.Nvidia || tools.FindProgram("nvidia-smi") is not { } smi)
+        {
+            return null;
+        }
+
+        var lines = new List<string>();
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(10));
+            var result = await runner.RunAsync(new ProcessStart(smi, ["--query-gpu=name,memory.free", "--format=csv,noheader,nounits"], Path.GetDirectoryName(smi)!),
+                lines.Add, timeout.Token).ConfigureAwait(false);
+            if (result.ExitCode != 0)
+            {
+                return null;
+            }
+        }
+        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException or OperationCanceledException)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            logger.LogWarning(ex, "nvidia-smi could not read the free graphics card memory");
+            return null;
+        }
+
+        var cards = Parse(lines);
+        var match = cards.FirstOrDefault(c => string.Equals(c.Name, adapter.Name, StringComparison.OrdinalIgnoreCase)) ?? (cards.Count == 1 ? cards[0] : null);
+        return match?.VideoMemoryBytes;
     }
 
     /// <summary>The cards of nvidia-smi's <c>name, memory.total</c> lines (MiB, no units): <c>NVIDIA GeForce RTX 3060, 12288</c>.</summary>

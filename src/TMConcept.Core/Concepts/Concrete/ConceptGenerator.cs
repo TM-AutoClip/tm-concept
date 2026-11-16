@@ -161,7 +161,6 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
                 logger.LogInformation("Concept run {Run}: batch {Batch}/{Batches} of {Size} concepts with {Topics} topics, max_tokens {MaxTokens}, effort {Effort}, {Seconds} s {Language}",
                     run.Id, index + 1, sizes.Count, sizes[index], slice?.Count ?? 0, maxTokens, request.Model.Effort.Length > 0 ? request.Model.Effort : "automatic",
                     profile.TargetSeconds, profile.ContentLanguage);
-                string answer;
                 ProviderException? cut = null;
                 var batchNumber = index + 1;
                 var batchSize = sizes[index];
@@ -169,51 +168,60 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
                     ? null
                     : new ForwardProgress<ChatProgress>(p => live.Report(new ConceptCallProgress(batchNumber, sizes.Count, batchSize, p,
                         Math.Min(batchSize, ConceptResponseParser.CompleteCount(p.Text)))));
-                try
+
+                // An answer without one readable concept is asked again (the same request, at most twice; JsonAnswerRetry). Every attempt is
+                // charged to the run. A cut-off answer is not asked again: its complete concepts are kept and the run ends after this batch.
+                var parsed = await JsonAnswerRetry.RunAsync($"Concept run {run.Id}: batch {batchNumber}", async (_, token) =>
                 {
-                    var response = await client.SendAsync(new ChatRequest(prompt.System, prompt.User, CacheSystem: true, Schema: prompt.Schema,
-                        MaxOutputTokens: maxTokens,
-                        Effort: request.Model.Effort, Stream: true, Progress: call), cancellationToken).ConfigureAwait(false);
-                    Charge(run, request, response.Usage, response.ReportedCostUsd);
-                    answer = response.Text;
-                }
-                catch (ProviderException ex) when (ex.ChargedUsage is { } charged)
-                {
-                    Charge(run, request, charged, null);
-                    if (ex.Code is not ("truncated" or "incomplete") || ex.PartialText.Length == 0)
+                    string answer;
+                    cut = null;
+                    try
                     {
+                        var response = await client.SendAsync(new ChatRequest(prompt.System, prompt.User, CacheSystem: true, Schema: prompt.Schema,
+                            MaxOutputTokens: maxTokens,
+                            Effort: request.Model.Effort, Stream: true, Progress: call), token).ConfigureAwait(false);
+                        Charge(run, request, response.Usage, response.ReportedCostUsd);
+                        answer = response.Text;
+                    }
+                    catch (ProviderException ex) when (ex.ChargedUsage is { } charged)
+                    {
+                        Charge(run, request, charged, null);
+                        if (ex.Code is not ("truncated" or "incomplete") || ex.PartialText.Length == 0)
+                        {
+                            throw;
+                        }
+
+                        // The cut-off answer was paid for: keep the complete concepts before the cut, then stop the run.
+                        logger.LogWarning("Concept run {Run}: batch {Batch} was cut off ({Code}, stop reason {StopReason}, max_tokens {MaxTokens}, {Output} output tokens); keeping the complete concepts before the cut",
+                            run.Id, batchNumber, ex.Code, ex.StopReason.Length > 0 ? ex.StopReason : "-", maxTokens, charged.Output);
+                        cut = ex;
+                        answer = ex.PartialText;
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // Canceled while the call ran: the provider may bill the prompt (and what was written so far, which is not known here).
+                        // At least the prompt is counted, as an estimate, so the month's spending does not miss the call.
+                        var input = costs.Tokens(prompt.System, profile.ContentLanguage) + costs.Tokens(prompt.User, profile.ContentLanguage);
+                        run.InputTokens += input;
+                        run.ActualUsd += costs.Exact(request.Model.Model, new ChatUsage(input, 0, 0, 0));
+                        run.CostExact = false;
                         throw;
                     }
 
-                    // The cut-off answer was paid for: keep the complete concepts before the cut, then stop the run.
-                    logger.LogWarning("Concept run {Run}: batch {Batch} was cut off ({Code}, stop reason {StopReason}, max_tokens {MaxTokens}, {Output} output tokens); keeping the complete concepts before the cut",
-                        run.Id, index + 1, ex.Code, ex.StopReason.Length > 0 ? ex.StopReason : "-", maxTokens, charged.Output);
-                    cut = ex;
-                    answer = ex.PartialText;
-                }
-                catch (OperationCanceledException)
-                {
-                    // Canceled while the call ran: the provider may bill the prompt (and what was written so far, which is not known here).
-                    // At least the prompt is counted, as an estimate, so the month's spending does not miss the call.
-                    var input = costs.Tokens(prompt.System, profile.ContentLanguage) + costs.Tokens(prompt.User, profile.ContentLanguage);
-                    run.InputTokens += input;
-                    run.ActualUsd += costs.Exact(request.Model.Model, new ChatUsage(input, 0, 0, 0));
-                    run.CostExact = false;
-                    throw;
-                }
+                    var read = ConceptResponseParser.Parse(answer);
+                    problems += read.Problems.Count;
+                    foreach (var problem in read.Problems)
+                    {
+                        logger.LogWarning("Concept run {Run}: {Problem}", run.Id, problem);
+                    }
 
-                var parsed = ConceptResponseParser.Parse(answer);
-                problems += parsed.Problems.Count;
-                foreach (var problem in parsed.Problems)
-                {
-                    logger.LogWarning("Concept run {Run}: {Problem}", run.Id, problem);
-                }
+                    if (read.Concepts.Count == 0 && cut is not null)
+                    {
+                        throw cut;
+                    }
 
-                if (parsed.Concepts.Count == 0)
-                {
-                    throw cut ?? new ProviderException("The answer had no readable concept.") { Code = "parse" };
-                }
-
+                    return read.Concepts.Count > 0 ? read : null;
+                }, logger, cancellationToken).ConfigureAwait(false);
                 var batchCandidates = parsed.Concepts.Take(sizes[index])
                     .Select(c => (Parsed: c, Subject: new DuplicateSubject(Guid.NewGuid(), 0, c.Title, c.Summary))).ToList();
                 var verdicts = request.LocalCheck

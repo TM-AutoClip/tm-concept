@@ -40,8 +40,8 @@ public sealed class GpuDetectionTests
         var cards = new SysfsAdapterSource(root, NullLogger<SysfsAdapterSource>.Instance).Read();
 
         cards.Count.ShouldBe(2);
-        cards[0].ShouldBe(new GpuAdapter(GpuVendor.Amd, "AMD (73bf)", 17_163_091_968));
-        cards[1].ShouldBe(new GpuAdapter(GpuVendor.Nvidia, "NVIDIA (2504)", null));
+        cards[0].ShouldBe(new GpuAdapter(GpuVendor.Amd, "AMD (73bf)", 17_163_091_968, Path.Combine(root, "card0", "device")), "the device folder is the key of its memory readings");
+        cards[1].ShouldBe(new GpuAdapter(GpuVendor.Nvidia, "NVIDIA (2504)", null, Path.Combine(root, "card1", "device")));
     }
 
     [Fact]

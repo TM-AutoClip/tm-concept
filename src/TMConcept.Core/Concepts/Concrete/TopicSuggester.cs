@@ -7,6 +7,7 @@ using TMConcept.Core.Models;
 using TMConcept.Core.Profiles;
 using TMConcept.Core.Providers;
 using TMConcept.Core.Runs;
+using TMConcept.Core.Settings;
 using TMConcept.Core.Text;
 
 namespace TMConcept.Core.Concepts;
@@ -27,16 +28,20 @@ namespace TMConcept.Core.Concepts;
 /// the kept ones are saved as the profile's suggestions (10 Nov 2026, the developer: "could it ask the same ones again every time?").
 /// </summary>
 public sealed class TopicSuggester(IConceptStore concepts, ITopicSuggestionStore suggestions, IPromptMemorySource memory, IRunStore runs, IChatClientFactory chats, ICostCalculator costs, TimeProvider clock,
-    ILogger<TopicSuggester> logger)
+    ISettingsStore settings, ILogger<TopicSuggester> logger)
 {
     /// <summary>The concept statuses whose titles are sent: all of them (a trashed or produced concept is no new topic either).</summary>
     private static readonly ConceptStatus[] AllStatuses = Enum.GetValues<ConceptStatus>();
 
     /// <summary>
-    /// max_tokens of the call (thinking included), lowered to the model's limit when that is smaller. Only what is produced is paid for, so
-    /// this is a roof, not what the call costs.
+    /// The default max_tokens of the call (thinking included), lowered to the model's limit when that is smaller. Only what is produced is
+    /// paid for, so this is a roof, not what the call costs. Settings → General changes it (<see cref="AppSettings.TopicMaxOutputTokens"/>,
+    /// within <see cref="TopicLimits.OutputMin"/>-<see cref="TopicLimits.OutputLimit"/>).
     /// </summary>
     public const int OutputMax = 16_000;
+
+    /// <summary>A max_tokens setting kept within <see cref="TopicLimits.OutputMin"/>-<see cref="TopicLimits.OutputLimit"/> (0 or less = <see cref="OutputMax"/>).</summary>
+    public static int ClampOutput(int value) => value <= 0 ? OutputMax : Math.Clamp(value, TopicLimits.OutputMin, TopicLimits.OutputLimit);
 
     /// <summary>Fewest output tokens of an answer of <paramref name="count"/> topics (about 12 tokens for a short English topic).</summary>
     public static int OutputMinFor(int count) => 12 * Clamp(count);
@@ -72,11 +77,29 @@ public sealed class TopicSuggester(IConceptStore concepts, ITopicSuggestionStore
         return EffortOrder.FirstOrDefault(model.Efforts.Contains) ?? string.Empty;
     }
 
-    /// <summary>max_tokens for <paramref name="model"/>: <see cref="OutputMax"/>, or the model's limit when it is smaller.</summary>
-    public static int OutputFor(CatalogModel model)
+    /// <summary>
+    /// max_tokens for <paramref name="model"/>: <paramref name="roof"/> (the setting; default <see cref="OutputMax"/>), or the model's limit when
+    /// it is smaller.
+    /// </summary>
+    public static int OutputFor(CatalogModel model, int roof = OutputMax)
     {
         ArgumentNullException.ThrowIfNull(model);
-        return model.MaxOutputTokens > 0 ? Math.Min(OutputMax, model.MaxOutputTokens) : OutputMax;
+        roof = ClampOutput(roof);
+        return model.MaxOutputTokens > 0 ? Math.Min(roof, model.MaxOutputTokens) : roof;
+    }
+
+    /// <summary>The max_tokens setting (<see cref="AppSettings.TopicMaxOutputTokens"/>); the default when the settings cannot be read.</summary>
+    public async Task<int> OutputMaxAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            return ClampOutput((await settings.GetAsync(cancellationToken).ConfigureAwait(false)).TopicMaxOutputTokens);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException)
+        {
+            logger.LogWarning(ex, "The topic answer limit could not be read; {Default} is used", OutputMax);
+            return OutputMax;
+        }
     }
 
     /// <summary>The estimate of one press with <paramref name="model"/>.</summary>
@@ -86,7 +109,7 @@ public sealed class TopicSuggester(IConceptStore concepts, ITopicSuggestionStore
         ArgumentNullException.ThrowIfNull(model);
         count = Clamp(count);
         var (system, user, _) = await PromptAsync(profile, focus, count, language, cancellationToken).ConfigureAwait(false);
-        var roof = OutputFor(model);
+        var roof = OutputFor(model, await OutputMaxAsync(cancellationToken).ConfigureAwait(false));
         return costs.EstimateChat(model, costs.Tokens(system + user, language), 0, Math.Min(OutputMinFor(count), roof), Math.Min(OutputExpectedFor(count), roof));
     }
 
@@ -112,33 +135,64 @@ public sealed class TopicSuggester(IConceptStore concepts, ITopicSuggestionStore
             Requested = count,
             StartedAtUtc = started,
         };
-        string text;
-        ChatUsage usage;
-        decimal? reported = null;
+        var input = 0L;
+        var output = 0L;
+        decimal spent = 0;
         var cut = false;
+        var text = string.Empty;
+        IReadOnlyList<string> parsed;
         try
         {
             var effort = EffortFor(model.Model);
-            var answer = await chats.Create(model.Model, model.Key.Secret).SendAsync(new ChatRequest(system, user, Schema: ConceptPromptBuilder.TopicSchema(),
-                MaxOutputTokens: OutputFor(model.Model), Effort: effort, Stream: true, Progress: progress), cancellationToken).ConfigureAwait(false);
-            text = answer.Text;
-            usage = answer.Usage;
-            reported = answer.ReportedCostUsd;
-        }
-        catch (ProviderException ex) when (ex.Code is "truncated" or "incomplete" && ex.ChargedUsage is { } charged && ParsePartial(ex.PartialText, count).Count > 0)
-        {
-            // Cut off after some topics were written: they were paid for, so the complete ones are shown.
-            logger.LogWarning("Topic suggestions were cut off ({Code}, stop reason {StopReason}, {Output} output tokens); keeping the complete topics before the cut",
-                ex.Code, ex.StopReason.Length > 0 ? ex.StopReason : "-", charged.Output);
-            text = ex.PartialText;
-            usage = charged;
-            cut = true;
+            var roof = await OutputMaxAsync(cancellationToken).ConfigureAwait(false);
+            var client = chats.Create(model.Model, model.Key.Secret);
+
+            // An answer without one readable topic is asked again, at most twice (JsonAnswerRetry); every attempt is paid and counted here.
+            parsed = await JsonAnswerRetry.RunAsync<IReadOnlyList<string>>("Topic suggestions", async (_, token) =>
+            {
+                string answerText;
+                var answerCut = false;
+                try
+                {
+                    var answer = await client.SendAsync(new ChatRequest(system, user, Schema: ConceptPromptBuilder.TopicSchema(),
+                        MaxOutputTokens: OutputFor(model.Model, roof), Effort: effort, Stream: true, Progress: progress), token).ConfigureAwait(false);
+                    answerText = answer.Text;
+                    Count(answer.Usage, answer.ReportedCostUsd);
+                }
+                catch (ProviderException ex) when (ex.Code is "truncated" or "incomplete" && ex.ChargedUsage is { } charged && ParsePartial(ex.PartialText, count).Count > 0)
+                {
+                    // Cut off after some topics were written: they were paid for, so the complete ones are shown.
+                    logger.LogWarning("Topic suggestions were cut off ({Code}, stop reason {StopReason}, {Output} output tokens); keeping the complete topics before the cut",
+                        ex.Code, ex.StopReason.Length > 0 ? ex.StopReason : "-", charged.Output);
+                    answerText = ex.PartialText;
+                    answerCut = true;
+                    Count(charged, null);
+                }
+                catch (ProviderException ex) when (ex.ChargedUsage is { } charged)
+                {
+                    Count(charged, null);
+                    throw;
+                }
+
+                var topics = answerCut ? ParsePartial(answerText, count) : Parse(answerText, count);
+                if (topics.Count == 0 && !answerCut && !HasTopicList(answerText))
+                {
+                    // Not readable: asked again. A readable answer with no topic is an answer (the page says none came).
+                    return null;
+                }
+
+                text = answerText;
+                cut = answerCut;
+                return topics;
+            }, logger, cancellationToken).ConfigureAwait(false);
         }
         catch (ProviderException ex)
         {
-            // A refused or cut answer may still be billed: kept as a failed run.
-            run.ActualUsd = ex.ChargedUsage is { } charged ? costs.Exact(model.Model, charged) : 0;
+            // A refused, cut or unreadable answer may still be billed: kept as a failed run (every attempt counted).
+            run.ActualUsd = spent;
             run.CostExact = true;
+            run.InputTokens = input;
+            run.OutputTokens = output;
             run.Status = RunStatus.Failed;
             run.Error = ex.Code;
             run.FinishedAtUtc = clock.GetUtcNow();
@@ -151,9 +205,9 @@ public sealed class TopicSuggester(IConceptStore concepts, ITopicSuggestionStore
         {
             // Canceled while the call ran: the provider may bill the prompt (and what was written so far, which is not known here). The
             // prompt is kept as an estimated cost, so the month's spending does not miss the call.
-            var input = costs.Tokens(system + user, language);
-            run.InputTokens = input;
-            run.ActualUsd = costs.Exact(model.Model, new ChatUsage(input, 0, 0, 0));
+            var prompt = costs.Tokens(system + user, language);
+            run.InputTokens = input + prompt;
+            run.ActualUsd = spent + costs.Exact(model.Model, new ChatUsage(prompt, 0, 0, 0));
             run.CostExact = false;
             run.Status = RunStatus.Canceled;
             run.Error = "canceled";
@@ -163,15 +217,20 @@ public sealed class TopicSuggester(IConceptStore concepts, ITopicSuggestionStore
             throw new TopicsCanceledException(run.ActualUsd);
         }
 
+        void Count(ChatUsage usage, decimal? reported)
+        {
+            spent += costs.Exact(model.Model, usage, reported);
+            input += usage.Input;
+            output += usage.Output;
+        }
         // The scope sentence only anchors the model to the channel before it lists topics; it is not shown, only logged.
         logger.LogDebug("Topic suggestions: the model's scope: {Scope}", Scope(text));
-        var parsed = cut ? ParsePartial(text, count) : Parse(text, count);
         var topics = parsed.Where(t => !earlier.Contains(TurkishFold.Fold(t))).ToList();
         var repeats = parsed.Count - topics.Count;
-        run.ActualUsd = costs.Exact(model.Model, usage, reported);
+        run.ActualUsd = spent;
         run.CostExact = true;
-        run.InputTokens = usage.Input;
-        run.OutputTokens = usage.Output;
+        run.InputTokens = input;
+        run.OutputTokens = output;
         run.Accepted = topics.Count;
         // A read answer whose every topic was a repeat is a successful call (only filtered here), not an unreadable one.
         run.Status = parsed.Count > 0 ? RunStatus.Succeeded : RunStatus.Failed;
@@ -264,31 +323,24 @@ public sealed class TopicSuggester(IConceptStore concepts, ITopicSuggestionStore
     /// </summary>
     public static IReadOnlyList<string> Parse(string answer, int count)
     {
-        var text = answer ?? string.Empty;
-        var start = text.IndexOf('{', StringComparison.Ordinal);
-        var end = text.LastIndexOf('}');
-        if (start < 0 || end <= start)
+        // Read tolerantly (ModelJson: thinking, code fences and text around the JSON skipped, small mistakes repaired); a bare list counts too.
+        var node = ModelJson.TryParse(answer);
+        if ((node is JsonObject json ? json["topics"] : node) is not JsonArray items)
         {
             return [];
         }
 
-        try
-        {
-            if (JsonNode.Parse(text[start..(end + 1)])?["topics"] is not JsonArray items)
-            {
-                return [];
-            }
-
-            return items.Select(i => i is JsonValue value && value.TryGetValue<string>(out var topic) ? TextClean.OneLine(topic, TopicLimits.TopicMax) : string.Empty)
-                .Where(t => t.Length > 0)
-                .DistinctBy(TurkishFold.Fold)
-                .Take(count)
-                .ToList();
-        }
-        catch (JsonException)
-        {
-            return [];
-        }
+        return items.Select(i => i is JsonValue value && value.TryGetValue<string>(out var topic) ? TextClean.OneLine(topic, TopicLimits.TopicMax) : string.Empty)
+            .Where(t => t.Length > 0)
+            .DistinctBy(TurkishFold.Fold)
+            .Take(count)
+            .ToList();
+    }
+    /// <summary>Whether the answer's JSON holds a topic list at all (an empty one too).</summary>
+    private static bool HasTopicList(string answer)
+    {
+        var node = ModelJson.TryParse(answer);
+        return (node is JsonObject json ? json["topics"] : node) is JsonArray;
     }
 
     private async Task KeepAsync(Run run)

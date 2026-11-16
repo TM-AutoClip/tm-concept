@@ -20,4 +20,10 @@ public sealed class AppSettings
 
     /// <summary>Accepted the Supertonic OpenRAIL-M use restrictions.</summary>
     public bool SupertonicLicenseAccepted { get; set; }
+
+    /// <summary>
+    /// Answer limit (max_tokens, thinking included) of "Suggest topics" (default 16 000; Settings → General; kept within the topic limits and
+    /// lowered to the model's own limit). Only what the model writes is paid for.
+    /// </summary>
+    public int TopicMaxOutputTokens { get; set; } = 16_000;
 }

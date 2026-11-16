@@ -19,6 +19,10 @@ internal sealed class DesktopHarness : IDisposable
 
             // Nothing reaches a real provider: key tests pass, every other request fails (tests that look at requests replace it).
             s.AddSingleton(new Providers.OfflineHttp().Transport);
+
+            // The graphics card coordinator reads a fixed 16 GB card with 14 GB free and never waits (nothing native, any test machine).
+            s.AddSingleton<TMConcept.Core.Hardware.IVramProbe>(new Core.FakeVramProbe(new TMConcept.Core.Hardware.VramReading(16L << 30, 14L << 30, true, "test")));
+            s.AddSingleton(new TMConcept.Core.Models.GpuCoordinatorOptions(TimeSpan.FromMilliseconds(1), TimeSpan.FromSeconds(2)));
             overrides?.Invoke(s);
         });
     }

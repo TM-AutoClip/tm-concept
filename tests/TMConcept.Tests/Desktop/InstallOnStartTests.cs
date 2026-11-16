@@ -45,7 +45,7 @@ public sealed class InstallOnStartTests
     }
 
     [AvaloniaFact]
-    public async Task StartingInstallsOnlyWhatIsMissingAndKeepsNothingWhenTheDownloadIsDeclinedOrFails()
+    public async Task StartingInstallsOnlyWhatIsMissingAndStartsNothingWhenTheDownloadIsDeclinedOrFails()
     {
         var runtime = new FakeComponent(ComponentCodes.SpeechRuntime, ready: false);
         var voice = new FakeComponent(ComponentCodes.VoicePrefix + "supertonic", ready: false, ComponentCodes.SpeechRuntime);
@@ -62,10 +62,10 @@ public sealed class InstallOnStartTests
         speech.Note.ShouldContain(text["models.installs_on_start"]);
         string[] needed = [PipelineSteps.Speech, PipelineSteps.Images];
 
-        // The download list is declined: nothing starts and nothing is kept.
+        // The download list is declined: nothing starts and nothing is installed; the choice itself was saved when it was made (0.1.17).
         confirm.Answers.Enqueue(false);
         (await picker.PrepareAsync(needed, "install.purpose.video", CancellationToken.None)).ShouldBeFalse();
-        (await store.GetAsync(PipelineSteps.Speech, profile.Id, CancellationToken.None)).ShouldBeNull();
+        (await store.GetAsync(PipelineSteps.Speech, profile.Id, CancellationToken.None))!.Model.ShouldBe("supertonic");
         (runtime.Installs + voice.Installs + image.Installs).ShouldBe(0);
         confirm.Messages[^1].ShouldContain(voice.Name);
         confirm.Messages[^1].ShouldContain(runtime.Name);
@@ -76,7 +76,7 @@ public sealed class InstallOnStartTests
         voice.Fail = true;
         (await picker.PrepareAsync(needed, "install.purpose.video", CancellationToken.None)).ShouldBeFalse();
         runtime.Installs.ShouldBe(1);
-        (await store.GetAsync(PipelineSteps.Speech, profile.Id, CancellationToken.None)).ShouldBeNull();
+        (await store.GetAsync(PipelineSteps.Speech, profile.Id, CancellationToken.None))!.Model.ShouldBe("supertonic", "the choice stays; only the start stops");
 
         // Accepted and installed: the choices are kept for the profile; what is ready is not installed again.
         voice.Fail = false;
@@ -130,7 +130,8 @@ public sealed class InstallOnStartTests
 
         weights.Installs.ShouldBe(0, "its program has no download here: its weights are not fetched for nothing");
         picker.Status.ShouldContain(imageRuntime.Name);
-        (await h.Get<IStepModelStore>().GetAsync(PipelineSteps.Images, profile.Id, CancellationToken.None)).ShouldBeNull();
+        (await h.Get<IStepModelStore>().GetAsync(PipelineSteps.Images, profile.Id, CancellationToken.None))!.Model.ShouldBe("flux2-klein-4b",
+            "the choice is kept as the user made it (0.1.17); only the start is stopped");
     }
 
     [Fact]

@@ -70,6 +70,12 @@ public sealed class CatalogModel
     /// <summary>Components a local model needs on this computer (installed on save after a confirmation).</summary>
     public List<string> Requires { get; set; } = [];
 
-    /// <summary>Least graphics card memory (GB) a local model needs to run well (0 = no graphics card needed). A warning, never a block.</summary>
+    /// <summary>
+    /// Least graphics card memory (GB) a local model needs to run well (0 = no graphics card needed): its graphics card class
+    /// (<see cref="Hardware.VramTiers.ForModel"/>; a card sees its own class and every lower one). A warning, never a block.
+    /// </summary>
     public int MinVideoMemoryGb { get; set; }
+
+    /// <summary>Main memory (GB) a local model needs besides (0 = unknown or small); used when its weights move off the graphics card.</summary>
+    public int MemoryGb { get; set; }
 }

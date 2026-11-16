@@ -160,9 +160,27 @@ adım ne işe yaradığını yazar:
 **Üret**'e ya da **Kuyruğu üret**'e bastığında önce seçimler hazırlanır: henüz API anahtarı olmayan sağlayıcının adı söylenir ve anahtarı
 oracıkta yapıştırabilirsin (ücretsiz bir istekle denenir, yalnız çalışırsa saklanır); sonra bir seçim bu bilgisayarda olmayan bir şey
 gerektiriyorsa **tek bir onay bütün indirmeleri listeler** (ad, kaynak, boyut). Onaysız hiçbir şey indirilmez. Programın üstünde açılan
-bir pencerede kurulur (her indirme bir satırda, ilerlemesiyle; program bu sırada bekler, İptal durdurur), seçimler profil için saklanır ve
+bir pencerede kurulur (her indirme bir satırda, ilerlemesiyle; program bu sırada bekler, İptal durdurur) ve
 iş kendiliğinden devam eder. Onaylamazsan, vazgeçersen ya da kurulum başarısız olursa hiçbir şey
 başlamaz, hiçbir şey ödenmez; sebebi görünür. Saklanan bir seçimin bileşeni sonradan kaldırıldıysa bir dahaki sefere yeniden kurulur.
+
+**Seçimlerin yaptığın gibi kalır.** Model, efor, motor, ses ya da hızdaki her değişiklik o an profil için kaydedilir; sayfa değiştirmek,
+programı yeniden açmak, yeni API anahtarı ya da yeni yerel sunucu eklemek eski bir seçimi geri getirmez. Seçtiğin model şu an
+sunulmuyorsa (yerel sunucusu silindi ya da onu artık listelemiyor, ya da bu sürümde yok) seçili kalır ve sebebiyle birlikte *şu an
+kullanılamıyor* diye görünür; geri gelene ya da başka bir model seçene kadar onunla hiçbir iş başlamaz.
+
+**Ekran kartında aynı anda tek yerel model.** Bu bilgisayardaki bir yerel sunucunun modelleri (Ollama, LM Studio, llama-server,
+Lemonade…) ve yerel görsel modelleri ekran kartını paylaşır: bir yerel model başlamadan önce ondan önce kullanılan boşaltılır (sunucusuna
+sorulabiliyorsa) ve program kartın belleği yeniden boşalana kadar bekler; online modeller ve yerel sesler (işlemcide çalışırlar) hiç
+beklemez. Boş bellek her seferinde ölçülür: Windows'ta Görev Yöneticisi'nin gösterdiğiyle Windows'un programa izin verdiğinden küçük
+olanı, Linux'ta AMD sürücüsünün dosyaları ya da `nvidia-smi`. Ekran belleği sınıfları 4, 6, 8, 12, 16, 24 ve 32 GB'tır: bir kart
+bildirdiği belleğe sekizde bir payla en yakın sınıfta sayılır (15,8 GB bildiren "16 GB" kart 16 GB'lık karttır), kendi sınıfını ve
+altındakileri kullanabilir; daha yüksek sınıftaki model kırmızı görünür.
+
+**JSON olması gereken cevaplar.** Konseptler, konu önerileri, yapay zekâ düzenlemesi ve görsel istemleri hoşgörüyle okunur (düşünme
+blokları, kod çitleri ve cevabın etrafındaki metin atlanır, küçük hatalar onarılır). Yine de okunamayan cevap için aynı istek en çok
+iki kez daha gönderilir; her deneme ödenir ve maliyete sayılır, üç okunamayan cevaptan sonra iş "cevap okunamadı" diye durur.
+*Ayarlar → Genel → Konu önerileri* bir konu cevabının yazabileceği en fazla tokenı belirler (varsayılan 16 000; yalnız yazılana ödersin).
 
 | Bileşen | Kaynak | Yaklaşık |
 |---|---|---|

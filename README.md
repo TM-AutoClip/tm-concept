@@ -164,9 +164,27 @@ the model that describes a sample image. Each step says what it is for:
 When you press **Generate** or **Produce**, the choices are made ready first: a provider with no API key yet is named and you can paste a
 key right there (it is tested with a free request and kept only when it works); then, when a choice needs something this computer does
 not have, **one confirmation lists every download** (name, source, size). Nothing is downloaded without it. It installs in a window over
-the app (one line per download with its progress; the app waits meanwhile, Cancel stops it), the choices are saved for the profile, and
+the app (one line per download with its progress; the app waits meanwhile, Cancel stops it), and
 the process goes on by itself. If you decline, cancel or an install fails, nothing
 starts and nothing is paid for; the reason is shown. A kept choice whose component was removed later is installed again the next time.
+
+**Your choices stay as you made them.** Every change of a model, effort, engine, voice or speed is saved for the profile at once, so a
+page switch, a restart, a new API key or a new local server never brings an older choice back. A chosen model that is not offered right
+now (its local server was removed or does not list it, or this version no longer has it) stays chosen and is shown as *not available
+now* with the reason; nothing starts with it until it is back or you choose another one.
+
+**One local model on the graphics card at a time.** Models of a local server on this computer (Ollama, LM Studio, llama-server,
+Lemonade…) and the local image models share the graphics card: before a local model starts, the one used before it is unloaded (when its
+server can be asked to) and the app waits until the card's memory is free again; online models and the local voices (they run on the
+processor) never wait. The free memory is measured each time: on Windows the smaller of what Task Manager shows and what Windows lets
+the app use, on Linux the AMD driver's files or `nvidia-smi`. Graphics memory classes are 4, 6, 8, 12, 16, 24 and 32 GB: a card counts in
+the class it reports within about an eighth (a "16 GB" card that reports 15.8 GB is a 16 GB card) and can use its own class and every
+lower one; a model of a higher class is shown in red.
+
+**Answers that must be JSON.** Concepts, topics, the AI edit and the image prompts are read tolerantly (thinking, code fences and text
+around the answer are skipped, small mistakes repaired). An answer that still cannot be read is asked for once more, at most twice;
+every attempt is paid and counted in the cost, and after three unreadable answers the work stops with "the answer could not be read".
+*Settings → General → Topic suggestions* sets the most a topic answer may write (default 16 000 tokens; only what is written is paid).
 
 | Component | From | About |
 |---|---|---|

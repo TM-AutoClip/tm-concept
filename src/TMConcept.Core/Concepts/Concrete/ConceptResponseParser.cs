@@ -6,7 +6,8 @@ namespace TMConcept.Core.Concepts;
 /// Reads <c>{"konseptler":[{"baslik":"…","ozet":"…","icerik":"…"}]}</c> from a model answer. The answer is untrusted: a code fence or text
 /// around the JSON is skipped, NUL and control characters are removed, lengths are cut. A cut-off answer (the model stopped in the middle)
 /// still yields every complete item before the cut; a broken item is reported and skipped, the others are kept. English key names
-/// (<c>concepts</c>, <c>title</c>, <c>summary</c>, <c>content</c>) are accepted too.
+/// (<c>concepts</c>, <c>title</c>, <c>summary</c>, <c>content</c>) are accepted too. Thinking blocks are skipped and an item that is not valid JSON is read
+/// once more after <see cref="Chat.ModelJson.Repair"/> (0.1.17: small local models write raw line breaks inside the content).
 /// </summary>
 public static class ConceptResponseParser
 {
@@ -19,7 +20,7 @@ public static class ConceptResponseParser
     public static ConceptParseResult Parse(string? answer)
     {
         var problems = new List<string>();
-        var text = (answer ?? string.Empty).Replace("\0", string.Empty, StringComparison.Ordinal);
+        var text = Chat.ModelJson.StripThinking(answer).Replace("\0", string.Empty, StringComparison.Ordinal);
         var start = ArrayStart(text);
         if (start < 0)
         {
@@ -34,7 +35,7 @@ public static class ConceptResponseParser
             number++;
             try
             {
-                using var document = JsonDocument.Parse(json);
+                using var document = Document(json);
                 var root = document.RootElement;
                 var title = TextClean(Read(root, TitleKeys), ConceptLimits.TitleHardMax, oneLine: true);
                 var summary = TextClean(Read(root, SummaryKeys), ConceptLimits.SummaryMax, oneLine: true);
@@ -71,6 +72,21 @@ public static class ConceptResponseParser
         var start = ArrayStart(text);
         return start < 0 ? 0 : TopLevelObjects(text, start).Objects.Count;
     }
+
+    /// <summary>One item: as written, or after <see cref="Chat.ModelJson.Repair"/> (raw line breaks in the content, a trailing comma).</summary>
+    private static JsonDocument Document(string json)
+    {
+        try
+        {
+            return JsonDocument.Parse(json, Lenient);
+        }
+        catch (JsonException)
+        {
+            return JsonDocument.Parse(Chat.ModelJson.Repair(json), Lenient);
+        }
+    }
+
+    private static readonly JsonDocumentOptions Lenient = new() { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip };
 
     private static string TextClean(string? value, int max, bool oneLine) =>
         oneLine ? Text.TextClean.OneLine(value, max) : Text.TextClean.Clean(value, max);

@@ -111,11 +111,23 @@ public sealed partial class StepModelRowViewModel(PipelineStep step, string titl
     /// </summary>
     public string Fallback { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Why the saved model is not offered now (empty when it is): the note of an <see cref="StepOptionKind.Unavailable"/> entry, until the
+    /// user picks another entry.
+    /// </summary>
+    public string Unavailable { get; set; } = string.Empty;
+
     /// <summary>The value last loaded or saved (only a changed step is saved and logged).</summary>
     public string Saved { get; set; } = string.Empty;
 
     partial void OnSelectedChanged(StepOption? value)
     {
+        if (value is null)
+        {
+            // A picker whose list is being replaced pushes null for a moment: the effort list (and the chosen effort) stays.
+            return;
+        }
+
         var keep = Effort?.Value ?? string.Empty;
         // The topics step always asks at effort low (a cheap, quick call): no effort picker there.
         Efforts = value?.Model is { Efforts.Count: > 0 } model && Step.Code != PipelineSteps.Topics

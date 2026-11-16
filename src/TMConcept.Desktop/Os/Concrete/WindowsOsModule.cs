@@ -35,5 +35,9 @@ public sealed class WindowsOsModule : IOsModule
         // Graphics cards: DXGI first, the registry's 64-bit memory values for what DXGI did not give.
         services.AddSingleton<Engines.Hardware.IGraphicsAdapterSource, Engines.Hardware.DxgiAdapterSource>();
         services.AddSingleton<Engines.Hardware.IGraphicsAdapterSource, Engines.Hardware.RegistryAdapterSource>();
+
+        // Free graphics card memory: the whole system's use (performance counter) and this process's DXGI budget; the smaller one counts.
+        services.AddSingleton<Engines.Hardware.IVideoMemorySource, Engines.Hardware.PdhVideoMemorySource>();
+        services.AddSingleton<Engines.Hardware.IVideoMemorySource, Engines.Hardware.DxgiAdapterSource>();
     }
 }

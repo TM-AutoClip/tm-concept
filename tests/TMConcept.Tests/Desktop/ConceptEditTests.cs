@@ -230,7 +230,9 @@ public sealed class ConceptEditTests
     {
         var fake = new FakeChat()
             .Answer(_ => throw new ProviderException("cut") { Code = "truncated", ChargedUsage = new ChatUsage(3000, 0, 0, 64_000), PartialText = "{\"konseptler\":[{\"baslik\":\"Half" })
-            .Answer(_ => new ChatResponse("Sorry, no JSON today.", new ChatUsage(3000, 0, 0, 200), null, "end_turn", "r"));
+            .Answer(_ => new ChatResponse("Sorry, no JSON today.", new ChatUsage(3000, 0, 0, 200), null, "end_turn", "r"))
+            .Answer(_ => new ChatResponse("<think>JSON?</think> Still none.", new ChatUsage(3000, 0, 0, 200), null, "end_turn", "r"))
+            .Answer(_ => new ChatResponse("{\"konseptler\": [{\"baslik\": \"\"}]}", new ChatUsage(3000, 0, 0, 200), null, "end_turn", "r"));
         using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
         var (_, concept) = await PrepareAsync(h);
         var text = h.Get<Localizer>();
@@ -253,8 +255,11 @@ public sealed class ConceptEditTests
 
         await detail.SendAiEditAsync();
 
+        // An unreadable answer is asked again twice more (0.1.17); all three attempts are paid and counted in the one run.
         var unreadable = await RunOfAsync(h);
         unreadable.Error.ShouldBe("parse");
+        fake.Requests.Count.ShouldBe(4);
+        unreadable.OutputTokens.ShouldBe(600);
         detail.AiStatus.ShouldBe(text.Format("concepts.ai.failed", text["concepts.parse_failed"], text.Usd(unreadable.ActualUsd)));
         var stored = (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!;
         stored.Title.ShouldBe(concept.Title);

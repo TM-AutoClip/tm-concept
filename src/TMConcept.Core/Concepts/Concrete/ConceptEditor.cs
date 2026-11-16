@@ -60,18 +60,41 @@ public sealed class ConceptEditor(IProfileStore profiles, IRunStore runs, IConce
         var maxTokens = ConceptOutputBudget.MaxOutputTokens(model.Model);
         logger.LogInformation("AI edit of concept #{Number} with {Provider}/{Model}, max_tokens {MaxTokens}, effort {Effort}", concept.Number,
             model.Model.Provider, model.Model.Id, maxTokens, model.Effort.Length > 0 ? model.Effort : "automatic");
-        ChatResponse answer;
+        // An answer without a readable concept is asked again (the same request, at most twice; JsonAnswerRetry), every attempt counted.
+        // A cut-off answer is not asked again: a half concept is no edit.
+        var client = chats.Create(model.Model, model.Key.Secret);
+        ConceptParseResult parsed;
         try
         {
-            answer = await chats.Create(model.Model, model.Key.Secret).SendAsync(new ChatRequest(prompt.System, prompt.User, Schema: prompt.Schema,
-                MaxOutputTokens: maxTokens, Effort: model.Effort, Stream: true, Progress: progress), cancellationToken).ConfigureAwait(false);
+            parsed = await JsonAnswerRetry.RunAsync($"AI edit of concept #{concept.Number}", async (_, token) =>
+            {
+                var answer = await client.SendAsync(new ChatRequest(prompt.System, prompt.User, Schema: prompt.Schema,
+                    MaxOutputTokens: maxTokens, Effort: model.Effort, Stream: true, Progress: progress), token).ConfigureAwait(false);
+                run.ActualUsd += costs.Exact(model.Model, answer.Usage, answer.ReportedCostUsd);
+                run.InputTokens += answer.Usage.Input;
+                run.CachedTokens += answer.Usage.CacheRead;
+                run.CacheWriteTokens += answer.Usage.CacheWrite;
+                run.OutputTokens += answer.Usage.Output;
+                var read = ConceptResponseParser.Parse(answer.Text);
+                foreach (var problem in read.Problems)
+                {
+                    logger.LogWarning("AI edit of concept #{Number}: {Problem}", concept.Number, problem);
+                }
+
+                if (read.Truncated)
+                {
+                    throw new ProviderException("The edited concept was cut off.") { Code = "incomplete" };
+                }
+
+                return read.Concepts.Count > 0 ? read : null;
+            }, logger, cancellationToken).ConfigureAwait(false);
         }
         catch (ProviderException ex)
         {
-            // A cut-off or refused answer may still be billed: kept as a failed run; the concept stays as it was.
-            run.ActualUsd = ex.ChargedUsage is { } charged ? costs.Exact(model.Model, charged) : 0;
-            run.InputTokens = ex.ChargedUsage?.Input ?? 0;
-            run.OutputTokens = ex.ChargedUsage?.Output ?? 0;
+            // A cut-off, refused or unreadable answer may still be billed: kept as a failed run; the concept stays as it was.
+            run.ActualUsd += ex.ChargedUsage is { } charged ? costs.Exact(model.Model, charged) : 0;
+            run.InputTokens += ex.ChargedUsage?.Input ?? 0;
+            run.OutputTokens += ex.ChargedUsage?.Output ?? 0;
             return await FailAsync(run, ex.Code, true).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
@@ -79,27 +102,10 @@ public sealed class ConceptEditor(IProfileStore profiles, IRunStore runs, IConce
             // Canceled while the call ran: the provider may bill the prompt (and what was written so far, which is not known here). The
             // prompt is kept as an estimated cost, so the month's spending does not miss the call.
             var input = costs.Tokens(prompt.System + prompt.User, profile.ContentLanguage);
-            run.InputTokens = input;
-            run.ActualUsd = costs.Exact(model.Model, new ChatUsage(input, 0, 0, 0));
+            run.InputTokens += input;
+            run.ActualUsd += costs.Exact(model.Model, new ChatUsage(input, 0, 0, 0));
             return await FailAsync(run, "canceled", false).ConfigureAwait(false);
         }
-
-        run.ActualUsd = costs.Exact(model.Model, answer.Usage, answer.ReportedCostUsd);
-        run.InputTokens = answer.Usage.Input;
-        run.CachedTokens = answer.Usage.CacheRead;
-        run.CacheWriteTokens = answer.Usage.CacheWrite;
-        run.OutputTokens = answer.Usage.Output;
-        var parsed = ConceptResponseParser.Parse(answer.Text);
-        foreach (var problem in parsed.Problems)
-        {
-            logger.LogWarning("AI edit of concept #{Number}: {Problem}", concept.Number, problem);
-        }
-
-        if (parsed.Truncated || parsed.Concepts.Count == 0)
-        {
-            return await FailAsync(run, parsed.Truncated ? "incomplete" : "parse", true).ConfigureAwait(false);
-        }
-
         run.Accepted = 1;
         run.Status = RunStatus.Succeeded;
         run.CostExact = true;

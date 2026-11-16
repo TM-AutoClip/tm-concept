@@ -32,6 +32,13 @@
         <TextBlock Text="{DynamicResource settings.notifications.seconds}" VerticalAlignment="Center" />
         <NumericUpDown Value="{Binding NotificationSeconds}" Minimum="3" Maximum="3600" Increment="10" Width="140" FormatString="0" />
       </StackPanel>
+      <TextBlock Text="{DynamicResource settings.topics}" Classes="h2" Margin="0,10,0,0" />
+      <StackPanel Orientation="Horizontal" Spacing="10">
+        <TextBlock Text="{DynamicResource settings.topics.max_tokens}" VerticalAlignment="Center" />
+        <NumericUpDown Name="TopicMaxTokensBox" Value="{Binding TopicMaxOutputTokens}" Minimum="2000" Maximum="128000"
+                       Increment="1000" Width="160" FormatString="0" />
+      </StackPanel>
+      <TextBlock Text="{DynamicResource settings.topics.max_tokens.note}" Classes="muted" TextWrapping="Wrap" />
       <StackPanel Orientation="Horizontal" Spacing="10">
         <Button Classes="accent" Content="{DynamicResource common.save}" Command="{Binding SaveCommand}" />
         <Button Content="{DynamicResource settings.notifications.test}" Command="{Binding TestNotificationCommand}" />

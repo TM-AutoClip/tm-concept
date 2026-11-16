@@ -105,6 +105,15 @@ public static class DesktopServices
         services.AddSingleton<PreferencesImageAcceleration>();
         services.AddSingleton<Core.Hardware.IImageAccelerationSetting>(s => s.GetRequiredService<PreferencesImageAcceleration>());
         services.AddSingleton<Engines.Images.ImageBackendSelector>();
+
+        // 0.1.17 (one pipeline, local and online models mixed): every model is an IModel; a local one on the graphics card is used only inside
+        // a lease of the one coordinator, which unloads the previous model and measures the free memory first.
+        services.AddSingleton<Core.Hardware.IVramProbe, Engines.Hardware.VramProbe>();
+        services.AddSingleton(GpuCoordinatorOptions.Default);
+        services.AddSingleton<IModelDirectory, ModelDirectory>();
+        services.AddSingleton<IGpuCoordinator, GpuCoordinator>();
+        services.AddSingleton<ILocalModelSource, Engines.Images.SdCppModelSource>();
+        services.AddSingleton<ILocalModelSource, Speech.Speech.WorkerModelSource>();
         services.AddSingleton<Engines.Tools.ToolInstaller>();
         services.AddSingleton<Core.Tools.IToolLocator>(s => s.GetRequiredService<Engines.Tools.ToolInstaller>());
         services.AddSingleton<Core.Processes.IChildProcessGuard>(s => s.GetRequiredService<Engines.Processes.ChildProcessGuardBase>());

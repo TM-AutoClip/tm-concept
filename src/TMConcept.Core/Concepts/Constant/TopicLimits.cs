@@ -17,4 +17,10 @@ public static class TopicLimits
 
     /// <summary>Longest topic kept.</summary>
     public const int TopicMax = 120;
+
+    /// <summary>Smallest answer limit (max_tokens) the setting allows: room for thinking and a few topics.</summary>
+    public const int OutputMin = 2_000;
+
+    /// <summary>Largest answer limit (max_tokens) the setting allows (a model's own limit lowers it further).</summary>
+    public const int OutputLimit = 128_000;
 }

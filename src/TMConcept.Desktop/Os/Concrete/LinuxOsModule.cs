@@ -46,6 +46,10 @@ public sealed class LinuxOsModule : IOsModule
         // Graphics cards: sysfs first, nvidia-smi for an NVIDIA card's memory (its driver writes none to sysfs).
         services.AddSingleton<Engines.Hardware.IGraphicsAdapterSource, Engines.Hardware.SysfsAdapterSource>();
         services.AddSingleton<Engines.Hardware.IGraphicsAdapterSource, Engines.Hardware.NvidiaSmiAdapterSource>();
+
+        // Free graphics card memory: amdgpu's sysfs files, nvidia-smi for NVIDIA.
+        services.AddSingleton<Engines.Hardware.IVideoMemorySource, Engines.Hardware.SysfsAdapterSource>();
+        services.AddSingleton<Engines.Hardware.IVideoMemorySource, Engines.Hardware.NvidiaSmiAdapterSource>();
     }
 
     /// <summary>The documents folder from user-dirs.dirs (<c>XDG_DOCUMENTS_DIR="$HOME/Belgeler"</c>), otherwise ~/Documents.</summary>
