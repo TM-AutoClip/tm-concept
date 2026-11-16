@@ -23,7 +23,7 @@ public sealed class ChatterboxVoiceTests
     private static DesktopHarness Harness() => new(s =>
     {
         s.AddSingleton<IConfirmDialog>(new FakeConfirm());
-        s.AddSingleton<IGpuInfo>(new FakeGpu(null));
+        s.AddSingleton<IGpuInfo>(new FakeGpu(GpuReport.None));
         s.RemoveAll<IVoiceSampleConverter>();
         s.AddSingleton<IVoiceSampleConverter>(new ToneConverter());
         s.RemoveAll<IComponentSource>();

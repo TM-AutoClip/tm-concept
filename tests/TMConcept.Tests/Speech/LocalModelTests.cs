@@ -32,7 +32,7 @@ public sealed class LocalModelTests
         using var h = new DesktopHarness(s =>
         {
             s.AddSingleton<IConfirmDialog>(confirm);
-            s.AddSingleton<IGpuInfo>(new FakeGpu(null));
+            s.AddSingleton<IGpuInfo>(new FakeGpu(GpuReport.None));
             s.RemoveAll<IComponentSource>();
             s.AddSingleton<IComponentSource>(new FakeComponents(runtime, kokoro, embedding));
         });

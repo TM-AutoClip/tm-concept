@@ -21,7 +21,7 @@ public sealed class VoiceLanguageTests
     private static DesktopHarness Harness() => new(s =>
     {
         s.AddSingleton<IConfirmDialog>(new FakeConfirm());
-        s.AddSingleton<IGpuInfo>(new FakeGpu(null));
+        s.AddSingleton<IGpuInfo>(new FakeGpu(GpuReport.None));
         s.RemoveAll<IComponentSource>();
         s.AddSingleton<IComponentSource>(new FakeComponents(new FakeComponent(ComponentCodes.SpeechRuntime, ready: true),
             new FakeComponent(ComponentCodes.VoicePrefix + SpeechEngines.Supertonic, ready: true, ComponentCodes.SpeechRuntime),

@@ -70,7 +70,7 @@
                 <Border Classes="badge" HorizontalAlignment="Left" IsVisible="{Binding ShowRecommended}">
                   <TextBlock Text="{Binding Recommended}" Classes="small" />
                 </Border>
-                <TextBlock Text="{Binding Note}" Classes="small" Classes.warning="{Binding NoteIsWarning}" TextWrapping="Wrap"
+                <TextBlock Text="{Binding Note}" Classes="small" Classes.warning="{Binding NoteIsWarning}" Classes.error="{Binding NoteIsError}" Classes.ok="{Binding NoteIsOk}" TextWrapping="Wrap"
                            MaxLines="{Binding $parent[ItemsControl].((vm:StepPickerViewModel)DataContext).NoteLines}" TextTrimming="CharacterEllipsis"
                            ToolTip.Tip="{Binding Note}"
                            IsVisible="{Binding Note, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />

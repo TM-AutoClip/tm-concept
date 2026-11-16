@@ -18,4 +18,10 @@ public sealed class UiPreferences
     /// the running step; open it was a quarter of a 720-pixel window); the last choice is kept.
     /// </summary>
     public bool LogOpen { get; set; }
+
+    /// <summary>
+    /// Which stable-diffusion.cpp build runs the local image models on this computer (per machine: the graphics card belongs to the
+    /// computer, not to the backup). Automatic by default: chosen from the graphics card found. Stored as a number.
+    /// </summary>
+    public Core.Hardware.ImageAcceleration ImageAcceleration { get; set; }
 }

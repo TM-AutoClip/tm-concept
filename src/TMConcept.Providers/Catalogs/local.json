@@ -8,6 +8,7 @@
     { "id": "chatterbox", "name": "Chatterbox Multilingual V3 (your own voice)", "capabilities": "Speech", "requires": ["voice.chatterbox"] },
     { "id": "paraphrase-multilingual-minilm", "name": "Multilingual MiniLM (meaning check)", "capabilities": "Embedding", "requires": ["embedding.paraphrase-multilingual-minilm"] },
     { "id": "flux2-klein-4b", "name": "FLUX.2 klein 4B", "capabilities": "Image", "requires": ["image.flux2-klein-4b"], "minVideoMemoryGb": 6 },
-    { "id": "z-image-turbo", "name": "Z-Image Turbo", "capabilities": "Image", "requires": ["image.z-image-turbo"], "minVideoMemoryGb": 6 }
+    { "id": "z-image-turbo", "name": "Z-Image Turbo", "capabilities": "Image", "requires": ["image.z-image-turbo"], "minVideoMemoryGb": 6 },
+    { "id": "z-image-turbo-full", "name": "Z-Image Turbo (full quality)", "capabilities": "Image", "requires": ["image.z-image-turbo-full"], "minVideoMemoryGb": 16 }
   ]
 }

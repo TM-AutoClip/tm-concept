@@ -49,7 +49,7 @@ public sealed class VoiceCloneTests
     private static DesktopHarness Harness(FakeConverter converter) => new(s =>
     {
         s.AddSingleton<IConfirmDialog>(new FakeConfirm());
-        s.AddSingleton<IGpuInfo>(new FakeGpu(null));
+        s.AddSingleton<IGpuInfo>(new FakeGpu(GpuReport.None));
         s.RemoveAll<IVoiceSampleConverter>();
         s.AddSingleton<IVoiceSampleConverter>(converter);
         s.RemoveAll<IComponentSource>();

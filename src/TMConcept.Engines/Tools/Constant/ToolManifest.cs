@@ -10,9 +10,13 @@ namespace TMConcept.Engines.Tools;
 /// one (<see cref="FallbackToSystem"/>); an unverified download is never run. sherpa-onnx: the official "-lib" archives of the v2.0.1
 /// release (only the shared libraries with ONNX Runtime; Windows: the MT build, which needs no Visual C++ runtime), hashes from the
 /// release's asset digests; the speech worker loads them, the app itself carries no speech library. stable-diffusion.cpp (MIT, leejet): the
-/// master-890-74988b2 release the prototype measured (hashes from the release's asset digests): on Windows the CUDA 12 build with its
-/// CUDA runtime libraries (NVIDIA graphics cards), on Linux x64 the Vulkan build; none for Linux ARM64. Updating a version = new rows here
-/// with new hashes.
+/// master-890-74988b2 release the prototype measured (hashes from the release's asset digests, checked again on 2026-11-16 by downloading
+/// the Vulkan and processor zips), one build per image backend, each in its own tools folder so they can sit side by side: on Windows the
+/// CUDA 12 build with its CUDA runtime libraries (NVIDIA), the Vulkan build (AMD, Intel, NVIDIA; needs only vulkan-1.dll from the graphics
+/// driver) and the processor build (one zip that picks the processor's best variant at run time); on Linux x64 the Vulkan and the processor
+/// build (Ubuntu 24.04). Every zip is flat: sd-cli sits at its top. The release has no Linux CUDA build and nothing for Linux ARM64. The
+/// ROCm builds are not used: their zips carry no HIP runtime (hipblas, rocblas must come from AMD's SDK on the PATH, otherwise sd-cli
+/// ends with 0xC0000135 and prints nothing). Updating a version = new rows here with new hashes.
 /// </summary>
 public static class ToolManifest
 {
@@ -38,7 +42,8 @@ public static class ToolManifest
     public const int NodeMinimumMajor = 22;
 
     /// <summary>Tools that are libraries, not programs: never looked for on the system PATH.</summary>
-    public static readonly IReadOnlyList<ToolKind> Libraries = [ToolKind.SpeechRuntime, ToolKind.ImageRuntime, ToolKind.ImageRuntimeCuda, ToolKind.ImageWeights, ToolKind.EmbeddingWeights];
+    public static readonly IReadOnlyList<ToolKind> Libraries = [ToolKind.SpeechRuntime, ToolKind.ImageRuntime, ToolKind.ImageRuntimeCuda, ToolKind.ImageRuntimeVulkan,
+        ToolKind.ImageRuntimeCpu, ToolKind.ImageWeights, ToolKind.EmbeddingWeights];
 
     /// <summary>Tools that may come from the system PATH when their pinned download is gone (404) or does not match its hash.</summary>
     public static readonly IReadOnlyList<ToolKind> FallbackToSystem = [ToolKind.Ffmpeg];
@@ -85,8 +90,17 @@ public static class ToolManifest
         new(ToolKind.ImageRuntimeCuda, SdCppTag, "win-x64",
             new Uri($"https://github.com/leejet/stable-diffusion.cpp/releases/download/{SdCppTag}/cudart-sd-bin-win-cu12-x64.zip"),
             "fe20366827d357c00797eebb58244dddab7fd9a348d70090c3871004c320f38d", string.Empty, "cudart64_12.dll", 563_452_046),
-        new(ToolKind.ImageRuntime, SdCppTag, "linux-x64",
+        new(ToolKind.ImageRuntimeVulkan, SdCppTag, "win-x64",
+            new Uri($"https://github.com/leejet/stable-diffusion.cpp/releases/download/{SdCppTag}/sd-master-74988b2-bin-win-vulkan-x64.zip"),
+            "744c8f817c66ecfd02fbb9dc8b122e1f29f7240db1f6086dfde2669403c5d896", string.Empty, "sd-cli.exe", 31_932_748),
+        new(ToolKind.ImageRuntimeCpu, SdCppTag, "win-x64",
+            new Uri($"https://github.com/leejet/stable-diffusion.cpp/releases/download/{SdCppTag}/sd-master-74988b2-bin-win-cpu-x64.zip"),
+            "24fcac70fadc41eb3524837893f1cb7ea54895fe4d807f88ef7afdeee8bd484b", string.Empty, "sd-cli.exe", 17_182_628),
+        new(ToolKind.ImageRuntimeVulkan, SdCppTag, "linux-x64",
             new Uri($"https://github.com/leejet/stable-diffusion.cpp/releases/download/{SdCppTag}/sd-master-74988b2-bin-Linux-Ubuntu-24.04-x86_64-vulkan.zip"),
             "158d593c803d4e50ad0a93a12811dc4c638b998fd8a4cd43f484d4bba7f780b2", string.Empty, "sd-cli", 38_541_512),
+        new(ToolKind.ImageRuntimeCpu, SdCppTag, "linux-x64",
+            new Uri($"https://github.com/leejet/stable-diffusion.cpp/releases/download/{SdCppTag}/sd-master-74988b2-bin-Linux-Ubuntu-24.04-x86_64.zip"),
+            "04f7b4db880167c1b7b25eefcde27aa301301568eadb17623876eb3b8c938198", string.Empty, "sd-cli", 25_418_220),
     ];
 }

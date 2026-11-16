@@ -31,7 +31,7 @@ namespace TMConcept.Desktop.ViewModels;
 /// Anything declined, missing or failed stops the process before anything is paid for, with the reason on the page and in the log.
 /// </summary>
 public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepModelStore steps, StepModelResolver resolver, IEnumerable<IVideoEngine> engines,
-    SpeechService speech, VoiceSampleLibrary voiceSamples, ComponentInstallFlow installs, AppSession session, IConfirmDialog confirm, IApiKeyDialog keyDialog, IGpuInfo gpu, IAppPaths paths,
+    SpeechService speech, VoiceSampleLibrary voiceSamples, ComponentInstallFlow installs, AppSession session, IConfirmDialog confirm, IApiKeyDialog keyDialog, Engines.Images.ImageBackendSelector backends, IAppPaths paths,
     ShellLauncher shell, Localizer text, ILogger<StepPickerViewModel> logger) : ObservableObject
 {
     /// <summary>The "saved" mark of a row whose saved choice is not offered any more: never equal to a row's key, so it is saved again.</summary>
@@ -539,6 +539,8 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
     private async Task NoteAsync(StepModelRowViewModel row)
     {
         row.NoteIsWarning = false;
+        row.NoteIsError = false;
+        row.NoteIsOk = false;
         var selected = row.Selected;
         if (selected is null)
         {
@@ -579,13 +581,10 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
 
         if (model.MinVideoMemoryGb > 0)
         {
-            var memory = await gpu.VideoMemoryBytesAsync(CancellationToken.None).ConfigureAwait(true);
-            var gigabytes = memory is { } bytes ? Math.Round(bytes / (1024.0 * 1024 * 1024), 1) : 0;
+            // The first call looks at the graphics cards (native calls; on Linux maybe a short nvidia-smi run): off the UI thread.
+            var choice = await Task.Run(backends.Choose).ConfigureAwait(true);
             parts.Add(text.Format("images.memory", model.MinVideoMemoryGb));
-            parts.Add(memory is null ? text["images.memory.unknown"]
-                : gigabytes + 0.25 < model.MinVideoMemoryGb ? text.Format("images.memory.low", gigabytes.ToString("0.#", text.Culture))
-                : text.Format("images.memory.ok", gigabytes.ToString("0.#", text.Culture)));
-            row.NoteIsWarning = memory is null || gigabytes + 0.25 < model.MinVideoMemoryGb;
+            MemoryNote(row, parts, model.MinVideoMemoryGb, choice);
         }
 
         if (model.Provider != ModelProviders.Local && (await resolver.ProvidersWithoutKeyAsync([model], CancellationToken.None).ConfigureAwait(true)).Count > 0)
@@ -606,7 +605,52 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
         }
 
         row.Note = string.Join(" ", parts);
+        // One colour for the whole note: red wins over yellow, yellow over green.
+        row.NoteIsWarning &= !row.NoteIsError;
+        row.NoteIsOk &= !row.NoteIsError && !row.NoteIsWarning;
     }
+
+    /// <summary>
+    /// The memory part of a local image model's note for the build chosen now: the processor build (yellow: slow); the card's memory unknown
+    /// (yellow); less than the model needs (red: it will not run here; still selectable, the user decides); enough (green, with the card
+    /// and the build).
+    /// </summary>
+    private void MemoryNote(StepModelRowViewModel row, List<string> parts, int minimumGb, ImageBackendChoice choice)
+    {
+        if (choice.Backend == ImageBackend.Cpu)
+        {
+            parts.Add(text["images.memory.cpu"]);
+            row.NoteIsWarning = true;
+            return;
+        }
+
+        if (choice.Device?.VideoMemoryBytes is not { } bytes)
+        {
+            parts.Add(text["images.memory.unknown"]);
+            row.NoteIsWarning = true;
+            return;
+        }
+
+        var gigabytes = Math.Round(bytes / (1024.0 * 1024 * 1024), 1);
+        var shown = gigabytes.ToString("0.#", text.Culture);
+        if (gigabytes + 0.25 < minimumGb)
+        {
+            parts.Add(text.Format("images.memory.not_enough", minimumGb, shown));
+            row.NoteIsError = true;
+            return;
+        }
+
+        parts.Add(text.Format("images.memory.ok", shown, choice.Device.Name, text["settings.image_acceleration." + BackendKey(choice.Backend)]));
+        row.NoteIsOk = true;
+    }
+
+    /// <summary>The language key part of a build (<c>cuda</c>, <c>vulkan</c>, <c>cpu</c>).</summary>
+    internal static string BackendKey(ImageBackend backend) => backend switch
+    {
+        ImageBackend.Cuda => "cuda",
+        ImageBackend.Vulkan => "vulkan",
+        _ => "cpu",
+    };
 
     /// <summary>Asks for the licenses a row needs and has not got yet (Remotion; the Supertonic voice's OpenRAIL-M terms); false when declined.</summary>
     private async Task<bool> LicensesAsync(StepModelRowViewModel row)

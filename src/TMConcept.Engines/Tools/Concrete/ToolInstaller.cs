@@ -225,6 +225,8 @@ public sealed class ToolInstaller(IAppPaths paths, IToolPlatform platform, ToolD
         ToolKind.SpeechRuntime => "sherpa-onnx",
         ToolKind.ImageRuntime => "sd-cpp",
         ToolKind.ImageRuntimeCuda => "sd-cpp-cuda",
+        ToolKind.ImageRuntimeVulkan => "sd-cpp-vulkan",
+        ToolKind.ImageRuntimeCpu => "sd-cpp-cpu",
         _ => tool.ToString().ToLowerInvariant(),
     };
 

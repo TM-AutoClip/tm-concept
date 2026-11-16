@@ -14,6 +14,18 @@
       <TextBlock Text="{DynamicResource settings.drawing}" Classes="h2" Margin="0,10,0,0" />
       <CheckBox IsChecked="{Binding UseGraphicsCard}" Content="{DynamicResource settings.drawing.gpu}" />
       <TextBlock Text="{DynamicResource settings.drawing.note}" Classes="muted" TextWrapping="Wrap" />
+      <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+        <TextBlock Text="{DynamicResource settings.image_acceleration}" Classes="h2" VerticalAlignment="Center" />
+        <views:HelpTip Text="{DynamicResource settings.image_acceleration.help}" />
+      </StackPanel>
+      <ComboBox ItemsSource="{Binding AccelerationOptions}" SelectedItem="{Binding Acceleration}" MinWidth="260">
+        <ComboBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:ChoiceOption">
+            <TextBlock Text="{Binding Label}" />
+          </DataTemplate>
+        </ComboBox.ItemTemplate>
+      </ComboBox>
+      <TextBlock Text="{Binding AccelerationNote}" Classes="muted" TextWrapping="Wrap" />
       <TextBlock Text="{DynamicResource settings.notifications}" Classes="h2" Margin="0,10,0,0" />
       <CheckBox IsChecked="{Binding NotificationsEnabled}" Content="{DynamicResource settings.notifications.enabled}" />
       <StackPanel Orientation="Horizontal" Spacing="10">

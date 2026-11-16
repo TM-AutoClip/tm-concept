@@ -15,7 +15,10 @@ public enum ToolKind
     /// <summary>sherpa-onnx with ONNX Runtime: the native libraries the speech worker loads for the local voice (not in the app itself).</summary>
     SpeechRuntime = 3,
 
-    /// <summary>stable-diffusion.cpp (sd-cli) that runs the local image models.</summary>
+    /// <summary>
+    /// stable-diffusion.cpp (sd-cli), the CUDA build (NVIDIA graphics cards, Windows; with <see cref="ImageRuntimeCuda"/>). The Vulkan and
+    /// processor builds are <see cref="ImageRuntimeVulkan"/> and <see cref="ImageRuntimeCpu"/>.
+    /// </summary>
     ImageRuntime = 4,
 
     /// <summary>The CUDA runtime libraries next to the Windows CUDA build of stable-diffusion.cpp (NVIDIA graphics cards).</summary>
@@ -35,4 +38,10 @@ public enum ToolKind
 
     /// <summary>A file of the Chatterbox Multilingual V3 voice model (ONNX graphs, run with the ONNX Runtime of the speech libraries).</summary>
     ChatterboxVoice = 10,
+
+    /// <summary>stable-diffusion.cpp (sd-cli), the Vulkan build (AMD, Intel and NVIDIA graphics cards; needs only the graphics driver).</summary>
+    ImageRuntimeVulkan = 11,
+
+    /// <summary>stable-diffusion.cpp (sd-cli), the processor build (no graphics card).</summary>
+    ImageRuntimeCpu = 12,
 }
