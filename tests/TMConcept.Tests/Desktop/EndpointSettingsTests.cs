@@ -68,7 +68,7 @@ public sealed class EndpointSettingsTests
         keys.Provider.Name.ShouldBe(text["keys.endpoint.provider"]);
         keys.IsEndpoint.ShouldBeTrue();
         keys.Guide.ShouldContain("http://localhost:13305/api/v1");
-        keys.Guide.ShouldContain("http://localhost:11434/v1");
+        keys.Guide.ShouldContain("http://localhost:11434");
         var editor = keys.Endpoint;
 
         // Saving without a model is refused in red; the server's models are listed with its context.
@@ -81,7 +81,8 @@ public sealed class EndpointSettingsTests
         editor.Failed.ShouldBeFalse();
         editor.Models.Select(m => (m.Id, m.ContextTokens, m.Picked)).ShouldBe([("bonsai-27b", (decimal?)32768m, false), ("qwen3-8b", (decimal?)8192m, false)]);
         editor.Models[0].MaxOutputTokens.ShouldBe(24576m, "a 32 768 context less room for the prompt: the video code answer needs a large one");
-        server.Requests.Single().Headers["Authorization"].ShouldBe("Bearer " + Token);
+        server.Requests.ShouldAllBe(r => r.Headers["Authorization"] == "Bearer " + Token, "the kind probes and the list carry the token");
+        editor.Kind.ShouldBe(EndpointKind.Generic, "a plain OpenAI-compatible server");
 
         // One listed and one typed model; JSON schema on the first.
         editor.Models[0].Picked = true;
@@ -124,7 +125,8 @@ public sealed class EndpointSettingsTests
         await editor.TestAsync(row);
         row.Failed.ShouldBeFalse();
         row.Result.ShouldBe("✓ " + text.Format("keys.endpoint.not_listed", "typed-model"));
-        server.ModelList(401, """{"error":{"message":"bad token"}}""");
+        // Twice: on an /api/v1 address LM Studio's kind probe reads the same list first (a refused one is simply "not LM Studio").
+        server.ModelList(401, """{"error":{"message":"bad token"}}""").ModelList(401, """{"error":{"message":"bad token"}}""");
         await editor.TestAsync(row);
         (row.Failed, row.Result).ShouldBe((true, "✗ " + text["keys.endpoint.fail.auth"]));
 

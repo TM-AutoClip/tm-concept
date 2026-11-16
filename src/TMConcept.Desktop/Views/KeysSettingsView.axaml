@@ -33,6 +33,7 @@
             <TextBox Text="{Binding Name}" PlaceholderText="{DynamicResource keys.endpoint.name}" />
             <TextBlock Text="{DynamicResource keys.endpoint.address}" Classes="small" />
             <TextBox Text="{Binding Address}" PlaceholderText="http://localhost:13305/api/v1" />
+            <TextBlock Text="{Binding KindNote}" IsVisible="{Binding HasKindNote}" Classes="small" TextWrapping="Wrap" />
             <TextBox Classes="secret" Text="{Binding Token}" PlaceholderText="{DynamicResource keys.endpoint.token}" />
             <StackPanel Orientation="Horizontal" Spacing="8">
               <Button Content="{DynamicResource keys.endpoint.connect}" Command="{Binding ConnectCommand}" IsEnabled="{Binding !Busy}" />
@@ -47,7 +48,7 @@
                 <DataTemplate x:DataType="vm:EndpointModelRowViewModel">
                   <Border Classes="card" Margin="0,3" Padding="8">
                     <StackPanel Spacing="4">
-                      <CheckBox IsChecked="{Binding Picked}" Content="{Binding Id}" />
+                      <CheckBox IsChecked="{Binding Picked}" Content="{Binding Label}" />
                       <WrapPanel>
                         <TextBlock Text="{DynamicResource keys.endpoint.context}" Classes="small" VerticalAlignment="Center" Margin="0,0,6,4" />
                         <NumericUpDown Value="{Binding ContextTokens}" Minimum="512" Maximum="10000000" Increment="1024" FormatString="0" Width="150"
@@ -56,7 +57,9 @@
                         <NumericUpDown Value="{Binding MaxOutputTokens}" Minimum="256" Maximum="1000000" Increment="512" FormatString="0" Width="150"
                                        Margin="0,0,12,4" />
                         <CheckBox IsChecked="{Binding Vision}" Content="{DynamicResource keys.endpoint.vision}" Margin="0,0,12,4" />
-                        <CheckBox IsChecked="{Binding JsonSchema}" Content="{DynamicResource keys.endpoint.schema}" Margin="0,0,0,4" />
+                        <CheckBox IsChecked="{Binding JsonSchema}" Content="{DynamicResource keys.endpoint.schema}" Margin="0,0,12,4" />
+                        <CheckBox IsChecked="{Binding Think}" IsVisible="{Binding CanThink}" Content="{DynamicResource keys.endpoint.think}"
+                                  ToolTip.Tip="{DynamicResource keys.endpoint.think_tip}" Margin="0,0,0,4" />
                       </WrapPanel>
                     </StackPanel>
                   </Border>
@@ -95,6 +98,23 @@
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
+
+        <StackPanel IsVisible="{Binding Endpoint.HasDetected}" Spacing="4" Margin="0,12,0,0">
+          <TextBlock Text="{DynamicResource keys.endpoint.detected}" Classes="h2" />
+          <ItemsControl ItemsSource="{Binding Endpoint.Detected}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:DetectedServerViewModel">
+                <Border Classes="card" Margin="0,4" Padding="10">
+                  <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                    <TextBlock Text="{Binding Label}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                    <Button Grid.Column="1" Content="{DynamicResource keys.endpoint.use_detected}" VerticalAlignment="Center"
+                            Command="{Binding $parent[ItemsControl].((vm:KeysSettingsViewModel)DataContext).UseDetectedCommand}" CommandParameter="{Binding}" />
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
 
         <TextBlock Text="{DynamicResource keys.endpoint.saved}" Classes="h2" Margin="0,12,0,0" />
         <ItemsControl ItemsSource="{Binding Endpoint.Saved}">

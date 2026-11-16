@@ -81,8 +81,8 @@ yalnız sunucu istiyorsa yaz. Program bu modellere ücret yazmaz; uzak bir hizme
    | Sunucu | Adres |
    |---|---|
    | Lemonade Server (AMD; llama.cpp'yi ROCm ya da Vulkan ile çalıştırır) | `http://localhost:13305/api/v1` (eski sürümler: 8000 portu) |
-   | Ollama | `http://localhost:11434/v1` |
-   | LM Studio | `http://localhost:1234/v1` |
+   | Ollama | `http://localhost:11434` (kendiliğinden bulunur, aşağıya bak) |
+   | LM Studio | `http://localhost:1234` (kendiliğinden bulunur, aşağıya bak) |
    | llama.cpp `llama-server` | `http://localhost:8080/v1` (yeni sürümler: 9931 portu) |
    | vLLM | `http://localhost:8000/v1` |
    | Ağındaki başka bir bilgisayar | `http://192.168.1.20:8080/v1` |
@@ -108,6 +108,35 @@ sayılmaz. Küçük yerel modeller büyük çevrim içi modellerden daha zayıf 
 
 Sunucu listesi ayarlarla birlikte yedeğe girer; sunucunun jetonu yalnız *API anahtarları*'nı işaretlersen. Bir sunucuyu silmek, onu
 kullanan adımları sen başka bir model seçene kadar modelsiz bırakır.
+
+### Ollama ve LM Studio
+
+Ayarlar → **Anahtarlar** açılınca TM Concept bu bilgisayarda Ollama'yı (`http://127.0.0.1:11434`) ve LM Studio'yu
+(`http://127.0.0.1:1234`) arar. Çalışan biri **Bu bilgisayarda bulunanlar** altında metin modeli sayısıyla görünür; **Ekle** formu
+doldurur ve modelleri listeler. Başka bir adres de olur: adresi yaz (`/v1` ile ya da onsuz) ve **Bağlan ve modelleri listele**'ye bas;
+program Ollama'yı ve LM Studio'yu kendi API'lerinden tanır ve onları kendi adresleriyle saklar. LM Studio için önce sunucusunu başlat
+(*Developer* sekmesi ya da `lms server start`). TM Concept bunlara model indirmez; önce orada bir model indir (`ollama pull qwen3:8b` ya
+da LM Studio'nun model aramasından).
+
+Düz bir OpenAI uyumlu sunucuya göre değişenler:
+
+- **Liste** yalnız metin modellerini gösterir (gömme ve bulut modelleri dışarıda kalır); her birinin diskteki boyutu, görsel okuyup
+  okumadığı ve düşünebilip düşünemediği yazar. Önerilen **Bağlam**, modelin eğitildiği bağlamdır ama en fazla 16 384 token: program
+  modeli bu bağlamla yükler, bağlam büyüdükçe daha çok ekran kartı belleği ister. Kartında yer varsa uzun video kodu yanıtları için
+  büyüt.
+- **Ollama** kendi `/api/chat`'iyle çalışır: bağlam her istekle gönderilir (Ollama'nın 24 GB altı kartlardaki kendi varsayılanı
+  4 096 token ve uzun istemleri sessizce kesiyordu), JSON şeması bir dilbilgisine çevrilir, böylece küçük modeller bile geçerli JSON
+  yazar. **Önce düşünsün** (düşünebilen modellerde) modelin düşünmesini açar; varsayılan kapalıdır (daha hızlı).
+- **LM Studio** ilk istekten önce modeli seçilen bağlamla yükler (`/api/v1/models/load`); daha küçük bağlamla yüklenmiş bir model yeniden
+  yüklenir. İstekler JSON şemasıyla OpenAI uyumlu API'sine gider.
+- **Ekran kartında tek model:** bir görsel ya da ses modeli kartı isteyince program Ollama'dan ya da LM Studio'dan dil modelini
+  indirmesini ister ve model sunucunun listesinden çıkıp kartın belleği boşalana kadar bekler.
+- **Ekran kartı belleği yetmezse:** Ollama karta sığmayan kısmı kendiliğinden ana belleğe koyar (çalışır ama yavaşlar). Kayıtlı bir
+  Ollama'da **Bağlantıyı dene**, bellekteki her modelin kaç GB'ının kartta, kaç GB'ının ana bellekte olduğunu gösterir; günlük de her
+  yanıttan sonra aynısını yazar. LM Studio kartta ne kadarının duracağına kendisi karar verir; model sığmıyorsa LM Studio'da modelin
+  ayarlarından *GPU Offload*'u düşür ya da bir kez `lms load <model> --gpu 0.5` ile yükle (0 ile 1 arası bir pay). Daha küçük bir model,
+  daha küçük bir niceleme ya da daha küçük bir bağlam da işe yarar.
+- Bozuk JSON yazan zayıf yerel modellere aynı istek en fazla iki kez daha gönderilir; yine olmazsa adım açık bir hatayla durur.
 
 ## Anahtarı ekledikten sonra
 

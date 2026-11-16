@@ -18,13 +18,36 @@ namespace TMConcept.Providers.Endpoints;
 /// Lemonade, <c>max_model_len</c> of vLLM). llama.cpp lists only <c>meta.n_ctx_train</c>, the context the model was trained with (131 072),
 /// not the one the server runs it with (<c>-c</c>, often 4 096–8 192), so it is not taken: for a server with one model whose list has no
 /// context, <c>GET {root}/props</c> gives llama-server's real one (<c>default_generation_settings.n_ctx</c>); otherwise the editor's default
-/// stands. Its own HTTP layer (<see cref="EndpointTransport"/>: long waits). The token is never logged; a failure's detail masks it.
+/// stands. Ollama and LM Studio are found first (<c>/api/version</c>, <c>/api/v1/models</c>) and listed and run through their own API
+/// (<see cref="OllamaServer"/>, <see cref="LmStudioServer"/>, <see cref="OllamaChatClient"/>, <see cref="LmStudioChatClient"/>). Its own HTTP layer (<see cref="EndpointTransport"/>: long waits). The token is never logged; a failure's detail masks it.
 /// </summary>
-public sealed class EndpointChatTransport(EndpointRegistry endpoints, EndpointTransport transport, ILoggerFactory loggers)
-    : IChatTransport, IEndpointProbe, IDisposable
+public sealed class EndpointChatTransport : IChatTransport, IEndpointProbe, IDisposable
 {
-    private readonly ProviderHttp _http = new(transport.Http, loggers.CreateLogger<ProviderHttp>());
-    private readonly ILogger _logger = loggers.CreateLogger<EndpointChatTransport>();
+    private readonly EndpointRegistry _endpoints;
+    private readonly EndpointTransport _transport;
+    private readonly ProviderHttp _http;
+    private readonly LocalServerHttp _servers;
+    private readonly ILogger _logger;
+
+    /// <summary>Over the saved servers and the local server HTTP layer.</summary>
+    public EndpointChatTransport(EndpointRegistry endpoints, EndpointTransport transport, ILoggerFactory loggers)
+    {
+        ArgumentNullException.ThrowIfNull(transport);
+        ArgumentNullException.ThrowIfNull(loggers);
+        _endpoints = endpoints;
+        _transport = transport;
+        _http = new ProviderHttp(transport.Http, loggers.CreateLogger<ProviderHttp>());
+        _servers = new LocalServerHttp(transport, _http);
+        _logger = loggers.CreateLogger<EndpointChatTransport>();
+        Ollama = new OllamaServer(_servers, loggers.CreateLogger<OllamaServer>());
+        LmStudio = new LmStudioServer(_servers, loggers.CreateLogger<LmStudioServer>());
+    }
+
+    /// <summary>Ollama's own API (model list, memory, unload).</summary>
+    public OllamaServer Ollama { get; }
+
+    /// <summary>LM Studio's own API (model list, load, unload).</summary>
+    public LmStudioServer LmStudio { get; }
 
     /// <inheritdoc />
     public string Code => ModelProviders.Endpoint;
@@ -36,14 +59,20 @@ public sealed class EndpointChatTransport(EndpointRegistry endpoints, EndpointTr
     public IChatClient CreateChat(CatalogModel model, string apiKey)
     {
         ArgumentNullException.ThrowIfNull(model);
-        if (!EndpointCodes.TryId(model.Provider, out var id) || endpoints.Find(id) is not { } endpoint)
+        if (!EndpointCodes.TryId(model.Provider, out var id) || _endpoints.Find(id) is not { } endpoint)
         {
             throw new InvalidOperationException($"The local server of '{model.Id}' is not saved any more.");
         }
 
         var token = string.IsNullOrEmpty(apiKey) ? endpoint.Token : apiKey;
-        var provider = new EndpointProvider(endpoint, endpoint.Models.FirstOrDefault(m => m.Id == model.Id), transport, _http, _logger);
-        return provider.CreateChat(model, token);
+        var saved = endpoint.Models.FirstOrDefault(m => m.Id == model.Id);
+        if (endpoint.Kind == EndpointKind.Ollama)
+        {
+            return new OllamaChatClient(endpoint, saved, model, token, Ollama, _servers, _logger);
+        }
+
+        var chat = new EndpointProvider(endpoint, saved, _transport, _http, _logger).CreateChat(model, token);
+        return endpoint.Kind == EndpointKind.LmStudio ? new LmStudioChatClient(chat, endpoint, token, LmStudio) : chat;
     }
 
     /// <inheritdoc />
@@ -55,8 +84,21 @@ public sealed class EndpointChatTransport(EndpointRegistry endpoints, EndpointTr
         }
 
         token ??= string.Empty;
+        var root = LocalServerAddress.Root(address);
+        var (status, version) = await Ollama.VersionAsync(root, token, cancellationToken).ConfigureAwait(false);
+        if (version is not null)
+        {
+            return await NativeAsync(EndpointKind.Ollama, root, version, () => Ollama.ListAsync(root, token, cancellationToken)).ConfigureAwait(false);
+        }
+
+        // Nothing answered at all: the plain list below says so with its own failure (no second probe to wait for).
+        if (status != 0 && await LmStudio.IsLmStudioAsync(root, token, cancellationToken).ConfigureAwait(false))
+        {
+            return await NativeAsync(EndpointKind.LmStudio, root, string.Empty, () => LmStudio.ListAsync(root, token, cancellationToken)).ConfigureAwait(false);
+        }
+
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        limit.CancelAfter(transport.ProbeTimeout);
+        limit.CancelAfter(_transport.ProbeTimeout);
         ProviderReply reply;
         try
         {
@@ -78,7 +120,7 @@ public sealed class EndpointChatTransport(EndpointRegistry endpoints, EndpointTr
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            _logger.LogWarning("Local server model list: no answer in {Seconds} s", transport.ProbeTimeout.TotalSeconds);
+            _logger.LogWarning("Local server model list: no answer in {Seconds} s", _transport.ProbeTimeout.TotalSeconds);
             return new EndpointListing(false, "timeout", string.Empty, []);
         }
 
@@ -99,7 +141,87 @@ public sealed class EndpointChatTransport(EndpointRegistry endpoints, EndpointTr
     }
 
     /// <inheritdoc />
-    public void Dispose() => _http.Dispose();
+    public async Task<IReadOnlyList<DetectedServer>> DetectAsync(CancellationToken cancellationToken)
+    {
+        var found = await Task.WhenAll(_transport.DetectAddresses.Select(a => DetectOneAsync(a, cancellationToken))).ConfigureAwait(false);
+        var servers = found.OfType<DetectedServer>().ToList();
+        _logger.LogInformation("Local servers on this computer: {Found}", servers.Count == 0
+            ? "none found"
+            : string.Join(", ", servers.Select(s => s.Kind + " (" + s.ModelCount.ToString(System.Globalization.CultureInfo.InvariantCulture) + " model(s))")));
+        return servers;
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<LoadedServerModel>> LoadedAsync(LocalEndpoint endpoint, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(endpoint);
+        return endpoint.Kind switch
+        {
+            EndpointKind.Ollama => await Ollama.LoadedAsync(LocalServerAddress.Root(endpoint), endpoint.Token, cancellationToken).ConfigureAwait(false),
+            EndpointKind.LmStudio => await LmStudio.LoadedAsync(LocalServerAddress.Root(endpoint), endpoint.Token, cancellationToken).ConfigureAwait(false),
+            _ => [],
+        };
+    }
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        _servers.Dispose();
+        _http.Dispose();
+    }
+
+    /// <summary>The listing of a server whose own API lists its models (Ollama, LM Studio).</summary>
+    private async Task<EndpointListing> NativeAsync(EndpointKind kind, Uri root, string version, Func<Task<List<ListedModel>>> list)
+    {
+        try
+        {
+            var models = await list().ConfigureAwait(false);
+            _logger.LogInformation("Local server is {Kind} {Version}: {Count} text model(s)", kind, version.Length > 0 ? version : "-", models.Count);
+            return new EndpointListing(models.Count > 0, models.Count > 0 ? "ok" : "empty", string.Empty, models, kind, LocalServerAddress.Saved(root), version);
+        }
+        catch (ProviderException ex)
+        {
+            _logger.LogWarning("{Kind} model list failed ({Code})", kind, ex.Code);
+            return new EndpointListing(false, ex.Code, ex.Message, [], kind, LocalServerAddress.Saved(root), version);
+        }
+    }
+
+    /// <summary>Ollama or LM Studio at <paramref name="address"/>; null when neither answers in <see cref="EndpointTransport.DetectTimeout"/>.</summary>
+    private async Task<DetectedServer?> DetectOneAsync(string address, CancellationToken cancellationToken)
+    {
+        if (!EndpointAddress.TryParse(address, out var parsed))
+        {
+            return null;
+        }
+
+        var root = LocalServerAddress.Root(parsed);
+        try
+        {
+            var (status, version) = await Ollama.VersionAsync(root, string.Empty, cancellationToken, _transport.DetectTimeout).ConfigureAwait(false);
+            if (status == 0)
+            {
+                return null;
+            }
+
+            if (version is not null)
+            {
+                var models = await Ollama.ListAsync(root, string.Empty, cancellationToken).ConfigureAwait(false);
+                return new DetectedServer(EndpointKind.Ollama, LocalServerAddress.Saved(root), version, models.Count);
+            }
+
+            if (await LmStudio.IsLmStudioAsync(root, string.Empty, cancellationToken, _transport.DetectTimeout).ConfigureAwait(false))
+            {
+                var models = await LmStudio.ListAsync(root, string.Empty, cancellationToken).ConfigureAwait(false);
+                return new DetectedServer(EndpointKind.LmStudio, LocalServerAddress.Saved(root), string.Empty, models.Count);
+            }
+        }
+        catch (ProviderException ex)
+        {
+            _logger.LogInformation("A local server answered at {Address} but its models could not be listed ({Code})", LocalServerAddress.Saved(root), ex.Code);
+        }
+
+        return null;
+    }
 
     /// <summary>The models of an OpenAI-style list (<c>{"data":[{"id":…}]}</c>, or a bare array); null when it is not one.</summary>
     internal static List<ListedModel>? Read(string json)
@@ -135,7 +257,7 @@ public sealed class EndpointChatTransport(EndpointRegistry endpoints, EndpointTr
     {
         try
         {
-            using var client = new HttpClient(transport.Http.CreateHandler(), disposeHandler: true) { Timeout = transport.ProbeTimeout };
+            using var client = new HttpClient(_transport.Http.CreateHandler(), disposeHandler: true) { Timeout = _transport.ProbeTimeout };
             using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(address, "../props"));
             if (token.Length > 0)
             {

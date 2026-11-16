@@ -15,4 +15,10 @@ public static class EndpointDefaults
     /// 4 096 cut every video code answer off, the 0.1.16 review).
     /// </summary>
     public const long PromptReserveTokens = 8_192;
+
+    /// <summary>
+    /// Context proposed for an Ollama or LM Studio model (within its trained context): the app loads the model with it, and a larger context
+    /// takes more graphics memory (the user can raise it for long video code answers).
+    /// </summary>
+    public const long ServerContextTokens = 16_384;
 }

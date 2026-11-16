@@ -13,8 +13,8 @@ public sealed partial class EndpointRowViewModel(LocalEndpoint endpoint) : Obser
     /// <summary>Name.</summary>
     public string Name => Endpoint.Name;
 
-    /// <summary>Address.</summary>
-    public string Address => Endpoint.BaseUrl;
+    /// <summary>Address, with the server's kind when the app speaks its own API (Ollama, LM Studio).</summary>
+    public string Address => Endpoint.Kind == EndpointKind.Generic ? Endpoint.BaseUrl : EndpointEditorViewModel.KindName(Endpoint.Kind) + " · " + Endpoint.BaseUrl;
 
     /// <summary>The kept models, one line.</summary>
     public string Models => string.Join(", ", Endpoint.Models.Select(m => m.Id));

@@ -20,9 +20,8 @@ public sealed class EndpointProvider(LocalEndpoint endpoint, EndpointModel? mode
     /// <summary>Name used in logs when the user gave none.</summary>
     public const string DefaultName = "Local server";
 
-    private readonly Uri _address = EndpointAddress.TryParse(endpoint.BaseUrl, out var address)
-        ? address
-        : throw new InvalidOperationException("The local server's address is not a valid http or https address.");
+    // LM Studio's endpoint keeps the server's own address; its OpenAI-compatible API is under /v1.
+    private readonly Uri _address = LocalServerAddress.ChatBase(endpoint);
 
     /// <inheritdoc />
     public override string Code => EndpointCodes.For(endpoint.Id);

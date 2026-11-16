@@ -67,7 +67,9 @@ public sealed class EndpointTests
         listing.Models.ShouldBe([new ListedModel("Bonsai-27B-GGUF", 16384), new ListedModel("vllm-model", 8192), new ListedModel("llama", 0),
             new ListedModel("plain", 0)], "llama.cpp's n_ctx_train is the training context, not the one the server runs");
         anonymous.Models.Count.ShouldBe(4);
-        var requests = server.Requests.ToList();
+
+        // The kind probes (Ollama's /api/version, LM Studio's /api/v1/models) come first; the list is the last /models request of each call.
+        var requests = server.Requests.Where(r => r.Uri.AbsolutePath == "/api/v1/models").Where((_, i) => i % 2 == 1).ToList();
         requests[0].Uri.AbsolutePath.ShouldBe("/api/v1/models", "the /api/v1 part of the address is kept");
         requests[0].Headers["Authorization"].ShouldBe("Bearer " + Token);
         requests[1].Headers.ContainsKey("Authorization").ShouldBeFalse("no token, no header");

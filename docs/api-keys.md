@@ -82,8 +82,8 @@ in its own dashboard.
    | Server | Address |
    |---|---|
    | Lemonade Server (AMD; runs llama.cpp on ROCm or Vulkan) | `http://localhost:13305/api/v1` (older versions: port 8000) |
-   | Ollama | `http://localhost:11434/v1` |
-   | LM Studio | `http://localhost:1234/v1` |
+   | Ollama | `http://localhost:11434` (found by itself, see below) |
+   | LM Studio | `http://localhost:1234` (found by itself, see below) |
    | llama.cpp `llama-server` | `http://localhost:8080/v1` (new builds: port 9931) |
    | vLLM | `http://localhost:8000/v1` |
    | Another computer on your network | `http://192.168.1.20:8080/v1` |
@@ -108,6 +108,33 @@ used as the answer. Small local models write weaker video code than the large on
 
 The server list goes into a backup with the settings; a server's token only when you tick *API keys*. Deleting a server leaves the steps
 that used it with no model until you choose another.
+
+### Ollama and LM Studio
+
+When Settings → **Keys** opens, TM Concept looks for Ollama (`http://127.0.0.1:11434`) and LM Studio (`http://127.0.0.1:1234`) on this
+computer. A running one shows under **Found on this computer** with its number of text models; **Add** fills the form and lists them. A
+different address works too: type it (with or without `/v1`) and press **Connect and list models**; the app recognises Ollama and LM Studio
+by their own API and keeps them by their own address. For LM Studio, start its server first (the *Developer* tab, or `lms server start`);
+TM Concept never downloads models into them, so download one there first (`ollama pull qwen3:8b`, or LM Studio's model search).
+
+What changes compared with a plain OpenAI-compatible server:
+
+- **The list** shows only text models (embedding and cloud models are left out), each with its size on disk, whether it reads images and
+  whether it can think. The proposed **Context** is the model's trained context, at most 16 384 tokens: it is what the app loads the model
+  with, and a larger context takes more graphics memory. Raise it for long video code answers if your card has room.
+- **Ollama** runs through its own `/api/chat`: the context goes with every request (Ollama's own default on cards under 24 GB is
+  4 096 tokens, which silently cut long prompts), a JSON schema becomes a grammar so even small models write valid JSON, and **Think
+  first** (for models that can think) turns the model's thinking on; it is off by default (faster).
+- **LM Studio** loads the model with the chosen context before the first request (`/api/v1/models/load`); a model already loaded with a
+  smaller context is loaded again. The requests go to its OpenAI-compatible API with a JSON schema.
+- **One model on the graphics card:** when an image or voice model needs the card, the app asks Ollama or LM Studio to unload the
+  language model and waits until it has left the server's list and the card's memory is free.
+- **Too little graphics memory:** Ollama puts what does not fit on the card into main memory by itself (it works, but slower). **Test
+  connection** on a saved Ollama shows each model in memory with how many GB sit on the card and how many in main memory, and the log
+  says the same after every answer. LM Studio decides itself how much goes on the card; if a model does not fit, lower *GPU Offload* in
+  the model's settings in LM Studio, or load it once with `lms load <model> --gpu 0.5` (a share between 0 and 1). A smaller model, a
+  smaller quantization or a smaller context also helps.
+- Weak local models that answer with broken JSON get the same request up to two more times before the step stops with a clear error.
 
 ## After adding a key
 

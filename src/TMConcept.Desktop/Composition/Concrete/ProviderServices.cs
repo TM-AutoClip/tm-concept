@@ -52,6 +52,10 @@ public static class ProviderServices
         services.AddSingleton<IChatTransport>(s => s.GetRequiredService<EndpointChatTransport>());
         services.AddSingleton<IEndpointProbe>(s => s.GetRequiredService<EndpointChatTransport>());
         services.AddSingleton<ILocalModelSource, EndpointModelSource>();
+
+        // Ollama and LM Studio (0.1.17): their models leave the graphics card when another local model needs it.
+        services.AddSingleton<IEndpointModelControl, OllamaModelControl>();
+        services.AddSingleton<IEndpointModelControl, LmStudioModelControl>();
     }
 
     /// <summary>A provider without chat.</summary>
