@@ -81,6 +81,14 @@ public sealed partial class TopicSectionViewModel(AppSession session, TopicSugge
     /// <inheritdoc />
     protected override bool Paused => Suggesting;
 
+    /// <summary>A press that cannot run: the reason in red on the section's line and in the activity panel.</summary>
+    private void Refuse(string reason)
+    {
+        SuggestFailed = true;
+        SuggestStatus = reason;
+        activity.Add(ActivityLevel.Warning, reason);
+    }
+
     /// <summary>
     /// "Suggest topics": the topics step's model is made ready like any process (key, saved for the profile), then ONE call brings
     /// <see cref="TopicCount"/> topics. The cost is shown here and counted in the month's spending; any failure is shown and logged (a
@@ -89,8 +97,18 @@ public sealed partial class TopicSectionViewModel(AppSession session, TopicSugge
     [RelayCommand]
     public async Task SuggestAsync()
     {
-        if (!CanSuggest || session.Profile is not { } profile)
+        // Every press that cannot run says why on the section's line (red) and in the activity panel: 0.1.15 returned without a word when
+        // there was no profile, so "Suggest topics" seemed to do nothing.
+        if (session.Profile is not { } profile)
         {
+            Refuse(Text["profile.needed"]);
+            session.AskForProfile();
+            return;
+        }
+
+        if (!CanSuggest)
+        {
+            Refuse(Text["concepts.busy_other"]);
             return;
         }
 
@@ -98,14 +116,14 @@ public sealed partial class TopicSectionViewModel(AppSession session, TopicSugge
         if (picker.Model(PipelineSteps.Topics) is null)
         {
             // The step to choose is in the folded models: they are unfolded.
-            SuggestFailed = true;
-            SuggestStatus = Text["topics.no_model"];
+            Refuse(Text["topics.no_model"]);
             Runner.Settings.ModelsOpen = true;
             return;
         }
 
         if (!Runner.TryEnter(this))
         {
+            Refuse(Text["concepts.busy_other"]);
             return;
         }
 
@@ -121,8 +139,7 @@ public sealed partial class TopicSectionViewModel(AppSession session, TopicSugge
         {
             if (!await picker.PrepareAsync([PipelineSteps.Topics], "install.purpose.topics", cancel.Token).ConfigureAwait(true))
             {
-                SuggestFailed = true;
-                SuggestStatus = picker.Status;
+                Refuse(picker.Status.Length > 0 ? picker.Status : Text["install.cancelled"]);
                 return;
             }
 
@@ -148,8 +165,7 @@ public sealed partial class TopicSectionViewModel(AppSession session, TopicSugge
         catch (ModelNotReadyException ex)
         {
             logger.LogWarning("Topic suggestions not started: the {Step} step has no {Missing}", ex.Step, ex.Missing);
-            SuggestFailed = true;
-            SuggestStatus = Text["topics.no_model"];
+            Refuse(Text["topics.no_model"]);
         }
         catch (Core.Providers.ProviderException ex)
         {

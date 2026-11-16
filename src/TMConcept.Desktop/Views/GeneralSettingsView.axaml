@@ -29,6 +29,7 @@
         <TextBlock Text="{DynamicResource components.title}" Classes="h2" VerticalAlignment="Center" />
         <views:HelpTip Text="{DynamicResource components.explain}" />
       </StackPanel>
+      <TextBlock Name="ToolsLocationLine" Text="{Binding ToolsLocation}" Classes="small muted" TextWrapping="Wrap" />
       <TextBlock Text="{DynamicResource components.none}" Classes="muted" IsVisible="{Binding NothingInstalled}" />
       <ItemsControl ItemsSource="{Binding Installed}">
         <ItemsControl.ItemTemplate>
@@ -48,6 +49,8 @@
           </DataTemplate>
         </ItemsControl.ItemTemplate>
       </ItemsControl>
+      <Button Name="ReinstallComponentsButton" Classes="danger" Content="{DynamicResource components.reinstall}" Command="{Binding ReinstallComponentsCommand}"
+              IsEnabled="{Binding !Reinstalling}" ToolTip.Tip="{DynamicResource components.reinstall.tip}" />
       <Border Classes="card" IsVisible="{Binding HasMissingLibraries}">
         <StackPanel Spacing="6">
           <TextBlock Text="{DynamicResource tools.libraries}" Classes="warning" TextWrapping="Wrap" />

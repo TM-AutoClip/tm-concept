@@ -48,6 +48,13 @@ public sealed class ConceptRunner(AppSession session, ConceptGenerator generator
     /// <summary>Uses the page's bar.</summary>
     public void Attach(ConceptSettingsViewModel settings) => _settings = settings;
 
+    /// <summary>A run that could not start: its reason goes on the section's status line (the report) and in the activity panel.</summary>
+    private ConceptRunReport Refused(string line, ActivityLevel level)
+    {
+        activity.Add(level, line);
+        return new ConceptRunReport(null, line, level);
+    }
+
     /// <summary>Takes the page's one paid call for <paramref name="owner"/>; false while another one runs.</summary>
     public bool TryEnter(object owner)
     {
@@ -86,12 +93,14 @@ public sealed class ConceptRunner(AppSession session, ConceptGenerator generator
         ArgumentNullException.ThrowIfNull(saved);
         if (session.Profile is not { } profile)
         {
-            return new ConceptRunReport(null, text["concepts.no_profile"], ActivityLevel.Error);
+            // The button stays on without a profile so that a press says why; the profile page opens with a new profile.
+            session.AskForProfile();
+            return Refused(text["profile.needed"], ActivityLevel.Error);
         }
 
         if (!TryEnter(owner))
         {
-            return new ConceptRunReport(null, text["concepts.busy_other"], ActivityLevel.Warning);
+            return Refused(text["concepts.busy_other"], ActivityLevel.Warning);
         }
 
         ConceptCallProgress? live = null;
@@ -123,7 +132,7 @@ public sealed class ConceptRunner(AppSession session, ConceptGenerator generator
 
             if (!await picker.PrepareAsync(needed, "install.purpose.concepts", cancellationToken).ConfigureAwait(true))
             {
-                return new ConceptRunReport(null, picker.Status, ActivityLevel.Error);
+                return Refused(picker.Status.Length > 0 ? picker.Status : text["install.cancelled"], ActivityLevel.Error);
             }
 
             cancellationToken.ThrowIfCancellationRequested();
@@ -157,7 +166,7 @@ public sealed class ConceptRunner(AppSession session, ConceptGenerator generator
         {
             logger.LogWarning("Concept generation not started: the {Step} step has no {Missing}", ex.Step, ex.Missing);
             Settings.ModelsOpen = true;
-            return new ConceptRunReport(null, text["concepts.no_model"], ActivityLevel.Error);
+            return Refused(text["concepts.no_model"], ActivityLevel.Error);
         }
         catch (OperationCanceledException)
         {

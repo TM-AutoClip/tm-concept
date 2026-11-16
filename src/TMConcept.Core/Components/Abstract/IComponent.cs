@@ -30,6 +30,12 @@ public interface IComponent
     /// <summary>The folders it occupies (its size and what Remove takes away); empty when it is the system's copy.</summary>
     IReadOnlyList<string> Folders();
 
+    /// <summary>
+    /// Whether an install of this app left it on disk, ready or not, in this version or an earlier one (a new app version may pin a newer
+    /// download in a new folder): an update after a new app version installs again exactly these. By default: one of its folders exists.
+    /// </summary>
+    bool WasInstalled => Folders().Any(Directory.Exists);
+
     /// <summary>Looks again at what is on the computer (a suitable Node.js on the PATH); may start a short process. No network.</summary>
     Task RefreshAsync(CancellationToken cancellationToken);
 

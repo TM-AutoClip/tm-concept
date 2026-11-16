@@ -27,6 +27,15 @@ public sealed class AppSession(ISettingsStore store, IProfileStore profiles)
     /// <summary>Raised after the selected profile changed (or was edited).</summary>
     public event EventHandler? ProfileChanged;
 
+    /// <summary>A page needs a profile and has none: the main window opens the profile page with a new profile.</summary>
+    public event EventHandler? ProfileWanted;
+
+    /// <summary>
+    /// Asks for a profile (an action that needs one was pressed without any; the action said why on its own status line and in the
+    /// activity panel). The buttons stay on without a profile so that a press can say this; 0.1.15 ignored the press.
+    /// </summary>
+    public void AskForProfile() => ProfileWanted?.Invoke(this, EventArgs.Empty);
+
     /// <summary>Loads settings and the selected profile.</summary>
     public async Task LoadAsync(CancellationToken cancellationToken)
     {

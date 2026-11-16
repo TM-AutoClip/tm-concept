@@ -290,7 +290,7 @@ public sealed class VideoRemaker(IEnumerable<IVideoEngine> engines, SceneNarrato
 
     /// <summary>The warnings about the images of the version a new one starts from (the images are the same).</summary>
     private static IEnumerable<string> ImageWarnings(VideoRecord record) =>
-        record.Warnings.Split(',', StringSplitOptions.RemoveEmptyEntries).Where(w => w is VideoWarnings.ImagesFailed or VideoWarnings.SamplesNone);
+        record.Warnings.Split(',', StringSplitOptions.RemoveEmptyEntries).Where(w => w is VideoWarnings.SamplesNone);
 
     private void Ready(IVideoEngine engine)
     {

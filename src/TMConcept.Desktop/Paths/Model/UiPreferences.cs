@@ -18,4 +18,10 @@ public sealed class UiPreferences
     /// the running step; open it was a quarter of a 720-pixel window); the last choice is kept.
     /// </summary>
     public bool LogOpen { get; set; }
+
+    /// <summary>
+    /// The app version that last opened the main window (<c>0.1.16</c>), written after the version check (<c>VersionCheck</c>): another
+    /// version at start asks what to do with the installed components. Empty = not recorded (0.1.15 and earlier).
+    /// </summary>
+    public string LastVersion { get; set; } = string.Empty;
 }

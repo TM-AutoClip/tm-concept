@@ -110,6 +110,8 @@ public sealed partial class ShellViewModel : ObservableObject
             }
         };
 
+        // An action pressed without a profile (it said why): the profile page opens with a new profile.
+        session.ProfileWanted += (_, _) => Dispatcher.UIThread.Post(() => _ = OpenNewProfileAsync());
         spending.Changed += (_, _) => RefreshSpending();
         // A concept run, an edit, a made or failed video: the month is read again (a running work's own part is shown live meanwhile).
         events.Changed += (_, _) => _ = spending.RefreshAsync();
@@ -223,6 +225,18 @@ public sealed partial class ShellViewModel : ObservableObject
         var page = (ProfileViewModel)item.Page;
         page.StartNew();
         await NavigateAsync(page).ConfigureAwait(true);
+    }
+
+    private async Task OpenNewProfileAsync()
+    {
+        try
+        {
+            await NewProfileAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException)
+        {
+            _logger.LogError(ex, "The profile page could not be opened");
+        }
     }
 
     /// <summary>Reloads the profile list (after a profile was added, edited or deleted) and keeps the session's selection.</summary>

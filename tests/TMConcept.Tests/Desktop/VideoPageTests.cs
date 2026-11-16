@@ -487,7 +487,7 @@ public sealed class VideoPageTests
         subtitles.ShouldContain("siege.");
         subtitles.ShouldNotContain("seej");
         File.ReadAllText(Path.Combine(folder, VideoFolders.NarrationFile)).ShouldNotContain("seej");
-        record.Warnings.ShouldNotContain(VideoWarnings.SpeechFailed);
+        record.SpeechModel.ShouldStartWith(ModelProviders.Local + "/" + voice.Code);
     }
 
     [AvaloniaFact]
@@ -610,21 +610,138 @@ public sealed class VideoPageTests
     }
 
     [AvaloniaFact]
-    public async Task ANarrationModelThatCannotBeResolvedGivesASilentVideoNotACrash()
+    public async Task ANarrationModelThatCannotBeResolvedStopsTheVideoBeforeTheCodeCall()
     {
         var engine = new FakeEngine();
-        using var h = Harness(new FakeChat().Answer(_ => Code(engine.SampleCode)), engine);
+        var chat = new FakeChat().Answer(_ => Code(engine.SampleCode));
+        using var h = Harness(chat, engine);
         var (_, concept) = await PrepareAsync(h);
 
-        // Kokoro speaks English but is not installed in the test folder: resolving the voice fails before anything is spoken.
+        // Kokoro speaks English but is not installed in the test folder: resolving the chosen voice fails before anything is spoken. Since
+        // 16 Nov 2026 that stops the video (0.1.15 made it silent): nothing is paid for a video the user did not ask for.
         await h.Get<IStepModelStore>().SaveAsync(new StepModelChoice { Step = PipelineSteps.Speech, ProfileId = concept.ProfileId, Provider = ModelProviders.Local,
             Model = "kokoro" }, CancellationToken.None);
 
-        var record = await RunAsync(h, concept, new VideoOptions { Engine = engine.Kind, Speech = true });
+        var failure = await Should.ThrowAsync<VideoException>(() => RunAsync(h, concept, new VideoOptions { Engine = engine.Kind, Speech = true }));
 
-        record.Warnings.ShouldContain(VideoWarnings.SpeechFailed);
-        record.Warnings.ShouldNotContain(VideoWarnings.SpeechOff);
-        record.SpeechModel.ShouldBeEmpty();
+        failure.Code.ShouldBe("speech");
+        failure.Message.ShouldContain("not installed");
+        chat.Requests.ShouldBeEmpty("the code model is never called");
+        (await h.Get<IVideoStore>().ListAsync(concept.ProfileId, CancellationToken.None)).ShouldBeEmpty();
+    }
+
+    [AvaloniaFact]
+    public async Task AVoiceThatFailsWhileSpeakingStopsTheVideo()
+    {
+        var engine = new FakeEngine();
+        var voice = new FakeVoice { Fail = true };
+        var chat = new FakeChat().Answer(_ => Code(engine.SampleCode));
+        using var h = Harness(chat, engine, s =>
+        {
+            s.RemoveAll<TMConcept.Core.Speech.ISpeechEngine>();
+            s.AddSingleton<TMConcept.Core.Speech.ISpeechEngine>(voice);
+        });
+        var (_, concept) = await PrepareAsync(h);
+        await h.Get<IStepModelStore>().SaveAsync(new StepModelChoice { Step = PipelineSteps.Speech, ProfileId = concept.ProfileId, Provider = ModelProviders.Local,
+            Model = voice.Code }, CancellationToken.None);
+
+        var failure = await Should.ThrowAsync<VideoException>(() => RunAsync(h, concept, new VideoOptions { Engine = engine.Kind, Speech = true }));
+
+        (failure.Code, failure.Message).ShouldBe(("speech", "fake voice crashed"));
+        chat.Requests.ShouldBeEmpty("no silent video and no paid code call after a failed voice");
+        (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!.Status.ShouldBe(ConceptStatus.Queued);
+    }
+
+    [AvaloniaFact]
+    public async Task AnImageEngineFailureStopsTheVideoBeforeTheCodeCallAndSaysWhy()
+    {
+        var engine = new FakeEngine();
+        var images = new FakeImages { Fail = "z-image-turbo could not make the image (sd-cli -1073741515): DLL not found" };
+        var chat = new FakeChat().Answer(_ => new ChatResponse("{\"prompts\":[\"a map\",\"burning ships\"]}", new ChatUsage(100, 0, 0, 50), null, "end_turn", "r"))
+            .Answer(_ => Code(engine.SampleCode));
+        using var h = Harness(chat, engine, s =>
+        {
+            s.RemoveAll<IImageEngine>();
+            s.AddSingleton<IImageEngine>(images);
+        });
+        var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
+        var (page, concept) = await OpenAsync(h);
+        await h.Get<IApiKeyStore>().SaveAsync(new ApiKey { Provider = "fal", Label = "k", Secret = "fake-test-key-video-4567" }, CancellationToken.None);
+        await page.ActivateAsync();
+        var imageRow = page.Picker.Row(PipelineSteps.Images)!;
+        imageRow.Selected = imageRow.Options.First(o => o.Model?.Id == "fal-ai/flux-2/flash");
+        await page.EnqueueAsync(page.Approved.Single());
+        var row = page.Queue.Single();
+
+        await page.ProduceAllAsync();
+
+        // Only the image prompts were asked for: the video code model was never called (0.1.15 went on without images and paid for it).
+        chat.Requests.ShouldHaveSingleItem().System.ShouldBe(ImagePromptBuilder.System);
+        row.Failed.ShouldBeTrue();
+        row.Error.ShouldContain(text["video.error.images"]);
+        row.Error.ShouldContain("sd-cli -1073741515");
+        row.Progress!.Stages.Single(s => s.Code == VideoSteps.Images).State.ShouldBe(StageState.Failed);
+        row.Progress.Stages.Single(s => s.Code == VideoSteps.Code).State.ShouldBe(StageState.Waiting);
+        (await h.Get<IVideoStore>().ListAsync(concept.ProfileId, CancellationToken.None)).ShouldBeEmpty();
+        (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!.Status.ShouldBe(ConceptStatus.Queued);
+
+        // Said where the user looks: a red activity line with the engine's message and a Failed notification.
+        var lines = h.Get<TMConcept.Core.Activity.IActivityFeed>().Recent();
+        lines.ShouldContain(l => l.IsError && l.Text.Contains("sd-cli -1073741515", StringComparison.Ordinal) && l.Text.Contains("Greek fire", StringComparison.Ordinal));
+        var toast = h.Get<TMConcept.Desktop.Notifications.ToastNotifier>().Open.Last().DataContext as TMConcept.Desktop.Notifications.ToastViewModel;
+        toast!.Message.ShouldContain("sd-cli -1073741515");
+    }
+
+    [AvaloniaFact]
+    public async Task AnImageModelThatIsNotReadyStopsTheVideoAtPrepare()
+    {
+        var engine = new FakeEngine();
+        var chat = new FakeChat().Answer(_ => Code(engine.SampleCode));
+        using var h = Harness(chat, engine);
+        var (_, concept) = await PrepareAsync(h);
+
+        // An image model of a provider without a key: the step cannot be made ready.
+        await h.Get<IStepModelStore>().SaveAsync(new StepModelChoice { Step = PipelineSteps.Images, ProfileId = concept.ProfileId, Provider = "fal",
+            Model = "fal-ai/flux-2/flash" }, CancellationToken.None);
+        var reports = new System.Collections.Concurrent.ConcurrentQueue<VideoProgress>();
+
+        var failure = await Should.ThrowAsync<VideoException>(() => RunAsync(h, concept,
+            new VideoOptions { Engine = engine.Kind, Speech = false, Images = ImageSources.Model }, new ForwardProgress<VideoProgress>(reports.Enqueue)));
+
+        failure.Code.ShouldBe("images");
+        chat.Requests.ShouldBeEmpty();
+        reports.Last().Step.ShouldBe(VideoSteps.Prepare, "the Prepare row shows the failure");
+    }
+
+    [AvaloniaFact]
+    public async Task WarningsGatheredBeforeAFailureAreStillShown()
+    {
+        var engine = new FakeEngine { FailRenders = 2 };
+        var chat = new FakeChat().Answer(_ => Code(engine.SampleCode)).Answer(_ => Code(engine.SampleCode));
+        using var h = Harness(chat, engine);
+        var (page, concept) = await OpenAsync(h);
+        var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
+
+        // Sample images chosen, but the profile has none: an expected situation stays a warning; the render then fails twice.
+        await h.Get<IStepModelStore>().SaveAsync(new StepModelChoice { Step = PipelineSteps.Images, ProfileId = concept.ProfileId, Provider = ModelProviders.Off,
+            Model = string.Empty, OptionsJson = StepModelResolver.OptionsJson(new StepOptions { ImageSource = ImageSources.Samples }) }, CancellationToken.None);
+        var direct = await Should.ThrowAsync<VideoException>(() => RunAsync(h, concept,
+            new VideoOptions { Engine = engine.Kind, Speech = false, Images = ImageSources.Samples }));
+        direct.Warnings.ShouldBe([VideoWarnings.SpeechOff, VideoWarnings.SamplesNone]);
+
+        engine.FailRenders = 2;
+        chat.Answer(_ => Code(engine.SampleCode)).Answer(_ => Code(engine.SampleCode));
+        await page.ActivateAsync();
+        var imageRow = page.Picker.Row(PipelineSteps.Images)!;
+        imageRow.Selected = imageRow.Options.First(o => o.Kind == StepOptionKind.Samples);
+        await page.EnqueueAsync(page.Approved.Single());
+        await page.ProduceAllAsync();
+
+        page.Queue.Single().Failed.ShouldBeTrue();
+        var lines = h.Get<TMConcept.Core.Activity.IActivityFeed>().Recent();
+        var title = page.Queue.Single().Title;
+        lines.ShouldContain(l => l.IsWarning && l.Text == text.Format("video.failed.noted", title, text["video.noted.samples_none"]));
+        lines.ShouldContain(l => l.IsWarning && l.Text == text.Format("video.failed.noted", title, text["video.noted.speech_off"]));
     }
 
     [AvaloniaFact]
@@ -901,8 +1018,16 @@ public sealed class VideoPageTests
 
         public string Code => "fal";
 
+        /// <summary>When set, every image fails with this message (as sd-cli's exit does).</summary>
+        public string? Fail { get; init; }
+
         public Task<ImageResult> GenerateAsync(ImageRequest request, CancellationToken cancellationToken)
         {
+            if (Fail is not null)
+            {
+                throw new InvalidOperationException(Fail);
+            }
+
             Prompts.Add(request.Prompt);
             Directory.CreateDirectory(Path.GetDirectoryName(request.Output)!);
             File.WriteAllBytes(request.Output, [137, 80, 78, 71]);
@@ -1006,8 +1131,15 @@ public sealed class VideoPageTests
 
         public List<TMConcept.Core.Speech.SpeechRequest> Requests { get; } = [];
 
+        public bool Fail { get; init; }
+
         public Task<TMConcept.Core.Speech.SpeechClip> SynthesizeAsync(TMConcept.Core.Speech.SpeechRequest request, CancellationToken cancellationToken)
         {
+            if (Fail)
+            {
+                throw new TMConcept.Core.Speech.SpeechException("fake voice crashed");
+            }
+
             Requests.Add(request);
             TMConcept.Core.Speech.WaveFile.WritePcm16(request.OutputWav, new float[2400], 24_000);
             return Task.FromResult(new TMConcept.Core.Speech.SpeechClip(request.OutputWav, 100, request.Text.Length, 0, Code));

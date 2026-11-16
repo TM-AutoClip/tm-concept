@@ -22,8 +22,9 @@ namespace TMConcept.Core.Videos;
 /// <summary>
 /// Concept → video (plan §6.1): 0 the engine and ffmpeg must be installed (checked before anything is paid for) · A prepare (scenes, no
 /// model; the placeholders of the concept text are read: pauses and speed for the voice, transitions for the scenes) · B narration per scene
-/// with the profile's narration step (<see cref="SceneNarrator"/>, the same as a new version; cached; off or failed = silent video with a
-/// warning) · D images (samples, or the profile's images step: off = no image call at all; the prompts are written by the video code model; generated
+/// with the profile's narration step (<see cref="SceneNarrator"/>, the same as a new version; cached; off = silent video with a warning, a
+/// chosen voice that fails stops the video) · D images (samples, or the profile's images step: off = no image call at all, a failure stops the
+/// video before the code call; the prompts are written by the video code model; generated
 /// images and their prompts are kept per concept until the video is made, so a retry does not pay for them again) · C timing in C# after the
 /// clips and images (a pause lengthens its scene) · E
 /// video code from the model, safety check, one repair · F render (processor only), one repair with the error text · H mux into the work
@@ -71,147 +72,163 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         var id = Guid.NewGuid();
         var warnings = new List<string>();
 
-        // The profile's narration and image models (its choices on the video page). A model that is not ready means a silent video or no
-        // images, with a warning; an image step that is off makes no image call at all.
+        // The profile's narration and image choices (its choices on the video page). Off = no voice / no image call at all, a warning at
+        // most. A chosen model that cannot be made ready is an unexpected failure and stops the video (the developer's rule of 16 Nov 2026:
+        // 0.1.15 went on without images when sd-cli could not start, and the user paid for a code call of a video he did not want).
+        var speechChoice = options.Speech ? await resolver.ChoiceAsync(PipelineSteps.Speech, profile.Id, cancellationToken).ConfigureAwait(false) : null;
+        var imageChoice = options.Images == ImageSources.Model ? await resolver.ChoiceAsync(PipelineSteps.Images, profile.Id, cancellationToken).ConfigureAwait(false) : null;
+        var speechOn = !StepModelResolver.IsOff(speechChoice);
+        var imagesOn = options.Images == ImageSources.Samples || !StepModelResolver.IsOff(imageChoice);
+        logger.LogInformation("Video {Id} started: concept {Concept}, {Engine}, code model {Provider}/{Model}, voice {Voice}, images {Images}", id, job.Concept.Id,
+            engine.Name, job.CodeModel.Model.Provider, job.CodeModel.Model.Id, speechOn ? speechChoice!.Provider + "/" + speechChoice.Model : "off",
+            !StepModelResolver.IsOff(imageChoice) ? imageChoice!.Provider + "/" + imageChoice.Model : imagesOn ? options.Images : "off");
+        var work = assembler.WorkFolder(id);
+        var target = new VersionTarget();
+        var steps = new VideoStepProgress(
+            Weights.Where(w => (w.Step != VideoSteps.Speech || speechOn) && (w.Step != VideoSteps.Images || imagesOn)).ToList(), progress);
+
+        try
+        {
+            return await assembler.GuardAsync(profile.Id, job.CodeModel, work, target, steps, watch, () => MakeAsync(job, engine, speechChoice, imageChoice,
+                imagesOn, id, warnings, work, target, steps, watch, cancellationToken)).ConfigureAwait(false);
+        }
+        catch (VideoException ex) when (warnings.Count > 0)
+        {
+            // The warnings gathered before the failure are still shown with it (narration off, no samples…).
+            throw new VideoException(ex.Message, ex.InnerException ?? ex) { Code = ex.Code, SpentUsd = ex.SpentUsd, Warnings = [.. warnings] };
+        }
+    }
+
+    private async Task<VideoRecord> MakeAsync(VideoJob job, IVideoEngine engine, StepModelChoice? speechChoice, StepModelChoice? imageChoice, bool imagesOn,
+        Guid id, List<string> warnings, string work, VersionTarget target, VideoStepProgress steps, Stopwatch watch, CancellationToken cancellationToken)
+    {
+        var profile = job.Profile;
+        var options = job.Options;
+
+        // A. prepare: the chosen voice and image model are made ready first (inside the run, so its Prepare row shows the failure).
+        steps.Report(VideoSteps.Prepare, 0);
         SpeechSetup? voice = null;
-        if (options.Speech)
+        if (!StepModelResolver.IsOff(speechChoice))
         {
             try
             {
-                voice = await speech.ResolveAsync(profile.Id, profile.ContentLanguage, cancellationToken).ConfigureAwait(false);
+                voice = await speech.SetupAsync(speechChoice!, profile.ContentLanguage, cancellationToken).ConfigureAwait(false);
             }
             catch (SpeechException ex)
             {
-                logger.LogError(ex, "The narration model is not ready ({Code}); the video will be silent", ex.Code);
-                warnings.Add(VideoWarnings.SpeechFailed);
+                logger.LogError("The narration model is not ready ({Code}); the video is stopped", ex.Code);
+                throw new VideoException(ex.Message, ex) { Code = "speech" };
             }
         }
 
         ResolvedModel? imageModel = null;
-        if (options.Images == ImageSources.Model)
+        if (!StepModelResolver.IsOff(imageChoice))
         {
             try
             {
-                imageModel = await resolver.ResolveOptionalAsync(PipelineSteps.Images, profile.Id, cancellationToken).ConfigureAwait(false);
+                imageModel = await resolver.ResolveAsync(PipelineSteps.Images, imageChoice, cancellationToken).ConfigureAwait(false);
             }
             catch (ModelNotReadyException ex)
             {
-                logger.LogError("The image model is not ready (no {Missing}); the video is made without images", ex.Missing);
-                warnings.Add(VideoWarnings.ImagesFailed);
+                logger.LogError("The image model is not ready (no {Missing}); the video is stopped", ex.Missing);
+                throw new VideoException(ex.Message, ex) { Code = "images" };
             }
         }
 
-        var imagesOn = options.Images == ImageSources.Samples || imageModel is not null;
-        logger.LogInformation("Video {Id} started: concept {Concept}, {Engine}, code model {Provider}/{Model}, voice {Voice}, images {Images}", id, job.Concept.Id,
-            engine.Name, job.CodeModel.Model.Provider, job.CodeModel.Model.Id, voice is null ? "off" : voice.Model.Provider + "/" + voice.Model.Id,
-            imageModel is null ? (imagesOn ? options.Images : "off") : imageModel.Model.Provider + "/" + imageModel.Model.Id);
-        var work = assembler.WorkFolder(id);
-        var target = new VersionTarget();
         var speechOn = voice is not null;
-        var steps = new VideoStepProgress(
-            Weights.Where(w => (w.Step != VideoSteps.Speech || speechOn) && (w.Step != VideoSteps.Images || imagesOn)).ToList(), progress);
-
-        return await assembler.GuardAsync(profile.Id, job.CodeModel, work, target, steps, watch, async () =>
+        var split = SceneSplitter.Split(job.Concept.Content);
+        if (split.Scenes.Count == 0 || split.Scenes.All(s => s.Narration.Length == 0))
         {
-            // A. prepare
-            steps.Report(VideoSteps.Prepare, 0);
-            var split = SceneSplitter.Split(job.Concept.Content);
-            if (split.Scenes.Count == 0 || split.Scenes.All(s => s.Narration.Length == 0))
-            {
-                throw new VideoException("The concept has no scenes: " + string.Join(" ", split.Problems)) { Code = "scenes" };
-            }
+            throw new VideoException("The concept has no scenes: " + string.Join(" ", split.Problems)) { Code = "scenes" };
+        }
 
-            Directory.CreateDirectory(work);
-            steps.Finish(VideoSteps.Prepare);
+        Directory.CreateDirectory(work);
+        steps.Finish(VideoSteps.Prepare);
 
-            // B. narration
-            var clips = new List<SpeechClip?>();
-            if (!speechOn)
+        // B. narration
+        var clips = new List<SpeechClip?>();
+        if (!speechOn)
+        {
+            // No voice by choice: the video is silent, with a warning.
+            warnings.Add(VideoWarnings.SpeechOff);
+            logger.LogWarning("Narration is off; the video will be silent");
+        }
+        else
+        {
+            try
             {
-                // No voice: off by choice, or its model could not be resolved (that warning is already there). Either way nothing is
-                // spoken; 0.1.6 went on to the narration loop with a null voice when the model failed and threw ArgumentNullException.
-                if (!warnings.Contains(VideoWarnings.SpeechFailed))
+                var count = split.Scenes.Count;
+                steps.Report(VideoSteps.Speech, 0, done: 0, total: count);
+                for (var i = 0; i < count; i++)
                 {
-                    warnings.Add(VideoWarnings.SpeechOff);
-                    logger.LogWarning("Narration is off; the video will be silent");
-                }
-            }
-            else
-            {
-                try
-                {
-                    var count = split.Scenes.Count;
-                    steps.Report(VideoSteps.Speech, 0, done: 0, total: count);
-                    for (var i = 0; i < count; i++)
-                    {
-                        // The scene's script: its pauses and speed placeholders are applied exactly as in a new version.
-                        var clip = await SceneVoiceAsync(voice!, profile.ContentLanguage, i + 1, split.Scenes[i].Script, work, steps, id, cancellationToken)
-                            .ConfigureAwait(false);
-                        clips.Add(clip);
-                        steps.Report(VideoSteps.Speech, (i + 1.0) / count, done: i + 1, total: count);
-                    }
-
-                    warnings.Add(VideoWarnings.AiVoice);
-                    var skipped = clips.OfType<SpeechClip>().SelectMany(c => c.SkippedWords).Distinct(StringComparer.Ordinal).Count();
-                    if (skipped > 0)
-                    {
-                        // Only the count is logged: the words come from the concept.
-                        warnings.Add(VideoWarnings.SpeechSkipped);
-                        logger.LogWarning("The voice left out {Count} words it does not know; the subtitles still show them", skipped);
-                    }
-                }
-                catch (Exception ex) when (ex is SpeechException or Providers.ProviderException or IOException or InvalidDataException)
-                {
-                    logger.LogError(ex, "Narration failed; the video will be silent");
-                    warnings.Add(VideoWarnings.SpeechFailed);
-                    clips.Clear();
+                    // The scene's script: its pauses and speed placeholders are applied exactly as in a new version.
+                    var clip = await SceneVoiceAsync(voice!, profile.ContentLanguage, i + 1, split.Scenes[i].Script, work, steps, id, cancellationToken)
+                        .ConfigureAwait(false);
+                    clips.Add(clip);
+                    steps.Report(VideoSteps.Speech, (i + 1.0) / count, done: i + 1, total: count);
                 }
 
-                steps.Finish(VideoSteps.Speech);
+                warnings.Add(VideoWarnings.AiVoice);
+                var skipped = clips.OfType<SpeechClip>().SelectMany(c => c.SkippedWords).Distinct(StringComparer.Ordinal).Count();
+                if (skipped > 0)
+                {
+                    // Only the count is logged: the words come from the concept.
+                    warnings.Add(VideoWarnings.SpeechSkipped);
+                    logger.LogWarning("The voice left out {Count} words it does not know; the subtitles still show them", skipped);
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException and not Providers.ProviderException and not VideoException)
+            {
+                // A chosen voice that fails stops the video (16 Nov 2026; 0.1.15 went on silent). An online voice's provider error goes
+                // through as it is: the run's guard names it with the provider's own text.
+                logger.LogError(ex, "Narration failed; the video is stopped");
+                throw new VideoException(ex.Message, ex) { Code = "speech" };
             }
 
-            // D. images
-            var (width, height) = RenderInputBuilder.Size(profile.Format);
-            List<string> sceneImages = [];
-            if (imagesOn)
-            {
-                sceneImages = await ImagesAsync(job, imageModel, split.Scenes, work, warnings, steps, id, width, height, cancellationToken).ConfigureAwait(false);
-                steps.Finish(VideoSteps.Images);
-            }
+            steps.Finish(VideoSteps.Speech);
+        }
 
-            // C. timing, after the images: a scene lasts as long as its clip (a silent one as long as its text takes to say).
-            steps.Report(VideoSteps.Timing, 0);
-            var sources = split.Scenes.Select((s, i) => new RenderSceneSource(s.Visual, s.Narration, sceneImages.ElementAtOrDefault(i) ?? string.Empty,
-                clips.ElementAtOrDefault(i)?.DurationMs ?? VideoRemaker.SilentMs(s.Script, profile.ContentLanguage), s.Transition)).ToList();
-            var input = RenderInputBuilder.Build(job.Concept.Title, profile.ContentLanguage, sources, width, height, 30);
-            steps.Finish(VideoSteps.Timing);
+        // D. images
+        var (width, height) = RenderInputBuilder.Size(profile.Format);
+        List<string> sceneImages = [];
+        if (imagesOn)
+        {
+            sceneImages = await ImagesAsync(job, imageModel, split.Scenes, work, warnings, steps, id, width, height, cancellationToken).ConfigureAwait(false);
+            steps.Finish(VideoSteps.Images);
+        }
 
-            // E + F. code (+ one repair after a rejected check), render (+ one repair with the error text)
-            var rendered = await assembler.CodeAndRenderAsync(engine, job.CodeModel, options.Subtitles, input, work, id, steps, cancellationToken)
-                .ConfigureAwait(false);
-            if (rendered.Repaired)
-            {
-                warnings.Add(VideoWarnings.Repaired);
-            }
+        // C. timing, after the images: a scene lasts as long as its clip (a silent one as long as its text takes to say).
+        steps.Report(VideoSteps.Timing, 0);
+        var sources = split.Scenes.Select((s, i) => new RenderSceneSource(s.Visual, s.Narration, sceneImages.ElementAtOrDefault(i) ?? string.Empty,
+            clips.ElementAtOrDefault(i)?.DurationMs ?? VideoRemaker.SilentMs(s.Script, profile.ContentLanguage), s.Transition)).ToList();
+        var input = RenderInputBuilder.Build(job.Concept.Title, profile.ContentLanguage, sources, width, height, 30);
+        steps.Finish(VideoSteps.Timing);
 
-            // H + I. mux into the work folder, then the version folder gets only finished files; the record.
-            var folder = Path.Combine(LibraryFolder(profile, job.Concept), VideoFolders.FirstVersion);
-            var record = await assembler.SaveAsync(new VersionSave(id, profile, job.Concept.Id, job.Concept.Title, work, rendered, clips, target, folder, options,
-                engine.Name, job.CodeModel.Model.Provider + "/" + job.CodeModel.Model.Id,
-                speechOn && !warnings.Contains(VideoWarnings.SpeechFailed) ? voice!.Model.Provider + "/" + voice.Model.Id + ":" + voice.Voice : string.Empty,
-                imageModel is not null ? imageModel.Model.Provider + "/" + imageModel.Model.Id : imagesOn ? options.Images : string.Empty,
-                VideoCodePrompt.Version, warnings, steps.Spent, await ConceptShareAsync(job.Concept, id).ConfigureAwait(false), watch)
-            {
-                // Each scene's text with its placeholders and the transition into it: a new version is edited from this.
-                Script = split.Scenes.Select(s => VideoRemaker.WithTransition(s.Transition, s.Script, profile.ContentLanguage)).ToList(),
-            }, steps,
-                cancellationToken).ConfigureAwait(false);
-            await concepts.SetStatusAsync([job.Concept.Id], ConceptStatus.Produced, CancellationToken.None).ConfigureAwait(false);
-            logger.LogInformation("Video {Id} made in {Seconds:0} s ({Engine}, {Usd} USD)", id, watch.Elapsed.TotalSeconds, engine.Name, record.TotalUsd);
-            assembler.TryDelete(work);
-            assembler.TryDelete(SceneImageRoot(job.Concept.Id));
-            return record;
-        }).ConfigureAwait(false);
+        // E + F. code (+ one repair after a rejected check), render (+ one repair with the error text)
+        var rendered = await assembler.CodeAndRenderAsync(engine, job.CodeModel, options.Subtitles, input, work, id, steps, cancellationToken)
+            .ConfigureAwait(false);
+        if (rendered.Repaired)
+        {
+            warnings.Add(VideoWarnings.Repaired);
+        }
+
+        // H + I. mux into the work folder, then the version folder gets only finished files; the record.
+        var folder = Path.Combine(LibraryFolder(profile, job.Concept), VideoFolders.FirstVersion);
+        var record = await assembler.SaveAsync(new VersionSave(id, profile, job.Concept.Id, job.Concept.Title, work, rendered, clips, target, folder, options,
+            engine.Name, job.CodeModel.Model.Provider + "/" + job.CodeModel.Model.Id,
+            speechOn ? voice!.Model.Provider + "/" + voice.Model.Id + ":" + voice.Voice : string.Empty,
+            imageModel is not null ? imageModel.Model.Provider + "/" + imageModel.Model.Id : imagesOn ? options.Images : string.Empty,
+            VideoCodePrompt.Version, warnings, steps.Spent, await ConceptShareAsync(job.Concept, id).ConfigureAwait(false), watch)
+        {
+            // Each scene's text with its placeholders and the transition into it: a new version is edited from this.
+            Script = split.Scenes.Select(s => VideoRemaker.WithTransition(s.Transition, s.Script, profile.ContentLanguage)).ToList(),
+        }, steps,
+            cancellationToken).ConfigureAwait(false);
+        await concepts.SetStatusAsync([job.Concept.Id], ConceptStatus.Produced, CancellationToken.None).ConfigureAwait(false);
+        logger.LogInformation("Video {Id} made in {Seconds:0} s ({Engine}, {Usd} USD)", id, watch.Elapsed.TotalSeconds, engine.Name, record.TotalUsd);
+        assembler.TryDelete(work);
+        assembler.TryDelete(SceneImageRoot(job.Concept.Id));
+        return record;
     }
 
     /// <summary>
@@ -284,6 +301,10 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         }
     }
 
+    /// <summary>
+    /// The scene images: the profile's samples, or the chosen model's. Only "samples chosen but the profile has none" is a warning; any other
+    /// failure stops the video (<see cref="VideoException"/> "images").
+    /// </summary>
     private async Task<List<string>> ImagesAsync(VideoJob job, ResolvedModel? imageModel, IReadOnlyList<Scene> scenes, string work, List<string> warnings,
         VideoStepProgress steps, Guid id, int width, int height, CancellationToken cancellationToken)
     {
@@ -331,8 +352,10 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
 
                 if (missing > 0)
                 {
-                    logger.LogWarning("{Missing} scene(s) have no image: their sample image file is missing", missing);
-                    warnings.Add(VideoWarnings.ImagesFailed);
+                    // A sample image of the profile whose file is gone is not a choice: the video stops before anything is paid for.
+                    logger.LogError("{Missing} scene(s) have no image: their sample image file is missing", missing);
+                    throw new VideoException(string.Create(CultureInfo.InvariantCulture,
+                        $"{missing} scene(s) have no image: their sample image file is missing from the library.")) { Code = "images" };
                 }
             }
             else if (imageModel is not null)
@@ -390,6 +413,11 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                         logger.LogInformation("Scene image {Number} of {Count} made with {Provider}/{Model}", i + 1, prompts.Count, imageModel.Model.Provider,
                             imageModel.Model.Id);
                         steps.Spend(new VideoCost { VideoId = id, Step = PipelineSteps.Images, Usd = result.CostUsd, Exact = result.CostUsd == 0 });
+                        if (!File.Exists(file))
+                        {
+                            throw new VideoException(string.Create(CultureInfo.InvariantCulture,
+                                $"{imageModel.Model.Name} made no image file for scene {i + 1}.")) { Code = "images" };
+                        }
                     }
 
                     Place(file, Path.GetFileName(file));
@@ -398,11 +426,13 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                 }
             }
         }
-        catch (Exception ex) when (ex is ModelNotReadyException or Providers.ProviderException or IOException or VideoException or InvalidOperationException)
+        catch (Exception ex) when (ex is not OperationCanceledException and not Providers.ProviderException and not VideoException)
         {
-            logger.LogError(ex, "Scene images failed; the video is made without them");
-            warnings.Add(VideoWarnings.ImagesFailed);
-            names.Clear();
+            // Any failure of a chosen image step stops the video before the code call (16 Nov 2026: 0.1.15 went on without images when sd-cli
+            // could not start and the user paid for a video he did not want). The engine's own message (sd-cli's exit code and output) is
+            // the reason the user sees. A provider's error goes through as it is and is named with the provider's text.
+            logger.LogError(ex, "Scene images failed; the video is stopped");
+            throw new VideoException(ex.Message, ex) { Code = "images" };
         }
 
         return names;

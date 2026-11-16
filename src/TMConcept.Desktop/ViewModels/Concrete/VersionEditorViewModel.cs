@@ -268,10 +268,14 @@ public sealed partial class VersionEditorViewModel(StepPickerViewModel picker, V
             Status = text["video.canceled"];
             activity.Add(ActivityLevel.Warning, text["version.canceled"]);
         }
-        catch (Exception ex) when (ex is ModelNotReadyException or SpeechException)
+        catch (Exception ex) when (ex is ModelNotReadyException or SpeechException or IOException or UnauthorizedAccessException or InvalidOperationException)
         {
+            // Said where the user looks (status, activity panel, notification), not only in the log file: the voice or the code model could
+            // not be made ready, or a file of the version could not be read.
             logger.LogWarning(ex, "A new version could not start");
             Status = text.Format("version.failed", ex.Message);
+            activity.Add(ActivityLevel.Error, Status);
+            notifier.Notify(new AppNotification(NotificationKind.Failed, text["version.failed.title"], Status));
         }
         finally
         {

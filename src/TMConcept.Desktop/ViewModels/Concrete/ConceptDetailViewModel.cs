@@ -410,8 +410,17 @@ public sealed partial class ConceptDetailViewModel(AppSession session, IConceptS
     [RelayCommand]
     public async Task AiEditAsync()
     {
-        if (Card is not { } card || session.Profile is null || AiRunning || Mode == DetailMode.AiEditing)
+        if (Card is not { } card || AiRunning || Mode == DetailMode.AiEditing)
         {
+            return;
+        }
+
+        if (session.Profile is null)
+        {
+            // Said, not ignored (0.1.15 returned without a word); the profile page opens with a new profile.
+            Notice = text["profile.needed"];
+            activity.Add(ActivityLevel.Warning, Notice);
+            session.AskForProfile();
             return;
         }
 
@@ -445,6 +454,14 @@ public sealed partial class ConceptDetailViewModel(AppSession session, IConceptS
         await AiEstimateAsync().ConfigureAwait(true);
     }
 
+    /// <summary>An AI edit that cannot be sent: the reason in red under the box and in the activity panel.</summary>
+    private void AiRefuse(string reason)
+    {
+        AiFailed = true;
+        AiStatus = reason;
+        activity.Add(ActivityLevel.Warning, reason);
+    }
+
     /// <summary>
     /// Sends the AI edit: the concept model is made ready like for a run (key, saved for the profile), then ONE call. Its result opens in
     /// the editor (nothing is saved yet); a failure, a cut-off answer or a cancel keep the box open with the reason and the cost.
@@ -452,8 +469,15 @@ public sealed partial class ConceptDetailViewModel(AppSession session, IConceptS
     [RelayCommand]
     public async Task SendAiEditAsync()
     {
-        if (AiRunning || Card is not { } card || _aiBase is not { } concept || session.Profile is not { } profile || _picker is not { } picker)
+        if (AiRunning || Card is not { } card || _aiBase is not { } concept || _picker is not { } picker)
         {
+            return;
+        }
+
+        if (session.Profile is not { } profile)
+        {
+            AiRefuse(text["profile.needed"]);
+            session.AskForProfile();
             return;
         }
 
@@ -467,8 +491,7 @@ public sealed partial class ConceptDetailViewModel(AppSession session, IConceptS
 
         if (picker.Model(PipelineSteps.Concepts) is null)
         {
-            AiFailed = true;
-            AiStatus = text["concepts.no_model"];
+            AiRefuse(text["concepts.no_model"]);
             return;
         }
 
@@ -483,8 +506,7 @@ public sealed partial class ConceptDetailViewModel(AppSession session, IConceptS
         {
             if (!await picker.PrepareAsync([PipelineSteps.Concepts], "install.purpose.concepts", cancel.Token).ConfigureAwait(true))
             {
-                AiFailed = true;
-                AiStatus = picker.Status;
+                AiRefuse(picker.Status.Length > 0 ? picker.Status : text["install.cancelled"]);
                 return;
             }
 
