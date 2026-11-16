@@ -50,6 +50,13 @@ public abstract class ToolComponentBase(ToolInstaller installer, string code, st
         .Select(Installer.InstallFolder).Where(Directory.Exists).Distinct(StringComparer.Ordinal).ToList();
 
     /// <inheritdoc />
+    /// <remarks>
+    /// A tool's own folder (<c>tools/&lt;name&gt;</c>), whatever version is inside: a new app version pins a new version in a new folder, so
+    /// <see cref="Folders"/> alone would say an updated component was never installed.
+    /// </remarks>
+    public bool WasInstalled => tools.Any(t => Directory.Exists(Installer.ToolRoot(t)));
+
+    /// <inheritdoc />
     public virtual Task RefreshAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     /// <inheritdoc />

@@ -38,6 +38,9 @@ public sealed class ToolInstaller(IAppPaths paths, IToolPlatform platform, ToolD
     /// <summary>A program on the PATH (<see cref="SearchPath"/>), or null.</summary>
     public string? FindProgram(string name) => FindOnPath(platform.Executable(name));
 
+    /// <summary>A tool's own folder (<c>tools/&lt;name&gt;</c>) that holds its versions and its markers.</summary>
+    public string ToolRoot(ToolKind tool) => Path.Combine(paths.ToolsDirectory, Name(tool));
+
     /// <summary>The folder a tool's pinned version is installed into.</summary>
     public string InstallFolder(ToolKind tool) => Archive(tool) is { } archive ? Folder(archive) : Path.Combine(paths.ToolsDirectory, Name(tool));
 

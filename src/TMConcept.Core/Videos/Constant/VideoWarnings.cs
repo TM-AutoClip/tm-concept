@@ -1,16 +1,13 @@
 namespace TMConcept.Core.Videos;
 
-/// <summary>Warning codes kept on a video (comma separated).</summary>
+/// <summary>
+/// Warning codes kept on a video (comma separated). Only expected, chosen situations are warnings: a failed voice or failed images stop the
+/// video since 16 Nov 2026 (<see cref="VideoException"/> "speech" / "images"), so "speech_failed" and "images_failed" are gone.
+/// </summary>
 public static class VideoWarnings
 {
     /// <summary>Narration is off: the video is silent (yellow).</summary>
     public const string SpeechOff = "speech_off";
-
-    /// <summary>Narration was tried but failed: the video is silent (red).</summary>
-    public const string SpeechFailed = "speech_failed";
-
-    /// <summary>Images were asked for but could not be made.</summary>
-    public const string ImagesFailed = "images_failed";
 
     /// <summary>AI voice (Supertonic, online): say so when publishing.</summary>
     public const string AiVoice = "ai_voice";

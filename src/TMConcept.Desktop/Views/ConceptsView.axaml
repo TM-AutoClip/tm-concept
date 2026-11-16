@@ -41,6 +41,9 @@
                      IsVisible="{Binding ShowApproved}" MinHeight="0" />
           </Grid>
           <TextBlock DockPanel.Dock="Bottom" Text="{Binding KeysText}" Classes="tiny" Margin="2,4,0,0" />
+          <!-- The page's own errors (a row could not be approved or deleted, the page could not be read): 0.1.15 set them but showed nothing. -->
+          <TextBlock Name="PageStatusLine" DockPanel.Dock="Bottom" Text="{Binding Status}" Classes="small error" TextWrapping="Wrap" Margin="2,4,0,0"
+                     IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
           <Panel>
             <ListBox x:Name="NewList" Classes="rows" ItemsSource="{Binding NewConcepts}" SelectedItem="{Binding SelectedNew}" KeyDown="OnListKeyDown"
                      Background="Transparent" IsVisible="{Binding ShowNew}">

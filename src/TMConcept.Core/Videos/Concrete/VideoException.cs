@@ -1,7 +1,7 @@
 namespace TMConcept.Core.Videos;
 
 /// <summary>
-/// A video could not be made (<see cref="Code"/>: "scenes", "code", "render", "mux", "files", "missing", or <see cref="ProviderPrefix"/> +
+/// A video could not be made (<see cref="Code"/>: "scenes", "speech", "images", "code", "render", "mux", "files", "missing", or <see cref="ProviderPrefix"/> +
 /// the provider's failure code).
 /// </summary>
 public sealed class VideoException : Exception
@@ -31,4 +31,7 @@ public sealed class VideoException : Exception
 
     /// <summary>The cost spent before the failure.</summary>
     public decimal SpentUsd { get; init; }
+
+    /// <summary>The warnings gathered before the failure (<see cref="VideoWarnings"/> codes): they are shown with the failure.</summary>
+    public IReadOnlyList<string> Warnings { get; init; } = [];
 }

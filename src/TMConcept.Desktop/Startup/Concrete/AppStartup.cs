@@ -194,6 +194,17 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
             session.PendingMessage = null;
         }
 
+        // Another app version ran before: what to do with the installed components (update / reinstall / later). Only here, after the
+        // first run or the unlock, in the main window; a failure is logged and shown, it never keeps the app from starting.
+        try
+        {
+            await services.GetRequiredService<VersionCheck>().RunAsync(AppIdentity.ShortVersion, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            logger.LogError(ex, "The components could not be checked after the version change");
+        }
+
         try
         {
             services.GetRequiredService<Core.Videos.VideoPipeline>().CleanWork();

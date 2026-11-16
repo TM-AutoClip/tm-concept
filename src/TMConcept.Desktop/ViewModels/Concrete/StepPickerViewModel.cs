@@ -179,6 +179,8 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
         ArgumentNullException.ThrowIfNull(needed);
         if (Busy)
         {
+            // Never an empty reason: the caller shows Status in red.
+            Status = text["picker.busy"];
             return false;
         }
 

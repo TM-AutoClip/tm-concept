@@ -280,8 +280,15 @@ public sealed partial class VideoViewModel : PageViewModelBase
     [RelayCommand]
     public async Task EnqueueAsync(ConceptCardViewModel? card)
     {
-        if (card is null || _session.Profile is not { } profile)
+        if (card is null)
         {
+            return;
+        }
+
+        if (_session.Profile is not { } profile)
+        {
+            Refuse(_text["profile.needed"]);
+            _session.AskForProfile();
             return;
         }
 
@@ -337,7 +344,8 @@ public sealed partial class VideoViewModel : PageViewModelBase
 
         if (_session.Profile is not { } profile)
         {
-            Status = _text["picker.no_profile"];
+            Refuse(_text["profile.needed"]);
+            _session.AskForProfile();
             return;
         }
 
@@ -348,6 +356,13 @@ public sealed partial class VideoViewModel : PageViewModelBase
         try
         {
             var items = await _queue.ListAsync(profile.Id, CancellationToken.None).ConfigureAwait(true);
+            if (items.Count == 0)
+            {
+                // 0.1.15 ended at once without a word.
+                Refuse(_text["video.queue.empty"]);
+                return;
+            }
+
             if (!await PrepareAsync(items, cancel.Token).ConfigureAwait(true))
             {
                 return;
@@ -422,6 +437,13 @@ public sealed partial class VideoViewModel : PageViewModelBase
     /// <summary>Stops after the running step.</summary>
     [RelayCommand]
     public void Cancel() => _cancel?.Cancel();
+
+    /// <summary>A press that cannot run: the reason on the page's (red) status line and in the activity panel.</summary>
+    private void Refuse(string reason)
+    {
+        Status = reason;
+        _activity.Add(ActivityLevel.Warning, reason);
+    }
 
     /// <summary>Opens the chosen made video in the system's player.</summary>
     [RelayCommand]
@@ -603,6 +625,8 @@ public sealed partial class VideoViewModel : PageViewModelBase
             if (await _profiles.GetAsync(row.Item.ProfileId, CancellationToken.None).ConfigureAwait(true) is not { } profile)
             {
                 row.Error = _text["video.error.concept"];
+                _activity.Add(ActivityLevel.Error, _text.Format("video.failed", row.Title, row.Error, _text.Usd(0)),
+                    _text.Format("video.failed", ActivityPlaceholders.Title, row.Error, _text.Usd(0)));
                 return;
             }
 
@@ -619,6 +643,8 @@ public sealed partial class VideoViewModel : PageViewModelBase
             {
                 _logger.LogWarning("Video not started: the {Step} step has no {Missing}", ex.Step, ex.Missing);
                 row.Error = ex.Missing == "key" ? _text.Format("concepts.no_key", choice?.Provider ?? string.Empty) : _text["video.no_model"];
+                _activity.Add(ActivityLevel.Error, _text.Format("video.failed", row.Title, row.Error, _text.Usd(0)),
+                    _text.Format("video.failed", ActivityPlaceholders.Title, row.Error, _text.Usd(0)));
                 return;
             }
 
@@ -658,9 +684,12 @@ public sealed partial class VideoViewModel : PageViewModelBase
             LastLine = _text.Format("video.last.failed", row.Title, _text.Usd(ex.SpentUsd));
             _activity.Add(ActivityLevel.Error, _text.Format("video.failed", row.Title, reason, _text.Usd(ex.SpentUsd)),
                 _text.Format("video.failed", ActivityPlaceholders.Title, reason, _text.Usd(ex.SpentUsd)));
+            // The warnings gathered before the failure are still said (narration off, no samples…), after the failure itself.
+            var noted = Noted(row.Title, ex.Warnings);
+
             // The notification carries the reason and what was paid (the strip at the bottom shows the activity line too).
             _notifier.Notify(new AppNotification(NotificationKind.Failed, _text["video.failed.title"],
-                _text.Format("video.failed", row.Title, reason, _text.Usd(ex.SpentUsd))));
+                string.Join('\n', noted.Prepend(_text.Format("video.failed", row.Title, reason, _text.Usd(ex.SpentUsd))))));
         }
         catch (OperationCanceledException)
         {
@@ -712,7 +741,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
     {
         var warnings = record.Warnings.Split(',', StringSplitOptions.RemoveEmptyEntries);
         var problems = new List<string>();
-        foreach (var (code, key, level) in Problems)
+        foreach (var (code, key, level, _) in Problems)
         {
             if (warnings.Contains(code))
             {
@@ -731,15 +760,29 @@ public sealed partial class VideoViewModel : PageViewModelBase
         _events.Raise(this);
     }
 
-    /// <summary>The warnings of a made video that the notification names (warning code, text key, log level).</summary>
-    private static readonly (string Code, string Key, ActivityLevel Level)[] Problems =
+    /// <summary>
+    /// The warnings of a video that the notification names (warning code, text key of a made video, log level, text key when the run failed
+    /// later: "was made silent" would be wrong then).
+    /// </summary>
+    private static readonly (string Code, string Key, ActivityLevel Level, string NotedKey)[] Problems =
     [
-        (VideoWarnings.SpeechOff, "video.silent.off", ActivityLevel.Warning),
-        (VideoWarnings.SpeechFailed, "video.silent.failed", ActivityLevel.Error),
-        (VideoWarnings.SpeechSkipped, "video.speech.skipped", ActivityLevel.Warning),
-        (VideoWarnings.ImagesFailed, "video.images.failed", ActivityLevel.Warning),
-        (VideoWarnings.SamplesNone, "video.samples.none", ActivityLevel.Warning),
+        (VideoWarnings.SpeechOff, "video.silent.off", ActivityLevel.Warning, "video.noted.speech_off"),
+        (VideoWarnings.SpeechSkipped, "video.speech.skipped", ActivityLevel.Warning, "video.noted.speech_skipped"),
+        (VideoWarnings.SamplesNone, "video.samples.none", ActivityLevel.Warning, "video.noted.samples_none"),
     ];
+
+    /// <summary>The warnings of a failed run as activity lines (Warning); returns their texts for the notification.</summary>
+    private List<string> Noted(string title, IReadOnlyList<string> warnings)
+    {
+        var texts = new List<string>();
+        foreach (var key in Problems.Where(p => warnings.Contains(p.Code)).Select(p => p.NotedKey))
+        {
+            texts.Add(_text.Format("video.failed.noted", title, _text[key]));
+            _activity.Add(ActivityLevel.Warning, texts[^1], _text.Format("video.failed.noted", ActivityPlaceholders.Title, _text[key]));
+        }
+
+        return texts;
+    }
 
     /// <summary>Why a video failed (<see cref="VideoFailures"/>).</summary>
     private string Reason(string code, string detail, decimal spentUsd) => VideoFailures.Reason(_text, code, detail, spentUsd);

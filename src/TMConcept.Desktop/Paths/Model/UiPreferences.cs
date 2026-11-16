@@ -24,4 +24,10 @@ public sealed class UiPreferences
     /// computer, not to the backup). Automatic by default: chosen from the graphics card found. Stored as a number.
     /// </summary>
     public Core.Hardware.ImageAcceleration ImageAcceleration { get; set; }
+
+    /// <summary>
+    /// The app version that last opened the main window (<c>0.1.16</c>), written after the version check (<c>VersionCheck</c>): another
+    /// version at start asks what to do with the installed components. Empty = not recorded (0.1.15 and earlier).
+    /// </summary>
+    public string LastVersion { get; set; } = string.Empty;
 }

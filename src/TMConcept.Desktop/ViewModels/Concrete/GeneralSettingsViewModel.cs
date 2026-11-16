@@ -27,7 +27,7 @@ namespace TMConcept.Desktop.ViewModels;
 public sealed partial class GeneralSettingsViewModel(AppSession session, Localizer text, UiPreferencesFile preferences, INotifier notifier,
     ComponentPlanner components, IToolPlatform platform, Engines.Engines.SampleRender sample, IConfirmDialog confirm, ShellLauncher shell,
     IActivityLog activity, PreferencesImageAcceleration acceleration, Engines.Images.ImageBackendSelector backends, ComponentInstallFlow installs,
-    ILogger<GeneralSettingsViewModel> logger)
+    ILogger<GeneralSettingsViewModel> logger, ComponentReinstaller reinstaller)
     : SettingsSectionBase
 {
     /// <inheritdoc />
@@ -131,6 +131,59 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
         finally
         {
             row.Busy = false;
+        }
+
+        await RefreshInstalledAsync().ConfigureAwait(true);
+    }
+
+    /// <summary>Where the components live (shown under the list's title).</summary>
+    public string ToolsLocation => text.Format("components.location", reinstaller.Location());
+
+    /// <summary>A reinstall runs.</summary>
+    [ObservableProperty]
+    public partial bool Reinstalling { get; set; }
+
+    /// <summary>
+    /// "Reinstall components from scratch" (the same as after a new app version): after a confirmation the whole components folder goes to
+    /// the recycle bin and what was installed is installed again. Not while work runs: its components are in use.
+    /// </summary>
+    [RelayCommand]
+    public async Task ReinstallComponentsAsync()
+    {
+        if (Reinstalling)
+        {
+            return;
+        }
+
+        if (session.WorkRunning)
+        {
+            Status = text["components.reinstall.busy"];
+            activity.Add(ActivityLevel.Warning, Status);
+            return;
+        }
+
+        var answer = await confirm.AskAsync(text["components.reinstall.title"], text.Format("components.reinstall.message", reinstaller.Location()),
+            text["components.reinstall"], danger: true).ConfigureAwait(true);
+        if (!answer.Confirmed)
+        {
+            return;
+        }
+
+        Reinstalling = true;
+        try
+        {
+            var outcome = await reinstaller.ReinstallAsync(CancellationToken.None).ConfigureAwait(true);
+            Status = outcome.Ready ? text["components.reinstall.done"] : outcome.Reason;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            logger.LogError(ex, "The components could not be reinstalled");
+            Status = text.Format("components.reinstall.failed", ex.Message);
+            activity.Add(ActivityLevel.Error, Status);
+        }
+        finally
+        {
+            Reinstalling = false;
         }
 
         await RefreshInstalledAsync().ConfigureAwait(true);

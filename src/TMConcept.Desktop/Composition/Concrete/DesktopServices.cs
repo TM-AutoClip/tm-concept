@@ -50,6 +50,10 @@ public static class DesktopServices
         services.AddSingleton<ILoggerProvider>(s => new FileLoggerProvider(paths.LogDirectory, LogRules.AppKind, s.GetRequiredService<TimeProvider>(),
             s.GetRequiredService<LogScrubber>()));
         services.AddLogging(b => b.SetMinimumLevel(FileLoggerProvider.MinimumLevel));
+
+        // Package C (user-facing errors): warnings and errors of every logger also reach the activity panel. The feed is taken on the first
+        // line, not here: the activity log needs a logger, so resolving it while the logger factory is built would be a cycle.
+        services.AddSingleton<ILoggerProvider>(s => new ActivityLoggerProvider(() => s.GetService<IActivityFeed>(), s.GetRequiredService<LogScrubber>()));
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton(s => new CrashLog(s.GetRequiredService<ILoggerFactory>().CreateLogger("TMConcept.Crash")));
         services.AddSingleton(paths);
@@ -204,6 +208,12 @@ public static class DesktopServices
 
         services.AddSingleton<Dialogs.IConfirmDialog, Dialogs.ConfirmDialog>();
         services.AddSingleton<Dialogs.IInstallDialog, Dialogs.InstallDialog>();
+
+        // Package C (version change): after a new app version the installed components are updated, reinstalled or left for later.
+        services.AddSingleton<Dialogs.IUpdateDialog, Dialogs.UpdateDialog>();
+        services.AddSingleton<Components.ComponentReinstaller>();
+        services.AddSingleton<VersionCheck>();
+
         services.AddSingleton<Reports.SystemReport>();
         services.AddSingleton<Reports.ReportNames>();
         services.AddSingleton<Reports.ProblemReport>();
