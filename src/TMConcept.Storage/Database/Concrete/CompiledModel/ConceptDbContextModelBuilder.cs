@@ -11,7 +11,7 @@ namespace TMConcept.Storage.Database
     public partial class ConceptDbContextModel
     {
         private ConceptDbContextModel()
-            : base(skipDetectChanges: false, modelId: new Guid("3ead2fc7-b059-4657-8bb4-0d228bcfae6c"), entityTypeCount: 18)
+            : base(skipDetectChanges: false, modelId: new Guid("7971e4c8-8f55-42ed-830e-3a8d61caa990"), entityTypeCount: 19)
         {
         }
 
@@ -35,6 +35,7 @@ namespace TMConcept.Storage.Database
             var schemaObjectRow = SchemaObjectRowEntityType.Create(this);
             var secureDeleteRow = SecureDeleteRowEntityType.Create(this);
             var settingRow = SettingRowEntityType.Create(this);
+            var videoStyleRow = VideoStyleRowEntityType.Create(this);
 
             ConceptEntityType.CreateForeignKey1(concept, profile);
             ConceptWishEntityType.CreateForeignKey1(conceptWish, profile);
@@ -68,6 +69,7 @@ namespace TMConcept.Storage.Database
             SchemaObjectRowEntityType.CreateAnnotations(schemaObjectRow);
             SecureDeleteRowEntityType.CreateAnnotations(secureDeleteRow);
             SettingRowEntityType.CreateAnnotations(settingRow);
+            VideoStyleRowEntityType.CreateAnnotations(videoStyleRow);
 
             AddAnnotation("ProductVersion", "10.0.14");
         }

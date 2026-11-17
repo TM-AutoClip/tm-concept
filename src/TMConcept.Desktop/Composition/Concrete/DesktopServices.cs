@@ -194,6 +194,7 @@ public static class DesktopServices
         services.AddSingleton<IVideoStore, VideoStore>();
         services.AddSingleton<IVideoRatingStore, VideoRatingStore>();
         services.AddSingleton<IVideoRater, VideoRater>();
+        services.AddSingleton<Core.Styles.IVideoStyleStore, VideoStyleStore>();
         services.AddSingleton<IApiKeyStore, ApiKeyStore>();
         services.AddSingleton<IStepModelStore, StepModelStore>();
         services.AddSingleton<Core.Pronunciation.IPronunciationStore, PronunciationStore>();
@@ -299,6 +300,7 @@ public static class DesktopServices
         AddSection<GeneralSettingsViewModel, GeneralSettingsView>(services);
         AddSection<KeysSettingsViewModel, KeysSettingsView>(services);
         AddSection<StorageSettingsViewModel, StorageSettingsView>(services);
+        AddSection<VideoStylesSettingsViewModel, VideoStylesSettingsView>(services);
         AddSection<VoiceSettingsViewModel, VoiceSettingsView>(services);
         AddSection<BackupSettingsViewModel, BackupSettingsView>(services);
         AddSection<AboutSettingsViewModel, AboutSettingsView>(services);

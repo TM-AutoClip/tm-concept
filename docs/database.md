@@ -45,7 +45,8 @@ What happens at the start (`SchemaUpgrader`, called by `Vault.OpenAsync`, `Vault
    When the rows already there need another value than the new column's default (and the generated step must stay as the tool wrote it),
    add a data step to `EfSchemaSteps.AfterStepAsync`: EF Core LINQ (`ExecuteUpdateAsync`), run right after its step on the same working
    copy. `Version0118` has one: the topic suggestions of 0.1.17 become `Picked` (0.1.17 blocked them all and never recorded which ones got
-   a concept), the column's default `Shown` is only for new rows.
+   a concept), the column's default `Shown` is only for new rows. `Version0119` (the templates table `video_styles`, one JSON document per
+   template, and the profile's `ChannelPhoto` column) needs none: no row gets a template, and an empty photo is the right value.
 4. Build and run the tests: `SchemaUpgradeTests.TheAppsStepsMatchItsMappingAndANewFileRecordsThem` fails while the mapping and the steps
    differ (EF Core would also refuse to upgrade with pending model changes), and `CompiledModelTests` fails while the compiled model is old.
 5. Add a test that upgrades a file of the previous step with real data (see `SchemaUpgradeTests` for the pattern) when the step moves data.

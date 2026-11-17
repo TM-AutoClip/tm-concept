@@ -9,8 +9,11 @@ public sealed partial class ProfileImageViewModel(ProfileImage image, string ful
     /// <summary>The record.</summary>
     public ProfileImage Image { get; } = image;
 
-    /// <summary>Full path (preview).</summary>
+    /// <summary>Full path (preview): the copy in the library, or the picked file while <see cref="Pending"/>.</summary>
     public string FullPath { get; } = fullPath;
+
+    /// <summary>Picked on a new profile and not copied yet: Save copies it into the library and stores the record.</summary>
+    public bool Pending { get; init; }
 
     /// <summary>File name.</summary>
     public string FileName => Path.GetFileName(FullPath);

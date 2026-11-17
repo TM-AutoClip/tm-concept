@@ -32,10 +32,11 @@ public sealed class UiPreferences
     public string LastVersion { get; set; } = string.Empty;
 
     /// <summary>
-    /// The "Subtitles in the picture" choice of the Concept to video page (on by default). Kept since 0.1.17: until then it came back on
-    /// after every restart, and a queued item kept the choice it was added with, so turning it off did not stop the subtitles.
+    /// The template chosen on the Concept to video page (Settings → Templates; since 0.1.19). Empty on a new install: nothing is produced
+    /// until a template is chosen. It replaced the "Subtitles in the picture" checkbox of 0.1.17–0.1.18 (subtitles are part of a template
+    /// now); the old "Subtitles" value of the file is no longer read.
     /// </summary>
-    public bool Subtitles { get; set; } = true;
+    public Guid? VideoStyleId { get; set; }
 
     /// <summary>Look for a newer version of the app at start (once a day at most; Settings → General). On by default.</summary>
     public bool CheckForUpdates { get; set; } = true;

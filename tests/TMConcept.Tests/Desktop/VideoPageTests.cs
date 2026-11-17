@@ -13,6 +13,7 @@ using TMConcept.Core.Models;
 using TMConcept.Core.Paths;
 using TMConcept.Core.Pipeline;
 using TMConcept.Core.Profiles;
+using TMConcept.Core.Styles;
 using TMConcept.Core.Tools;
 using TMConcept.Core.Videos;
 using TMConcept.Desktop.Startup;
@@ -35,8 +36,11 @@ public sealed class VideoPageTests
         return (page, concept);
     }
 
-    /// <summary>A profile with a key, its video code choice and one approved concept; the page is open (nothing queued).</summary>
-    private static async Task<(VideoViewModel Page, Concept Concept)> OpenAsync(DesktopHarness h)
+    /// <summary>
+    /// A profile with a key, its video code choice and one approved concept; the page is open (nothing queued) with a default template chosen
+    /// (0.1.19: nothing is produced without one), unless <paramref name="chooseStyle"/> is false.
+    /// </summary>
+    private static async Task<(VideoViewModel Page, Concept Concept)> OpenAsync(DesktopHarness h, bool chooseStyle = true)
     {
         await FirstRunTests.CreateAsync(h);
         var profile = new Profile { Name = "Byzantium", ContentLanguage = ContentLanguages.English, ConceptText = "x" };
@@ -52,8 +56,15 @@ public sealed class VideoPageTests
             Provider = "anthropic",
             Model = "claude-sonnet-5-5",
         }, CancellationToken.None);
+        var style = new VideoStyle { Name = "Default" };
+        await h.Get<IVideoStyleStore>().SaveAsync(style, CancellationToken.None);
         var page = h.Get<VideoViewModel>();
         await page.ActivateAsync();
+        if (chooseStyle)
+        {
+            page.SelectedStyle = page.Styles.Single(s => s.Id == style.Id);
+        }
+
         return (page, concept);
     }
 
@@ -196,21 +207,27 @@ public sealed class VideoPageTests
     }
 
     [AvaloniaFact]
-    public async Task SubtitlesOffAppliesToAnItemQueuedBeforeAndTheCodeGetsNoNarrationToDraw()
+    public async Task ATemplateWithoutSubtitlesChosenAfterQueueingReachesTheItemAndTheCodeGetsNoNarrationToDraw()
     {
         var engine = new FakeEngine();
         var chat = new FakeChat().Answer(_ => Code(engine.SampleCode));
         using var h = Harness(chat, engine);
         var (page, concept) = await PrepareAsync(h);
-        page.Subtitles.ShouldBeTrue("on by default");
+        page.SelectedStyle!.Subtitles.ShouldBeTrue("a new template has subtitles on");
 
-        // Turned off after the item was queued: the choice of the moment the item starts applies, and it is kept on this computer.
-        page.Subtitles = false;
-        h.Get<TMConcept.Desktop.Paths.UiPreferencesFile>().Read().Subtitles.ShouldBeFalse();
+        // Another template chosen after the item was queued: the choice of the moment the item starts applies, and it is kept on this computer.
+        var silent = new VideoStyle { Name = "No subtitles", Subtitles = false, ProgressBar = true, PaletteId = "ocean" };
+        await h.Get<IVideoStyleStore>().SaveAsync(silent, CancellationToken.None);
+        await page.ActivateAsync();
+        page.SelectedStyle = page.Styles.Single(s => s.Id == silent.Id);
+        h.Get<TMConcept.Desktop.Paths.UiPreferencesFile>().Read().VideoStyleId.ShouldBe(silent.Id);
         await page.ProduceAllAsync();
 
         var video = (await h.Get<IVideoStore>().ListAsync(concept.ProfileId, CancellationToken.None)).Single();
-        VideoRemaker.Options(video).Subtitles.ShouldBeFalse("the video records its choice; its versions follow it");
+        var options = VideoRemaker.Options(video);
+        options.Subtitles.ShouldBeFalse("the video records its choice; its versions follow it");
+        var snapshot = options.Style.ShouldNotBeNull("the video keeps a copy of its template");
+        (snapshot.Id, snapshot.Name, snapshot.Subtitles, snapshot.ProgressBar, snapshot.PaletteId).ShouldBe((silent.Id, "No subtitles", false, true, "ocean"));
         var request = chat.Requests.Single();
         request.System.ShouldContain("There are NO subtitles");
         request.System.ShouldContain("NEVER draw the caption (narration) text");
@@ -228,18 +245,21 @@ public sealed class VideoPageTests
     }
 
     [AvaloniaFact]
-    public async Task TheSubtitlesChoiceIsKeptAcrossRestartsAndOnStillBurnsThemIn()
+    public async Task TheTemplateChoiceIsKeptAcrossRestartsAndEachVideoKeepsTheCopyItStartedWith()
     {
         var engine = new FakeEngine();
         var chat = new FakeChat().Answer(_ => Code(engine.SampleCode));
         using var h = Harness(chat, engine);
 
-        // As after a restart: the kept choice is what the page opens with.
-        h.Get<TMConcept.Desktop.Paths.UiPreferencesFile>().Change(p => p.Subtitles = false);
-        var (page, _) = await OpenAsync(h);
-        page.Subtitles.ShouldBeFalse();
-        page.Subtitles = true;
-        h.Get<TMConcept.Desktop.Paths.UiPreferencesFile>().Read().Subtitles.ShouldBeTrue();
+        // As after a restart: the kept choice is what the page shows when it opens.
+        var (page, concept) = await OpenAsync(h, chooseStyle: false);
+        page.SelectedStyle.ShouldBeNull();
+        var kept = new VideoStyle { Name = "Kept", Subtitles = true, FontId = "poppins" };
+        await h.Get<IVideoStyleStore>().SaveAsync(kept, CancellationToken.None);
+        h.Get<TMConcept.Desktop.Paths.UiPreferencesFile>().Change(p => p.VideoStyleId = kept.Id);
+        await page.ActivateAsync();
+        page.Styles.Select(s => s.Name).ShouldBe(["Default", "Kept"]);
+        page.SelectedStyle.ShouldNotBeNull().Id.ShouldBe(kept.Id);
         await page.EnqueueAsync(page.Approved.Single());
 
         await page.ProduceAllAsync();
@@ -248,6 +268,69 @@ public sealed class VideoPageTests
         chat.Requests.Single().System.ShouldContain("Subtitles are burned into the bottom");
         engine.Input!.Scenes[0].Caption.ShouldBe("In 672 the city was under siege.");
         ((FakeMedia)h.Get<IMediaTools>()).Ass.ShouldBe(["subtitles.ass"]);
+
+        // The template changes in Settings after the video was made: the video keeps the copy it started with.
+        kept.Subtitles = false;
+        kept.FontId = "anton";
+        await h.Get<IVideoStyleStore>().SaveAsync(kept, CancellationToken.None);
+        var video = (await h.Get<IVideoStore>().ListAsync(concept.ProfileId, CancellationToken.None)).Single();
+        var snapshot = VideoRemaker.Options(video).Style.ShouldNotBeNull();
+        (snapshot.Subtitles, snapshot.FontId).ShouldBe((true, "poppins"));
+        VideoRemaker.Options(video).Subtitles.ShouldBeTrue();
+    }
+
+    [AvaloniaFact]
+    public async Task NothingIsProducedUntilACodeModelAndATemplateAreChosen()
+    {
+        var engine = new FakeEngine();
+        var chat = new FakeChat().Answer(_ => Code(engine.SampleCode));
+        using var h = Harness(chat, engine);
+        var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
+        var (page, concept) = await OpenAsync(h, chooseStyle: false);
+        page.SelectedStyle.ShouldBeNull("a new install has no template chosen");
+        h.Get<TMConcept.Desktop.Paths.UiPreferencesFile>().Read().VideoStyleId.ShouldBeNull();
+        await page.EnqueueAsync(page.Approved.Single());
+
+        await page.ProduceAllAsync();
+        page.Status.ShouldBe(text["video.style.none"]);
+        h.Get<TMConcept.Core.Activity.IActivityFeed>().Recent()[^1].Text.ShouldBe(text["video.style.none"]);
+        await page.RetryAsync(page.Queue.Single());
+        page.Status.ShouldBe(text["video.style.none"]);
+
+        // Without a code model either, both are asked for.
+        await h.Get<IStepModelStore>().ClearAsync(PipelineSteps.VideoCode, concept.ProfileId, CancellationToken.None);
+        await page.ActivateAsync();
+        page.Picker.Model(PipelineSteps.VideoCode).ShouldBeNull();
+        await page.ProduceAllAsync();
+        page.Status.ShouldBe(text["video.style.both"]);
+        chat.Requests.ShouldBeEmpty("nothing was asked or paid for");
+        page.Queue.Single().Error.ShouldBeNullOrEmpty();
+        (await h.Get<IVideoStore>().ListAsync(concept.ProfileId, CancellationToken.None)).ShouldBeEmpty();
+    }
+
+    [AvaloniaFact]
+    public async Task ADeletedTemplateIsNoLongerChosenAndAQueueThatStillHadItSaysWhy()
+    {
+        var engine = new FakeEngine();
+        var chat = new FakeChat().Answer(_ => Code(engine.SampleCode));
+        using var h = Harness(chat, engine);
+        var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
+        var (page, concept) = await PrepareAsync(h);
+        var chosen = page.SelectedStyle.ShouldNotBeNull();
+
+        // Deleted in Settings while this page still shows it: the item fails before anything is paid.
+        await h.Get<IVideoStyleStore>().DeleteAsync(chosen.Id, CancellationToken.None);
+        await page.ProduceAllAsync();
+        page.Queue.Single().Error.ShouldContain(text["video.style.gone"]);
+        chat.Requests.ShouldBeEmpty();
+        (await h.Get<IVideoStore>().ListAsync(concept.ProfileId, CancellationToken.None)).ShouldBeEmpty();
+
+        // Shown again: nothing is chosen and the kept choice is forgotten.
+        await page.ActivateAsync();
+        page.SelectedStyle.ShouldBeNull();
+        page.Styles.ShouldBeEmpty();
+        page.NoStyles.ShouldBeTrue();
+        h.Get<TMConcept.Desktop.Paths.UiPreferencesFile>().Read().VideoStyleId.ShouldBeNull();
     }
 
     [AvaloniaFact]
