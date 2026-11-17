@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using TMConcept.Core.Engines;
 using TMConcept.Core.Paths;
 using TMConcept.Core.Processes;
+using TMConcept.Core.Render;
 using TMConcept.Engines.Tools;
 
 namespace TMConcept.Engines.Engines;
@@ -36,9 +37,9 @@ public sealed class RevideoEngine(IAppPaths paths, ToolInstaller tools, ChromeLo
     public override string Contract => """
         Engine: Revideo (TypeScript generator scene, Motion Canvas style).
         Write ONE file (src/scene.tsx): `export default makeScene2D('scene', function* (view) { … });`.
-        Allowed imports only: '@revideo/2d', '@revideo/core' and `import type {ConceptInput} from './input';`.
+        Allowed imports only: '@revideo/2d', '@revideo/core', `import type {ConceptInput} from './input';` and the helpers of './tm'.
         Read the input with `const input = useScene().variables.get<ConceptInput>('input', {} as ConceptInput)();`
-        (fields: width, height, fps, durationSeconds, title, theme {background, accent, text},
+        (fields: width, height, fps, durationSeconds, title, theme {background, accent, text}, style? (the template, when there is one),
         scenes [{number, startSeconds, durationSeconds, visual, image, transition}]).
         Play the scenes in order with yield* animations and waitFor so each scene lasts exactly its durationSeconds.
         Never hard-code texts or durations. No network, no external fonts.
@@ -95,12 +96,51 @@ public sealed class RevideoEngine(IAppPaths paths, ToolInstaller tools, ChromeLo
             // The app's file (TM Concept); not changed by the model. The input comes from renderVideo's variables ('input').
             import {makeProject} from '@revideo/core';
             import scene from './scene';
-
+            {{{FontLoader(request.Input)}}}
             export default makeProject({
               scenes: [scene],
               settings: {rendering: {fps: {{{request.Input.Fps.ToString(CultureInfo.InvariantCulture)}}}}},
             });
             """,
         ["src/input.ts"] = RemotionEngine.InputTs,
+        ["src/tm.ts"] = TemplateHelpers.RevideoHelpers,
     };
+
+    /// <summary>
+    /// The template's font for Revideo (experimental): the files are served from <c>public/fonts</c> and loaded with the FontFace API when the
+    /// project starts. Revideo does not wait for them, so the first frames may still use a fallback font (not checked in a real render yet); a
+    /// failure is written to the render's browser log. Nothing without a template.
+    /// </summary>
+    public static string FontLoader(RenderInput input)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        if (input.Style is not { } style)
+        {
+            return string.Empty;
+        }
+
+        static string Quote(string value) => "'" + new string(value.Where(ch => ch is not ('\'' or '\\' or '\n' or '\r')).ToArray()) + "'";
+        var faces = new List<string> { $"[{Quote(style.FontRegular)}, '{(style.FontBold.Length == 0 ? "100 900" : "400")}']" };
+        if (style.FontBold.Length > 0)
+        {
+            faces.Add($"[{Quote(style.FontBold)}, '700']");
+        }
+
+        return $$"""
+
+            // The template's font (served from public/fonts).
+            if (typeof document !== 'undefined') {
+              for (const [file, weight] of [{{string.Join(", ", faces)}}]) {
+                new FontFace({{Quote(style.Font)}}, `url('/${file}') format('truetype')`, {weight}).load()
+                  .then((face) => {
+                    document.fonts.add(face);
+                  })
+                  .catch((error: unknown) => {
+                    console.error('TM Concept: the template font could not be loaded', error);
+                  });
+              }
+            }
+
+            """;
+    }
 }

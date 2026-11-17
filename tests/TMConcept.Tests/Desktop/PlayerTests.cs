@@ -159,7 +159,7 @@ public sealed class PlayerTests
 
         public int Calls { get; private set; }
 
-        public Task MuxAsync(string folder, string silentVideo, IReadOnlyList<(string Wav, long StartMs)> clips, string? assFile, IReadOnlyList<long> fadesMs,
+        public Task MuxAsync(string folder, string silentVideo, IReadOnlyList<(string Wav, long StartMs)> clips, MuxOverlay overlay, IReadOnlyList<long> fadesMs,
             string output, CancellationToken cancellationToken) => throw new NotSupportedException();
 
         public async Task<bool> ThumbnailAsync(string video, string jpeg, CancellationToken cancellationToken)

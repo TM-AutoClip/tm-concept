@@ -124,9 +124,9 @@ public sealed class VideoRemaker(IEnumerable<IVideoEngine> engines, SceneNarrato
             var timed = RenderInputBuilder.Build(input.Title, input.Language, sources, input.Width, input.Height, input.Fps, input.Theme);
             steps.Finish(VideoSteps.Timing);
 
-            // The version keeps the video's own subtitles choice: off = the engine gets no captions and nothing is burned in.
+            // The version keeps the video's own subtitles choice and template snapshot: off = the engine gets no captions and nothing is burned in.
             var options = Options(source.Record);
-            var rendered = await assembler.RenderKeptAsync(source.Engine, source.Code, options.Subtitles, timed, work, steps, cancellationToken)
+            var rendered = await assembler.RenderKeptAsync(source.Engine, source.Code, options, timed, work, steps, cancellationToken)
                 .ConfigureAwait(false);
             options.Speech = voice is not null;
             warnings.AddRange(ImageWarnings(source.Record));
@@ -167,7 +167,7 @@ public sealed class VideoRemaker(IEnumerable<IVideoEngine> engines, SceneNarrato
             steps.Finish(VideoSteps.Prepare);
 
             var options = Options(source.Record);
-            var rendered = await assembler.CodeAndRenderAsync(job.Engine, job.CodeModel, options.Subtitles, input, work, id, steps, cancellationToken)
+            var rendered = await assembler.CodeAndRenderAsync(job.Engine, job.CodeModel, options, input, work, id, steps, cancellationToken)
                 .ConfigureAwait(false);
             var warnings = source.Record.Warnings.Split(',', StringSplitOptions.RemoveEmptyEntries).Where(w => w != VideoWarnings.Repaired).ToList();
             if (rendered.Repaired)

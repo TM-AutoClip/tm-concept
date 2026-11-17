@@ -23,7 +23,7 @@ public sealed class MuxTests
     [Fact]
     public void WithoutNarrationSubtitlesAndFadesTheVideoIsOnlyCopied()
     {
-        var arguments = FfmpegMuxer.Arguments("silent.mp4", [], null, [], "video.mp4");
+        var arguments = FfmpegMuxer.Arguments("silent.mp4", [], (string?)null, [], "video.mp4");
 
         arguments.ShouldNotContain("-filter_complex");
         arguments.ShouldContain("copy");
@@ -46,7 +46,7 @@ public sealed class MuxTests
             // With subtitles the fades come after them (the whole picture goes dark); without, the video is encoded for them.
             var burned = FfmpegMuxer.Arguments("silent.mp4", [], "subtitles.ass", [4200], "video.mp4");
             burned[burned.ToList().IndexOf("-filter_complex") + 1].ShouldStartWith("[0:v]ass=subtitles.ass,fade=t=out:st=3.95");
-            var faded = FfmpegMuxer.Arguments("silent.mp4", [("1.wav", 0)], null, [4200], "video.mp4");
+            var faded = FfmpegMuxer.Arguments("silent.mp4", [("1.wav", 0)], (string?)null, [4200], "video.mp4");
             var filter = faded[faded.ToList().IndexOf("-filter_complex") + 1];
             filter.ShouldStartWith("[0:v]fade=t=out:st=3.95:d=0.25:enable='between(t,3.95,4.2)',fade=t=in:st=4.2:d=0.25:enable='between(t,4.2,4.45)'[v];");
             faded[faded.ToList().IndexOf("-map") + 1].ShouldBe("[v]");
@@ -77,7 +77,7 @@ public sealed class MuxTests
             await RunAsync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "color=c=white:size=64x36:rate=30:duration=2",
                 "-c:v", "libx264", "-pix_fmt", "yuv420p", silent]);
             var output = Path.Combine(folder, "video.mp4");
-            await RunAsync(ffmpeg, [.. FfmpegMuxer.Arguments(silent, [], null, [1000], output)]);
+            await RunAsync(ffmpeg, [.. FfmpegMuxer.Arguments(silent, [], (string?)null, [1000], output)]);
 
             (await LumaAsync(ffmpeg, output, 0.5)).ShouldBeGreaterThan(200, "before the fade the picture is unchanged");
             (await LumaAsync(ffmpeg, output, 1.0)).ShouldBeLessThan(40, "dark at the scene's start");

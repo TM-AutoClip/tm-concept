@@ -7,10 +7,11 @@ public interface IMediaTools
     IReadOnlyList<string> RequiredComponents { get; }
 
     /// <summary>
-    /// Joins the silent video with narration clips (at their start), burns <paramref name="assFile"/> (a file in <paramref name="folder"/>) in
-    /// and fades through black at each of <paramref name="fadesMs"/> (the starts of the scenes with a soft transition).
+    /// Joins the silent video with narration clips (at their start), draws <paramref name="overlay"/> over it (an ASS file burned in with the
+    /// fonts of its folder, a round photo; every file in <paramref name="folder"/>) and fades through black at each of <paramref name="fadesMs"/>
+    /// (the starts of the scenes with a soft transition).
     /// </summary>
-    Task MuxAsync(string folder, string silentVideo, IReadOnlyList<(string Wav, long StartMs)> clips, string? assFile, IReadOnlyList<long> fadesMs, string output,
+    Task MuxAsync(string folder, string silentVideo, IReadOnlyList<(string Wav, long StartMs)> clips, MuxOverlay overlay, IReadOnlyList<long> fadesMs, string output,
         CancellationToken cancellationToken);
 
     /// <summary>Writes a thumbnail from the first frame that is not black; false when none was found.</summary>

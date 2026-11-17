@@ -188,9 +188,20 @@ public static class SubtitleBuilder
             : string.Create(CultureInfo.InvariantCulture, $"{(int)t.TotalHours:00}:{t.Minutes:00}:{t.Seconds:00}{separator}{t.Milliseconds:000}");
     }
 
-    private static string Colour(string hex)
+    private static string Colour(string hex) => AssColour(hex);
+
+    /// <summary>An ASS time (<c>h:mm:ss.cc</c>).</summary>
+    public static string AssTime(long ms) => Time(ms, '.', centiseconds: true);
+
+    /// <summary>
+    /// An ASS colour (<c>&amp;HAABBGGRR</c>) of a <c>#rrggbb</c> value; <paramref name="transparency"/> is ASS alpha (0 = opaque, 255 =
+    /// invisible). Anything else is white.
+    /// </summary>
+    public static string AssColour(string hex, byte transparency = 0)
     {
+        ArgumentNullException.ThrowIfNull(hex);
         var value = hex.TrimStart('#');
-        return value.Length == 6 ? "&H00" + value[4..6] + value[2..4] + value[..2] : "&H00FFFFFF";
+        var alpha = transparency.ToString("X2", CultureInfo.InvariantCulture);
+        return value.Length == 6 ? "&H" + alpha + value[4..6] + value[2..4] + value[..2] : "&H" + alpha + "FFFFFF";
     }
 }

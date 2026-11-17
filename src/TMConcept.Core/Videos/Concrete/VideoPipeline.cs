@@ -154,6 +154,11 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         }
 
         Directory.CreateDirectory(work);
+
+        // The template's spoken closing: its sentence (in the video's language) ends the last scene's narration before the voice reads it, so
+        // the timing follows the real clip, the subtitles show it and a later version keeps it. Images are made from the scenes as written.
+        var closing = Styles.VideoStyleRules.Closing(options.Style, profile.ContentLanguage);
+        var scenes = closing is { Voice: true } ? Styles.ClosingNarration.Append(split.Scenes, closing.Sentence) : split.Scenes;
         steps.Finish(VideoSteps.Prepare);
 
         // B. narration
@@ -168,12 +173,12 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         {
             try
             {
-                var count = split.Scenes.Count;
+                var count = scenes.Count;
                 steps.Report(VideoSteps.Speech, 0, done: 0, total: count);
                 for (var i = 0; i < count; i++)
                 {
                     // The scene's script: its pauses and speed placeholders are applied exactly as in a new version.
-                    var clip = await SceneVoiceAsync(voice!, profile.ContentLanguage, i + 1, split.Scenes[i].Script, work, steps, id, cancellationToken)
+                    var clip = await SceneVoiceAsync(voice!, profile.ContentLanguage, i + 1, scenes[i].Script, work, steps, id, cancellationToken)
                         .ConfigureAwait(false);
                     clips.Add(clip);
                     steps.Report(VideoSteps.Speech, (i + 1.0) / count, done: i + 1, total: count);
@@ -216,13 +221,13 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
 
         // C. timing, after the images: a scene lasts as long as its clip (a silent one as long as its text takes to say).
         steps.Report(VideoSteps.Timing, 0);
-        var sources = split.Scenes.Select((s, i) => new RenderSceneSource(s.Visual, s.Narration, sceneImages.ElementAtOrDefault(i) ?? string.Empty,
+        var sources = scenes.Select((s, i) => new RenderSceneSource(s.Visual, s.Narration, sceneImages.ElementAtOrDefault(i) ?? string.Empty,
             clips.ElementAtOrDefault(i)?.DurationMs ?? VideoRemaker.SilentMs(s.Script, profile.ContentLanguage), s.Transition)).ToList();
         var input = RenderInputBuilder.Build(job.Concept.Title, profile.ContentLanguage, sources, width, height, 30);
         steps.Finish(VideoSteps.Timing);
 
         // E + F. code (+ one repair after a rejected check), render (+ one repair with the error text)
-        var rendered = await assembler.CodeAndRenderAsync(engine, job.CodeModel, options.Subtitles, input, work, id, steps, cancellationToken)
+        var rendered = await assembler.CodeAndRenderAsync(engine, job.CodeModel, options, input, work, id, steps, cancellationToken)
             .ConfigureAwait(false);
         if (rendered.Repaired)
         {
@@ -238,7 +243,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
             VideoCodePrompt.Version, warnings, steps.Spent, await ConceptShareAsync(job.Concept, id).ConfigureAwait(false), watch)
         {
             // Each scene's text with its placeholders and the transition into it: a new version is edited from this.
-            Script = split.Scenes.Select(s => VideoRemaker.WithTransition(s.Transition, s.Script, profile.ContentLanguage)).ToList(),
+            Script = scenes.Select(s => VideoRemaker.WithTransition(s.Transition, s.Script, profile.ContentLanguage)).ToList(),
         }, steps,
             cancellationToken).ConfigureAwait(false);
         await concepts.SetStatusAsync([job.Concept.Id], ConceptStatus.Produced, CancellationToken.None).ConfigureAwait(false);
@@ -390,7 +395,8 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                 var visuals = scenes.Select(s => s.Visual.Length > 0 ? s.Visual : s.Narration).ToList();
 
                 // Prompts and images of this concept are kept until its video is made: a retry after a later failure reuses them.
-                var cache = Path.Combine(SceneImageRoot(job.Concept.Id), CacheKey(job.Profile.Name, imageModel.Model, width, height, visuals));
+                var drawStyle = job.Options.Style?.DrawStyle;
+                var cache = Path.Combine(SceneImageRoot(job.Concept.Id), CacheKey(job.Profile.Name, imageModel.Model, width, height, visuals, drawStyle));
                 Directory.CreateDirectory(cache);
                 var promptFile = Path.Combine(cache, "prompts.txt");
                 IReadOnlyList<string> prompts;
@@ -411,7 +417,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                         var cut = false;
                         try
                         {
-                            var answer = await chat.SendAsync(new ChatRequest(ImagePromptBuilder.System, ImagePromptBuilder.User(job.Profile.Name, visuals),
+                            var answer = await chat.SendAsync(new ChatRequest(ImagePromptBuilder.System, ImagePromptBuilder.User(job.Profile.Name, visuals, drawStyle),
                                 Schema: ImagePromptBuilder.Schema(), MaxOutputTokens: 4000, Effort: promptModel.Effort), token).ConfigureAwait(false);
                             steps.Spend(new VideoCost
                             {
@@ -502,10 +508,20 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
 
     private string SceneImageRoot(Guid conceptId) => Path.Combine(paths.WorkDirectory, "scene-images", conceptId.ToString("N"));
 
-    private static string CacheKey(string channel, CatalogModel model, int width, int height, IReadOnlyList<string> visuals)
+    /// <summary>
+    /// The key of a concept's kept image prompts and images: another channel, model, size, scene text or template drawing style makes new ones
+    /// (without a template the key is what it was before templates).
+    /// </summary>
+    private static string CacheKey(string channel, CatalogModel model, int width, int height, IReadOnlyList<string> visuals, Styles.DrawStyle? drawStyle)
     {
-        var text = string.Join('\n', new[] { channel, model.Provider, model.Id, width.ToString(CultureInfo.InvariantCulture), height.ToString(CultureInfo.InvariantCulture) }
-            .Concat(visuals));
+        var parts = new[] { channel, model.Provider, model.Id, width.ToString(CultureInfo.InvariantCulture), height.ToString(CultureInfo.InvariantCulture) }
+            .Concat(visuals);
+        if (drawStyle is { } style)
+        {
+            parts = parts.Append("style:" + RenderStyleBuilder.Name(style));
+        }
+
+        var text = string.Join('\n', parts);
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)))[..16];
     }
 

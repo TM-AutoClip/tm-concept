@@ -31,6 +31,13 @@ public sealed class RenderInput
     /// <summary>Colors.</summary>
     public RenderTheme Theme { get; set; } = new();
 
+    /// <summary>
+    /// The template resolved for the code (<see cref="RenderStyleBuilder"/>); <c>null</c> for a video made before templates, and then left out of
+    /// the file, so its input.json stays as it was.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public RenderStyle? Style { get; set; }
+
     /// <summary>Scenes.</summary>
     public List<RenderScene> Scenes { get; set; } = [];
 }

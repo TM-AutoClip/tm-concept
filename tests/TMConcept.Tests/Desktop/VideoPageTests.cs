@@ -1343,6 +1343,9 @@ public sealed class VideoPageTests
 
         public TMConcept.Core.Render.RenderInput? Input { get; private set; }
 
+        /// <summary>The font files in the project when it was last written (the template's font, placed by the app).</summary>
+        public IReadOnlyList<string> Fonts { get; private set; } = [];
+
         public EngineKind Kind { get; init; } = EngineKind.HyperFrames;
 
         public string Name { get; init; } = "Fake";
@@ -1374,6 +1377,7 @@ public sealed class VideoPageTests
             }
 
             Input = request.Input;
+            Fonts = Directory.Exists(Path.Combine(request.Folder, "fonts")) ? Directory.GetFiles(Path.Combine(request.Folder, "fonts")).Select(f => Path.GetFileName(f)!).ToList() : [];
             Directory.CreateDirectory(Path.Combine(request.Folder, "tmp"));
             File.WriteAllText(Path.Combine(request.Folder, CodeFile), request.Code);
             File.WriteAllText(Path.Combine(request.Folder, "input.json"), TMConcept.Core.Render.RenderInputBuilder.ToJson(request.Input));
@@ -1404,11 +1408,24 @@ public sealed class VideoPageTests
         /// <summary>The subtitle file burned in at every mux, in order (null = none).</summary>
         public List<string?> Ass { get; } = [];
 
-        public Task MuxAsync(string folder, string silentVideo, IReadOnlyList<(string Wav, long StartMs)> clips, string? assFile, IReadOnlyList<long> fadesMs,
+        /// <summary>
+        /// What every mux drew over the video, in order: the overlay, its ASS text as it was in the work folder (null = none) and the files
+        /// there at that moment (the font folder's as "fonts/&lt;name&gt;").
+        /// </summary>
+        public List<(MuxOverlay Overlay, string? AssText, IReadOnlyList<string> Files)> Overlays { get; } = [];
+
+        public Task MuxAsync(string folder, string silentVideo, IReadOnlyList<(string Wav, long StartMs)> clips, MuxOverlay overlay, IReadOnlyList<long> fadesMs,
             string output, CancellationToken cancellationToken)
         {
             Fades.Add(fadesMs);
-            Ass.Add(assFile);
+            Ass.Add(overlay.AssFile);
+            var files = Directory.GetFiles(folder).Select(f => Path.GetFileName(f)!).ToList();
+            if (overlay.FontsFolder is { } fonts && Directory.Exists(Path.Combine(folder, fonts)))
+            {
+                files.AddRange(Directory.GetFiles(Path.Combine(folder, fonts)).Select(f => fonts + "/" + Path.GetFileName(f)));
+            }
+
+            Overlays.Add((overlay, overlay.AssFile is null ? null : File.ReadAllText(Path.Combine(folder, overlay.AssFile)), files));
             File.Copy(silentVideo, output, overwrite: true);
             return Task.CompletedTask;
         }

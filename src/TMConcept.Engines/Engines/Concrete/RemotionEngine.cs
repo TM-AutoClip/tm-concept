@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using TMConcept.Core.Engines;
 using TMConcept.Core.Paths;
 using TMConcept.Core.Processes;
+using TMConcept.Core.Render;
 using TMConcept.Core.Tools;
 using TMConcept.Engines.Tools;
 
@@ -39,9 +40,9 @@ public sealed class RemotionEngine(IAppPaths paths, ToolInstaller tools, ChromeL
     public override string Contract => """
         Engine: Remotion (React + TypeScript).
         Write ONE file (src/Scene.tsx) that exports `export const Scene: React.FC<ConceptInput> = (input) => …`.
-        Allowed imports only: 'react', 'remotion' and `import type {ConceptInput, ConceptScene} from './input';`.
+        Allowed imports only: 'react', 'remotion', `import type {ConceptInput, ConceptScene} from './input';` and the helpers of './tm'.
         The input type: {width, height, fps, totalFrames, durationSeconds, language, title, theme {background, accent, text},
-        scenes [{number, startFrame, frameCount, startSeconds, durationSeconds, visual, image, transition}]}.
+        style? (the template, when there is one), scenes [{number, startFrame, frameCount, startSeconds, durationSeconds, visual, image, transition}]}.
         Put each scene in `<Sequence from={scene.startFrame} durationInFrames={scene.frameCount}>`; animate with useCurrentFrame,
         interpolate and spring. Images: `<Img src={staticFile(scene.image)} />` only when scene.image is not empty.
         Never hard-code texts or durations. No network, no external fonts, no randomness that changes between frames.
@@ -93,6 +94,23 @@ public sealed class RemotionEngine(IAppPaths paths, ToolInstaller tools, ChromeL
           transition: string;
         };
         export type ConceptTheme = {background: string; accent: string; text: string};
+        export type ConceptColors = {background: string; surface: string; accent: string; accent2: string; text: string; muted: string};
+        export type ConceptStyle = {
+          colors: ConceptColors;
+          font: string;
+          fontRegular: string;
+          fontBold: string;
+          titleStyle: string;
+          titleX: number;
+          titleY: number;
+          drawStyle: string;
+          motion: string;
+          subtitles: boolean;
+          progressBar: boolean;
+          safeMargin: number;
+          safeBottom: number;
+          endCardSeconds: number;
+        };
         export type ConceptInput = {
           width: number;
           height: number;
@@ -102,9 +120,50 @@ public sealed class RemotionEngine(IAppPaths paths, ToolInstaller tools, ChromeL
           language: string;
           title: string;
           theme: ConceptTheme;
+          style?: ConceptStyle;
           scenes: ConceptScene[];
         };
         """;
+
+    /// <summary>
+    /// <c>src/fonts.ts</c>, imported by Root.tsx: loads the template's font files from <c>public/fonts</c> (<c>staticFile</c>) before any frame
+    /// is drawn (<c>delayRender</c>); a font that cannot load stops the render (<c>cancelRender</c>) instead of drawing in another font.
+    /// Without a template the list is empty and nothing is loaded.
+    /// </summary>
+    public static string FontsTs(RenderInput input)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        var faces = new List<string>();
+        if (input.Style is { } style)
+        {
+            var family = Quote(style.Font);
+            faces.Add($"[{family}, {Quote(style.FontRegular)}, '{(style.FontBold.Length == 0 ? "100 900" : "400")}']");
+            if (style.FontBold.Length > 0)
+            {
+                faces.Add($"[{family}, {Quote(style.FontBold)}, '700']");
+            }
+        }
+
+        return $$"""
+            // The app's file (TM Concept): loads the template's font before the frames are drawn; not changed by the model.
+            import {cancelRender, continueRender, delayRender, staticFile} from 'remotion';
+
+            const faces: [string, string, string][] = [{{string.Join(", ", faces)}}];
+
+            if (typeof document !== 'undefined' && faces.length > 0) {
+              const handle = delayRender('Loading the template font');
+              Promise.all(faces.map(([family, file, weight]) => new FontFace(family, `url('${staticFile(file)}') format('truetype')`, {weight}).load()
+                .then((face) => {
+                  document.fonts.add(face);
+                })))
+                .then(() => continueRender(handle))
+                .catch((error: unknown) => cancelRender(error instanceof Error ? error : new Error(String(error))));
+            }
+            """;
+    }
+
+    /// <summary>A TypeScript string literal of an app value (font names and file names only; quotes and backslashes are dropped).</summary>
+    private static string Quote(string value) => "'" + new string(value.Where(ch => ch is not ('\'' or '\\' or '\n' or '\r')).ToArray()) + "'";
 
     private const string IndexTs = """
         // The app's file (TM Concept); not changed by the model.
@@ -117,6 +176,7 @@ public sealed class RemotionEngine(IAppPaths paths, ToolInstaller tools, ChromeL
         // The app's file (TM Concept); length, fps and size come from input.json (calculated in C#).
         import React from 'react';
         import {Composition} from 'remotion';
+        import './fonts';
         import {Scene} from './Scene';
         import type {ConceptInput} from './input';
 
@@ -162,6 +222,8 @@ public sealed class RemotionEngine(IAppPaths paths, ToolInstaller tools, ChromeL
         ["src/index.ts"] = IndexTs,
         ["src/Root.tsx"] = RootTsx,
         ["src/input.ts"] = InputTs,
+        ["src/fonts.ts"] = FontsTs(request.Input),
+        ["src/tm.tsx"] = TemplateHelpers.RemotionHelpers,
         ["public/.keep"] = string.Empty,
     };
 

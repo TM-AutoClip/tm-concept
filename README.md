@@ -322,6 +322,24 @@ Then choose the models on the pages that use them (see above). Nothing paid is c
    each queued video starts: a change applies to the next video, never to the one being made.
 4. **Produced videos:** watch in the app (sound on Linux through PulseAudio or PipeWire), open the folder. Each video is a version folder (`v1/` inside the concept's folder) with `video.mp4`, `subtitles.srt`, `narration.txt` (always written) and `thumbnail.jpg`, plus `source/` (the engine project as it rendered: the model's code, `input.json`, the scene images) and `audio/` (the narration clip of each scene), kept for a later re-render.
 
+### How a template shows in the video
+
+A video made with a template (Settings → Templates) follows it without relying on the model's good will:
+
+- **Drawn by the program, not by the model:** the subtitles (in the template's font and colours), the thin progress bar along the top
+  edge (only when the template has it on) and the closing card are burned in when the video is put together. The video code is never asked
+  to draw them, and code that draws a progress bar, a timer or a scene counter itself, reads the narration of a video without subtitles or
+  names another font is sent back for its one repair; if the repair breaks the template again, the video is not made and the queue shows
+  the error (night mode counts it as an error).
+- **Colours and font:** the code gets the template's palette and font (six bundled SIL OFL fonts that draw every Turkish letter). A colour
+  outside the palette is replaced by the nearest palette colour on this computer, without a paid repair.
+- **Closing:** the chosen sentence is in the video's language, with the platform's wording (YouTube: subscribe; Instagram and TikTok:
+  follow). *Voice* adds it to the end of the last scene's narration before it is spoken, so it is also in the subtitles and in
+  `narration.txt`; *Screen* shows a closing card over the last seconds with the profile's channel photo (round, when the profile has one),
+  the channel name, the sentence and a button.
+- **Drawing style:** scenes without an image are drawn in the template's style, and generated images are asked for in the same style.
+- A new version made from the kept code keeps the template the video was made with.
+
 ## Update
 
 **From the app:** at start (at most once a day) TM Concept reads the project's release list on GitHub (no account, no server of ours,
