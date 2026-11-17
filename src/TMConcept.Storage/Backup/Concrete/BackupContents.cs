@@ -10,13 +10,13 @@ public sealed class BackupContents
     /// <summary>API keys.</summary>
     public bool Keys { get; set; }
 
-    /// <summary>Profiles with their model choices and sample images (the image files themselves).</summary>
+    /// <summary>Profiles with their model choices, sample images and channel photos (the image files themselves).</summary>
     public bool Profiles { get; set; } = true;
 
     /// <summary>Concepts (also the trash), the queue, the video list, the cost history.</summary>
     public bool Concepts { get; set; } = true;
 
-    /// <summary>The app's settings (with the pronunciation dictionary and the voice samples).</summary>
+    /// <summary>The app's settings (with the pronunciation dictionary, the voice samples and the templates).</summary>
     public bool Settings { get; set; } = true;
 
     /// <summary>The default of automatic backups: everything except the API keys.</summary>

@@ -4,9 +4,10 @@
              xmlns:views="using:TMConcept.Desktop.Views"
              xmlns:c="using:TMConcept.Desktop.Converters"
              xmlns:controls="using:TMConcept.Desktop.Controls"
+             xmlns:styles="using:TMConcept.Core.Styles"
              x:Class="TMConcept.Desktop.Views.VideoView"
              x:DataType="vm:VideoViewModel">
-  <!-- 0.1.13 layout, made for 1280×720 and wider (down to 1024×600): one bar line (the models folded, subtitles); the approved concepts over
+  <!-- 0.1.13 layout, made for 1280×720 and wider (down to 1024×600): one bar line (the models folded, the template); the approved concepts over
        the detail panel on the left; the queue and the made videos side by side (the made videos go under the queue on a narrow window).
        The made videos get the larger share, and their list takes only the height its rows need, so the preview of the chosen video gets
        the rest (on a low card, under the queue, they stand side by side). Nothing on the page scrolls as a whole. The unfolded models lie over a dimmed page (the last children, drawn on top); a
@@ -16,8 +17,20 @@
       <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12">
         <views:ModelSummaryBar Name="ModelsBar" Picker="{Binding Picker}" IsOpen="{Binding ModelsOpen}" />
         <views:HelpTip Grid.Column="1" Text="{DynamicResource video.models.tip}" VerticalAlignment="Center" />
-        <CheckBox Name="SubtitlesCheck" Grid.Column="2" IsChecked="{Binding Subtitles}" Content="{DynamicResource video.subtitles}" MinHeight="0"
-                  ToolTip.Tip="{DynamicResource video.subtitles.tip}" />
+        <!-- The template (Settings → Templates): empty on a new install; nothing is produced until one is chosen. -->
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+          <TextBlock Text="{DynamicResource video.style}" VerticalAlignment="Center" />
+          <ComboBox Name="StylePicker" ItemsSource="{Binding Styles}" SelectedItem="{Binding SelectedStyle}" MinWidth="180" MaxWidth="260" MinHeight="0"
+                    PlaceholderText="{DynamicResource video.style.placeholder}" ToolTip.Tip="{DynamicResource video.style.tip}">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="styles:VideoStyle">
+                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+          <TextBlock Name="NoStylesHint" Text="{DynamicResource video.style.empty}" Classes="small warning" VerticalAlignment="Center"
+                     IsVisible="{Binding NoStyles}" />
+        </StackPanel>
       </Grid>
     </Border>
 

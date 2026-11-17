@@ -1,0 +1,229 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:TMConcept.Desktop.ViewModels"
+             xmlns:views="using:TMConcept.Desktop.Views"
+             xmlns:styles="using:TMConcept.Core.Styles"
+             x:Class="TMConcept.Desktop.Views.VideoStylesSettingsView"
+             x:DataType="vm:VideoStylesSettingsViewModel">
+  <!-- The templates on the left (at most 20), the form of the chosen one on the right with a live preview. -->
+  <Grid ColumnDefinitions="240,*" ColumnSpacing="16" Margin="0,12">
+    <DockPanel>
+      <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,8">
+        <StackPanel Orientation="Horizontal">
+          <TextBlock Name="StylesCount" Text="{Binding CountText}" Classes="muted" VerticalAlignment="Center" />
+          <views:HelpTip Text="{DynamicResource styles.explain}" />
+        </StackPanel>
+        <Button Name="AddStyleButton" Classes="accent" Content="{DynamicResource styles.add}" Command="{Binding AddCommand}" IsEnabled="{Binding CanAdd}" />
+      </StackPanel>
+      <TextBlock DockPanel.Dock="Top" Text="{DynamicResource styles.empty}" Classes="muted" TextWrapping="Wrap" IsVisible="{Binding Empty}" />
+      <ListBox Name="StyleList" Classes="rows" ItemsSource="{Binding Styles}" SelectedItem="{Binding SelectedStyle}" Background="Transparent">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="styles:VideoStyle">
+            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </DockPanel>
+
+    <ScrollViewer Grid.Column="1">
+      <StackPanel Spacing="12" MaxWidth="760" HorizontalAlignment="Left">
+        <TextBlock Text="{DynamicResource styles.pick}" Classes="muted" TextWrapping="Wrap" IsVisible="{Binding !HasEditor}" />
+        <ContentControl Content="{Binding Editor}" IsVisible="{Binding HasEditor}">
+          <ContentControl.ContentTemplate>
+            <DataTemplate x:DataType="vm:VideoStyleEditorViewModel">
+              <StackPanel Spacing="12">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                  <StackPanel Spacing="8">
+                    <TextBlock Text="{DynamicResource styles.name}" FontWeight="SemiBold" />
+                    <TextBox Name="StyleName" Text="{Binding Name}" MaxLength="60" />
+                    <CheckBox Name="StyleSubtitles" IsChecked="{Binding Subtitles}" Content="{DynamicResource styles.subtitles}"
+                              ToolTip.Tip="{DynamicResource styles.subtitles.tip}" />
+                    <CheckBox Name="StyleProgress" IsChecked="{Binding ProgressBar}" Content="{DynamicResource styles.progress}"
+                              ToolTip.Tip="{DynamicResource styles.progress.tip}" />
+                  </StackPanel>
+                  <!-- Live preview: colours, font, title style and place, progress bar and subtitles. -->
+                  <StackPanel Grid.Column="1" Spacing="4">
+                    <TextBlock Text="{DynamicResource styles.preview}" Classes="small muted" />
+                    <Border Name="StylePreview" Width="256" Height="144" CornerRadius="6" ClipToBounds="True" Background="{Binding PreviewBackground}">
+                      <Grid>
+                        <Rectangle Height="3" Width="150" VerticalAlignment="Top" HorizontalAlignment="Left" Fill="{Binding PreviewAccent}"
+                                   IsVisible="{Binding ProgressBar}" />
+                        <Border Margin="10,12" Padding="8,4" CornerRadius="4" Background="{Binding PreviewTitleBox}"
+                                HorizontalAlignment="{Binding PreviewTitleBoxAlignment}" VerticalAlignment="{Binding PreviewTitleVertical}">
+                          <StackPanel Spacing="2" HorizontalAlignment="{Binding PreviewTitleHorizontal}">
+                            <Panel>
+                              <TextBlock Text="{DynamicResource styles.preview.title}" FontFamily="{Binding Font.Preview}" FontSize="18" FontWeight="Bold"
+                                         Foreground="{Binding PreviewTitleText}" IsVisible="{Binding !PreviewOutlined}" />
+                              <TextBlock Text="{DynamicResource styles.preview.title}" FontFamily="{Binding Font.Preview}" FontSize="18" FontWeight="Bold"
+                                         Foreground="{Binding PreviewTitleText}" IsVisible="{Binding PreviewOutlined}">
+                                <TextBlock.Effect>
+                                  <DropShadowEffect OffsetX="0" OffsetY="0" BlurRadius="3" Opacity="1" Color="{Binding PreviewOutline}" />
+                                </TextBlock.Effect>
+                              </TextBlock>
+                            </Panel>
+                            <Rectangle Height="3" Width="36" HorizontalAlignment="Left" Fill="{Binding PreviewAccent}" IsVisible="{Binding PreviewUnderline}" />
+                          </StackPanel>
+                        </Border>
+                        <TextBlock Text="{DynamicResource styles.preview.subtitle}" FontFamily="{Binding Font.Preview}" FontSize="11" Margin="0,0,0,8"
+                                   HorizontalAlignment="Center" VerticalAlignment="Bottom" Foreground="{Binding PreviewText}" IsVisible="{Binding Subtitles}" />
+                      </Grid>
+                    </Border>
+                  </StackPanel>
+                </Grid>
+
+                <Border Classes="card">
+                  <StackPanel Spacing="8">
+                    <TextBlock Text="{DynamicResource styles.look}" FontWeight="SemiBold" />
+                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="10" ColumnSpacing="12">
+                      <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="{DynamicResource styles.palette}" VerticalAlignment="Center" />
+                        <views:HelpTip Text="{DynamicResource styles.palette.tip}" />
+                      </StackPanel>
+                      <ListBox Name="StylePalettes" Grid.Column="1" ItemsSource="{Binding Palettes}" SelectedItem="{Binding Palette}" Background="Transparent">
+                        <ListBox.ItemsPanel>
+                          <ItemsPanelTemplate>
+                            <WrapPanel />
+                          </ItemsPanelTemplate>
+                        </ListBox.ItemsPanel>
+                        <ListBox.ItemTemplate>
+                          <DataTemplate x:DataType="vm:PaletteOption">
+                            <StackPanel Spacing="4" Margin="2">
+                              <ItemsControl ItemsSource="{Binding Swatches}">
+                                <ItemsControl.ItemsPanel>
+                                  <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" />
+                                  </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                  <DataTemplate x:DataType="IBrush">
+                                    <Border Width="14" Height="22" Background="{Binding}" BorderBrush="{DynamicResource tm-border}" BorderThickness="0.5" />
+                                  </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                              </ItemsControl>
+                              <TextBlock Text="{Binding Label}" Classes="small" HorizontalAlignment="Center" />
+                            </StackPanel>
+                          </DataTemplate>
+                        </ListBox.ItemTemplate>
+                      </ListBox>
+
+                      <StackPanel Grid.Row="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="{DynamicResource styles.font}" VerticalAlignment="Center" />
+                        <views:HelpTip Text="{DynamicResource styles.font.tip}" />
+                      </StackPanel>
+                      <ComboBox Name="StyleFonts" Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Fonts}" SelectedItem="{Binding Font}" MinWidth="240">
+                        <ComboBox.ItemTemplate>
+                          <DataTemplate x:DataType="vm:FontOption">
+                            <TextBlock Text="{Binding Font.Family}" FontFamily="{Binding Preview}" FontSize="16" />
+                          </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                      </ComboBox>
+
+                      <TextBlock Grid.Row="2" Text="{DynamicResource styles.title_style}" VerticalAlignment="Center" />
+                      <ComboBox Name="StyleTitleStyles" Grid.Row="2" Grid.Column="1" ItemsSource="{Binding TitleStyles}" SelectedItem="{Binding TitleStyle}"
+                                MinWidth="240">
+                        <ComboBox.ItemTemplate>
+                          <DataTemplate x:DataType="vm:NumberChoice">
+                            <TextBlock Text="{Binding Label}" />
+                          </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                      </ComboBox>
+
+                      <StackPanel Grid.Row="3" Orientation="Horizontal" VerticalAlignment="Top">
+                        <TextBlock Text="{DynamicResource styles.title_position}" VerticalAlignment="Center" />
+                        <views:HelpTip Text="{DynamicResource styles.title_position.tip}" />
+                      </StackPanel>
+                      <Border Grid.Row="3" Grid.Column="1" Classes="inset" HorizontalAlignment="Left" Padding="6">
+                        <ItemsControl Name="StyleTitleCells" ItemsSource="{Binding TitleCells}">
+                          <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                              <UniformGrid Rows="3" Columns="3" />
+                            </ItemsPanelTemplate>
+                          </ItemsControl.ItemsPanel>
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:TitleCellViewModel">
+                              <RadioButton GroupName="title-position" IsChecked="{Binding IsChecked}" ToolTip.Tip="{Binding Label}" Margin="6,2" MinWidth="0" />
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                      </Border>
+
+                      <StackPanel Grid.Row="4" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="{DynamicResource styles.draw}" VerticalAlignment="Center" />
+                        <views:HelpTip Text="{DynamicResource styles.draw.tip}" />
+                      </StackPanel>
+                      <WrapPanel Grid.Row="4" Grid.Column="1" ItemSpacing="12" LineSpacing="6">
+                        <ComboBox Name="StyleDraw" ItemsSource="{Binding DrawStyles}" SelectedItem="{Binding DrawStyle}" MinWidth="200">
+                          <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:NumberChoice">
+                              <TextBlock Text="{Binding Label}" />
+                            </DataTemplate>
+                          </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <TextBlock Text="{DynamicResource styles.motion}" VerticalAlignment="Center" />
+                        <ComboBox Name="StyleMotion" ItemsSource="{Binding Motions}" SelectedItem="{Binding Motion}" MinWidth="140"
+                                  ToolTip.Tip="{DynamicResource styles.motion.tip}">
+                          <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:NumberChoice">
+                              <TextBlock Text="{Binding Label}" />
+                            </DataTemplate>
+                          </ComboBox.ItemTemplate>
+                        </ComboBox>
+                      </WrapPanel>
+                    </Grid>
+                  </StackPanel>
+                </Border>
+
+                <Border Classes="card">
+                  <StackPanel Spacing="8">
+                    <StackPanel Orientation="Horizontal">
+                      <TextBlock Text="{DynamicResource styles.closing}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                      <views:HelpTip Text="{DynamicResource styles.closing.tip}" />
+                    </StackPanel>
+                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="10" ColumnSpacing="12">
+                      <TextBlock Text="{DynamicResource styles.closing.where}" VerticalAlignment="Center" />
+                      <ComboBox Name="StyleClosing" Grid.Column="1" ItemsSource="{Binding Placements}" SelectedItem="{Binding Closing}" MinWidth="240">
+                        <ComboBox.ItemTemplate>
+                          <DataTemplate x:DataType="vm:NumberChoice">
+                            <TextBlock Text="{Binding Label}" />
+                          </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                      </ComboBox>
+                      <TextBlock Grid.Row="1" Text="{DynamicResource styles.closing.platform}" VerticalAlignment="Center" IsVisible="{Binding ClosingOn}" />
+                      <ComboBox Name="StylePlatform" Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Platforms}" SelectedItem="{Binding Platform}"
+                                MinWidth="240" IsVisible="{Binding ClosingOn}">
+                        <ComboBox.ItemTemplate>
+                          <DataTemplate x:DataType="vm:NumberChoice">
+                            <TextBlock Text="{Binding Label}" />
+                          </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                      </ComboBox>
+                      <TextBlock Grid.Row="2" Text="{DynamicResource styles.closing.phrase}" VerticalAlignment="Center" IsVisible="{Binding ClosingOn}" />
+                      <ComboBox Name="StylePhrase" Grid.Row="2" Grid.Column="1" ItemsSource="{Binding Phrases}" SelectedItem="{Binding Phrase}" MinWidth="240"
+                                IsVisible="{Binding ClosingOn}">
+                        <ComboBox.ItemTemplate>
+                          <DataTemplate x:DataType="vm:NumberChoice">
+                            <TextBlock Text="{Binding Label}" />
+                          </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                      </ComboBox>
+                    </Grid>
+                    <TextBlock Name="StyleClosingPreview" Text="{Binding ClosingPreview}" Classes="small muted" TextWrapping="Wrap"
+                               IsVisible="{Binding ClosingOn}" />
+                  </StackPanel>
+                </Border>
+              </StackPanel>
+            </DataTemplate>
+          </ContentControl.ContentTemplate>
+        </ContentControl>
+
+        <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding HasEditor}">
+          <Button Name="SaveStyleButton" Classes="accent" Content="{DynamicResource common.save}" Command="{Binding SaveCommand}" />
+          <Button Content="{DynamicResource common.cancel}" Command="{Binding RevertCommand}" />
+          <Button Name="DeleteStyleButton" Classes="danger" Content="{DynamicResource styles.delete}" Command="{Binding DeleteCommand}"
+                  IsVisible="{Binding CanDelete}" />
+        </StackPanel>
+        <SelectableTextBlock Name="StylesStatus" Text="{Binding Status}" TextWrapping="Wrap" />
+      </StackPanel>
+    </ScrollViewer>
+  </Grid>
+</UserControl>

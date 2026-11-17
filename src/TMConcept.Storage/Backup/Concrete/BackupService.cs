@@ -17,8 +17,8 @@ namespace TMConcept.Storage.Backup;
 /// Backups as one file (<c>.tmcbak</c>): <see cref="SealedBox"/> (Argon2id + AES-256-GCM, the backup password) with the magic word
 /// <c>TMCBAK03</c> around [header length (4, LE) | header JSON (<see cref="BackupHeader"/>) | database key (32) | encrypted database copy |
 /// sample image files]. What goes in is chosen (<see cref="BackupContents"/>): API keys only when chosen (allowed because the whole file is
-/// password-encrypted), profiles with their model choices and their sample image files, concepts with the trash, the video list and the
-/// costs, settings. The copy is made with SQLite's online backup into a file encrypted with the same key, so no plain data is written to
+/// password-encrypted), profiles with their model choices, their sample image files and their channel photos, concepts with the trash, the
+/// video list and the costs, settings (with the templates). The copy is made with SQLite's online backup into a file encrypted with the same key, so no plain data is written to
 /// disk at any moment; what was not chosen, the stored backup key and the backup bookkeeping are deleted from the copy before it is sealed.
 /// Videos are never in a backup. The backup password is required at the first start; the key derived from it is kept only in the encrypted
 /// database (never in a backup file), so daily backups need no password. Opening a backup always needs the password; changing it needs the
@@ -189,12 +189,16 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
                 header.ProfileCount = await db.Profiles.CountAsync(cancellationToken).ConfigureAwait(false);
                 header.ConceptCount = await db.Concepts.CountAsync(cancellationToken).ConfigureAwait(false);
                 header.VideoCount = await db.Videos.CountAsync(cancellationToken).ConfigureAwait(false);
-                foreach (var image in await db.ProfileImages.ToListAsync(cancellationToken).ConfigureAwait(false))
+                // The sample images and the channel photos: files in the library folder that the profile rows point at.
+                var files = (await db.ProfileImages.Select(i => i.FileName).ToListAsync(cancellationToken).ConfigureAwait(false))
+                    .Concat(await db.Profiles.Where(p => p.ChannelPhoto != null).Select(p => p.ChannelPhoto!).ToListAsync(cancellationToken).ConfigureAwait(false))
+                    .Distinct(StringComparer.Ordinal);
+                foreach (var file in files)
                 {
-                    if (await ReadImageAsync(image.FileName, cancellationToken).ConfigureAwait(false) is { } bytes)
+                    if (await ReadImageAsync(file, cancellationToken).ConfigureAwait(false) is { } bytes)
                     {
                         images.Add(bytes);
-                        header.Images.Add(new BackupImage { Path = image.FileName, Length = bytes.Length, Sha256 = Convert.ToHexStringLower(SHA256.HashData(bytes)) });
+                        header.Images.Add(new BackupImage { Path = file, Length = bytes.Length, Sha256 = Convert.ToHexStringLower(SHA256.HashData(bytes)) });
                     }
                 }
             }
@@ -426,6 +430,7 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
             await db.Settings.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
             await db.Pronunciations.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
             await db.VoiceSamples.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+            await db.VideoStyles.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
         }
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -441,11 +446,11 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
                 return await File.ReadAllBytesAsync(file, cancellationToken).ConfigureAwait(false);
             }
 
-            logger.LogWarning("A sample image file is missing; the backup holds its record without the file");
+            logger.LogWarning("A sample image or channel photo file is missing; the backup holds its record without the file");
         }
         catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
         {
-            logger.LogWarning(ex, "A sample image could not be read for the backup; it holds its record without the file");
+            logger.LogWarning(ex, "A sample image or channel photo could not be read for the backup; it holds its record without the file");
         }
 
         return null;
@@ -670,6 +675,7 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
         await db.TopicSuggestions.AsNoTracking().Take(1).ToListAsync(cancellationToken).ConfigureAwait(false);
         await db.ConceptWishes.AsNoTracking().Take(1).ToListAsync(cancellationToken).ConfigureAwait(false);
         await db.VideoRatings.AsNoTracking().Take(1).ToListAsync(cancellationToken).ConfigureAwait(false);
+        await db.VideoStyles.AsNoTracking().Take(1).ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static RestoreReport Report(BackupHeader header) => new(header.CreatedAtUtc, header.Contents, header.KeyCount,

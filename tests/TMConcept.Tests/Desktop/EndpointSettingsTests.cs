@@ -311,8 +311,11 @@ public sealed class EndpointSettingsTests
         {
             Step = PipelineSteps.VideoCode, ProfileId = profile.Id, Provider = EndpointCodes.For(endpoint.Id), Model = "bonsai-27b",
         }, None);
+        var style = new TMConcept.Core.Styles.VideoStyle { Name = "Default" };
+        await h.Get<TMConcept.Core.Styles.IVideoStyleStore>().SaveAsync(style, None);
         var page = h.Get<VideoViewModel>();
         await page.ActivateAsync();
+        page.SelectedStyle = page.Styles.Single();
         await page.EnqueueAsync(page.Approved.Single());
         var row = page.Queue.Single();
 

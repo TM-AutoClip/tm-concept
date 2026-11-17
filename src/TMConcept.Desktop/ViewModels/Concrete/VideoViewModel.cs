@@ -11,6 +11,7 @@ using TMConcept.Core.Models;
 using TMConcept.Core.Notifications;
 using TMConcept.Core.Pipeline;
 using TMConcept.Core.Profiles;
+using TMConcept.Core.Styles;
 using TMConcept.Core.Videos;
 using TMConcept.Desktop.Concepts;
 using TMConcept.Desktop.Localization;
@@ -21,7 +22,7 @@ namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
 /// Concept → video (0.1.13 layout, the developer's request of 11 Nov 2026). On top one folded line with the page's models (video code with
-/// its engine, images, narration, and the concept model for edits) and the subtitles choice. Left: the approved concepts over the detail
+/// its engine, images, narration, and the concept model for edits) and the template. Left: the approved concepts over the detail
 /// panel (<see cref="ConceptDetailViewModel"/>): a click opens a concept there, where it can be edited by hand or with AI, taken back from
 /// approved or deleted; nothing is added here, and only "Add to queue" on a row queues it. Middle: the queue (↑↓ order, ✕ back to approved);
 /// the item being made shows every step with its time and cost, the code call's tokens and what was paid so far
@@ -31,9 +32,10 @@ namespace TMConcept.Desktop.ViewModels;
 /// "Produce in order" first makes the choices ready (licenses, a key asked for when a provider has none, ONE confirmation that lists every
 /// download) and saves them for the profile; declined or failed = nothing is made or paid for. The videos are made one by one: before each
 /// item the queue is read again, so a removed item is not made, a new one is, and the order follows ↑↓; the models are the profile's
-/// choices when the item starts, and so is the subtitles choice (kept on this computer, <see cref="Paths.UiPreferences.Subtitles"/>; until
-/// 0.1.16 each queue item kept the choice it was added with, so turning subtitles off did not reach the queued videos). Cancel stops after
-/// the running step.
+/// choices when the item starts, and so is the template (0.1.19, Settings → Templates; chosen here and kept on this computer,
+/// <see cref="Paths.UiPreferences.VideoStyleId"/>, empty on a new install): nothing is produced until a code model and a template are chosen;
+/// each video takes a copy of the template as it is stored when the video starts (<see cref="VideoStyleRules.Snapshot"/>), so a change of
+/// the choice or of the template reaches the next video, never the one being made. Cancel stops after the running step.
 /// <para>0.1.18 stop rules (<see cref="IVideoQueueRunner"/>): with "Night mode" off (the default at every start) any failed video stops the
 /// whole queue (its error on the page, a notification and a red line); with it on (for when nobody is at the computer, a checkbox next to
 /// "Produce in order", read at every decision so it can be ticked while the queue runs) a failed video is reported and the next one is made
@@ -64,19 +66,21 @@ public sealed partial class VideoViewModel : PageViewModelBase
     private readonly Localizer _text;
     private readonly ILogger<VideoViewModel> _logger;
     private readonly Paths.UiPreferencesFile _preferences;
+    private readonly IVideoStyleStore _styles;
     private readonly Dictionary<Guid, Concept> _queued = [];
     private CancellationTokenSource? _cancel;
     private Guid? _running;
     private bool _attached;
     private bool _loading;
     private bool _choosing;
+    private bool _loadingStyles;
 
     /// <summary>Creates the page with its models, its detail panel and the shared player.</summary>
     public VideoViewModel(AppSession session, IConceptStore concepts, IQueueStore queue, IProfileStore profiles, VideoPipeline pipeline,
         IEnumerable<IVideoEngine> engines, StepModelResolver resolver, Core.Media.IMediaTools media, VideoCostEstimator estimator, StepPickerViewModel picker,
         ConceptDetailViewModel detail, ConceptActions actions, VideoRows rows, VideoFiles files, PlayerViewModel player,
         Func<ProductionProgressViewModel> progress, ConceptEvents events, INotifier notifier, IVideoQueueRunner runner, IActivityLog activity, Localizer text,
-        Paths.UiPreferencesFile preferences, ILogger<VideoViewModel> logger)
+        Paths.UiPreferencesFile preferences, IVideoStyleStore styles, ILogger<VideoViewModel> logger)
     {
         _session = session;
         _concepts = concepts;
@@ -98,9 +102,8 @@ public sealed partial class VideoViewModel : PageViewModelBase
         _text = text;
         _logger = logger;
 
-        // The kept subtitles choice, set before the preferences file is known to the page: restoring it writes nothing and estimates nothing.
-        Subtitles = preferences.Read().Subtitles;
         _preferences = preferences;
+        _styles = styles;
         Player = player;
         Detail = detail;
 
@@ -136,12 +139,19 @@ public sealed partial class VideoViewModel : PageViewModelBase
     [RelayCommand]
     public void CloseModels() => ModelsOpen = false;
 
+    /// <summary>The templates of Settings → Templates, by name (read again whenever the page is shown).</summary>
+    public ObservableCollection<VideoStyle> Styles { get; } = [];
+
     /// <summary>
-    /// Subtitles in the picture, kept on this computer. Read when each queued video starts, so a change applies to every video not started
-    /// yet. Off: nothing is burned in and the video code gets no narration text to draw (the .srt file is still written).
+    /// The chosen template, kept on this computer (nothing on a new install). Read when each queued video starts, so a change applies to the
+    /// next video, never to the one being made; nothing is produced while none is chosen.
     /// </summary>
     [ObservableProperty]
-    public partial bool Subtitles { get; set; } = true;
+    public partial VideoStyle? SelectedStyle { get; set; }
+
+    /// <summary>There is no template yet (the picker says to make one in Settings).</summary>
+    [ObservableProperty]
+    public partial bool NoStyles { get; set; }
 
     /// <summary>The detail panel under the approved list.</summary>
     public ConceptDetailViewModel Detail { get; }
@@ -247,6 +257,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
             };
         }
 
+        await LoadStylesAsync().ConfigureAwait(true);
         if (!Busy)
         {
             await LoadModelsAsync().ConfigureAwait(true);
@@ -385,6 +396,12 @@ public sealed partial class VideoViewModel : PageViewModelBase
                 return;
             }
 
+            if (MissingChoice() is { } missing)
+            {
+                Refuse(missing);
+                return;
+            }
+
             if (!await PrepareAsync(items, cancel.Token).ConfigureAwait(true))
             {
                 return;
@@ -444,6 +461,12 @@ public sealed partial class VideoViewModel : PageViewModelBase
     {
         if (row is null || Busy)
         {
+            return;
+        }
+
+        if (MissingChoice() is { } missing)
+        {
+            Refuse(missing);
             return;
         }
 
@@ -531,27 +554,74 @@ public sealed partial class VideoViewModel : PageViewModelBase
 
     partial void OnBusyChanged(bool value) => Working = value || Detail.AiRunning;
 
-    partial void OnSubtitlesChanged(bool value)
+    partial void OnSelectedStyleChanged(VideoStyle? value)
     {
-        // Set by the constructor from the file before the page knows the file: nothing to keep or estimate yet.
-        if (_preferences is null)
+        // Filled from the kept choice when the list is read: nothing to keep or estimate.
+        if (_loadingStyles)
         {
             return;
         }
 
-        if (value != _preferences.Read().Subtitles)
+        KeepStyle(value?.Id);
+        _ = SafeAsync(EstimateAsync);
+    }
+
+    /// <summary>Reads the templates again and chooses the kept one (no longer there, e.g. deleted in Settings: nothing is chosen).</summary>
+    private async Task LoadStylesAsync()
+    {
+        var all = await _styles.ListAsync(CancellationToken.None).ConfigureAwait(true);
+        var kept = _preferences.Read().VideoStyleId;
+        _loadingStyles = true;
+        try
         {
-            try
+            Styles.Clear();
+            foreach (var style in all)
             {
-                _preferences.Change(p => p.Subtitles = value);
+                Styles.Add(style);
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                _logger.LogWarning(ex, "The subtitles choice could not be kept");
-            }
+
+            SelectedStyle = Styles.FirstOrDefault(s => s.Id == kept);
+        }
+        finally
+        {
+            _loadingStyles = false;
         }
 
-        _ = SafeAsync(EstimateAsync);
+        NoStyles = Styles.Count == 0;
+        if (kept is not null && SelectedStyle is null)
+        {
+            _logger.LogInformation("The kept template {Id} is gone; none is chosen", kept);
+            KeepStyle(null);
+        }
+    }
+
+    private void KeepStyle(Guid? id)
+    {
+        if (_preferences.Read().VideoStyleId == id)
+        {
+            return;
+        }
+
+        try
+        {
+            _preferences.Change(p => p.VideoStyleId = id);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The choice still holds for this run of the app; only the next start would not know it (logged, like the other kept choices).
+            _logger.LogWarning(ex, "The template choice could not be kept");
+        }
+    }
+
+    /// <summary>What must still be chosen before anything is produced: a code model and a template; <c>null</c> when both are.</summary>
+    private string? MissingChoice()
+    {
+        if (SelectedStyle is not null)
+        {
+            return null;
+        }
+
+        return Picker.Model(PipelineSteps.VideoCode) is null ? _text["video.style.both"] : _text["video.style.none"];
     }
 
     partial void OnSelectedApprovedChanged(ConceptCardViewModel? value)
@@ -728,10 +798,26 @@ public sealed partial class VideoViewModel : PageViewModelBase
                 return outcome;
             }
 
-            // Everything is the choice of now: the subtitles checkbox (an item queued before it was changed follows it too) and the profile's
-            // models (saved when the run was prepared): code model and engine, images, narration.
-            var options = new VideoOptions { Subtitles = Subtitles };
-            _logger.LogInformation("Queued video starts with subtitles {Subtitles}", Subtitles ? "on" : "off");
+            // Everything is the choice of now: the template (an item queued before it was changed follows it too; a copy as it is stored now,
+            // so an edit in Settings reaches this video) and the profile's models (saved when the run was prepared): code model and engine,
+            // images, narration.
+            if (SelectedStyle is not { } chosen)
+            {
+                FailedBeforeStart(row, _text["video.style.none"]);
+                return outcome;
+            }
+
+            if (await _styles.GetAsync(chosen.Id, CancellationToken.None).ConfigureAwait(true) is not { } style)
+            {
+                _logger.LogWarning("Video not started: the chosen template {Id} was deleted", chosen.Id);
+                FailedBeforeStart(row, _text["video.style.gone"]);
+                return outcome;
+            }
+
+            var options = new VideoOptions();
+            VideoStyleRules.Snapshot(options, style);
+            _logger.LogInformation("Queued video starts with template {Id} (subtitles {Subtitles}, progress bar {ProgressBar}, closing {Closing})",
+                style.Id, style.Subtitles ? "on" : "off", style.ProgressBar ? "on" : "off", style.Closing);
             ResolvedModel model;
             var choice = await _resolver.ChoiceAsync(PipelineSteps.VideoCode, profile.Id, CancellationToken.None).ConfigureAwait(true);
             try
@@ -954,7 +1040,8 @@ public sealed partial class VideoViewModel : PageViewModelBase
         }
 
         var engine = _engines.FirstOrDefault(e => e.Kind == Picker.Row(PipelineSteps.VideoCode)?.Engine?.Kind);
-        var estimate = _estimator.Estimate(queued, profile, engine, code, Picker.Model(PipelineSteps.Images), Picker.Model(PipelineSteps.Speech), Subtitles);
+        var estimate = _estimator.Estimate(queued, profile, engine, code, Picker.Model(PipelineSteps.Images), Picker.Model(PipelineSteps.Speech),
+            SelectedStyle?.Subtitles ?? true);
         QueueEstimate = _text.Format("concepts.estimate.tiny", _text.Usd(estimate.MinUsd), _text.Usd(estimate.MaxUsd));
         QueueEstimateTip = _text.Format("video.estimate", queued.Count, _text.Usd(estimate.MinUsd), _text.Usd(estimate.MaxUsd));
     }

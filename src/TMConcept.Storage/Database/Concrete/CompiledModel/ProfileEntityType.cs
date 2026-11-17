@@ -19,7 +19,7 @@ namespace TMConcept.Storage.Database
                 "TMConcept.Core.Profiles.Profile",
                 typeof(Profile),
                 baseEntityType,
-                propertyCount: 10,
+                propertyCount: 11,
                 keyCount: 1);
 
             var id = runtimeEntityType.AddProperty(
@@ -30,6 +30,13 @@ namespace TMConcept.Storage.Database
                 afterSaveBehavior: PropertySaveBehavior.Throw,
                 valueConverter: new StoredIdConverter());
             id.SetSentinelFromProviderValue("00000000-0000-0000-0000-000000000000");
+
+            var channelPhoto = runtimeEntityType.AddProperty(
+                "ChannelPhoto",
+                typeof(string),
+                propertyInfo: typeof(Profile).GetProperty("ChannelPhoto", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(Profile).GetField("<ChannelPhoto>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true);
 
             var conceptCounter = runtimeEntityType.AddProperty(
                 "ConceptCounter",

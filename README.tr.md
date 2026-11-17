@@ -26,8 +26,15 @@ veritabanını şifreli tutar.
 
 - **Profil = kanal.** Kanal adı, video dili (Türkçe, İngilizce, Almanca, İspanyolca, Fransızca, İtalyanca, Portekizce, Felemenkçe,
   Lehçe, Rusça, İsveççe ya da Endonezce; notların kendi dilinde kalabilir, video bu dilde yazılır), dikey kısa ya da yatay video, hedef süre (15–180 sn), kanalın
-  konsepti, isteğe bağlı örnek görseller ve genel ayardan farklı olmasını istediğin her adım için kendi modelleri (ses, görseller, motor…). Dört hazır şablon alanları doldurur (tarih: Bizans, Osmanlı; teknoloji:
-  antik, modern).
+  konsepti, isteğe bağlı örnek görseller, isteğe bağlı kanal fotoğrafı (kapanış bitiş kartı için yuvarlak avatar) ve genel ayardan farklı
+  olmasını istediğin her adım için kendi modelleri (ses, görseller, motor…). Görseller ve fotoğraf profil daha yeniyken de eklenir;
+  kaydedince kopyalanır. Dört hazır profil şablonu alanları doldurur (tarih: Bizans, Osmanlı; teknoloji: antik, modern).
+- **Video şablonları** (Ayarlar → **Şablonlar**, en çok 20, profile bağlı değil): videoların nasıl görüneceği ve nasıl biteceği. Altyazı
+  açık ya da kapalı, programın çizdiği ilerleme çubuğu (varsayılan kapalı), Türkçe harfleri olan altı ücretsiz yazı tipinden biri, başlık
+  biçimi ve 3×3 ızgarada yeri, renk paleti, görseli olmayan sahnelerin çizim tarzı, hareket miktarı ve kapanış çağrısı ("Diğer videolar
+  için abone olmayı unutma!"; YouTube'da *abone ol*, Instagram ve TikTok'ta *takip et*) seste, ekranda, ikisinde ya da kapalı; her zaman
+  videonun dilinde. Form canlı önizleme gösterir. Her video başlarken şablonunun bir kopyasını alır; şablonu düzenlemek ya da silmek
+  yapılmış videoyu değiştirmez.
 - **Konsept üret.** İki ayrı bölüm. **Konu önererek üret**: 5–100 konu önert, beğendiklerini işaretle, **Seçilenleri üret**'e bas: her
   işaretli konudan tam bir konsept. İşaretlemediğin konu kötü sayılmaz: sonra yeniden önerilebilir; yalnız konsepti yapılan konu bir daha
   gelmez (0.1.18'den önce önerilen konular engelli kalır: o sürüm hangisinden konsept yapıldığını kaydetmiyordu). **Fikirden üret**: bir fikir yaz (ya da boş bırak), 1–100 konsept seç. Her basış listeye ekler. Her
@@ -37,7 +44,8 @@ veritabanını şifreli tutar.
   yanındaki detay panelinde açılır. Silinenler **Silinenler** sayfasında süresiz durur (tekrar denetiminde sayılmaya devam eder); oradan
   kalıcı silinebilir.
 - **Konseptten video.** Solda onaylı konseptler (tıklanan, listenin altında açılır; orada elle ya da yapay zekâyla düzenlenir), **Sıraya
-  ekle**, sonra **Sırayla üret**. Modeller (motoruyla kod, görseller, ses) üstte tek bir katlanmış satırdır. Video üretilirken her aşama
+  ekle**, sonra **Sırayla üret**. Modeller (motoruyla kod, görseller, ses) üstte tek bir katlanmış satırdır, yanında **şablon** seçici
+  (yeni kurulumda boştur: kod modeli ve şablon seçilmeden video üretilmez). Video üretilirken her aşama
   süresi ve ücretiyle, kod modelinin jetonları ve o ana kadar harcanan görünür. Üretilen videolar sağda: önizleme oynatıcısı,
   **Oynatıcıda aç**, **Klasörü aç** ve **Konsepti düzelt, yeniden üret**. Model tek bir kod dosyası yazar; hiçbir şey çalıştırılmadan
   önce güvenlik denetimi yapılır; denetim ya da render hatasında tek onarım istenir. Videolar en çok 3 dakikadır.
@@ -301,8 +309,9 @@ Sonra modelleri onları kullanan sayfalarda seç (yukarıya bak). Ücretli hiçb
 2. Bir konsepte tıkla, detay panelinde oku; iyileri onayla (A), kalanı sil (D). **Düzenle** (ya da **Yapay zekâyla düzenle**) metni
    değiştirir; `[duraklama 1 sn]`, `[yumuşak geçiş]` gibi yer tutucular imlecin olduğu yere eklenir, program videoda kendisi uygular.
 3. **Konseptten video:** onaylı konseptlerde **Sıraya ekle**'ye bas, üstteki modellere bak, **Sırayla üret**'e bas.
-   *Ekranda altyazı* kapalıysa ne altyazı ne de ekranda anlatım yazısı olur (video koduna çizebileceği anlatım verilmez); seçim bu
-   bilgisayarda saklanır ve henüz başlamamış her sıradaki videoya uygulanır.
+   Önce modellerin yanından bir **şablon** seç (Ayarlar → Şablonlar'da oluşturursun). Altyazısı kapalı bir şablonda ne altyazı ne de ekranda
+   anlatım yazısı olur (video koduna çizebileceği anlatım verilmez). Seçim bu bilgisayarda saklanır ve sıradaki her video başlarken okunur:
+   değişiklik bir sonraki videoya uygulanır, yapılmakta olana değil.
 4. **Üretilen Videolar:** program içinde izle (Linux'ta ses PulseAudio ya da PipeWire ile), klasörü aç. Her video, konseptin klasöründe bir sürüm klasörüdür (`v1/`): `video.mp4`, `subtitles.srt`, `narration.txt` (her zaman yazılır) ve `thumbnail.jpg`; ayrıca sonraki bir yeniden render için `source/` (render edildiği hâliyle motor projesi: modelin kodu, `input.json`, sahne görselleri) ve `audio/` (her sahnenin seslendirme klibi).
 
 ## Güncelleme

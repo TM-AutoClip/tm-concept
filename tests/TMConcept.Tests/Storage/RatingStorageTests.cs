@@ -118,7 +118,18 @@ public sealed class RatingStorageTests
             return steps[0];
         });
         SchemaUpgrader.Name(first).ShouldBe("Version0117");
-        await new ProfileStore(h.Database).SaveAsync(profile, None);
+
+        // The profile as that version wrote it (the app's mapping has the channel photo of 0.1.19 since).
+        await using (var old = Version0118Context.Open(h.ConnectionString))
+        {
+            old.Profiles.Add(new OldProfileRow
+            {
+                Id = profile.Id.ToString("D").ToUpperInvariant(), Name = profile.Name, ContentLanguage = profile.ContentLanguage, TargetSeconds = 75,
+                ConceptText = string.Empty, CreatedAtUtc = at.UtcTicks, UpdatedAtUtc = at.UtcTicks,
+            });
+            await old.SaveChangesAsync(None);
+        }
+
         concept.ProfileId = profile.Id;
         await new ConceptStore(h.Database).AddAsync([concept], None);
         await new VideoStore(h.Database).AddAsync(new VideoRecord
@@ -139,7 +150,7 @@ public sealed class RatingStorageTests
         await h.Vault.OpenAsync(None);
 
         (await h.QueryAsync(async db => (await db.Database.GetAppliedMigrationsAsync(None)).Select(SchemaUpgrader.Name).ToList()))
-            .ShouldBe(["Version0117", "Version0118"]);
+            .ShouldBe(["Version0117", "Version0118", "Version0119"]);
         var suggestion = (await new TopicSuggestionStore(h.Database).ListAsync(profile.Id, 10, None)).ShouldHaveSingleItem();
         suggestion.Id.ShouldBe(suggestionId);
         suggestion.Text.ShouldBe("Greek fire");

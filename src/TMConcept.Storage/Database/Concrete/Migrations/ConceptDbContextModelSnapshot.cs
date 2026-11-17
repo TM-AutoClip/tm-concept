@@ -218,6 +218,9 @@ namespace TMConcept.Storage.Database
                     b.Property<string>("Id")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("ChannelPhoto")
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("ConceptCounter")
                         .HasColumnType("INTEGER");
 
@@ -683,6 +686,30 @@ namespace TMConcept.Storage.Database
                     b.HasKey("Key");
 
                     b.ToTable("settings", (string)null);
+                });
+
+            modelBuilder.Entity("TMConcept.Storage.Database.VideoStyleRow", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("CreatedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Json")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("UpdatedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("video_styles", (string)null);
                 });
 
             modelBuilder.Entity("TMConcept.Core.Concepts.Concept", b =>

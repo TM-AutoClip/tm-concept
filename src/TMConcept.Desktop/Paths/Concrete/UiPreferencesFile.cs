@@ -40,8 +40,8 @@ public sealed class UiPreferencesFile(AppPaths paths, ILogger<UiPreferencesFile>
         ArgumentNullException.ThrowIfNull(preferences);
         File.WriteAllText(paths.PreferencesFile, JsonSerializer.Serialize(preferences, DesktopJsonContext.Default.UiPreferences));
         logger.LogInformation(
-            "Preferences saved (language {Language}, graphics card {GraphicsCard}, log open {LogOpen}, image acceleration {Acceleration}, subtitles {Subtitles})",
+            "Preferences saved (language {Language}, graphics card {GraphicsCard}, log open {LogOpen}, image acceleration {Acceleration}, template {Template})",
             preferences.Language.Length > 0 ? preferences.Language : "not chosen", preferences.UseGraphicsCard, preferences.LogOpen, preferences.ImageAcceleration,
-            preferences.Subtitles);
+            preferences.VideoStyleId?.ToString() ?? "none");
     }
 }

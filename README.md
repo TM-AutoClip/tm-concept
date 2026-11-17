@@ -25,9 +25,16 @@ needed) and narrates it with a **free local voice**. It runs on Windows and Linu
 
 - **Profiles = channels.** Channel name, video language (Turkish, English, German, Spanish, French, Italian, Portuguese, Dutch, Polish,
   Russian, Swedish or Indonesian; your notes may stay in your own language, the video is written in this one), vertical short or horizontal video, target length
-  (15–180 s), the channel's concept in your words, optional sample images, and its own models for any step (voice, images, engine…)
-  where it should differ from the general setting. Four ready templates fill the fields
+  (15–180 s), the channel's concept in your words, optional sample images, an optional channel photo (a round avatar for the closing
+  end card), and its own models for any step (voice, images, engine…) where it should differ from the general setting. Images and the
+  photo can be added while the profile is new; they are copied when you save. Four ready profile templates fill the fields
   (history: Byzantine, Ottoman; technology: ancient, modern).
+- **Video templates** (Settings → **Templates**, at most 20, not tied to a profile): how videos look and end. Subtitles on or off, a
+  progress bar drawn by the app (off by default), one of six free fonts with Turkish letters, the title style and its place on a 3×3
+  grid, a colour palette, the drawing style of scenes without images, how much things move, and a closing call to action ("Don't forget
+  to subscribe for more videos!"; *subscribe* for YouTube, *follow* for Instagram and TikTok) in the narration, on screen, both or off,
+  always in the video's language. The form shows a live preview. Each video takes a copy of its template when it starts, so editing or
+  deleting a template never changes a made video.
 - **Generate concepts.** Two separate sections. **Generate from suggested topics**: suggest 5–100 topics, tick the ones you like and
   press **Generate selected**: exactly one concept per ticked topic. A topic you did not tick is not a bad one: it may be suggested again
   later; only a topic that got a concept never comes back (topics suggested before 0.1.18 stay blocked: that version did not record which
@@ -38,7 +45,8 @@ needed) and narrates it with a **free local voice**. It runs on Windows and Linu
   (key A) and **Delete** (key D); a click opens the concept in the detail panel beside the list. Deleted concepts stay in **Trash**
   forever (they still count against duplicates) until you delete them permanently.
 - **Concept to video.** Approved concepts on the left (a click opens one under the list, where it can be edited by hand or with AI),
-  **Add to queue**, then **Produce in order**. The models (code with its engine, images, voice) are one folded line on top. While a video
+  **Add to queue**, then **Produce in order**. The models (code with its engine, images, voice) are one folded line on top, next to the
+  **template** (empty on a new install: nothing is produced until a code model and a template are chosen). While a video
   is made, every step shows with its time and cost, the code model's tokens and what was paid so far. The made videos are on the right
   with a preview player, **Open in player**, **Open folder** and **Fix the concept, produce again**. The model writes one code file; a
   safety check runs before anything is executed; a failed check or render gets one repair request. Videos are at most 3 minutes.
@@ -309,8 +317,9 @@ Then choose the models on the pages that use them (see above). Nothing paid is c
    changes the text; placeholders such as `[pause 1 s]` or `[soft transition]` go in at the cursor and the program applies them in the
    video.
 3. **Concept to video:** press **Add to queue** on approved concepts, check the models on top, press **Produce in order**.
-   *Subtitles in the picture* off means no subtitles and no narration text on screen at all (the video code gets no narration to draw); the
-   choice is kept on this computer and applies to every queued video that has not started yet.
+   Choose a **template** next to the models first (make one in Settings → Templates). A template with subtitles off means no subtitles and
+   no narration text on screen at all (the video code gets no narration to draw). The choice is kept on this computer and is read when
+   each queued video starts: a change applies to the next video, never to the one being made.
 4. **Produced videos:** watch in the app (sound on Linux through PulseAudio or PipeWire), open the folder. Each video is a version folder (`v1/` inside the concept's folder) with `video.mp4`, `subtitles.srt`, `narration.txt` (always written) and `thumbnail.jpg`, plus `source/` (the engine project as it rendered: the model's code, `input.json`, the scene images) and `audio/` (the narration clip of each scene), kept for a later re-render.
 
 ## Update

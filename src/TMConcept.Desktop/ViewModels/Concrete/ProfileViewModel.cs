@@ -16,9 +16,13 @@ namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
 /// Profile (channel) editor: a ready template fills the fields (the template itself never changes), channel name, content language,
-/// format, target length, the channel's concept, optional sample images with captions and the rights warning, and the model that describes a
-/// sample image ("Describe with a model": chosen here, where it is used; kept for the profile). The other models are chosen on the pages
-/// that use them. Saving with a required value missing is not possible. Deleting a profile is confirmed and permanent; video files stay on disk.
+/// format, target length, the channel's concept, the channel photo (0.1.19: a round avatar for the closing end card of the templates),
+/// optional sample images with captions and the rights warning, and the model that describes a sample image ("Describe with a model": chosen
+/// here, where it is used; kept for the profile). The other models are chosen on the pages that use them. A new profile can take sample
+/// images and a photo before it is saved (until 0.1.18 "Add images" was disabled until the first save): they are copied into the library only
+/// by Save, and Cancel (or starting another new profile) drops them without a trace. The photo of a saved profile is replaced or removed by
+/// Save too; its old copy is deleted then. Saving with a required value missing is not possible. Deleting a profile is confirmed and
+/// permanent; video files and sample images stay on disk, the channel photo copy is deleted.
 /// </summary>
 public sealed partial class ProfileViewModel(AppSession session, IProfileStore profiles, ITemplateSource templates, IAppPaths paths, FileDialogs dialogs,
     IConfirmDialog confirm, IActivityLog activity, Localizer text, ILogger<ProfileViewModel> logger, StepPickerViewModel picker,
@@ -28,6 +32,10 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
     public StepPickerViewModel Picker { get; } = picker;
 
     private Profile? _editing;
+
+    // The channel photo chosen but not saved yet (a file anywhere), and whether Save removes the stored one.
+    private string? _photoSource;
+    private bool _photoRemoved;
     private Func<Task>? _profilesChanged;
 
     /// <inheritdoc />
@@ -88,8 +96,16 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
     public bool ConceptTextShort => ConceptText.Trim().Length is > 0 and < ProfileLimits.ConceptTextAdvised;
 
 
-    /// <summary>Sample images.</summary>
+    /// <summary>Sample images (on a new profile they are copied into the library by Save).</summary>
     public ObservableCollection<ProfileImageViewModel> Images { get; } = [];
+
+    /// <summary>The channel photo shown in the round preview (the chosen file before Save, the stored copy after); <c>null</c> when none.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasChannelPhoto))]
+    public partial string? ChannelPhotoPath { get; set; }
+
+    /// <summary>A channel photo is shown.</summary>
+    public bool HasChannelPhoto => ChannelPhotoPath is not null;
 
     /// <summary>Whether there is a profile to edit or create.</summary>
     [ObservableProperty]
@@ -105,6 +121,8 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
         _editing = new Profile { ContentLanguage = text.Language == "tr" ? ContentLanguages.Turkish : ContentLanguages.English };
         IsNew = true;
         Fill(_editing);
+
+        // Whatever an unsaved new profile had picked is dropped (nothing of it was copied).
         Images.Clear();
         HasProfile = true;
         Status = string.Empty;
@@ -139,6 +157,32 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
     {
         IsNew = false;
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Drops the new profile that is not saved yet (its picked images and photo were never copied) and goes back to the selected profile, or
+    /// to an empty new one when there is none.
+    /// </summary>
+    [RelayCommand]
+    public async Task CancelNewAsync()
+    {
+        if (!IsNew)
+        {
+            return;
+        }
+
+        logger.LogInformation("New profile cancelled ({Images} picked images dropped)", Images.Count);
+        _editing = null;
+        IsNew = false;
+        Images.Clear();
+        if (session.Profile is null)
+        {
+            StartNew();
+            return;
+        }
+
+        await ActivateAsync().ConfigureAwait(true);
+        Status = string.Empty;
     }
 
     /// <summary>Copies the chosen template into the fields.</summary>
@@ -182,10 +226,41 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
         _editing.ConceptText = ConceptText.Trim();
         try
         {
+            // A new photo is copied before the profile row points at it; the old copy goes only after the row is saved.
+            var oldPhoto = _editing.ChannelPhoto;
+            if (_photoSource is not null)
+            {
+                _editing.ChannelPhoto = await CopyIntoLibraryAsync(_photoSource, "channel").ConfigureAwait(true);
+            }
+            else if (_photoRemoved)
+            {
+                _editing.ChannelPhoto = null;
+            }
+
             await profiles.SaveAsync(_editing, CancellationToken.None).ConfigureAwait(true);
-            foreach (var image in Images)
+            if (oldPhoto is not null && oldPhoto != _editing.ChannelPhoto)
+            {
+                DeletePhotoFile(oldPhoto);
+            }
+
+            _photoSource = null;
+            _photoRemoved = false;
+            ChannelPhotoPath = StoredPhoto(_editing);
+            foreach (var image in Images.ToList())
             {
                 image.Image.Caption = image.Caption.Trim();
+                if (image.Pending)
+                {
+                    // Picked while the profile was new: copied now, under the saved name.
+                    var stored = await CopyIntoLibraryAsync(image.FullPath, "images").ConfigureAwait(true);
+                    image.Image.ProfileId = _editing.Id;
+                    image.Image.FileName = stored;
+                    Images[Images.IndexOf(image)] = new ProfileImageViewModel(image.Image, LibraryPaths.Resolve(paths.LibraryDirectory, stored))
+                    {
+                        Caption = image.Caption.Trim(),
+                    };
+                }
+
                 await profiles.SaveImageAsync(image.Image, CancellationToken.None).ConfigureAwait(true);
             }
 
@@ -220,13 +295,15 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
         await AddImageFilesAsync(files).ConfigureAwait(true);
     }
 
-    /// <summary>Adds the given image files (also used by drag and drop and tests).</summary>
+    /// <summary>
+    /// Adds the given image files (also used by drag and drop and tests). A saved profile copies them at once; a new one keeps them as picked
+    /// and copies them when it is saved.
+    /// </summary>
     public async Task AddImageFilesAsync(IReadOnlyList<string> files)
     {
         ArgumentNullException.ThrowIfNull(files);
-        if (_editing is null || IsNew)
+        if (_editing is null)
         {
-            Status = text["profile.images.save_first"];
             return;
         }
 
@@ -249,6 +326,15 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
                 }
 
                 var (width, height) = ImageSize(file);
+                if (IsNew)
+                {
+                    Images.Add(new ProfileImageViewModel(new ProfileImage { ProfileId = _editing.Id, Width = width, Height = height, Sha256 = hash }, file)
+                    {
+                        Pending = true,
+                    });
+                    continue;
+                }
+
                 var folder = Path.Combine(paths.LibraryDirectory, LibraryPaths.SafeName(_editing.Name, "profile"), "images");
                 Directory.CreateDirectory(folder);
                 var target = Path.Combine(folder, hash[..10] + "-" + LibraryPaths.SafeName(Path.GetFileName(file), "image" + Path.GetExtension(file)));
@@ -335,7 +421,7 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
         }
     }
 
-    /// <summary>Removes a sample image record (the copied file stays in the folder).</summary>
+    /// <summary>Removes a sample image record (the copied file stays in the folder; one picked on a new profile was never copied).</summary>
     [RelayCommand]
     private async Task RemoveImageAsync(ProfileImageViewModel? image)
     {
@@ -344,8 +430,58 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
             return;
         }
 
-        await profiles.DeleteImageAsync(image.Image.Id, CancellationToken.None).ConfigureAwait(true);
+        if (!image.Pending)
+        {
+            await profiles.DeleteImageAsync(image.Image.Id, CancellationToken.None).ConfigureAwait(true);
+        }
+
         Images.Remove(image);
+    }
+
+    /// <summary>Chooses a channel photo (kept by Save).</summary>
+    [RelayCommand]
+    public async Task PickChannelPhotoAsync()
+    {
+        var file = await dialogs.OpenAsync("profile.photo.pick", "profile.images.filter", ["*.png", "*.jpg", "*.jpeg", "*.webp"]).ConfigureAwait(true);
+        if (file is not null)
+        {
+            ChooseChannelPhoto(file);
+        }
+    }
+
+    /// <summary>Takes <paramref name="file"/> as the channel photo when it is an image the app can read (copied into the library by Save).</summary>
+    public void ChooseChannelPhoto(string file)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(file);
+        try
+        {
+            _ = ImageSize(file);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // Not an image the decoder can read, or the file is locked: the reason is shown and logged; the old photo stays.
+            logger.LogWarning(ex, "The channel photo could not be read");
+            Status = text.Format("profile.photo.failed", Path.GetFileName(file), ex.Message);
+            return;
+        }
+
+        _photoSource = file;
+        _photoRemoved = false;
+        ChannelPhotoPath = file;
+        Status = text["profile.photo.save"];
+    }
+
+    /// <summary>Removes the channel photo (Save deletes the stored copy).</summary>
+    [RelayCommand]
+    public void RemoveChannelPhoto()
+    {
+        _photoSource = null;
+        _photoRemoved = _editing?.ChannelPhoto is not null;
+        ChannelPhotoPath = null;
+        if (_photoRemoved)
+        {
+            Status = text["profile.photo.save"];
+        }
     }
 
     /// <summary>Deletes the profile after a confirmation.</summary>
@@ -389,6 +525,12 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
         try
         {
             await profiles.DeleteAsync(_editing.Id, CancellationToken.None).ConfigureAwait(true);
+            if (_editing.ChannelPhoto is { } photo)
+            {
+                // The photo goes with the profile (the backup taken above holds it); sample images and videos stay on disk.
+                DeletePhotoFile(photo);
+            }
+
             activity.Add(ActivityLevel.Info, text.Format("profile.deleted", _editing.Name), text.Format("profile.deleted", ActivityPlaceholders.Name));
             _editing = null;
             HasProfile = false;
@@ -428,6 +570,9 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
 
     private void Fill(Profile profile)
     {
+        _photoSource = null;
+        _photoRemoved = false;
+        ChannelPhotoPath = StoredPhoto(profile);
         Name = profile.Name;
         Language = Languages.FirstOrDefault(l => l.Value == profile.ContentLanguage) ?? Languages.First(l => l.Value == ContentLanguages.English);
         Vertical = profile.Format == VideoFormat.Vertical;
@@ -484,6 +629,55 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
         }
 
         SelectedTemplate = Templates.FirstOrDefault(t => t.Template.Id == selected);
+    }
+
+    /// <summary>The full path of the stored channel photo; <c>null</c> when there is none or its record points outside the library.</summary>
+    private string? StoredPhoto(Profile profile)
+    {
+        if (profile.ChannelPhoto is not { } stored)
+        {
+            return null;
+        }
+
+        try
+        {
+            return LibraryPaths.Resolve(paths.LibraryDirectory, stored);
+        }
+        catch (InvalidOperationException ex)
+        {
+            logger.LogWarning(ex, "The channel photo record points outside the library folder; not shown");
+            return null;
+        }
+    }
+
+    /// <summary>Copies <paramref name="source"/> into the profile's <paramref name="folder"/> in the library; the stored relative path.</summary>
+    private async Task<string> CopyIntoLibraryAsync(string source, string folder)
+    {
+        var bytes = await File.ReadAllBytesAsync(source).ConfigureAwait(true);
+        var hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
+        var directory = Path.Combine(paths.LibraryDirectory, LibraryPaths.SafeName(_editing!.Name, "profile"), folder);
+        Directory.CreateDirectory(directory);
+        var target = Path.Combine(directory, hash[..10] + "-" + LibraryPaths.SafeName(Path.GetFileName(source), "image" + Path.GetExtension(source)));
+        await File.WriteAllBytesAsync(target, bytes).ConfigureAwait(true);
+        return LibraryPaths.Relative(paths.LibraryDirectory, target);
+    }
+
+    /// <summary>Deletes a channel photo copy that no profile points at any more (a failure is logged and shown; the profile is saved).</summary>
+    private void DeletePhotoFile(string stored)
+    {
+        try
+        {
+            var file = LibraryPaths.Resolve(paths.LibraryDirectory, stored);
+            if (File.Exists(file))
+            {
+                File.Delete(file);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            logger.LogWarning(ex, "The old channel photo copy could not be deleted");
+            activity.Add(ActivityLevel.Warning, text.Format("profile.photo.delete_failed", ex.Message));
+        }
     }
 
     private static (int Width, int Height) ImageSize(string file)
