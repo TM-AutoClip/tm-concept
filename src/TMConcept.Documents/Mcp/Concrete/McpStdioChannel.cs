@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using Microsoft.Extensions.Logging;
+using TMConcept.Core.Processes;
 using TMConcept.Core.Research;
 
 namespace TMConcept.Documents.Mcp;
@@ -9,8 +10,10 @@ namespace TMConcept.Documents.Mcp;
 /// An MCP server that is a program on this computer (stdio): one JSON message per line on its standard input and output. The program runs
 /// with the user's rights, so it is started only after the user confirmed the warning, WITHOUT the app's environment (only the variables a
 /// program needs to run: PATH, the system and temporary folders, the user's folders, the locale), so keys that sit in environment variables
-/// do not reach it. What it writes to its error output is kept (the last part) to say why it ended. Disposing ends it with its child
-/// processes.
+/// do not reach it. Like every program the app starts, it is handed to the app's <see cref="IChildProcessGuard"/> at once, so it never
+/// outlives the app (a closed window, a crash). What it writes to its error output is kept (the last part) to say why it ended. Disposing
+/// ends it with its child processes and waits at most <see cref="ExitWaitMax"/> for that (a descendant that kept the error output open
+/// cannot hold the page busy).
 /// </summary>
 public sealed class McpStdioChannel : McpChannelBase
 {
@@ -22,11 +25,15 @@ public sealed class McpStdioChannel : McpChannelBase
         "XDG_DATA_HOME", "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE", "OS",
     ];
 
+    /// <summary>The longest wait for an ended server program to be gone.</summary>
+    public static readonly TimeSpan ExitWaitMax = TimeSpan.FromSeconds(5);
+
     private const int ErrorTailMax = 2_000;
 
     private readonly Stream _fromServer;
     private readonly Stream _toServer;
     private readonly Process? _process;
+    private readonly IDisposable? _adoption;
     private readonly StringBuilder _errors = new();
     private readonly Decoder _decoder = new UTF8Encoding(false).GetDecoder();
     private readonly byte[] _buffer = new byte[16_384];
@@ -36,12 +43,13 @@ public sealed class McpStdioChannel : McpChannelBase
     private bool _ended;
 
     /// <summary>A channel over the streams of a server (<paramref name="fromServer"/>: its output; <paramref name="toServer"/>: its input).</summary>
-    public McpStdioChannel(Stream fromServer, Stream toServer, ILogger logger, Process? process = null)
+    public McpStdioChannel(Stream fromServer, Stream toServer, ILogger logger, Process? process = null, IDisposable? adoption = null)
         : base(logger)
     {
         _fromServer = fromServer ?? throw new ArgumentNullException(nameof(fromServer));
         _toServer = toServer ?? throw new ArgumentNullException(nameof(toServer));
         _process = process;
+        _adoption = adoption;
     }
 
     /// <summary>The arguments of <paramref name="text"/>: split at spaces, double quotes keep spaces ("C:\My tools\server.js").</summary>
@@ -83,11 +91,12 @@ public sealed class McpStdioChannel : McpChannelBase
     }
 
     /// <summary>
-    /// Starts <paramref name="command"/> with <paramref name="arguments"/> (no shell: nothing in them is interpreted) and gives its channel.
-    /// <see cref="McpException"/> "start" when it cannot be started.
+    /// Starts <paramref name="command"/> with <paramref name="arguments"/> (no shell: nothing in them is interpreted), hands it to
+    /// <paramref name="children"/> and gives its channel. <see cref="McpException"/> "start" when it cannot be started.
     /// </summary>
-    public static McpStdioChannel Start(string command, string arguments, ILogger logger)
+    public static McpStdioChannel Start(string command, string arguments, IChildProcessGuard children, ILogger logger)
     {
+        ArgumentNullException.ThrowIfNull(children);
         ArgumentNullException.ThrowIfNull(logger);
         if (string.IsNullOrWhiteSpace(command))
         {
@@ -130,7 +139,8 @@ public sealed class McpStdioChannel : McpChannelBase
             throw new McpException("start", ex.Message, ex);
         }
 
-        var channel = new McpStdioChannel(process.StandardOutput.BaseStream, process.StandardInput.BaseStream, logger, process);
+        var adoption = children.Adopt(process);
+        var channel = new McpStdioChannel(process.StandardOutput.BaseStream, process.StandardInput.BaseStream, logger, process, adoption);
         process.ErrorDataReceived += (_, e) => channel.KeepError(e.Data);
         process.BeginErrorReadLine();
         logger.LogInformation("An MCP server program was started (stdio)");
@@ -176,7 +186,16 @@ public sealed class McpStdioChannel : McpChannelBase
             if (_process is { HasExited: false })
             {
                 _process.Kill(entireProcessTree: true);
-                await _process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
+                using var wait = new CancellationTokenSource(ExitWaitMax);
+                try
+                {
+                    await _process.WaitForExitAsync(wait.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    // Something the program started still holds its error output: the app goes on (the guard ends it with the app).
+                    Logger.LogWarning("An MCP server program did not end within {Seconds} s", ExitWaitMax.TotalSeconds);
+                }
             }
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
@@ -185,9 +204,22 @@ public sealed class McpStdioChannel : McpChannelBase
         }
         finally
         {
+            if (_process is not null)
+            {
+                try
+                {
+                    _process.CancelErrorRead();
+                }
+                catch (InvalidOperationException ex)
+                {
+                    Logger.LogDebug(ex, "The MCP server's error output was not being read");
+                }
+            }
+
             await _toServer.DisposeAsync().ConfigureAwait(false);
             await _fromServer.DisposeAsync().ConfigureAwait(false);
             _process?.Dispose();
+            _adoption?.Dispose();
         }
     }
 

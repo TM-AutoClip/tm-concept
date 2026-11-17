@@ -98,7 +98,7 @@ public sealed class McpClientTests
     public async Task AServerWhoseWarningWasNotAcceptedIsNeitherStartedNorReached()
     {
         var http = new FixtureHttp();
-        var connector = new McpConnector(new McpHttpTransport(() => http), NullLoggerFactory.Instance);
+        var connector = new McpConnector(new McpHttpTransport(() => http), new RecordingChildGuard(), NullLoggerFactory.Instance);
 
         var error = await Should.ThrowAsync<McpException>(() => connector.ConnectAsync(new McpServerSettings { Url = "https://example.org/mcp", Confirmed = false }, None));
 
@@ -152,6 +152,86 @@ public sealed class McpClientTests
         McpResearchBackend.ParseHits("  ", "srv", "q").ShouldBeEmpty();
     }
 
+    [Fact]
+    public void ASearchAnswerNeverOffersAnAddressOnThisComputerOrTheLocalNetwork()
+    {
+        var json = McpResearchBackend.ParseHits("""
+            {"results":[{"title":"Router","url":"http://192.168.1.1/admin"},{"title":"Metadata","url":"http://169.254.169.254/latest/meta-data/"},
+                        {"title":"Guard","url":"https://example.org/guard"}]}
+            """, "srv", "q");
+        json.Select(h => h.Url).ShouldBe(["https://example.org/guard"]);
+
+        var text = McpResearchBackend.ParseHits(
+            "1. [admin](http://127.0.0.1:8080/admin)\n2. http://localhost/x\n3. http://printer.local/status\n4. Army https://example.org/army", "srv", "q");
+        text.Select(h => h.Url).ShouldBe(["https://example.org/army"]);
+
+        var only = McpResearchBackend.ParseHits("Open http://10.0.0.5/secret now", "srv", "q").ShouldHaveSingleItem();
+        (only.Url, only.InlineText).ShouldBe((string.Empty, "Open http://10.0.0.5/secret now"), "with no public address the answer is only text");
+    }
+
+    [Fact]
+    public async Task ALocalAddressNeverGoesToTheFetchTool()
+    {
+        var http = Session("""[{"name":"web_search"},{"name":"fetch"}]""")
+            .Json(Reply(3, ToolText("1. [Router page](http://192.168.1.1/admin)\n2. [Cloud metadata](http://169.254.169.254/latest/meta-data/)")));
+        await using var backend = Backend(http, fetchTool: "fetch");
+
+        var hits = await backend.SearchAsync(new ResearchQuery("router", "en", 5), None);
+        var planted = await Should.ThrowAsync<DocumentRejectedException>(() =>
+            backend.FetchAsync(new ResearchHit(backend.Id, "Router", "http://192.168.1.1/admin", string.Empty), None));
+
+        hits.ShouldHaveSingleItem().InlineText.ShouldContain("192.168.1.1", Case.Sensitive, "the answer stays data, no address is offered");
+        planted.Code.ShouldBe("private");
+        http.Requests.Select(r => JsonDocument.Parse(r.Body).RootElement).Where(r => r.GetProperty("method").GetString() == "tools/call")
+            .Select(r => r.GetProperty("params").GetProperty("name").GetString()).ShouldBe(["web_search"], "the fetch tool is never called");
+    }
+
+    [Fact]
+    public async Task AnAnswerOfTheWrongShapeIsAProtocolErrorOfThatServerOnly()
+    {
+        var http = Session("""[{"name":5},{"name":"web_search","inputSchema":{"properties":[1,2]}}]""")
+            .Json(Reply(3, """{"content":[5,{"type":7,"text":"x"},{"type":"text","text":"kept"}]}"""));
+        await using var backend = Backend(http, fetchTool: string.Empty);
+
+        var hit = (await backend.SearchAsync(new ResearchQuery("x", "en", 5), None)).ShouldHaveSingleItem();
+        hit.InlineText.ShouldBe("kept", "parts of the wrong shape are left out");
+
+        var broken = new FixtureHttp()
+            .Json(Reply(1, """{"protocolVersion":"2025-06-18","serverInfo":"not an object"}"""))
+            .Answer(HttpStatusCode.Accepted, "application/json", string.Empty)
+            .Json(Reply(2, """{"tools":{"name":"x"},"nextCursor":5}"""))
+            .Json("""[1,2,3]""");
+        await using var client = new McpClient(new McpHttpChannel(new Uri("https://example.org/mcp"), new McpHttpTransport(() => broken), NullLogger.Instance),
+            NullLogger<McpClient>.Instance);
+        await client.InitializeAsync(None);
+        client.ServerName.ShouldBeEmpty();
+        (await client.ListToolsAsync(None)).ShouldBeEmpty();
+        (await Should.ThrowAsync<McpException>(() => client.CallToolAsync("x", new Dictionary<string, string>(), None))).Code.ShouldBe("protocol");
+
+        var numeric = Session("""[{"name":"web_search"}]""").Json(Reply(3, """{"content":{"type":"text"},"isError":"yes"}"""));
+        await using var other = Backend(numeric, fetchTool: string.Empty);
+        (await other.SearchAsync(new ResearchQuery("x", "en", 5), None)).ShouldBeEmpty("an answer without text parts is no hit");
+
+        var notJson = Session("""[{"name":"web_search"}]""").Answer(HttpStatusCode.OK, "application/json", "{not json");
+        await using var third = Backend(notJson, fetchTool: string.Empty);
+        (await Should.ThrowAsync<DocumentRejectedException>(() => third.SearchAsync(new ResearchQuery("x", "en", 5), None))).Code
+            .ShouldBe("mcp", "the run reports this backend and goes on with the others");
+    }
+
+    [Fact]
+    public async Task AStartedServerProgramIsHandedToTheChildGuardAndLetGoWhenItEnds()
+    {
+        var guard = new RecordingChildGuard();
+
+        var channel = McpStdioChannel.Start("dotnet", "--version", guard, NullLogger.Instance);
+        guard.Adopted.ShouldHaveSingleItem("the program is tied to the app at once, so it never outlives it");
+        guard.Released.ShouldBeEmpty();
+        await channel.DisposeAsync();
+
+        guard.Released.ShouldBe(guard.Adopted);
+        McpStdioChannel.ExitWaitMax.ShouldBeLessThanOrEqualTo(TimeSpan.FromSeconds(10), "disposing never waits for ever");
+    }
+
     [Theory]
     [InlineData("server.js --port 3", new[] { "server.js", "--port", "3" })]
     [InlineData("\"C:\\My tools\\server.js\" --name \"a b\"", new[] { "C:\\My tools\\server.js", "--name", "a b" })]
@@ -189,7 +269,7 @@ public sealed class McpClientTests
             FetchTool = fetchTool,
             FetchArgument = "url",
         },
-        new McpConnector(new McpHttpTransport(() => http), NullLoggerFactory.Instance),
+        new McpConnector(new McpHttpTransport(() => http), new RecordingChildGuard(), NullLoggerFactory.Instance),
         new WebPageFetcher(new DocumentTransport(() => http), NullLogger<WebPageFetcher>.Instance),
         NullLogger<McpResearchBackend>.Instance);
 

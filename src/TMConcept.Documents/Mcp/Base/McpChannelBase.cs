@@ -77,7 +77,7 @@ public abstract class McpChannelBase(ILogger logger) : IMcpChannel
 
             if (hasId && root.TryGetProperty("method", out var method))
             {
-                return (false, Answer(idElement, method.GetString() == "ping"));
+                return (false, Answer(idElement, method.ValueKind == JsonValueKind.String && method.GetString() == "ping"));
             }
 
             return (false, null);

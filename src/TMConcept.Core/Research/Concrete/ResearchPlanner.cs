@@ -41,7 +41,8 @@ public static class ResearchPlanner
 
             foreach (var language in backend.PerLanguage ? searched : [languages[0]])
             {
-                queries.Add(new ResearchPlannedQuery(backend.Id, new ResearchQuery(subject, language, ResearchLimits.HitsPerQuery)));
+                var query = new ResearchQuery(subject, language, ResearchLimits.HitsPerQuery) { LinkLanguages = LinkLanguages(languages, searched.Count, language) };
+                queries.Add(new ResearchPlannedQuery(backend.Id, query));
             }
         }
 
@@ -78,6 +79,18 @@ public static class ResearchPlanner
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// The languages a hit found in <paramref name="language"/> is wanted in as well: the more preferred read languages (an English article's
+    /// Turkish version is read instead of it) and the ones not searched directly (its Greek version is a source of its own). A searched
+    /// language that is less preferred is left out: the run never reads a Turkish hit's English version.
+    /// </summary>
+    public static IReadOnlyList<string> LinkLanguages(IReadOnlyList<string> languages, int searched, string language)
+    {
+        ArgumentNullException.ThrowIfNull(languages);
+        var at = languages.ToList().IndexOf(language);
+        return languages.Where((code, index) => code != language && (index < at || index >= searched)).ToList();
     }
 
     /// <summary>The languages the words of <paramref name="subject"/> point at, in the table's order.</summary>

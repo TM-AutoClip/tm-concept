@@ -46,7 +46,7 @@ public sealed partial class WikipediaFetcher(DocumentTransport transport, ILogge
 
     /// <summary>The API address of an article.</summary>
     public static Uri ApiAddress(string language, string title) => new(string.Create(CultureInfo.InvariantCulture,
-        $"https://{language}.wikipedia.org/w/api.php?action=query&format=json&formatversion=2&redirects=1&prop=extracts%7Cinfo&inprop=url&explaintext=1&exsectionformat=wiki&titles={Uri.EscapeDataString(title)}"));
+        $"https://{language}.wikipedia.org/w/api.php?action=query&format=json&formatversion=2&maxlag=5&redirects=1&prop=extracts%7Cinfo&inprop=url&explaintext=1&exsectionformat=wiki&titles={Uri.EscapeDataString(title)}"));
 
     /// <summary>The article of an API answer: its title, address and text as Markdown; <see cref="DocumentRejectedException"/> "not_found" when there is none.</summary>
     public static (string Title, string Url, string Markdown) ParseAnswer(byte[] json, string language)

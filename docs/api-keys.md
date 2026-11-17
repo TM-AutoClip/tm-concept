@@ -75,7 +75,7 @@ API use is billed separately from chat subscriptions (Claude Pro, ChatGPT Plusâ€
 2. Copy your API key from the dashboard.
 3. Paste it under **Settings â†’ Research** (not under Keys) and press **Save key**.
 4. It is used only by "From research" on the Concepts page, sent only to Tavily's own address and never logged. It is saved untested:
-   a test would spend your allowance. The app fetches the found pages itself.
+   a test would spend your allowance. The app fetches the found pages itself, only when the site's robots.txt allows it.
 
 ## Custom server (OpenAI-compatible)
 

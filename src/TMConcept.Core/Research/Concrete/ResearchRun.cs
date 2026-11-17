@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using Microsoft.Extensions.Logging;
 using TMConcept.Core.Documents;
 
@@ -11,7 +12,8 @@ namespace TMConcept.Core.Research;
 /// (<see cref="Pick"/>): nothing is fetched yet, the section shows the list. <see cref="SaveAsync"/>: the ticked pages fetched one by one
 /// within the byte budget and the time limit, each saved into the profile's documents (text, passages, vectors; a page the profile already
 /// has is reused). A backend or a page that fails is logged and reported with its reason, and the others go on; a cancel stops at once
-/// (what was saved stays). Keys and fetched text never go into the log: only backend ids, hosts and counts.
+/// (what was saved stays, and the caller learns which documents it added even then, so it can take them away again). Keys and fetched text
+/// never go into the log: only backend ids, hosts and counts.
 /// </summary>
 public sealed class ResearchRun(DocumentLibrary library, ILogger<ResearchRun> logger)
 {
@@ -93,8 +95,9 @@ public sealed class ResearchRun(DocumentLibrary library, ILogger<ResearchRun> lo
     /// The candidates of <paramref name="hits"/> (in the merged order): hits of one entity or one address are one group, and each group's
     /// version in the most preferred language of <paramref name="plan"/> is its main candidate (the profile's language, then English, …; an
     /// article's other languages come from its language links). The user's addresses are picked first, then the main candidates in order,
-    /// while about a third of <paramref name="maxPages"/> goes to the groups' versions in the other read languages (Greek for Byzantium), so the
-    /// sources are not all in one language. Picked ones come first; at most <see cref="ResearchLimits.CandidatesMax"/> in all.
+    /// while about a third of the pages left goes to the groups' versions in the other read languages (Greek for Byzantium), so the sources
+    /// are not all in one language. With one or two pages left there is no such share: a small budget (a local 8k model) reads the
+    /// profile's language and English first. Picked ones come first; at most <see cref="ResearchLimits.CandidatesMax"/> in all.
     /// </summary>
     public static IReadOnlyList<ResearchCandidate> Pick(ResearchPlan plan, IReadOnlyList<ResearchHit> hits, int maxPages)
     {
@@ -134,7 +137,7 @@ public sealed class ResearchRun(DocumentLibrary library, ILogger<ResearchRun> lo
         }
 
         var picked = new List<ResearchHit>(users.Take(maxPages));
-        var otherQuota = others.Count == 0 ? 0 : Math.Min(others.Count, Math.Max(1, maxPages / 3));
+        var otherQuota = Math.Min(others.Count, (maxPages - picked.Count) / 3);
         picked.AddRange(main.Take(Math.Max(0, maxPages - picked.Count - otherQuota)));
         picked.AddRange(others.Take(Math.Max(0, maxPages - picked.Count)));
         picked.AddRange(main.Except(picked).Take(Math.Max(0, maxPages - picked.Count)));
@@ -143,25 +146,36 @@ public sealed class ResearchRun(DocumentLibrary library, ILogger<ResearchRun> lo
     }
 
     /// <summary>
-    /// Fetches <paramref name="picked"/> one by one and saves each into the profile's documents, within the byte budget and the time limit
-    /// of <paramref name="request"/>. A page that fails or does not fit is skipped with its reason; a page whose text could not be read is
-    /// counted as added (so it is taken away with the others) but not used.
+    /// Fetches <paramref name="picked"/> one by one and saves each into the profile's documents, within the page count, the byte budget and
+    /// the time limit of <paramref name="request"/>. A page that fails or does not fit is skipped with its reason (a page past the page count
+    /// too); a page whose text could not be read is counted as added (so it is taken away with the others) but not used. Every document
+    /// this run adds goes into <paramref name="added"/> the moment it is saved, so a cancel or an error midway still tells the caller what
+    /// to take away.
     /// </summary>
     public async Task<ResearchSaved> SaveAsync(Guid profileId, IReadOnlyList<ResearchHit> picked, IReadOnlyList<IResearchBackend> backends, ResearchRequest request,
-        IProgress<ResearchProgress>? progress, CancellationToken cancellationToken)
+        ICollection<Guid>? added, IProgress<ResearchProgress>? progress, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(picked);
         ArgumentNullException.ThrowIfNull(backends);
         ArgumentNullException.ThrowIfNull(request);
         var byId = backends.ToDictionary(b => b.Id, StringComparer.Ordinal);
         var documents = new List<SourceDocument>();
-        var added = new List<Guid>();
+        var mine = new List<Guid>();
         var skipped = new List<ResearchFailure>();
         long bytes = 0;
         var cut = false;
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         limit.CancelAfter(request.TimeLimit);
-        var pages = picked.Take(ResearchLimits.PagesMax).ToList();
+        var most = Math.Clamp(request.MaxPages, 1, ResearchLimits.PagesMax);
+        var pages = picked.Take(most).ToList();
+        if (picked.Count > most)
+        {
+            logger.LogWarning("Research: {Over} ticked pages are over the limit of {Most}", picked.Count - most, most);
+            skipped.AddRange(picked.Skip(most).Select(p => new ResearchFailure(p.Title, "pages", most.ToString(CultureInfo.InvariantCulture))));
+            cut = true;
+        }
+
+        var seconds = string.Create(CultureInfo.InvariantCulture, $"{request.TimeLimit.TotalSeconds:0} s");
         for (var i = 0; i < pages.Count; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -187,7 +201,7 @@ public sealed class ResearchRun(DocumentLibrary library, ILogger<ResearchRun> lo
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
                 logger.LogWarning("Research: the time limit stopped the fetching after {Done} of {Total} pages", i, pages.Count);
-                skipped.AddRange(pages.Skip(i).Select(p => new ResearchFailure(p.Title, "time", string.Empty)));
+                skipped.AddRange(pages.Skip(i).Select(p => new ResearchFailure(p.Title, "time", seconds)));
                 cut = true;
                 break;
             }
@@ -216,7 +230,8 @@ public sealed class ResearchRun(DocumentLibrary library, ILogger<ResearchRun> lo
 
             if (!result.Existed)
             {
-                added.Add(result.Document.Id);
+                mine.Add(result.Document.Id);
+                added?.Add(result.Document.Id);
             }
 
             if (result.Document.Status == DocumentStatus.Ready && result.Document.Chunks > 0)
@@ -230,9 +245,9 @@ public sealed class ResearchRun(DocumentLibrary library, ILogger<ResearchRun> lo
         }
 
         progress?.Report(new ResearchProgress(ResearchStage.Done, string.Empty, pages.Count, pages.Count));
-        logger.LogInformation("Research: {Saved} pages usable ({Added} new), {Skipped} skipped, {Bytes} bytes{Cut}", documents.Count, added.Count, skipped.Count, bytes,
+        logger.LogInformation("Research: {Saved} pages usable ({Added} new), {Skipped} skipped, {Bytes} bytes{Cut}", documents.Count, mine.Count, skipped.Count, bytes,
             cut ? ", a limit stopped it early" : string.Empty);
-        return new ResearchSaved(documents, added, skipped, bytes, cut);
+        return new ResearchSaved(documents, mine, skipped, bytes, cut);
     }
 
     /// <summary>The key of the group of <paramref name="hit"/>: its entity, else its normalized address, else its backend and title.</summary>

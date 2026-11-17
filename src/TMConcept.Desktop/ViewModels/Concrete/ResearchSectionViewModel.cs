@@ -22,8 +22,9 @@ namespace TMConcept.Desktop.ViewModels;
 /// within the page, byte and time limits (cancellable, its steps in the activity panel), saves them into the profile's documents
 /// ("Belgelerim": passages, meaning search, citations) and writes the concepts from them alone, in the profile's language, through the
 /// documents prompt (everything fetched is data, never instructions). When the user does not keep the results, the pages this run added go
-/// to the recycle bin after the run. Like the other sections it only ADDS to the concept list and shares the page's one call at a time; the
-/// model may be online or local.
+/// to the recycle bin after the run, also when it was canceled or failed midway. The button writes only from what the last search found
+/// for the subject, addresses and languages now in the boxes (a change asks for a new search), and at most "Pages" ticked pages. Like the
+/// other sections it only ADDS to the concept list and shares the page's one call at a time; the model may be online or local.
 /// </summary>
 public sealed partial class ResearchSectionViewModel(AppSession session, ResearchRun run, ResearchBackendSet backends, IActivityLog activity, WorkStatus work,
     Localizer text, ILogger<ResearchSectionViewModel> logger) : ConceptSectionBase(text, logger)
@@ -31,6 +32,8 @@ public sealed partial class ResearchSectionViewModel(AppSession session, Researc
     private CancellationTokenSource? _searchCancel;
     private DocumentLibraryViewModel? _library;
     private IReadOnlyList<Guid> _added = [];
+    private Dictionary<string, string> _backendNames = new(StringComparer.Ordinal);
+    private string? _searchedFor;
     private bool _loaded;
 
     /// <summary>The subject.</summary>
@@ -160,6 +163,7 @@ public sealed partial class ResearchSectionViewModel(AppSession session, Researc
         SearchFailed = false;
         SearchStatus = string.Empty;
         Searching = true;
+        var searchedFor = SearchKey();
         using var cancel = new CancellationTokenSource();
         _searchCancel = cancel;
         IReadOnlyList<IResearchBackend> asked = [];
@@ -175,6 +179,7 @@ public sealed partial class ResearchSectionViewModel(AppSession session, Researc
             }
 
             Fill(found, asked);
+            _searchedFor = searchedFor;
             PlanLine = Text.Format("research.plan", string.Join(", ", found.Plan.Languages), string.Join(", ", asked.Where(b => found.Plan.Queries.Any(q => q.BackendId == b.Id))
                 .Select(b => b.Name)));
             var failures = found.Failures.Select(f => f.Source + ": " + Reason(f)).Distinct(StringComparer.Ordinal).ToList();
@@ -226,6 +231,7 @@ public sealed partial class ResearchSectionViewModel(AppSession session, Researc
 
         Candidates.Clear();
         PlanLine = string.Empty;
+        _searchedFor = null;
         CandidatesChanged();
     }
 
@@ -264,6 +270,16 @@ public sealed partial class ResearchSectionViewModel(AppSession session, Researc
             return Text[HasCandidates ? "research.none_ticked" : "research.search_first"];
         }
 
+        if (!string.Equals(_searchedFor, SearchKey(), StringComparison.Ordinal))
+        {
+            return Text["research.search_again"];
+        }
+
+        if (CheckedCount > MaxPages())
+        {
+            return Text.Format("research.too_many", MaxPages());
+        }
+
         return Count is null or < 1 ? Text["concepts.idea.count_empty"] : string.Empty;
     }
 
@@ -293,27 +309,27 @@ public sealed partial class ResearchSectionViewModel(AppSession session, Researc
 
         var picked = Candidates.Where(c => c.Checked).Select(c => c.Hit).ToList();
         IReadOnlyList<IResearchBackend> asked = [];
-        ResearchSaved saved;
+        var added = new List<Guid>();
+        ResearchSaved? saved = null;
+        string? stopped = null;
         try
         {
             await SaveSettingsAsync().ConfigureAwait(true);
             asked = await backends.ForRunAsync(session.Settings.Research, cancellationToken).ConfigureAwait(true);
-            saved = await run.SaveAsync(profile.Id, picked, asked, Request(profile.ContentLanguage), new Progress<ResearchProgress>(ShowFetch), cancellationToken)
+            saved = await run.SaveAsync(profile.Id, picked, asked, Request(profile.ContentLanguage), added, new Progress<ResearchProgress>(ShowFetch), cancellationToken)
                 .ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
-            logger.LogInformation("Research fetching canceled");
-            ShowStatus(Text["research.fetch_canceled"], error: false, warning: true);
-            activity.Add(ActivityLevel.Warning, Text["research.fetch_canceled"]);
-            return null;
+            logger.LogInformation("Research fetching canceled after {Added} new pages", added.Count);
+            stopped = Text[KeepInLibrary || added.Count == 0 ? "research.fetch_canceled" : "research.fetch_canceled_dropped"];
+            ShowStatus(stopped, error: false, warning: true);
         }
         catch (Exception ex) when (ex is DocumentRejectedException or IOException or InvalidOperationException or UnauthorizedAccessException)
         {
-            logger.LogError(ex, "Research fetching failed");
-            ShowStatus(Text.Format("research.fetch_failed", ex.Message), error: true);
-            activity.Add(ActivityLevel.Error, Status);
-            return null;
+            logger.LogError(ex, "Research fetching failed after {Added} new pages", added.Count);
+            stopped = Text.Format("research.fetch_failed", ex.Message);
+            ShowStatus(stopped, error: true);
         }
         finally
         {
@@ -322,13 +338,22 @@ public sealed partial class ResearchSectionViewModel(AppSession session, Researc
             Runner.Leave(this);
         }
 
-        _added = saved.Added;
+        // What this run added is known even when it stopped midway: the lists show it, and it is taken away when it is not kept.
+        _added = added;
         if (_library is not null)
         {
             await _library.RefreshAsync().ConfigureAwait(true);
         }
 
-        var skipped = saved.Skipped.Select(f => f.Source + ": " + Reason(f)).ToList();
+        if (saved is null)
+        {
+            activity.Add(StatusIsError ? ActivityLevel.Error : ActivityLevel.Warning, stopped ?? Status);
+            await SafeAsync(() => AfterRunAsync(research)).ConfigureAwait(true);
+            return null;
+        }
+
+        var skipped = saved.Skipped.Select(f => f.Source + ": " + Reason(f.Code == "backend" && _backendNames.TryGetValue(f.Detail, out var name) ? f with { Detail = name } : f))
+            .ToList();
         var line = Text.Format("research.saved", saved.Documents.Count, picked.Count) + (saved.Cut ? " " + Text["research.fetch_cut"] : string.Empty);
         activity.Add(skipped.Count > 0 || saved.Cut ? ActivityLevel.Warning : ActivityLevel.Info, string.Join(" · ", new[] { line }.Concat(skipped)));
         if (saved.Documents.Count == 0)
@@ -370,20 +395,30 @@ public sealed partial class ResearchSectionViewModel(AppSession session, Researc
 
     partial void OnCountChanged(decimal? value) => Refresh();
 
+    partial void OnLanguagesChanged(string value) => Refresh();
+
+    partial void OnPagesChanged(decimal? value) => Refresh();
+
+    private int MaxPages() => Math.Clamp((int)(Pages ?? ResearchLimits.PagesDefault), 1, ResearchLimits.PagesMax);
+
+    /// <summary>What a search is for: the subject, the addresses and the extra languages as the boxes hold them now.</summary>
+    private string SearchKey() => string.Join("\n", Subject.Trim(), string.Join(" ", Urls.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)),
+        string.Join(",", ResearchText.Languages(Languages)));
+
     private int Asked() => Math.Clamp((int)(Count ?? 1), ConceptLimits.CountMin, DocumentLimits.ConceptCountMax);
 
     private ResearchRequest Request(string language) => new(Subject, language)
     {
         ExtraLanguages = ResearchText.Languages(Languages),
         Urls = Urls.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Take(ResearchLimits.UrlsMax).ToList(),
-        MaxPages = Math.Clamp((int)(Pages ?? ResearchLimits.PagesDefault), 1, ResearchLimits.PagesMax),
+        MaxPages = MaxPages(),
     };
 
     private async Task SaveSettingsAsync()
     {
         var settings = session.Settings;
         var research = settings.Research;
-        var pages = Math.Clamp((int)(Pages ?? ResearchLimits.PagesDefault), 1, ResearchLimits.PagesMax);
+        var pages = MaxPages();
         var languages = string.Join(", ", ResearchText.Languages(Languages));
         if (research.Pages == pages && research.ExtraLanguages == languages && research.KeepInLibrary == KeepInLibrary)
         {
@@ -399,6 +434,7 @@ public sealed partial class ResearchSectionViewModel(AppSession session, Researc
     private void Fill(ResearchCandidates found, IReadOnlyList<IResearchBackend> asked)
     {
         ClearCandidates();
+        _backendNames = asked.GroupBy(b => b.Id, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First().Name, StringComparer.Ordinal);
         foreach (var candidate in found.Candidates)
         {
             var name = asked.FirstOrDefault(b => b.Id == candidate.Hit.BackendId)?.Name ?? candidate.Hit.BackendId;

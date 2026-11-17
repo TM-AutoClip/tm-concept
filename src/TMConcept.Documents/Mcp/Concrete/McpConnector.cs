@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using TMConcept.Core.Processes;
 using TMConcept.Core.Research;
 
 namespace TMConcept.Documents.Mcp;
@@ -6,9 +7,10 @@ namespace TMConcept.Documents.Mcp;
 /// <summary>
 /// Opens a session with an MCP server the user added (Settings → Research, advanced): nothing is started or called before the user
 /// accepted the warning (<see cref="McpServerSettings.Confirmed"/>); a program is started without the app's environment
-/// (<see cref="McpStdioChannel.Start"/>), an address is reached without redirects. The session is initialized before it is given back.
+/// (<see cref="McpStdioChannel.Start"/>) and handed to the app's <see cref="IChildProcessGuard"/>, so it never outlives the app; an
+/// address is reached without redirects. The session is initialized before it is given back.
 /// </summary>
-public sealed class McpConnector(McpHttpTransport transport, ILoggerFactory loggers)
+public sealed class McpConnector(McpHttpTransport transport, IChildProcessGuard children, ILoggerFactory loggers)
 {
     /// <summary>A started, initialized session with <paramref name="server"/>; the caller disposes it. <see cref="McpException"/> with the reason.</summary>
     public async Task<McpClient> ConnectAsync(McpServerSettings server, CancellationToken cancellationToken)
@@ -22,7 +24,7 @@ public sealed class McpConnector(McpHttpTransport transport, ILoggerFactory logg
         var logger = loggers.CreateLogger<McpClient>();
         IMcpChannel channel = server.Transport switch
         {
-            McpTransportKind.Stdio => McpStdioChannel.Start(server.Command, server.Arguments, loggers.CreateLogger<McpStdioChannel>()),
+            McpTransportKind.Stdio => McpStdioChannel.Start(server.Command, server.Arguments, children, loggers.CreateLogger<McpStdioChannel>()),
             _ => Uri.TryCreate(server.Url.Trim(), UriKind.Absolute, out var address)
                 ? new McpHttpChannel(address, transport, loggers.CreateLogger<McpHttpChannel>())
                 : throw new McpException("http", "The MCP server's address is not a web address."),

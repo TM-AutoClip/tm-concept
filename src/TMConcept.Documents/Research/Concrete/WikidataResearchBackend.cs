@@ -35,7 +35,7 @@ public sealed partial class WikidataResearchBackend(DocumentTransport transport,
 
     /// <summary>The search address of <paramref name="text"/> in <paramref name="language"/>.</summary>
     public static Uri SearchAddress(string language, string text, int count) => new(string.Create(CultureInfo.InvariantCulture,
-        $"https://www.wikidata.org/w/api.php?action=wbsearchentities&format=json&type=item&limit={count}&language={language}&uselang={language}&search={Uri.EscapeDataString(text)}"));
+        $"https://www.wikidata.org/w/api.php?action=wbsearchentities&format=json&maxlag=5&type=item&limit={count}&language={language}&uselang={language}&search={Uri.EscapeDataString(text)}"));
 
     /// <summary>The SPARQL query of the facts of <paramref name="item"/> with labels in <paramref name="language"/> (then English); null when the id is not an item id.</summary>
     public static string? FactsQuery(string item, string language)

@@ -70,13 +70,18 @@ veritabanını şifreli tutar.
   (Bizans için Yunanca, Safeviler için Farsça, Osmanlı için Türkçe; toplam en çok dört). Yalnızca profilin dilinde ve İngilizcede arama
   yapılır; diğer dillere bulunan makalelerin dil bağlantılarıyla ulaşılır, yani aynı konu kendi Yunanca makalesinden okunur. Bir konunun
   birçok dildeki sürümü tek kaynak grubudur (Wikidata öğesiyle). **Ara** yalnızca alacağı sayfaları listeler ve plana göre işaretler (önce
-  senin adreslerin, yaklaşık üçte biri diğer dillerden); hiçbir şey indirilmez, model çağrılmaz. Düğme sonra işaretli sayfaları alır (toplam
+  senin adreslerin, kalanın yaklaşık üçte biri diğer dillerden; *Sayfa* bir ya da iki ise önce profilin dili ve İngilizce); hiçbir şey
+  indirilmez, model çağrılmaz. Sonradan konuyu, adresleri ya da dilleri değiştirirsen düğme yeniden arama ister; *Sayfa*'dan fazla sayfa
+  işaretlersen bazılarını kaldırmanı ya da sayıyı artırmanı ister. Düğme sonra işaretli sayfaları alır (toplam
   en çok 12 sayfa, 4 MB ve iki dakika; iptal edilebilir; her adım etkinlik panelinde), bunu **Belgelerim**'deki korumalı alma ile yapar,
   sayfaları oraya kaydeder (parçalar, anlam araması) ve konseptleri yalnız onlardan, videonun dilinde yazar; her konsept kullandığı
   sayfaları söyler (*Kaynaklar*). Alınan bir sayfadaki yazı veridir: yazıyı gizleyen ya da sırasını değiştiren görünmez karakterler
-  silinir ve sayfa istemin veri bloğunun içinde durur, yani modele talimat veremez. Bir çalışmanın eklediği sayfaların sonradan geri
-  dönüşüm kutusuna gitmesi için **Belgelerim'de tut** işaretini kaldır. Model çevrimiçi ya da yerel olabilir: parçalar her belgede olduğu
-  gibi modelin bağlamına sığdırılır.
+  silinir (her belgeden, PDF'lerden de) ve sayfa istemin veri bloğunun içinde durur, yani modele talimat veremez. Tavily'nin ya da bir MCP
+  sunucusunun bulduğu sayfa yalnızca sitenin robots.txt'si izin veriyorsa alınır; senin yazdığın adres istediğin gibi alınır. Alma işi
+  ücretsiz servisleri yormaz: her siteye aynı anda tek istek gider, "biraz bekle" cevabına bir kez uyulur ve her istek uygulamanın adını
+  ve proje sayfasını söyler (Wikimedia böyle istiyor), senin hakkında hiçbir şey söylemez. Bir çalışmanın eklediği sayfaların sonradan
+  geri dönüşüm kutusuna gitmesi için **Belgelerim'de tut** işaretini kaldır; çalışma iptal edilse ya da yarıda kalsa da öyle olur. Model
+  çevrimiçi ya da yerel olabilir: parçalar her belgede olduğu gibi modelin bağlamına sığdırılır.
 - **Konseptten video.** Solda onaylı konseptler (tıklanan, listenin altında açılır; orada elle ya da yapay zekâyla düzenlenir), **Sıraya
   ekle**, sonra **Sırayla üret**. Modeller (motoruyla kod, görseller, ses) üstte tek bir katlanmış satırdır, yanında **şablon** seçici
   (yeni kurulumda boştur: kod modeli ve şablon seçilmeden video üretilmez). Video üretilirken her aşama
@@ -370,8 +375,10 @@ Sonra modelleri onları kullanan sayfalarda seç (yukarıya bak). Ücretli hiçb
   her birinin aldığı argümanı seç, kaydet. Bir sunucu ilk kez başlatılmadan ya da ona ulaşılmadan önce uygulama bir uyarı gösterir: MCP
   sunucusu başkasının programı ya da servisidir; senin yetkilerinle çalışır ve arama kelimelerini görür. Uygulama yalnızca seçtiğin iki
   aracı çağırır (sunucunun listelemediği bir araç reddedilir), cevaplarına her web sayfası gibi davranır ve bir programı uygulamanın
-  ortam değişkenleri olmadan başlatır, yani ortam değişkenlerindeki anahtarlar ona ulaşmaz. DeepWiki ve Context7 kod belgeler, tarih
-  değil: burada işe yaramazlar.
+  ortam değişkenleri olmadan başlatır, yani ortam değişkenlerindeki anahtarlar ona ulaşmaz. Sunucu programı uygulamaya bağlanır ve
+  onunla biter; arama sürerken uygulamayı kapatsan da açık kalmaz. Arama cevabındaki bu bilgisayara ya da yerel ağa ait bir adres
+  hiçbir zaman önerilmez ve alma aracına gönderilmez. Yanlış biçimde cevap veren bir sunucu yalnızca kendi satırını bozar; diğer
+  kaynaklar devam eder. DeepWiki ve Context7 kod belgeler, tarih değil: burada işe yaramazlar.
 
 ## İlk videonu üret
 

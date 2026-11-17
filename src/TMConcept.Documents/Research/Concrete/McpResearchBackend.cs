@@ -12,7 +12,8 @@ namespace TMConcept.Documents.Research;
 /// <summary>
 /// A tool of the user's own MCP server as a research backend (advanced, off by default). The app calls ONLY the two tools the user chose
 /// (a tool the server does not list is refused before any call): the search tool with the query, and, for each picked hit, the fetch tool
-/// with its address; without a fetch tool the app fetches the address itself through the guarded web fetcher (public addresses only). A
+/// with its address; without a fetch tool the app fetches the address itself through the guarded web fetcher (public addresses only, the
+/// site's robots.txt honoured). An address on this computer or the local network is never a hit and never goes to the fetch tool. A
 /// search answer is read as a list of results when it is JSON with addresses ("url", "link", …) or text with addresses; otherwise the
 /// answer itself is one hit whose text is kept as it is. Every answer is data, like a web page: cleaned, stored, and sent to the model only
 /// inside the documents prompt's data block. One session per run; disposing ends it (and the server program).
@@ -71,15 +72,19 @@ public sealed partial class McpResearchBackend(McpServerSettings server, McpConn
             var link = MarkdownLink().Match(line);
             if (link.Success)
             {
-                hits.Add(new ResearchHit(string.Empty, link.Groups[1].Value.Trim(), link.Groups[2].Value, string.Empty));
+                if (IsPublic(link.Groups[2].Value))
+                {
+                    hits.Add(new ResearchHit(string.Empty, link.Groups[1].Value.Trim(), link.Groups[2].Value, string.Empty));
+                }
+
                 continue;
             }
 
             var bare = BareUrl().Match(line);
-            if (bare.Success)
+            if (bare.Success && bare.Value.TrimEnd('.', ',', ')', ';') is var url && IsPublic(url))
             {
                 var title = line.Replace(bare.Value, string.Empty, StringComparison.Ordinal).Trim(' ', '-', '*', ':', '|', '\t', '\r');
-                hits.Add(new ResearchHit(string.Empty, title.Length > 0 ? title : bare.Value, bare.Value.TrimEnd('.', ',', ')', ';'), string.Empty));
+                hits.Add(new ResearchHit(string.Empty, title.Length > 0 ? title : bare.Value, url, string.Empty));
             }
         }
 
@@ -112,7 +117,14 @@ public sealed partial class McpResearchBackend(McpServerSettings server, McpConn
     {
         if (hit.InlineText.Length == 0 && server.FetchTool.Trim().Length == 0)
         {
-            return await web.FetchAsync(hit.Url, string.Empty, cancellationToken).ConfigureAwait(false);
+            return await web.FetchAutomaticAsync(hit.Url, string.Empty, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (hit.InlineText.Length == 0)
+        {
+            // The same check as the app's own fetching: a found address on this computer or the local network never goes to the fetch tool.
+            var address = DocumentFetcherBase.WebAddress(hit.Url) ?? throw new DocumentRejectedException("address", "This is not a web address.", hit.Url);
+            SafeHttp.RefuseLocal(address);
         }
 
         var text = hit.InlineText.Length > 0 ? hit.InlineText : await CallAsync(server.FetchTool, server.FetchArgument, hit.Url, cancellationToken).ConfigureAwait(false);
@@ -161,7 +173,7 @@ public sealed partial class McpResearchBackend(McpServerSettings server, McpConn
         string First(string[] names) => names.Select(n => item.TryGetProperty(n, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? string.Empty : string.Empty)
             .FirstOrDefault(v => v.Length > 0) ?? string.Empty;
         var url = First(UrlNames);
-        if (DocumentFetcherBase.WebAddress(url) is null || !url.Contains("://", StringComparison.Ordinal))
+        if (!IsPublic(url))
         {
             return null;
         }
@@ -169,6 +181,13 @@ public sealed partial class McpResearchBackend(McpServerSettings server, McpConn
         var title = First(TitleNames);
         return new ResearchHit(string.Empty, title.Length > 0 ? title : url, url, string.Empty) { Snippet = First(SnippetNames) };
     }
+
+    /// <summary>
+    /// Whether <paramref name="url"/> is a full http(s) address whose host is not this computer or the local network: a search answer can
+    /// carry any address a page planted (a router's page, the cloud metadata address), and such a hit is never offered.
+    /// </summary>
+    private static bool IsPublic(string url) =>
+        url.Contains("://", StringComparison.Ordinal) && DocumentFetcherBase.WebAddress(url) is { } address && !NetworkAddresses.IsLocalHost(address.Host);
 
     /// <summary>Calls one of the two chosen tools (only those), opening the session the first time.</summary>
     private async Task<string> CallAsync(string tool, string argument, string value, CancellationToken cancellationToken)

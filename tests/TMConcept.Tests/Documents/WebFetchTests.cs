@@ -49,6 +49,8 @@ public sealed class WebFetchTests
         request.Uri.Query.ShouldContain("explaintext=1");
         request.UserAgent.ShouldStartWith("TM-Concept/");
         request.UserAgent.ShouldNotContain("@", Case.Sensitive, "nothing about the user");
+        request.UserAgent.ShouldContain("+https://github.com/TM-AutoClip/tm-concept", Case.Sensitive, "the project page, as the Wikimedia policy asks");
+        request.Uri.Query.ShouldContain("maxlag=5");
         (article.Kind, article.Title, article.Language, article.Extension).ShouldBe((DocumentKind.Wikipedia, "Bizans İmparatorluğu", "tr", ".md"));
         article.Url.ShouldBe("https://tr.wikipedia.org/wiki/Bizans_%C4%B0mparatorlu%C4%9Fu");
         var markdown = Encoding.UTF8.GetString(article.Content);
@@ -221,6 +223,91 @@ public sealed class WebFetchTests
     private static ExtractedDocument MarkdownExtractorOf(string text) => TMConcept.Documents.Extractors.MarkdownExtractor.Parse(text);
 
     /// <summary>Sends its headers at once and then its body a byte at a time, slower than any limit.</summary>
+    [Fact]
+    public async Task AWaitAnswerIsTriedOnceMoreAfterTheAskedWaitAndALongOrSecondOneIsARateError()
+    {
+        var page = "<html><body><p>The page.</p></body></html>";
+        var once = new FixtureHttp().Answer(HttpStatusCode.TooManyRequests, "text/plain", "slow down", ("Retry-After", "0"))
+            .Answer(HttpStatusCode.OK, "text/html", page);
+        (await Web(once).FetchAsync("https://wait-once.example/a", string.Empty, None)).Title.ShouldBe("wait-once.example");
+        once.Requests.Count.ShouldBe(2);
+
+        var twice = new FixtureHttp().Answer(HttpStatusCode.TooManyRequests, "text/plain", "slow", ("Retry-After", "0"))
+            .Answer(HttpStatusCode.TooManyRequests, "text/plain", "slow", ("Retry-After", "0"));
+        var second = await Should.ThrowAsync<DocumentRejectedException>(() => Web(twice).FetchAsync("https://wait-twice.example/a", string.Empty, None));
+        (second.Code, twice.Requests.Count).ShouldBe(("rate", 2));
+
+        var longWait = new FixtureHttp().Answer(HttpStatusCode.TooManyRequests, "text/plain", "slow", ("Retry-After", "3600"));
+        var refused = await Should.ThrowAsync<DocumentRejectedException>(() => Web(longWait).FetchAsync("https://wait-long.example/a", string.Empty, None));
+        (refused.Code, longWait.Requests.Count).ShouldBe(("rate", 1), "a wait longer than the limit is reported at once");
+    }
+
+    [Fact]
+    public async Task AWikimediaMaxlagAnswerIsTriedOnceMore()
+    {
+        var http = new FixtureHttp()
+            .Json("""{"error":{"code":"maxlag","info":"Waiting for a database server: 6 seconds lagged."}}""", HttpStatusCode.OK, ("Retry-After", "0"), ("X-Database-Lag", "6"))
+            .Json(WikipediaAnswer);
+        var fetcher = new WikipediaFetcher(new DocumentTransport(() => http), NullLogger<WikipediaFetcher>.Instance);
+
+        var article = await fetcher.FetchAsync("Bizans", "tr", None);
+
+        article.Title.ShouldBe("Bizans İmparatorluğu");
+        http.Requests.Count.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task OneHostGetsOneRequestAtATimeAcrossTheApp()
+    {
+        var handler = new CountingAnswers();
+        var transport = new DocumentTransport(() => handler);
+        var fetchers = Enumerable.Range(0, 3).Select(_ => new WebPageFetcher(transport, NullLogger<WebPageFetcher>.Instance)).ToList();
+
+        await Task.WhenAll(fetchers.SelectMany((f, i) => new[]
+        {
+            f.FetchAsync("https://one-host.example/" + i, string.Empty, None),
+            f.FetchAsync("https://other-host.example/" + i, string.Empty, None),
+        }));
+
+        handler.Most.ShouldBe(1, "three fetchers, still one request per host at a time");
+        handler.Total.ShouldBe(6);
+    }
+
+    private static WebPageFetcher Web(FixtureHttp http) => new(new DocumentTransport(() => http), NullLogger<WebPageFetcher>.Instance);
+
+    /// <summary>Answers every request with a page after a short wait and counts how many requests to one host overlap.</summary>
+    private sealed class CountingAnswers : HttpMessageHandler
+    {
+        private readonly Dictionary<string, int> _running = new(StringComparer.Ordinal);
+        private int _most;
+        private int _total;
+
+        public int Most => Volatile.Read(ref _most);
+
+        public int Total => Volatile.Read(ref _total);
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var host = request.RequestUri!.Host;
+            lock (_running)
+            {
+                _running[host] = _running.GetValueOrDefault(host) + 1;
+                _most = Math.Max(_most, _running[host]);
+            }
+
+            await Task.Delay(40, cancellationToken);
+            lock (_running)
+            {
+                _running[host]--;
+            }
+
+            Interlocked.Increment(ref _total);
+            var content = new ByteArrayContent(Encoding.UTF8.GetBytes("<html><body><p>Page.</p></body></html>"));
+            content.Headers.ContentType = System.Net.Http.Headers.MediaTypeHeaderValue.Parse("text/html");
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = content, RequestMessage = request };
+        }
+    }
+
     private sealed class TricklingAnswer : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)

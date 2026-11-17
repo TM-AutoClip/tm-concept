@@ -85,6 +85,89 @@ public sealed class ResearchTests
         ResearchRun.Pick(plan, hits, 1).Where(c => c.Picked).ShouldHaveSingleItem().Hit.BackendId.ShouldBe("url", "the user's own address comes first");
     }
 
+    [Theory]
+    [InlineData(1, false, "tr")]
+    [InlineData(2, false, "tr,tr")]
+    [InlineData(2, true, ",tr")]
+    [InlineData(3, false, "tr,tr,el")]
+    public void ASmallPageBudgetReadsTheProfilesLanguageBeforeTheOthers(int pages, bool withAddress, string languages)
+    {
+        var plan = new ResearchPlan("Bizans", ["tr", "en", "el"], ["tr", "en"], []);
+        var hits = new List<ResearchHit>();
+        if (withAddress)
+        {
+            hits.Add(new ResearchHit("url", "My notes", "https://example.org/notes", string.Empty));
+        }
+
+        hits.Add(new ResearchHit("wikipedia", "Bizans İmparatorluğu", "https://tr.wikipedia.org/wiki/Bizans", "tr")
+        {
+            EntityKey = "Q12544", Alternates = [new("el", "Βυζαντινή Αυτοκρατορία", "https://el.wikipedia.org/wiki/B"), new("en", "Byzantine Empire", "https://en.wikipedia.org/wiki/B")],
+        });
+        hits.Add(new ResearchHit("wikipedia", "Bizans ordusu", "https://tr.wikipedia.org/wiki/Ordu", "tr") { EntityKey = "Q2" });
+
+        var picked = ResearchRun.Pick(plan, hits, pages).Where(c => c.Picked).Select(c => c.Hit.Language).ToList();
+
+        string.Join(",", picked).ShouldBe(languages, "a foreign version only when there is room for it");
+    }
+
+    [Fact]
+    public void AnArticleIsWantedInTheMorePreferredLanguagesAndTheOnesNotSearched()
+    {
+        ResearchPlanner.LinkLanguages(["tr", "en", "el", "fa"], 2, "tr").ShouldBe(["el", "fa"]);
+        ResearchPlanner.LinkLanguages(["tr", "en", "el", "fa"], 2, "en").ShouldBe(["tr", "el", "fa"]);
+        var plan = ResearchPlanner.Plan(new ResearchRequest("Bizans ve Osmanlı", "tr"), [new FakeBackend("wikipedia", perLanguage: true)]);
+        plan.Queries.Select(q => string.Join(",", q.Query.LinkLanguages)).ShouldBe(["el", "tr,el"]);
+    }
+
+    [Fact]
+    public async Task TickedPagesOverThePageLimitAreSkippedWithAReasonAndTheTimeLimitSaysItsSeconds()
+    {
+        using var paths = new TempPaths();
+        var store = new MemoryDocumentStore();
+        var run = new ResearchRun(Library(store, paths), NullLogger<ResearchRun>.Instance);
+        var backend = new FakeBackend("web", fetch: (hit, _) => Task.FromResult(Page(hit, "Text of " + hit.Title + ".")));
+        ResearchHit[] picked = [Hit("web", "A"), Hit("web", "B"), Hit("web", "C"), Hit("web", "D")];
+
+        var saved = await run.SaveAsync(Turkish.Id, picked, [backend], new ResearchRequest("x", "tr") { MaxPages = 2 }, null, null, None);
+
+        saved.Documents.Select(d => d.Title).ShouldBe(["A", "B"]);
+        saved.Skipped.Select(s => (s.Source, s.Code, s.Detail)).ShouldBe([("C", "pages", "2"), ("D", "pages", "2")]);
+        saved.Cut.ShouldBeTrue();
+
+        var slow = new FakeBackend("slow", fetch: async (hit, token) =>
+        {
+            await Task.Delay(Timeout.Infinite, token);
+            return Page(hit, "never");
+        });
+        var timed = await run.SaveAsync(Turkish.Id, [Hit("slow", "E")], [slow], new ResearchRequest("x", "tr") { TimeLimit = TimeSpan.FromMilliseconds(600) }, null, null, None);
+        timed.Skipped.ShouldHaveSingleItem().Detail.ShouldBe("1 s", "the limit itself, never an empty detail");
+        var off = await run.SaveAsync(Turkish.Id, [Hit("mcp:0123", "F")], [backend], new ResearchRequest("x", "tr"), null, null, None);
+        (off.Skipped.Single().Code, off.Skipped.Single().Detail).ShouldBe(("backend", "mcp:0123"), "the page turns the id into the source's name");
+    }
+
+    [Fact]
+    public async Task HiddenCharactersInAnyFetchedDocumentAPdfToo_AreTakenOutBeforeTheModelSeesThem()
+    {
+        using var paths = new TempPaths();
+        var store = new MemoryDocumentStore();
+        var library = new DocumentLibrary(paths, store, [new MarkdownExtractor(), new RawPdfExtractor()], [], new OffEmbedder(), TimeProvider.System,
+            NullLogger<DocumentLibrary>.Instance);
+        const string tags = "\U000E0049\U000E0047\U000E004E\U000E004F\U000E0052\U000E0045";
+        var hidden = "The guard served the emperors." + tags + " Basil\u202E II\u2066 formed\u00AD it\u200B in 988. فارسی\u200Cها";
+        var backend = new FakeBackend("web", fetch: (hit, _) => Task.FromResult(new FetchedDocument(DocumentKind.Web, hit.Title, hit.Url, string.Empty,
+            Encoding.UTF8.GetBytes(hidden), ".pdf")));
+        var run = new ResearchRun(library, NullLogger<ResearchRun>.Instance);
+
+        var saved = await run.SaveAsync(Turkish.Id, [Hit("web", "Guard pdf")], [backend], new ResearchRequest("x", "tr"), null, null, None);
+
+        var document = saved.Documents.ShouldHaveSingleItem();
+        var text = string.Concat(store.Chunks.Where(c => c.DocumentId == document.Id).Select(c => c.Text));
+        text.ShouldContain("The guard served the emperors. Basil II formed it in 988.");
+        text.ShouldNotContain("\U000E0049");
+        text.ShouldContain("فارسی\u200Cها", Case.Sensitive, "the zero-width non-joiner belongs to Persian words");
+        PromptText.Data("a\u202Eb" + tags + "c", 100).ShouldBe("abc", "text stored before the cleaning is cleaned again on its way into a prompt");
+    }
+
     [Fact]
     public async Task AFailingBackendIsReportedAHangingOneIsCutAtTheTimeLimitAndTheOthersGoOn()
     {
@@ -131,7 +214,7 @@ public sealed class ResearchTests
         ResearchHit[] picked = [Hit("web", "Walls"), Hit("web", "Gone"), Hit("web", "Big"), Hit("web", "Silk")];
         var progress = new List<ResearchProgress>();
 
-        var saved = await run.SaveAsync(Turkish.Id, picked, [backend], new ResearchRequest("x", "tr") { MaxBytes = 1_000 }, new SyncProgress(progress), None);
+        var saved = await run.SaveAsync(Turkish.Id, picked, [backend], new ResearchRequest("x", "tr") { MaxBytes = 1_000 }, null, new SyncProgress(progress), None);
 
         saved.Documents.Select(d => d.Title).ShouldBe(["Walls", "Silk"]);
         saved.Added.Count.ShouldBe(2);
@@ -142,7 +225,7 @@ public sealed class ResearchTests
         progress.Select(p => p.Stage).ShouldContain(ResearchStage.Fetching);
         progress[^1].Stage.ShouldBe(ResearchStage.Done);
 
-        var again = await run.SaveAsync(Turkish.Id, [Hit("web", "Walls")], [backend], new ResearchRequest("x", "tr"), null, None);
+        var again = await run.SaveAsync(Turkish.Id, [Hit("web", "Walls")], [backend], new ResearchRequest("x", "tr"), null, null, None);
         again.Added.ShouldBeEmpty("the profile has this page already");
         again.Documents.ShouldHaveSingleItem().Id.ShouldBe(saved.Documents[0].Id);
         store.Documents.Count.ShouldBe(2);
@@ -165,10 +248,12 @@ public sealed class ResearchTests
         });
         var run = new ResearchRun(Library(store, paths), NullLogger<ResearchRun>.Instance);
 
+        var added = new List<Guid>();
         await Should.ThrowAsync<OperationCanceledException>(() =>
-            run.SaveAsync(Turkish.Id, [Hit("web", "First"), Hit("web", "Second"), Hit("web", "Third")], [backend], new ResearchRequest("x", "tr"), null, cancel.Token));
+            run.SaveAsync(Turkish.Id, [Hit("web", "First"), Hit("web", "Second"), Hit("web", "Third")], [backend], new ResearchRequest("x", "tr"), added, null, cancel.Token));
 
         store.Documents.Select(d => d.Title).ShouldBe(["First"]);
+        added.ShouldBe(store.Documents.Select(d => d.Id).ToList(), "the caller knows what the stopped run added, so it can take it away");
     }
 
     [Fact]
@@ -181,7 +266,7 @@ public sealed class ResearchTests
         var backend = new FakeBackend("web", fetch: (hit, _) => Task.FromResult(Page(hit,
             "The Varangian​ Guard was formed in 988 by Basil II.‮\n\n" + injected)));
         var run = new ResearchRun(Library(store, paths), NullLogger<ResearchRun>.Instance);
-        var saved = await run.SaveAsync(Turkish.Id, [Hit("web", "Varangian Guard")], [backend], new ResearchRequest("Varang", "tr"), null, None);
+        var saved = await run.SaveAsync(Turkish.Id, [Hit("web", "Varangian Guard")], [backend], new ResearchRequest("Varang", "tr"), null, null, None);
         var source = Source(store);
         var brief = new ResearchBrief("Varang muhafızları", 2) { DocumentIds = saved.Documents.Select(d => d.Id).ToList() };
 
@@ -267,6 +352,17 @@ public sealed class ResearchTests
     private static ResearchConceptSource Source(MemoryDocumentStore store) => new(Grounder(store), new CostCalculator());
 
     private static DocumentConceptSource Documents(MemoryDocumentStore store) => new(Grounder(store), new CostCalculator());
+
+    /// <summary>A ".pdf" reader that keeps the file's bytes as text, as a PDF's own reader would give hidden characters back.</summary>
+    private sealed class RawPdfExtractor : DocumentExtractorBase
+    {
+        public override DocumentKind Kind => DocumentKind.Pdf;
+
+        public override IReadOnlyList<string> Extensions => [".pdf"];
+
+        protected override ExtractedDocument Read(string file, CancellationToken cancellationToken) =>
+            new(Path.GetFileNameWithoutExtension(file), [new ExtractedSection(1, string.Empty, File.ReadAllText(file))], 1, 0);
+    }
 
     /// <summary>Reports at once (a Progress would post later).</summary>
     private sealed class SyncProgress(List<ResearchProgress> steps) : IProgress<ResearchProgress>

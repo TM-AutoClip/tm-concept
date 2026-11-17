@@ -6,7 +6,8 @@ namespace TMConcept.Core.Documents;
 /// <summary>
 /// The common part of reading a document file: a missing or too large file is refused before it is read (<see cref="DocumentLimits.FileBytesMax"/>);
 /// the kind's own reader runs off the calling thread; then the text is cleaned the same way for every kind: line ends unified, control
-/// characters removed, a word broken over a line end with a hyphen joined again, runs of spaces made one, a header or footer line that
+/// characters and the invisible characters that hide or reorder text removed (zero-width, bidi, tag characters, soft hyphens: a PDF or a
+/// page cannot hide an instruction from the reader), a word broken over a line end with a hyphen joined again, runs of spaces made one, a header or footer line that
 /// repeats on most pages left out, empty pieces dropped, and the whole cut at <see cref="DocumentLimits.CharactersMax"/>.
 /// </summary>
 public abstract partial class DocumentExtractorBase : IDocumentExtractor
@@ -81,7 +82,7 @@ public abstract partial class DocumentExtractorBase : IDocumentExtractor
             return string.Empty;
         }
 
-        var unified = text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n').Replace(' ', ' ');
+        var unified = Text.TextClean.Visible(text).Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n').Replace(' ', ' ');
         var builder = new StringBuilder(unified.Length);
         foreach (var c in unified)
         {

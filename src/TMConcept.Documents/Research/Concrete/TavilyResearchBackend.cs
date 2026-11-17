@@ -13,7 +13,7 @@ namespace TMConcept.Documents.Research;
 /// Tavily web search with the user's OWN key (Settings → Research; stored encrypted like every API key, sent only to Tavily's fixed address
 /// in the Authorization header, never logged). Tavily is a search API made for AI apps, with a free monthly allowance. Only its result list
 /// is used (titles and addresses); every page is then fetched by the app itself through the guarded web fetcher, so what is stored is the
-/// page, not Tavily's copy. Without a key the backend is not offered.
+/// page, not Tavily's copy (only when the site's robots.txt allows it). Without a key the backend is not offered.
 /// </summary>
 public sealed class TavilyResearchBackend(DocumentTransport transport, IApiKeyStore keys, WebPageFetcher web, ILogger<TavilyResearchBackend> logger)
     : HttpResearchBackendBase(transport, logger)
@@ -97,5 +97,6 @@ public sealed class TavilyResearchBackend(DocumentTransport transport, IApiKeySt
     }
 
     /// <inheritdoc />
-    protected override Task<FetchedDocument> FetchCoreAsync(ResearchHit hit, CancellationToken cancellationToken) => web.FetchAsync(hit.Url, string.Empty, cancellationToken);
+    protected override Task<FetchedDocument> FetchCoreAsync(ResearchHit hit, CancellationToken cancellationToken) =>
+        web.FetchAutomaticAsync(hit.Url, string.Empty, cancellationToken);
 }

@@ -1,5 +1,3 @@
-using System.Globalization;
-using System.Text;
 using System.Text.RegularExpressions;
 
 namespace TMConcept.Core.Research;
@@ -17,28 +15,10 @@ public static partial class ResearchText
 
     /// <summary>
     /// <paramref name="text"/> without invisible format characters (Unicode category Cf) except the zero-width joiner and non-joiner, which
-    /// Persian, Arabic and Indic scripts need inside words.
+    /// Persian, Arabic and Indic scripts need inside words (<see cref="Text.TextClean.Visible"/>; every document's text is cleaned the same
+    /// way when it is read, a PDF's too).
     /// </summary>
-    public static string Clean(string? text)
-    {
-        if (string.IsNullOrEmpty(text))
-        {
-            return string.Empty;
-        }
-
-        var builder = new StringBuilder(text.Length);
-        foreach (var rune in text.EnumerateRunes())
-        {
-            if (Rune.GetUnicodeCategory(rune) == UnicodeCategory.Format && rune.Value is not (0x200C or 0x200D))
-            {
-                continue;
-            }
-
-            builder.Append(rune.ToString());
-        }
-
-        return builder.ToString();
-    }
+    public static string Clean(string? text) => Text.TextClean.Visible(text);
 
     /// <summary>
     /// The key one page's addresses share: the host without "www." and "m." in lower case, the path without a trailing slash, and the query

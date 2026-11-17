@@ -75,7 +75,7 @@ API kullanımı sohbet aboneliklerinden (Claude Pro, ChatGPT Plus…) ayrı ücr
 2. Panelden API anahtarını kopyala.
 3. **Ayarlar → Araştırma**'ya yapıştır (Anahtarlar'a değil) ve **Anahtarı kaydet**'e bas.
 4. Yalnızca Konseptler sayfasındaki "Araştırmadan" kullanır; yalnızca Tavily'nin kendi adresine gönderilir ve günlüğe asla yazılmaz.
-   Denenmeden kaydedilir: bir deneme kullanım hakkını harcardı. Bulunan sayfaları uygulama kendisi alır.
+   Denenmeden kaydedilir: bir deneme kullanım hakkını harcardı. Bulunan sayfaları uygulama kendisi alır, sitenin robots.txt'si izin veriyorsa.
 
 ## Özel sunucu (OpenAI uyumlu)
 

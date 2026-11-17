@@ -71,13 +71,18 @@ needed) and narrates it with a **free local voice**. It runs on Windows and Linu
   points at (Greek for Byzantium, Persian for the Safavids, Turkish for the Ottomans; at most four in all). Only the profile's language
   and English are searched; the other languages are reached through the found articles' language links, so the same entity is read in
   its own Greek article. One entity in many languages is one source group (by its Wikidata item). **Search** only lists the pages it
-  would fetch, ticked by the plan (your own addresses first, about a third in the other languages); nothing is fetched and no model is
-  called. The button then fetches the ticked pages (at most 12, 4 MB and two minutes in all; cancellable; each step in the activity
+  would fetch, ticked by the plan (your own addresses first, about a third of the rest in the other languages; with only one or two
+  *Pages* the profile's language and English come first); nothing is fetched and no model is called. Change the subject, the addresses
+  or the languages afterwards and the button asks for a new search; tick more pages than *Pages* and it asks you to untick some or raise
+  the number. The button then fetches the ticked pages (at most 12, 4 MB and two minutes in all; cancellable; each step in the activity
   panel) through the same guarded fetching as **My documents**, saves them there (passages, meaning search) and writes the concepts from
   them alone, in the video's language, naming the pages they used (*Sources*). Text on a fetched page is data: invisible characters that
-  hide or reorder text are removed, and the page sits inside the prompt's data block, so it cannot give the model orders. Untick **Keep
-  in My documents** to send the pages a run added to the recycle bin afterwards. The model may be online or local: the passages are
-  fitted into its context like any document's.
+  hide or reorder text are removed (from every document, PDFs too), and the page sits inside the prompt's data block, so it cannot give
+  the model orders. A page that Tavily or an MCP server found is fetched only when the site's robots.txt allows it; an address you typed
+  is fetched as you asked. The fetching is kind to the free services: one request at a time per site, a "please wait" answer is honoured
+  once, and every request names the app and its project page (as Wikimedia asks), nothing about you. Untick **Keep in My documents** to
+  send the pages a run added to the recycle bin afterwards, also when the run is canceled or fails midway. The model may be online or
+  local: the passages are fitted into its context like any document's.
 - **Concept to video.** Approved concepts on the left (a click opens one under the list, where it can be edited by hand or with AI),
   **Add to queue**, then **Produce in order**. The models (code with its engine, images, voice) are one folded line on top, next to the
   **template** (empty on a new install: nothing is produced until a code model and a template are chosen). While a video
@@ -375,7 +380,10 @@ Then choose the models on the pages that use them (see above). Nothing paid is c
   the argument each one takes, and save. Before a server is first started or reached the app shows a warning: an MCP server is someone
   else's program or service; it runs with your rights and sees your search words. The app calls only the two tools you chose (a tool the
   server does not list is refused), treats their answers like any web page, and starts a program without the app's environment, so keys
-  in environment variables do not reach it. DeepWiki and Context7 document code, not history: they are of no use here.
+  in environment variables do not reach it. A server program is tied to the app and ends with it, even when the app is closed during a
+  search. An address on this computer or the local network in a search answer is never offered and never sent to the fetch tool. A
+  server that answers in the wrong shape only fails its own line; the other sources go on. DeepWiki and Context7 document code, not
+  history: they are of no use here.
 
 ## Make your first video
 

@@ -17,11 +17,20 @@ public sealed class ResearchBackendTests
     private const string WikipediaSearch = """
         {"batchcomplete":true,"query":{"pages":[
           {"pageid":2,"ns":0,"title":"Varang Muhafızları","index":2,"description":"Bizans imparatorlarının muhafız birliği",
-           "pageprops":{"wikibase_item":"Q838185"},"fullurl":"https://tr.wikipedia.org/wiki/Varang_Muhaf%C4%B1zlar%C4%B1",
-           "langlinks":[{"lang":"el","title":"Βαράγγειος Φρουρά"},{"lang":"en","title":"Varangian Guard"},{"lang":"bad code!","title":"x"}]},
+           "pageprops":{"wikibase_item":"Q838185"},"fullurl":"https://tr.wikipedia.org/wiki/Varang_Muhaf%C4%B1zlar%C4%B1"},
           {"pageid":1,"ns":0,"title":"Bizans İmparatorluğu","index":1,"pageprops":{"wikibase_item":"Q12544"},
            "fullurl":"https://tr.wikipedia.org/wiki/Bizans_%C4%B0mparatorlu%C4%9Fu"},
           {"ns":0,"title":"Yok","missing":true}]}}
+        """;
+
+    private const string GreekLinks = """
+        {"batchcomplete":true,"query":{"pages":[
+          {"pageid":1,"ns":0,"title":"Bizans İmparatorluğu","langlinks":[{"lang":"el","title":"Βυζαντινή Αυτοκρατορία"}]},
+          {"pageid":2,"ns":0,"title":"Varang Muhafızları","langlinks":[{"lang":"el","title":"Βαράγγειος Φρουρά"},{"lang":"bad code!","title":"x"}]}]}}
+        """;
+
+    private const string PersianLinks = """
+        {"batchcomplete":true,"query":{"pages":[{"pageid":2,"ns":0,"title":"Varang Muhafızları"},{"pageid":1,"ns":0,"title":"Bizans İmparatorluğu"}]}}
         """;
 
     private const string WikidataSearch = """
@@ -42,27 +51,54 @@ public sealed class ResearchBackendTests
     private static readonly CancellationToken None = CancellationToken.None;
 
     [Fact]
-    public async Task WikipediaSearchesOnceAndGroupsTheArticleByItsWikidataItemWithItsOtherLanguages()
+    public async Task WikipediaSearchesOnceAndAsksTheOtherLanguagesLinksOneLanguageAtATime()
     {
-        var http = new FixtureHttp().Json(WikipediaSearch);
+        var http = new FixtureHttp().Json(WikipediaSearch).Json(GreekLinks).Json(PersianLinks);
         var backend = Wikipedia(http);
 
-        var hits = await backend.SearchAsync(new ResearchQuery("Varang muhafızları", "tr", 5), None);
+        var hits = await backend.SearchAsync(new ResearchQuery("Varang muhafızları", "tr", 5) { LinkLanguages = ["el", "tr", "fa"] }, None);
 
-        var request = http.Requests.ShouldHaveSingleItem();
+        http.Requests.Count.ShouldBe(3, "one search, then one small request per wanted language (not the searched one)");
+        var request = http.Requests[0];
         request.Uri.Host.ShouldBe("tr.wikipedia.org");
         request.Uri.Query.ShouldContain("generator=search");
         request.Uri.Query.ShouldContain("gsrsearch=Varang%20muhaf%C4%B1zlar%C4%B1");
-        request.Uri.Query.ShouldContain("langlinks");
+        request.Uri.Query.ShouldNotContain("langlinks", Case.Sensitive, "every language link at once is cut at 500 for the whole answer");
         request.Uri.Query.ShouldContain("wikibase_item");
+        request.Uri.Query.ShouldContain("maxlag=5");
         request.Headers["User-Agent"].ShouldStartWith("TM-Concept/");
+        request.Headers["User-Agent"].ShouldContain(SafeHttp.ProjectAddress);
+        foreach (var (links, language) in new[] { (http.Requests[1], "el"), (http.Requests[2], "fa") })
+        {
+            links.Uri.Host.ShouldBe("tr.wikipedia.org");
+            links.Uri.Query.ShouldContain("prop=langlinks");
+            links.Uri.Query.ShouldContain("lllang=" + language);
+            links.Uri.Query.ShouldContain("pageids=1%7C2");
+        }
+
         hits.Select(h => h.Title).ShouldBe(["Bizans İmparatorluğu", "Varang Muhafızları"], "Wikipedia's own order, the missing page left out");
         var guard = hits[1];
         (guard.BackendId, guard.Rank, guard.EntityKey, guard.Language).ShouldBe(("wikipedia", 1, "Q838185", "tr"));
         guard.Snippet.ShouldBe("Bizans imparatorlarının muhafız birliği");
-        guard.Alternates.Select(a => a.Language).ShouldBe(["el", "en"], "a bad language code is dropped");
+        guard.Alternates.Select(a => a.Language).ShouldBe(["el"], "a bad language code is dropped, a language without a version adds nothing");
+        hits[0].Alternates.ShouldHaveSingleItem().Title.ShouldBe("Βυζαντινή Αυτοκρατορία");
         guard.Alternates[0].Url.ShouldBe("https://el.wikipedia.org/wiki/" + Uri.EscapeDataString("Βαράγγειος_Φρουρά"));
         WikipediaFetcher.Article(guard.Alternates[0].Url, string.Empty).ShouldBe(("el", "Βαράγγειος Φρουρά"), "the Greek version is fetched by its own title");
+    }
+
+    [Fact]
+    public async Task ALanguageWhoseLinksFailKeepsTheHitsAndAPopularArticleKeepsItsLinks()
+    {
+        var many = string.Join(",", Enumerable.Range(0, 400).Select(i => "{\"lang\":\"el\",\"title\":\"x" + i + "\"}"));
+        var http = new FixtureHttp().Json(WikipediaSearch).Answer(HttpStatusCode.InternalServerError, "text/plain", "down");
+        var hits = await Wikipedia(http).SearchAsync(new ResearchQuery("Varang", "tr", 5) { LinkLanguages = ["el"] }, None);
+
+        hits.Count.ShouldBe(2, "the search's hits stay when the language links cannot be read");
+        hits.ShouldAllBe(h => h.Alternates.Count == 0);
+
+        var links = WikipediaResearchBackend.ParseLinks(System.Text.Json.JsonDocument.Parse(
+            "{\"query\":{\"pages\":[{\"pageid\":9,\"langlinks\":[" + many + "]}]},\"continue\":{\"llcontinue\":\"9|fa\"}}").RootElement);
+        links[9].Count.ShouldBe(400);
     }
 
     [Fact]
@@ -74,6 +110,7 @@ public sealed class ResearchBackendTests
         var hit = (await backend.SearchAsync(new ResearchQuery("Varangian Guard", "en", 5), None)).ShouldHaveSingleItem();
         (hit.EntityKey, hit.Url, hit.Snippet).ShouldBe(("wikidata:Q838185", "https://www.wikidata.org/wiki/Q838185", "elite unit of the Byzantine army"));
         http.Requests[0].Uri.Query.ShouldContain("action=wbsearchentities");
+        http.Requests[0].Uri.Query.ShouldContain("maxlag=5");
         http.Requests[0].Uri.Query.ShouldContain("language=en");
 
         var page = await backend.FetchAsync(hit, None);
@@ -170,6 +207,48 @@ public sealed class ResearchBackendTests
         text.ShouldContain("Visible text reversed isolated and soft.");
         text.ShouldContain("فارسی‌ها", Case.Sensitive, "the zero-width non-joiner belongs to Persian words");
     }
+
+    [Fact]
+    public async Task AFoundPageIsFetchedOnlyWhenTheSitesRobotsTxtAllowsIt()
+    {
+        const string secret = "tvly-TESTONLY-robots-00000000000";
+        var http = new FixtureHttp()
+            .Json("""{"results":[{"title":"Open","url":"https://open.example/page"},{"title":"Closed","url":"https://closed.example/private/page"},{"title":"Down","url":"https://down.example/a"}]}""")
+            .Answer(HttpStatusCode.NotFound, "text/plain", string.Empty)
+            .Answer(HttpStatusCode.OK, "text/html", "<html><head><title>Open</title></head><body><p>An open page about the guard.</p></body></html>")
+            .Answer(HttpStatusCode.OK, "text/plain", "User-agent: *\nDisallow: /private/\n\nUser-agent: OtherBot\nDisallow: /")
+            .Answer(HttpStatusCode.ServiceUnavailable, "text/plain", "busy");
+        var backend = new TavilyResearchBackend(new DocumentTransport(() => http), new MemoryKeys(secret), Web(http), NullLogger<TavilyResearchBackend>.Instance);
+        var hits = await backend.SearchAsync(new ResearchQuery("guard", "en", 5), None);
+
+        var open = await backend.FetchAsync(hits[0], None);
+        var closed = await Should.ThrowAsync<DocumentRejectedException>(() => backend.FetchAsync(hits[1], None));
+        var down = await Should.ThrowAsync<DocumentRejectedException>(() => backend.FetchAsync(hits[2], None));
+
+        Encoding.UTF8.GetString(open.Content).ShouldContain("An open page about the guard.");
+        (closed.Code, closed.Detail).ShouldBe(("robots", "closed.example"));
+        down.Code.ShouldBe("robots", "a robots.txt that cannot be reached refuses the site for now (RFC 9309)");
+        http.Requests.Skip(1).Select(r => r.Uri.ToString()).ShouldBe(
+            ["https://open.example/robots.txt", "https://open.example/page", "https://closed.example/robots.txt", "https://down.example/robots.txt"],
+            "a refused page is never asked");
+        await Should.ThrowAsync<DocumentRejectedException>(() => backend.FetchAsync(hits[1], None));
+        http.Requests.Count.ShouldBe(5, "the site's robots.txt is kept");
+    }
+
+    [Theory]
+    [InlineData("User-agent: *\nDisallow: /", "/a", false)]
+    [InlineData("User-agent: *\nDisallow: /\nAllow: /wiki/", "/wiki/Rome", true)]
+    [InlineData("User-agent: *\nDisallow: /wiki/\nAllow: /wiki", "/wiki/Rome", false)]
+    [InlineData("User-agent: *\nDisallow: /*.pdf$", "/files/a.pdf", false)]
+    [InlineData("User-agent: *\nDisallow: /*.pdf$", "/files/a.pdf?x=1", true)]
+    [InlineData("User-agent: *\nDisallow: /search", "/search?q=1", false)]
+    [InlineData("User-agent: *\nDisallow:", "/a", true)]
+    [InlineData("User-agent: *\nDisallow: /\n\nUser-agent: TM-Concept\nAllow: /", "/a", true)]
+    [InlineData("User-agent: TM-Concept\nUser-agent: other\nDisallow: /x # comment", "/x/y", false)]
+    [InlineData("# nothing for anyone\nSitemap: https://example.org/s.xml", "/a", true)]
+    [InlineData("User-agent: *\nDisallow: /*a*a*a*a*a*a*a*a*a*a*a*a*b", "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaac", true)]
+    public void RobotsTxtRulesAreReadForTheApp(string robots, string path, bool allowed) =>
+        RobotsTxt.Parse(robots).Allows(new Uri("https://example.org" + path)).ShouldBe(allowed);
 
     [Fact]
     public async Task AHitOfAnotherBackendIsRefused()
