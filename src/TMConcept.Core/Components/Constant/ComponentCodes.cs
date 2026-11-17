@@ -27,6 +27,12 @@ public static class ComponentCodes
     /// <summary>Prefix of a Python voice environment (its packages, torch included: "speech-env.xtts").</summary>
     public const string PythonEnvironmentPrefix = "speech-env.";
 
+    /// <summary>The app's own Ollama copy ("Ollama (TM Concept)": the official release package, only the graphics backend this computer needs).</summary>
+    public const string AppOllama = "ollama-app";
+
+    /// <summary>Prefix of a model of the app's own Ollama copy ("ollama-model.qwen3.5:4b-q4_K_M"; pulled through the app's own server).</summary>
+    public const string AppOllamaModelPrefix = "ollama-model.";
+
     /// <summary>Prefix of engine components ("engine.hyperframes").</summary>
     public const string EnginePrefix = "engine.";
 

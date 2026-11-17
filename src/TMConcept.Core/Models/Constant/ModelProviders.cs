@@ -12,6 +12,13 @@ public static class ModelProviders
     /// </summary>
     public const string Endpoint = "endpoint";
 
+    /// <summary>
+    /// The models of the app's own Ollama copy ("Ollama (TM Concept)", 0.1.20): pulled by the app into its own models folder, run by the app's
+    /// own server on a port of its own (never the user's Ollama on 11434). Free, no key; the model id is the Ollama tag
+    /// (<c>qwen3.5:4b-q4_K_M</c>). See <see cref="TMConcept.Core.AppOllama.AppModelRegistry"/>.
+    /// </summary>
+    public const string AppOllama = "app-ollama";
+
     /// <summary>An optional step turned off explicitly.</summary>
     public const string Off = "off";
 }

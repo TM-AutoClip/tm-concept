@@ -57,6 +57,12 @@ public enum ToolKind
     /// <summary>A file of the Ahenk Cep voice model (Turkish, ONNX graphs, run with the ONNX Runtime of the speech libraries).</summary>
     AhenkCepVoice = 15,
 
+    /// <summary>
+    /// The app's own Ollama copy (the official release package of github.com/ollama/ollama; only the graphics backend this computer needs is
+    /// kept after unpacking). Runs only as the app's own server, never as the user's Ollama.
+    /// </summary>
+    AppOllama = 16,
+
     /// <summary>A new version of the app itself (a release asset; its SHA-256 comes from the release notes). Not a component.</summary>
     AppUpdate = 100,
 }

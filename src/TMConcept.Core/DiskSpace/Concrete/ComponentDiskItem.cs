@@ -25,12 +25,13 @@ public sealed class ComponentDiskItem(IComponent component, ComponentPlanner pla
     /// <summary>The key of a component's row.</summary>
     public static string KeyOf(string code) => "component:" + code;
 
-    /// <summary>Models (voices, image models, the meaning-check model) or tools (everything else).</summary>
+    /// <summary>Models (voices, image models, the meaning-check model, the app's Ollama models) or tools (everything else).</summary>
     public static DiskArea AreaOf(string code)
     {
         ArgumentNullException.ThrowIfNull(code);
         return code.StartsWith(ComponentCodes.VoicePrefix, StringComparison.Ordinal) || code.StartsWith(ComponentCodes.ImagePrefix, StringComparison.Ordinal)
             || code.StartsWith(ComponentCodes.EmbeddingPrefix, StringComparison.Ordinal)
+            || code.StartsWith(ComponentCodes.AppOllamaModelPrefix, StringComparison.Ordinal)
             ? DiskArea.Models
             : DiskArea.Tools;
     }

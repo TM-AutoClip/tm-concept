@@ -73,6 +73,6 @@ public sealed class ModelDirectory : IModelDirectory
 
         return model.Provider == ModelProviders.Local
             ? new ProcessorModel(model)
-            : new OnlineModel(model, model.Provider != ModelProviders.Off && !EndpointCodes.IsEndpoint(model.Provider));
+            : new OnlineModel(model, StepModelResolver.NeedsKey(model.Provider) && model.Provider != ModelProviders.Off);
     }
 }

@@ -195,16 +195,19 @@ public sealed class ComponentPlanner(IEnumerable<IComponentSource> sources, ILog
         }
     }
 
-    /// <summary>Bytes on disk of a component's folders (0 when it has none or they cannot be read).</summary>
+    /// <summary>Bytes on disk of a component's folders and files (0 when it has none or they cannot be read).</summary>
     public long Size(IComponent component)
     {
         ArgumentNullException.ThrowIfNull(component);
         long total = 0;
-        foreach (var folder in component.Folders().Where(Directory.Exists))
+        foreach (var folder in component.Folders())
         {
             try
             {
-                total += new DirectoryInfo(folder).EnumerateFiles("*", SearchOption.AllDirectories).Sum(f => f.Length);
+                // A component may own single files too (an Ollama model: its manifest and blobs).
+                total += Directory.Exists(folder)
+                    ? new DirectoryInfo(folder).EnumerateFiles("*", SearchOption.AllDirectories).Sum(f => f.Length)
+                    : File.Exists(folder) ? new FileInfo(folder).Length : 0;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {

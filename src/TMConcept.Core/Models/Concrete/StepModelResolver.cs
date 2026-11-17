@@ -53,6 +53,12 @@ public sealed class StepModelResolver(IStepModelStore steps, IApiKeyStore keys, 
             return new ResolvedModel(model, new ApiKey { Provider = ModelProviders.Local, Label = ModelProviders.Local }, options.Effort);
         }
 
+        if (model.Provider == ModelProviders.AppOllama)
+        {
+            // The app's own Ollama copy: no key, no token, no effort levels; its name is the label a run keeps.
+            return new ResolvedModel(model, new ApiKey { Provider = ModelProviders.AppOllama, Label = AppOllama.AppOllamaDefaults.Name }, string.Empty);
+        }
+
         if (EndpointCodes.TryId(model.Provider, out var endpointId))
         {
             // A local server: no API key row; the synthetic key carries the endpoint's optional token (empty = no header) and its name as
@@ -151,8 +157,12 @@ public sealed class StepModelResolver(IStepModelStore steps, IApiKeyStore keys, 
         return false;
     }
 
-    /// <summary>Whether models of <paramref name="provider"/> need an API key (not the app's own local models, not a local server's).</summary>
-    public static bool NeedsKey(string provider) => provider != ModelProviders.Local && !EndpointCodes.IsEndpoint(provider);
+    /// <summary>
+    /// Whether models of <paramref name="provider"/> need an API key (not the app's own local models, not its own Ollama copy's, not a local
+    /// server's).
+    /// </summary>
+    public static bool NeedsKey(string provider) =>
+        provider != ModelProviders.Local && provider != ModelProviders.AppOllama && !EndpointCodes.IsEndpoint(provider);
 
     /// <summary>Whether a choice means "no model": none saved, an empty model, or an explicit off.</summary>
     public static bool IsOff(StepModelChoice? choice) => choice is null || choice.Provider == ModelProviders.Off || choice.Model.Length == 0;
