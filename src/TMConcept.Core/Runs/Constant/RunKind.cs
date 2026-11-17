@@ -35,4 +35,7 @@ public enum RunKind
 
     /// <summary>An AI edit of one concept on the concept page (one chat call with the concept step's model).</summary>
     ConceptEdit = 9,
+
+    /// <summary>"Find topics" in the profile's documents on the concept page (one chat call with the topics step's model, 0.1.21).</summary>
+    DocumentTopics = 10,
 }

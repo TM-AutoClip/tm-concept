@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using TMConcept.Core.Documents;
 using TMConcept.Core.Profiles;
 
 namespace TMConcept.Core.Concepts;
@@ -19,6 +20,10 @@ namespace TMConcept.Core.Concepts;
 /// with the guillemets themselves removed from it, so it cannot close the block (<see cref="PromptText"/>). A line whose value is empty is
 /// left out (no images, no history, no extra request). No placeholder ([pause 1 s], [soft transition]…) goes to the concept model: they are
 /// put into a concept's text afterwards and applied by the program itself. The prompts are not shown to the user and cannot be edited.
+/// A documents run (0.1.21, a <see cref="ConceptPromptInput.Grounding"/>) uses its own prompt (concepts-documents.txt): only the passages'
+/// facts, the documents named in "kaynaklar", the concepts in the video's language whatever the documents' language; its passages are in
+/// the changing part, so the cached part stays the same for the whole run. Its version is the file's <c>@version</c> line
+/// (<see cref="DocumentPromptVersion"/>).
 /// </summary>
 public static partial class ConceptPromptBuilder
 {
@@ -28,7 +33,8 @@ public static partial class ConceptPromptBuilder
     public static ConceptPrompt Build(ConceptPromptInput input)
     {
         ArgumentNullException.ThrowIfNull(input);
-        var (words, template) = Template(OutputLanguages.Of(input.Profile.ContentLanguage).PromptLanguage, "concepts");
+        var (words, template) = Template(OutputLanguages.Of(input.Profile.ContentLanguage).PromptLanguage,
+            input.Grounding is null ? "concepts" : "concepts-documents");
         var values = Channel(input.Profile, input.Images, words);
         Memory(values, input.Memory);
         values["wishes"] = input.Memory.Wishes;
@@ -42,8 +48,57 @@ public static partial class ConceptPromptBuilder
             ? null
             : string.Concat(topics.Select((t, i) => string.Create(CultureInfo.InvariantCulture, $"\n{i + 1}. «{PromptText.Line(t, TopicLimits.TopicMax)}»")));
         values["count"] = input.Count.ToString(CultureInfo.InvariantCulture);
+        if (input.Grounding is { } grounding)
+        {
+            values["documents"] = DocumentLines(grounding);
+            values["sources"] = PassageLines(grounding);
+            return Make(template, values, DocumentSchema());
+        }
+
         return Make(template, values, Schema());
     }
+
+    /// <summary>
+    /// Builds the "Find topics" prompt of the documents section (Prompts/&lt;interface lang&gt;/topics-documents.txt): the channel content and
+    /// format, the profile's covered concepts, the optional subject, the documents and the passages picked for the call; the answer is
+    /// <see cref="DocumentTopicSchema"/>, topics in the interface language, each with the numbers of its documents.
+    /// </summary>
+    public static ConceptPrompt BuildDocumentTopics(DocumentTopicPromptInput input)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        var code = input.Language == ContentLanguages.Turkish ? ContentLanguages.Turkish : ContentLanguages.English;
+        var (words, template) = Template(code, "topics-documents");
+        var values = new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["concept"] = PromptText.Data(input.Profile.ConceptText, ProfileLimits.ConceptTextMax),
+            ["format"] = input.Profile.Format == VideoFormat.Vertical ? words["vertical"] : words["horizontal"],
+            ["seconds"] = input.Profile.TargetSeconds.ToString(CultureInfo.InvariantCulture),
+            ["subject"] = string.IsNullOrWhiteSpace(input.Subject) ? null : PromptText.Data(input.Subject, ConceptLimits.ExtraPromptMax),
+            ["documents"] = DocumentLines(input.Grounding),
+            ["sources"] = PassageLines(input.Grounding),
+            ["count"] = input.Count.ToString(CultureInfo.InvariantCulture),
+        };
+        Memory(values, input.Memory);
+        return Make(template, values, DocumentTopicSchema());
+    }
+
+    /// <summary>
+    /// The version of the documents prompts (the <c>@version</c> line of concepts-documents.txt; both languages carry the same one, a test
+    /// holds them together). It goes into the log of every documents run.
+    /// </summary>
+    public static string DocumentPromptVersion(string language) =>
+        Template(language == ContentLanguages.Turkish ? ContentLanguages.Turkish : ContentLanguages.English, "concepts-documents").Words.GetValueOrDefault("version", "?");
+
+    /// <summary>The documents of a grounded prompt, one per line ("1: «title»"); none = null (the line is left out).</summary>
+    private static string? DocumentLines(DocumentGrounding grounding) => grounding.Documents.Count == 0
+        ? null
+        : string.Concat(grounding.Documents.Select(d => string.Create(CultureInfo.InvariantCulture, $"\n{d.Number}: «{PromptText.Line(d.Title, DocumentLimits.TitleMax)}»")));
+
+    /// <summary>The passages of a grounded prompt ("[2] p. 12: «text»"), each guarded as user data; none = null.</summary>
+    private static string? PassageLines(DocumentGrounding grounding) => grounding.Passages.Count == 0
+        ? null
+        : string.Concat(grounding.Passages.Select(p => string.Create(CultureInfo.InvariantCulture,
+            $"\n[{p.Document}]{(p.Locator.Length > 0 ? " " + PromptText.Line(p.Locator, DocumentLimits.TitleMax) : string.Empty)}: «{PromptText.Data(p.Text, DocumentLimits.ChunkMaxCharacters * 2)}»")));
 
     /// <summary>
     /// Builds the prompt of an AI edit of one concept (Prompts/&lt;lang&gt;/concept-edit.txt): the same channel part, rules and answer format
@@ -157,6 +212,57 @@ public static partial class ConceptPromptBuilder
             ["additionalProperties"] = false,
         };
     }
+
+    /// <summary>The answer schema of a documents run: <see cref="Schema"/> with "kaynaklar", the numbers of the documents each concept uses.</summary>
+    public static JsonObject DocumentSchema()
+    {
+        var item = new JsonObject
+        {
+            ["type"] = "object",
+            ["properties"] = new JsonObject
+            {
+                ["baslik"] = new JsonObject { ["type"] = "string" },
+                ["ozet"] = new JsonObject { ["type"] = "string" },
+                ["icerik"] = new JsonObject { ["type"] = "string" },
+                ["kaynaklar"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "integer" } },
+            },
+            ["required"] = new JsonArray("baslik", "ozet", "icerik", "kaynaklar"),
+            ["additionalProperties"] = false,
+        };
+        return new JsonObject
+        {
+            ["type"] = "object",
+            ["properties"] = new JsonObject { ["konseptler"] = new JsonObject { ["type"] = "array", ["items"] = item } },
+            ["required"] = new JsonArray("konseptler"),
+            ["additionalProperties"] = false,
+        };
+    }
+
+    /// <summary>The answer schema of "Find topics" in documents: <c>{"topics": [{"topic": "…", "documents": [1]}]}</c>.</summary>
+    public static JsonObject DocumentTopicSchema() => new()
+    {
+        ["type"] = "object",
+        ["properties"] = new JsonObject
+        {
+            ["topics"] = new JsonObject
+            {
+                ["type"] = "array",
+                ["items"] = new JsonObject
+                {
+                    ["type"] = "object",
+                    ["properties"] = new JsonObject
+                    {
+                        ["topic"] = new JsonObject { ["type"] = "string" },
+                        ["documents"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "integer" } },
+                    },
+                    ["required"] = new JsonArray("topic", "documents"),
+                    ["additionalProperties"] = false,
+                },
+            },
+        },
+        ["required"] = new JsonArray("topics"),
+        ["additionalProperties"] = false,
+    };
 
     /// <summary>
     /// The answer schema of the topic suggestions: <c>{"scope": "…", "topics": ["…"]}</c>. The scope comes first and is required: writing

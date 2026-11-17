@@ -1,3 +1,5 @@
+using TMConcept.Core.Text;
+
 namespace TMConcept.Speech.Embeddings;
 
 /// <summary>

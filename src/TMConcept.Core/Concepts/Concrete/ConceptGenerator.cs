@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using TMConcept.Core.Chat;
 using TMConcept.Core.Costs;
+using TMConcept.Core.Documents;
 using TMConcept.Core.Duplicates;
 using TMConcept.Core.Profiles;
 using TMConcept.Core.Providers;
@@ -24,9 +25,21 @@ namespace TMConcept.Core.Concepts;
 /// idea as the extra request, never topics. Every batch reports the topics that got a concept (<see cref="ConceptBatch.TopicsMade"/>).
 /// </summary>
 public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profiles, IRunStore runs, IChatClientFactory chats, ICostCalculator costs,
-    IPromptMemorySource memory, IEmbeddingStore embeddings, IEmbeddingService embedder, TimeProvider clock, ILogger<ConceptGenerator> logger)
+    IPromptMemorySource memory, IEmbeddingStore embeddings, IEmbeddingService embedder, IEnumerable<IConceptSource> sources, TimeProvider clock,
+    ILogger<ConceptGenerator> logger)
 {
     private readonly List<ConceptEmbedding> _pendingEmbeddings = [];
+    private readonly IReadOnlyList<IConceptSource> _sources = [.. sources];
+
+    /// <summary>
+    /// The source that handles <paramref name="brief"/> (0.1.21: "Konu öner", "Fikirden", "Belgelerden"; the page's choice is the brief, the
+    /// generator only asks which registered source takes it). None is a programming error.
+    /// </summary>
+    public IConceptSource SourceOf(ConceptBrief brief)
+    {
+        ArgumentNullException.ThrowIfNull(brief);
+        return _sources.FirstOrDefault(s => s.Handles(brief)) ?? throw new InvalidOperationException($"No concept source takes a {brief.GetType().Name}.");
+    }
 
     /// <summary>Band around a measured per-concept output (it already contains the thinking tokens).</summary>
     public static readonly (double Low, double High) MeasuredBand = (0.85, 1.15);
@@ -42,6 +55,7 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
         ArgumentNullException.ThrowIfNull(brief);
         ArgumentNullException.ThrowIfNull(model);
         var count = brief.Count;
+        var source = SourceOf(brief);
         var images = await profiles.ImagesAsync(profile.Id, cancellationToken).ConfigureAwait(false);
         var past = await memory.ReadAsync(profile, cancellationToken).ConfigureAwait(false);
         var (perConcept, band) = await OutputPerConceptAsync(profile, model, effort, cancellationToken).ConfigureAwait(false);
@@ -49,15 +63,17 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
         var total = CostEstimate.Zero;
         var first = true;
         var offset = 0;
-        foreach (var size in Batches(count, ConceptOutputBudget.BatchSize(roof, perConcept * band.High)))
+        var high = perConcept * band.High;
+        foreach (var size in Batches(count, source.BatchSize(brief, model, ConceptOutputBudget.BatchSize(roof, high), high)))
         {
-            var prompt = ConceptPromptBuilder.Build(new ConceptPromptInput(profile, images, past, brief.ExtraPrompt, size, focus, brief.Topics(offset, size)));
+            var (prompt, _, batchRoof) = await BatchPromptAsync(source, new ConceptPromptInput(profile, images, past, brief.ExtraPrompt, size, focus,
+                brief.Topics(offset, size), brief.Grounded ? DocumentGrounding.Empty : null), brief, model, offset, high, true, cancellationToken).ConfigureAwait(false);
             offset += size;
             var system = costs.Tokens(prompt.System, profile.ContentLanguage);
             var user = costs.Tokens(prompt.User, profile.ContentLanguage);
             var output = size * perConcept;
-            total = total.Plus(costs.EstimateChat(model, system + user, first ? 0 : system, (long)Math.Min(output * band.Low, roof),
-                (long)Math.Min(output * band.High, roof)));
+            total = total.Plus(costs.EstimateChat(model, system + user, first ? 0 : system, (long)Math.Min(output * band.Low, batchRoof),
+                (long)Math.Min(output * band.High, batchRoof)));
             first = false;
         }
 
@@ -102,6 +118,16 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
         return ConceptOutputBudget.BatchSize(ConceptOutputBudget.MaxOutputTokens(model), perConcept * band.High);
     }
 
+    /// <summary>Concepts per batch of <paramref name="brief"/>: what the answer limit allows, lowered by the brief's source when it needs to.</summary>
+    public async Task<int> BatchSizeAsync(Profile profile, ConceptBrief brief, Models.CatalogModel model, string effort, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(brief);
+        ArgumentNullException.ThrowIfNull(model);
+        var fitting = await BatchSizeAsync(profile, model, effort, cancellationToken).ConfigureAwait(false);
+        var (perConcept, band) = await OutputPerConceptAsync(profile, model, effort, cancellationToken).ConfigureAwait(false);
+        return SourceOf(brief).BatchSize(brief, model, fitting, perConcept * band.High);
+    }
+
     /// <summary>Tokens of one concept's title and summary in English (other languages: <see cref="Profiles.OutputLanguage.EmbeddingTokenFactor"/>; Turkish about twice).</summary>
     public const int EmbeddingTokensPerConcept = 80;
 
@@ -116,6 +142,7 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
         var profile = request.Profile;
         var brief = request.Brief;
         var count = brief.Count;
+        var source = SourceOf(brief);
         var estimate = await EstimateAsync(profile, brief, request.Focus, request.Model.Model, request.Model.Effort, cancellationToken).ConfigureAwait(false);
         var run = new Run
         {
@@ -132,15 +159,16 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
             StartedAtUtc = clock.GetUtcNow(),
         };
         await runs.AddAsync(run, CancellationToken.None).ConfigureAwait(false);
-        logger.LogInformation("Concept run {Run}: {Count} concepts with {Provider}/{Model}{Topics}", run.Id, count, run.Provider, run.Model,
-            brief is TopicBrief ? ", one per ticked topic" : string.Empty);
+        logger.LogInformation("Concept run {Run}: {Count} concepts with {Provider}/{Model} from the {Source} source{Topics}", run.Id, count, run.Provider,
+            run.Model, source.Kind, brief.Topics(0, count) is { Count: > 0 } ? ", one per topic" : string.Empty);
 
         var images = await profiles.ImagesAsync(profile.Id, cancellationToken).ConfigureAwait(false);
         var client = chats.Create(request.Model.Model, request.Model.Key.Secret);
         var accepted = new List<Concept>();
         var rejected = 0;
         var problems = 0;
-        var sizes = Batches(count, await BatchSizeAsync(profile, request.Model.Model, request.Model.Effort, cancellationToken).ConfigureAwait(false)).ToList();
+        var sizes = Batches(count, await BatchSizeAsync(profile, brief, request.Model.Model, request.Model.Effort, cancellationToken).ConfigureAwait(false)).ToList();
+        var (outputPerConcept, outputBand) = await OutputPerConceptAsync(profile, request.Model.Model, request.Model.Effort, cancellationToken).ConfigureAwait(false);
         var errorCode = string.Empty;
         var errorDetail = string.Empty;
         var semanticSkipped = 0;
@@ -155,9 +183,16 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
                 cancellationToken.ThrowIfCancellationRequested();
                 var subjects = await concepts.HistoryAsync(profile.Id, cancellationToken).ConfigureAwait(false);
                 var past = await memory.ReadAsync(profile, cancellationToken).ConfigureAwait(false);
-                var slice = brief.Topics(topicsDone, sizes[index]);
-                var prompt = ConceptPromptBuilder.Build(new ConceptPromptInput(profile, images, past, brief.ExtraPrompt, sizes[index], request.Focus, slice));
-                var maxTokens = ConceptOutputBudget.MaxOutputTokens(request.Model.Model);
+                var (prompt, sourceBatch, maxTokens) = await BatchPromptAsync(source, new ConceptPromptInput(profile, images, past, brief.ExtraPrompt, sizes[index],
+                    request.Focus, brief.Topics(topicsDone, sizes[index]), brief.Grounded ? DocumentGrounding.Empty : null), brief, request.Model.Model, topicsDone,
+                    outputPerConcept * outputBand.High, false, cancellationToken).ConfigureAwait(false);
+                var slice = sourceBatch.Topics;
+                if (sourceBatch.Grounding is { } grounding)
+                {
+                    logger.LogInformation("Concept run {Run}: batch {Batch} is grounded in {Passages} passages of {Documents} documents", run.Id, index + 1,
+                        grounding.Passages.Count, grounding.Documents.Count);
+                }
+
                 logger.LogInformation("Concept run {Run}: batch {Batch}/{Batches} of {Size} concepts with {Topics} topics, max_tokens {MaxTokens}, effort {Effort}, {Seconds} s {Language}",
                     run.Id, index + 1, sizes.Count, sizes[index], slice?.Count ?? 0, maxTokens, request.Model.Effort.Length > 0 ? request.Model.Effort : "automatic",
                     profile.TargetSeconds, profile.ContentLanguage);
@@ -240,6 +275,12 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
                         continue;
                     }
 
+                    var cited = sourceBatch.Grounding is { } used ? used.Titles(candidate.Parsed.Sources) : [];
+                    if (sourceBatch.Grounding is not null && cited.Count == 0)
+                    {
+                        logger.LogWarning("Concept run {Run}: a concept named none of the documents it was given", run.Id);
+                    }
+
                     batch.Add(new Concept
                     {
                         Id = candidate.Subject.Id,
@@ -252,6 +293,7 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
                         SimilarToId = verdict.Result.Kind == DuplicateKind.Similar ? verdict.Result.OtherId : null,
                         Similarity = verdict.Result.Kind == DuplicateKind.Similar ? verdict.Result.Similarity : null,
                         DuplicateNote = verdict.Result.Code,
+                        Sources = string.Join("; ", cited),
                         CreatedAtUtc = clock.GetUtcNow(),
                     });
                 }
@@ -305,6 +347,24 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
         }
 
         return new ConceptRunResult(run, accepted, rejected, problems, errorCode, errorDetail, semanticSkipped);
+    }
+
+    /// <summary>
+    /// One batch's prompt: <paramref name="input"/> as the brief alone would send it is measured, the brief's source fills the batch (its
+    /// extra request, topics and, for documents, the passages that fit next to that prompt and the batch's output), and the prompt is built
+    /// again with what the source gave. Returns the prompt, the source's batch and the batch's answer limit.
+    /// </summary>
+    private async Task<(ConceptPrompt Prompt, ConceptSourceBatch Batch, int MaxOutput)> BatchPromptAsync(IConceptSource source, ConceptPromptInput input,
+        ConceptBrief brief, Models.CatalogModel model, int offset, double perConceptHigh, bool estimate, CancellationToken cancellationToken)
+    {
+        var bare = ConceptPromptBuilder.Build(input);
+        var language = input.Profile.ContentLanguage;
+        var roof = ConceptOutputBudget.MaxOutputTokens(model);
+        var request = new ConceptSourceRequest(input.Profile, brief, model, offset, input.Count, costs.Tokens(bare.System, language) + costs.Tokens(bare.User, language),
+            (long)Math.Ceiling(input.Count * perConceptHigh), roof, estimate);
+        var batch = await source.PrepareAsync(request, cancellationToken).ConfigureAwait(false);
+        var prompt = ConceptPromptBuilder.Build(input with { ExtraPrompt = batch.ExtraPrompt, Topics = batch.Topics, Grounding = batch.Grounding ?? input.Grounding });
+        return (prompt, batch, batch.MaxOutputTokens is { } lower ? Math.Min(lower, roof) : roof);
     }
 
     /// <summary>Batch sizes of a count at the largest batch (20, 20, …, rest).</summary>

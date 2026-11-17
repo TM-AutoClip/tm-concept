@@ -1,4 +1,5 @@
 using TMConcept.Core.Components;
+using TMConcept.Core.Documents;
 using TMConcept.Core.Models;
 using TMConcept.Core.Pipeline;
 using TMConcept.Core.Profiles;
@@ -10,9 +11,11 @@ namespace TMConcept.Core.DiskSpace;
 /// engine of the video code step (kept in its options, also before a code model is picked), plus the app's own needs
 /// (<see cref="FixedNeeds"/>), closed over <see cref="IComponent.DependsOn"/> (an image model brings stable-diffusion.cpp, a Python voice its
 /// environment, Python and uv) and <see cref="IComponentUses.Uses"/> (HyperFrames and Revideo bring the shared browser). A step that is off
-/// needs nothing.
+/// needs nothing. A profile with documents (0.1.21) needs the documents' meaning model (<paramref name="documentEmbedder"/>), so "Clean up
+/// unused" does not take it while documents use it.
 /// </summary>
-public sealed class ComponentUsage(IProfileStore profiles, IStepModelStore steps, IModelCatalog catalog, ComponentPlanner planner) : IComponentUsage
+public sealed class ComponentUsage(IProfileStore profiles, IStepModelStore steps, IModelCatalog catalog, ComponentPlanner planner,
+    IDocumentStore? documents = null, IDocumentEmbedder? documentEmbedder = null) : IComponentUsage
 {
     /// <summary>What the app itself needs whatever is chosen: ffmpeg (voice samples, the final video, playback).</summary>
     public static readonly IReadOnlyList<string> FixedNeeds = [ComponentCodes.Ffmpeg];
@@ -26,8 +29,16 @@ public sealed class ComponentUsage(IProfileStore profiles, IStepModelStore steps
             Add(direct, code, new DiskUse(string.Empty, string.Empty));
         }
 
+        HashSet<Guid> withDocuments = documents is null || documentEmbedder is null
+            ? []
+            : (await documents.ListAllAsync(cancellationToken).ConfigureAwait(false)).Select(d => d.ProfileId).ToHashSet();
         foreach (var profile in await profiles.ListAsync(cancellationToken).ConfigureAwait(false))
         {
+            if (withDocuments.Contains(profile.Id))
+            {
+                Add(direct, documentEmbedder!.ComponentCode, new DiskUse(profile.Name, "documents"));
+            }
+
             foreach (var choice in await steps.ListAsync(profile.Id, cancellationToken).ConfigureAwait(false))
             {
                 foreach (var code in CodesOf(choice))

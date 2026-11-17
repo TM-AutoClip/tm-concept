@@ -16,4 +16,10 @@ public abstract record ConceptBrief
 
     /// <summary>The topics of the batch of <paramref name="size"/> concepts at <paramref name="offset"/>; null = the prompt has no TOPICS block.</summary>
     public abstract IReadOnlyList<string>? Topics(int offset, int size);
+
+    /// <summary>
+    /// Whether the concepts are grounded in the profile's documents (0.1.21, "Belgelerden"): the prompt then holds the passages its source
+    /// picks and the rules to use only their facts and to name the documents.
+    /// </summary>
+    public virtual bool Grounded => false;
 }

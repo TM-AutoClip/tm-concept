@@ -142,7 +142,7 @@ public sealed class LocalModelTests
 
         tokenizer.Encode("walls").ShouldBe([0, 4, 7, 2]);
         tokenizer.Encode("walls  ✓").ShouldBe([0, 4, 7, 8, 3, 2], "an unknown character becomes one unknown piece");
-        tokenizer.Encode(string.Join(' ', Enumerable.Repeat("walls", 200))).Length.ShouldBe(UnigramTokenizer.MaxTokens);
+        tokenizer.Encode(string.Join(' ', Enumerable.Repeat("walls", 200))).Length.ShouldBe(UnigramTokenizer.DefaultMaxTokens);
     }
 
     [Fact]

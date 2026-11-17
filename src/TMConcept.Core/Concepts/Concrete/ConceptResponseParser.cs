@@ -15,6 +15,7 @@ public static class ConceptResponseParser
     private static readonly string[] TitleKeys = ["baslik", "title"];
     private static readonly string[] SummaryKeys = ["ozet", "summary"];
     private static readonly string[] ContentKeys = ["icerik", "content"];
+    private static readonly string[] SourceKeys = ["kaynaklar", "sources"];
 
     /// <summary>Parses.</summary>
     public static ConceptParseResult Parse(string? answer)
@@ -46,7 +47,7 @@ public static class ConceptResponseParser
                     continue;
                 }
 
-                concepts.Add(new ParsedConcept(title, summary, content));
+                concepts.Add(new ParsedConcept(title, summary, content) { Sources = Numbers(root, SourceKeys) });
             }
             catch (JsonException ex)
             {
@@ -107,6 +108,34 @@ public static class ConceptResponseParser
         }
 
         return null;
+    }
+
+    /// <summary>The whole numbers of the first of <paramref name="keys"/> that is a list (other items skipped); none = empty.</summary>
+    private static List<int> Numbers(JsonElement root, string[] keys)
+    {
+        var numbers = new List<int>();
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            return numbers;
+        }
+
+        foreach (var key in keys)
+        {
+            if (root.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in value.EnumerateArray())
+                {
+                    if (item.ValueKind == JsonValueKind.Number && item.TryGetInt32(out var number) && !numbers.Contains(number))
+                    {
+                        numbers.Add(number);
+                    }
+                }
+
+                break;
+            }
+        }
+
+        return numbers;
     }
 
     /// <summary>Index of the '[' that opens the concept list (after the list key; or the first '[' of a bare array).</summary>

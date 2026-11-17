@@ -39,6 +39,9 @@ public sealed class Concept
     /// <summary>Short note of the duplicate check ("similar to #212 (71 %)").</summary>
     public string DuplicateNote { get; set; } = string.Empty;
 
+    /// <summary>The documents a concept made from documents is based on, by title ("Byzantine trade; The Nika riots"); empty otherwise.</summary>
+    public string Sources { get; set; } = string.Empty;
+
     /// <summary>Created (UTC).</summary>
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
 

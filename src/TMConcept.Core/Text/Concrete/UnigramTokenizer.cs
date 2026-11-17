@@ -1,24 +1,26 @@
 using System.Text;
 using System.Text.Json;
 
-namespace TMConcept.Speech.Embeddings;
+namespace TMConcept.Core.Text;
 
 /// <summary>
 /// The SentencePiece unigram tokenizer of an XLM-RoBERTa vocabulary, read from a Hugging Face <c>tokenizer.json</c>: text normalized with
 /// NFKC (close to the model's precompiled character map), split at white space, each word with "▁" in front, then the most likely split into
 /// vocabulary pieces (Viterbi over the piece scores; an unknown character becomes the unknown piece). Wrapped in &lt;s&gt; … &lt;/s&gt; and cut
-/// to <see cref="MaxTokens"/>, like the model was trained.
+/// to <see cref="MaxTokens"/>, like the model was trained (128 for the duplicate check's MiniLM, 512 for the documents' e5 model; both use
+/// the same XLM-RoBERTa vocabulary). Shared by the speech worker and the documents (0.1.21: moved here from the speech project).
 /// </summary>
-internal sealed class UnigramTokenizer
+public sealed class UnigramTokenizer
 {
     private const string Space = "▁";
     private readonly Dictionary<string, (int Id, double Score)> _pieces;
     private readonly int _longest;
     private readonly double _unknownScore;
 
-    private UnigramTokenizer(Dictionary<string, (int Id, double Score)> pieces, int unknown, int start, int end)
+    private UnigramTokenizer(Dictionary<string, (int Id, double Score)> pieces, int unknown, int start, int end, int maxTokens)
     {
         _pieces = pieces;
+        MaxTokens = maxTokens;
         Unknown = unknown;
         Start = start;
         End = end;
@@ -26,8 +28,11 @@ internal sealed class UnigramTokenizer
         _unknownScore = pieces.Values.Min(v => v.Score) - 10;
     }
 
+    /// <summary>The default of <see cref="MaxTokens"/> (the duplicate check's model).</summary>
+    public const int DefaultMaxTokens = 128;
+
     /// <summary>Most tokens per text (the model's maximum sequence length).</summary>
-    public const int MaxTokens = 128;
+    public int MaxTokens { get; }
 
     /// <summary>Id of the unknown piece.</summary>
     public int Unknown { get; }
@@ -38,9 +43,10 @@ internal sealed class UnigramTokenizer
     /// <summary>Id of &lt;/s&gt;.</summary>
     public int End { get; }
 
-    /// <summary>Reads a <c>tokenizer.json</c> with a unigram model.</summary>
-    public static UnigramTokenizer Load(string file)
+    /// <summary>Reads a <c>tokenizer.json</c> with a unigram model; texts are cut to <paramref name="maxTokens"/> tokens.</summary>
+    public static UnigramTokenizer Load(string file, int maxTokens = DefaultMaxTokens)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxTokens, 3);
         using var document = JsonDocument.Parse(File.ReadAllBytes(file));
         var model = document.RootElement.GetProperty("model");
         if (model.GetProperty("type").GetString() != "Unigram")
@@ -58,7 +64,7 @@ internal sealed class UnigramTokenizer
 
         var unknown = model.TryGetProperty("unk_id", out var u) && u.ValueKind == JsonValueKind.Number ? u.GetInt32() : 3;
         int Special(string token) => pieces.TryGetValue(token, out var value) ? value.Item1 : throw new InvalidDataException("The tokenizer has no " + token + ".");
-        return new UnigramTokenizer(pieces, unknown, Special("<s>"), Special("</s>"));
+        return new UnigramTokenizer(pieces, unknown, Special("<s>"), Special("</s>"), maxTokens);
     }
 
     /// <summary>The ids of <paramref name="text"/> with &lt;s&gt; and &lt;/s&gt;.</summary>
