@@ -1,0 +1,77 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:TMConcept.Desktop.ViewModels"
+             xmlns:views="using:TMConcept.Desktop.Views"
+             x:Class="TMConcept.Desktop.Views.ResearchSettingsView"
+             x:DataType="vm:ResearchSettingsViewModel">
+  <!-- Settings → Research: the backends of "From research" (Wikipedia and Wikidata without a key, Tavily with the user's own key) and,
+       folded under "Advanced", the user's MCP servers with the warning that a third-party server runs with the user's rights. -->
+  <ScrollViewer>
+    <StackPanel Spacing="10" Margin="0,12" MaxWidth="820" HorizontalAlignment="Left">
+      <StackPanel Orientation="Horizontal">
+        <TextBlock Text="{DynamicResource research.settings.title}" Classes="h2" VerticalAlignment="Center" />
+        <views:HelpTip Text="{DynamicResource research.settings.tip}" />
+      </StackPanel>
+      <TextBlock Text="{DynamicResource research.settings.explain}" Classes="muted" TextWrapping="Wrap" />
+      <CheckBox Name="WikipediaBox" IsChecked="{Binding Wikipedia}" Content="{DynamicResource research.backend.wikipedia}" />
+      <CheckBox Name="WikidataBox" IsChecked="{Binding Wikidata}" Content="{DynamicResource research.backend.wikidata}" />
+
+      <TextBlock Text="{DynamicResource research.tavily.title}" Classes="h2" Margin="0,8,0,0" />
+      <TextBlock Text="{DynamicResource research.tavily.explain}" Classes="muted" TextWrapping="Wrap" />
+      <CheckBox Name="TavilyBox" IsChecked="{Binding Tavily}" Content="{DynamicResource research.backend.tavily}" />
+      <TextBlock Text="{DynamicResource research.tavily.has_key}" Classes="small ok" IsVisible="{Binding HasTavilyKey}" />
+      <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+        <TextBox Name="TavilyKeyBox" Classes="secret" Text="{Binding TavilyKey}" PlaceholderText="{DynamicResource research.tavily.key}" />
+        <Button Grid.Column="1" Classes="accent" Content="{DynamicResource research.tavily.save}" Command="{Binding SaveTavilyKeyCommand}" />
+        <Button Grid.Column="2" Classes="danger" Content="{DynamicResource research.tavily.delete}" Command="{Binding DeleteTavilyKeyCommand}"
+                IsVisible="{Binding HasTavilyKey}" />
+      </Grid>
+      <TextBlock Text="{Binding Status}" Classes="muted" TextWrapping="Wrap" IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+      <Expander Name="McpExpander" Header="{DynamicResource research.mcp.title}" HorizontalAlignment="Stretch" Margin="0,8,0,0">
+        <StackPanel Spacing="8">
+          <TextBlock Text="{DynamicResource research.mcp.explain}" Classes="small warning" TextWrapping="Wrap" />
+          <CheckBox Name="McpEnabledBox" IsChecked="{Binding McpEnabled}" Content="{DynamicResource research.mcp.enabled}" />
+          <ItemsControl Name="McpServerList" ItemsSource="{Binding Servers}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:McpServerRowViewModel">
+                <Border Classes="card" Margin="0,3" Padding="8">
+                  <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                    <CheckBox IsChecked="{Binding Enabled}" VerticalAlignment="Center" MinHeight="0" />
+                    <StackPanel Grid.Column="1">
+                      <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                      <TextBlock Text="{Binding Info}" Classes="small" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <Button Grid.Column="2" Classes="small danger" Content="{DynamicResource common.delete}" VerticalAlignment="Center"
+                            Command="{Binding $parent[ItemsControl].((vm:ResearchSettingsViewModel)DataContext).DeleteServerCommand}" CommandParameter="{Binding}" />
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <TextBlock Text="{DynamicResource research.mcp.add}" FontWeight="SemiBold" Margin="0,6,0,0" />
+          <TextBox Name="McpNameBox" Text="{Binding ServerName}" PlaceholderText="{DynamicResource research.mcp.name}" />
+          <ComboBox Name="McpTransportBox" ItemsSource="{Binding Transports}" SelectedIndex="{Binding TransportIndex}" MinWidth="240" />
+          <TextBox Name="McpUrlBox" Text="{Binding ServerUrl}" PlaceholderText="https://example.org/mcp" IsVisible="{Binding IsHttp}" />
+          <StackPanel Spacing="6" IsVisible="{Binding IsStdio}">
+            <TextBox Name="McpCommandBox" Text="{Binding ServerCommand}" PlaceholderText="{DynamicResource research.mcp.command}" />
+            <TextBox Name="McpArgumentsBox" Text="{Binding ServerArguments}" PlaceholderText="{DynamicResource research.mcp.arguments}" />
+          </StackPanel>
+          <Button Name="McpListToolsButton" Content="{DynamicResource research.mcp.list_tools}" Command="{Binding ListToolsCommand}" IsEnabled="{Binding !Busy}" />
+          <TextBlock Text="{Binding ToolsLine}" Classes="small" TextWrapping="Wrap" IsVisible="{Binding ToolsLine, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+          <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+            <TextBox Name="McpSearchToolBox" Text="{Binding SearchTool}" PlaceholderText="{DynamicResource research.mcp.search_tool}" />
+            <TextBox Name="McpSearchArgumentBox" Grid.Column="1" Text="{Binding SearchArgument}" PlaceholderText="{DynamicResource research.mcp.argument}" />
+          </Grid>
+          <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+            <TextBox Name="McpFetchToolBox" Text="{Binding FetchTool}" PlaceholderText="{DynamicResource research.mcp.fetch_tool}" />
+            <TextBox Name="McpFetchArgumentBox" Grid.Column="1" Text="{Binding FetchArgument}" PlaceholderText="{DynamicResource research.mcp.argument}" />
+          </Grid>
+          <Button Name="McpAddButton" Classes="accent" Content="{DynamicResource research.mcp.save}" Command="{Binding AddServerCommand}" IsEnabled="{Binding !Busy}" />
+          <TextBlock Text="{Binding McpStatus}" Classes="small" Classes.error="{Binding McpFailed}" TextWrapping="Wrap"
+                     IsVisible="{Binding McpStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+        </StackPanel>
+      </Expander>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

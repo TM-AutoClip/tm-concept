@@ -36,10 +36,10 @@ public sealed partial class ConceptsViewModel : PageViewModelBase
     private bool _loadedOnce;
     private bool _choosing;
 
-    /// <summary>Creates the page with its bar, its three sections, its runner and its detail panel.</summary>
+    /// <summary>Creates the page with its bar, its four sections, its runner and its detail panel.</summary>
     public ConceptsViewModel(AppSession session, IConceptStore concepts, ConceptActions actions, ConceptEvents events, Localizer text,
         ConceptSettingsViewModel settings, ConceptRunner runner, TopicSectionViewModel topics, IdeaSectionViewModel ideas, DocumentSectionViewModel documents,
-        ConceptDetailViewModel detail, ILogger<ConceptsViewModel> logger)
+        ResearchSectionViewModel research, ConceptDetailViewModel detail, ILogger<ConceptsViewModel> logger)
     {
         _session = session;
         _concepts = concepts;
@@ -52,12 +52,22 @@ public sealed partial class ConceptsViewModel : PageViewModelBase
         Topics = topics;
         Ideas = ideas;
         Documents = documents;
+        Research = research;
         Detail = detail;
         Runner.Attach(Settings);
         Topics.Attach(Runner);
         Ideas.Attach(Runner);
         Documents.Attach(Runner);
         Documents.AttachLibrary();
+        Research.Attach(Runner);
+        Research.AttachLibrary(Documents.Library);
+        Research.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ResearchSectionViewModel.Searching))
+            {
+                UpdateWorking();
+            }
+        };
         Documents.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(DocumentSectionViewModel.Finding))
@@ -113,6 +123,9 @@ public sealed partial class ConceptsViewModel : PageViewModelBase
 
     /// <summary>Section C: from the profile's documents.</summary>
     public DocumentSectionViewModel Documents { get; }
+
+    /// <summary>Section D: from the app's own research (0.1.22).</summary>
+    public ResearchSectionViewModel Research { get; }
 
     /// <summary>The detail panel.</summary>
     public ConceptDetailViewModel Detail { get; }
@@ -223,6 +236,8 @@ public sealed partial class ConceptsViewModel : PageViewModelBase
             await Documents.Library.ProfileChangedAsync().ConfigureAwait(true);
         }
 
+        Research.LoadSettings();
+
         await Settings.LoadAsync(_session.Profile, newProfile: !_loadedOnce).ConfigureAwait(true);
         _loadedOnce = true;
         await ReloadAsync().ConfigureAwait(true);
@@ -236,6 +251,7 @@ public sealed partial class ConceptsViewModel : PageViewModelBase
         Topics.Clear();
         Ideas.Clear();
         Documents.Clear();
+        Research.Clear();
         await Documents.Library.ProfileChangedAsync().ConfigureAwait(true);
         await Detail.LoadAsync(null).ConfigureAwait(true);
         await Settings.LoadAsync(_session.Profile, newProfile: true).ConfigureAwait(true);
@@ -249,6 +265,7 @@ public sealed partial class ConceptsViewModel : PageViewModelBase
         Topics.CancelAll();
         Ideas.Cancel();
         Documents.CancelAll();
+        Research.CancelAll();
         Detail.CancelWork();
     }
 
@@ -435,6 +452,7 @@ public sealed partial class ConceptsViewModel : PageViewModelBase
         Topics.Refresh();
         Ideas.Refresh();
         Documents.Refresh();
+        Research.Refresh();
     }
 
     private void Filter()
@@ -450,7 +468,7 @@ public sealed partial class ConceptsViewModel : PageViewModelBase
         OnPropertyChanged(nameof(EmptyText));
     }
 
-    private void UpdateWorking() => Working = Runner.Busy || Topics.Suggesting || Documents.Finding || Documents.Library.Busy || Detail.AiRunning;
+    private void UpdateWorking() => Working = Runner.Busy || Topics.Suggesting || Documents.Finding || Research.Searching || Documents.Library.Busy || Detail.AiRunning;
 
     private async Task SafeAsync(Func<Task> work)
     {

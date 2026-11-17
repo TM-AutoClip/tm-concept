@@ -1,0 +1,80 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:TMConcept.Desktop.ViewModels"
+             xmlns:views="using:TMConcept.Desktop.Views"
+             x:Class="TMConcept.Desktop.Views.ResearchSectionView"
+             x:DataType="vm:ResearchSectionViewModel">
+  <!-- Section D: the app researches a subject itself. "Search" shows the pages it would fetch (nothing is fetched yet); the options (extra
+       languages, own addresses, pages, keep) fold away; the found pages are the only scroll of the section. The button fetches the ticked
+       pages into "My documents" and writes the concepts from them. -->
+  <Border Classes="card" Padding="12,10">
+    <DockPanel>
+      <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6" MinHeight="28">
+        <views:HelpTip DockPanel.Dock="Right" Text="{DynamicResource research.tip}" />
+        <TextBlock Name="ResearchTitle" Text="{DynamicResource research.title}" Classes="h2" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                   ToolTip.Tip="{DynamicResource research.title}" />
+      </DockPanel>
+      <TextBox Name="ResearchSubjectBox" DockPanel.Dock="Top" Text="{Binding Subject}" MaxLength="{Binding SubjectMax}"
+               PlaceholderText="{DynamicResource research.subject.hint}" MinHeight="0" />
+      <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,Auto,Auto,*" ColumnSpacing="8" Margin="0,6,0,0">
+        <TextBlock Text="{DynamicResource documents.count}" Classes="small" VerticalAlignment="Center" />
+        <NumericUpDown Name="ResearchCountBox" Grid.Column="1" Value="{Binding Count}" Minimum="1" Maximum="30" Increment="1" FormatString="0" Width="100"
+                       IsEnabled="{Binding !Running}" />
+        <Button Name="ResearchSearchButton" Grid.Column="2" Classes="small" Content="{DynamicResource research.search}" Command="{Binding SearchCommand}"
+                IsEnabled="{Binding CanSearch}" ToolTip.Tip="{DynamicResource research.search.tip}" />
+      </Grid>
+      <Expander Name="ResearchOptions" DockPanel.Dock="Top" Header="{DynamicResource research.options}" Margin="0,6,0,0" Padding="0,4,0,0"
+                HorizontalAlignment="Stretch">
+        <StackPanel Spacing="6">
+          <TextBox Name="ResearchLanguagesBox" Text="{Binding Languages}" PlaceholderText="{DynamicResource research.languages.hint}" MinHeight="0"
+                   ToolTip.Tip="{DynamicResource research.languages.tip}" />
+          <TextBox Name="ResearchUrlsBox" Text="{Binding Urls}" AcceptsReturn="True" TextWrapping="NoWrap" MaxHeight="80"
+                   PlaceholderText="{DynamicResource research.urls.hint}" />
+          <WrapPanel>
+            <TextBlock Text="{DynamicResource research.pages}" Classes="small" VerticalAlignment="Center" Margin="0,0,8,0" />
+            <NumericUpDown Name="ResearchPagesBox" Value="{Binding Pages}" Minimum="1" Maximum="{Binding PagesMax}" Increment="1" FormatString="0" Width="100"
+                           Margin="0,0,12,0" />
+            <CheckBox Name="ResearchKeepBox" IsChecked="{Binding KeepInLibrary}" Content="{DynamicResource research.keep}"
+                      ToolTip.Tip="{DynamicResource research.keep.tip}" MinHeight="0" />
+          </WrapPanel>
+        </StackPanel>
+      </Expander>
+      <views:ConceptSectionFooter Name="ResearchFooter" DockPanel.Dock="Bottom" Margin="0,6,0,0" />
+      <DockPanel Margin="0,6,0,0">
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Margin="0,0,0,4" IsVisible="{Binding Searching}">
+          <ProgressBar IsIndeterminate="True" Width="48" MinWidth="48" VerticalAlignment="Center" />
+          <TextBlock Grid.Column="1" Text="{Binding SearchProgress}" Classes="small" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+          <Button Grid.Column="2" Classes="small" Content="{DynamicResource common.cancel}" Command="{Binding CancelSearchCommand}" />
+        </Grid>
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*" ColumnSpacing="8" Margin="0,0,0,4">
+          <Button Name="ClearCandidatesButton" Classes="link small" Content="{DynamicResource research.clear}" Command="{Binding ClearCandidatesCommand}"
+                  IsVisible="{Binding HasCandidates}" IsEnabled="{Binding !Running}" />
+          <TextBlock Name="SearchStatusLine" Grid.Column="1" Text="{Binding SearchStatus}" Classes="small" Classes.error="{Binding SearchFailed}"
+                     TextTrimming="CharacterEllipsis" TextAlignment="Right" VerticalAlignment="Center" ToolTip.Tip="{Binding SearchStatus}" />
+        </Grid>
+        <TextBlock Name="PlanLine" DockPanel.Dock="Top" Text="{Binding PlanLine}" Classes="tiny" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PlanLine}"
+                   IsVisible="{Binding PlanLine, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" Margin="0,0,0,4" />
+        <Border Classes="inset" MinHeight="40">
+          <Panel>
+            <TextBlock Text="{DynamicResource research.empty}" Classes="small" TextWrapping="Wrap" VerticalAlignment="Center" HorizontalAlignment="Center"
+                       TextAlignment="Center" Margin="8" IsVisible="{Binding !HasCandidates}" />
+            <ScrollViewer Name="CandidateScroll" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto" IsVisible="{Binding HasCandidates}">
+              <ItemsControl Name="CandidateList" ItemsSource="{Binding Candidates}" IsEnabled="{Binding !Running}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:ResearchCandidateViewModel">
+                    <CheckBox Classes="topic" IsChecked="{Binding Checked}" ToolTip.Tip="{Binding Detail}">
+                      <StackPanel>
+                        <TextBlock Text="{Binding Title}" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding Source}" Classes="tiny" />
+                      </StackPanel>
+                    </CheckBox>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+          </Panel>
+        </Border>
+      </DockPanel>
+    </DockPanel>
+  </Border>
+</UserControl>

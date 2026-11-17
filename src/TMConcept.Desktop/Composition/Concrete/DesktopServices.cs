@@ -193,7 +193,7 @@ public static class DesktopServices
     }
 
     /// <summary>
-    /// "Belgelerim" and the three sources of the concept page (0.1.21): the readers of each file kind, the web page and Wikipedia fetchers,
+    /// "Belgelerim" and the sources of the concept page (0.1.21; "Araştırmadan" 0.1.22, <see cref="AddResearch"/>): the readers of each file kind, the web page and Wikipedia fetchers,
     /// the meaning model (a component, downloaded after a confirmation) and the keyword search, the library, the documents source and "Find
     /// topics". The concept generator picks the source that takes the page's brief; the page only fills the brief from the user's choices.
     /// </summary>
@@ -207,8 +207,8 @@ public static class DesktopServices
         services.AddSingleton<Core.Documents.IDocumentExtractor, TMConcept.Documents.Extractors.DocxExtractor>();
         services.AddSingleton<Core.Documents.IDocumentExtractor, TMConcept.Documents.Extractors.PlainTextExtractor>();
         services.AddSingleton<Core.Documents.IDocumentExtractor, TMConcept.Documents.Extractors.MarkdownExtractor>();
-        services.AddSingleton<Core.Documents.IDocumentFetcher, TMConcept.Documents.Web.WebPageFetcher>();
-        services.AddSingleton<Core.Documents.IDocumentFetcher, TMConcept.Documents.Web.WikipediaFetcher>();
+        services.AddSingleton<Core.Documents.IDocumentFetcher>(s => s.GetRequiredService<TMConcept.Documents.Web.WebPageFetcher>());
+        services.AddSingleton<Core.Documents.IDocumentFetcher>(s => s.GetRequiredService<TMConcept.Documents.Web.WikipediaFetcher>());
         services.AddSingleton<TMConcept.Documents.Embeddings.E5Embedder>();
         services.AddSingleton<Core.Documents.IDocumentEmbedder>(s => s.GetRequiredService<TMConcept.Documents.Embeddings.E5Embedder>());
         services.AddSingleton<Core.Components.IComponentSource, TMConcept.Documents.Embeddings.E5ComponentSource>();
@@ -218,6 +218,27 @@ public static class DesktopServices
         services.AddSingleton<Core.Documents.DocumentGrounder>();
         services.AddSingleton<Core.Documents.DocumentLibrary>();
         services.AddSingleton<Core.Documents.DocumentTopicFinder>();
+        AddResearch(services);
+    }
+
+    /// <summary>
+    /// "Araştırmadan" (0.1.22): the fourth source of the concept page and its backends. Wikipedia, Wikidata and the user's addresses are
+    /// the app's own fetch-based research (no paid search of the model providers); Tavily needs the user's own key; the user's MCP servers
+    /// (advanced, off by default) are reached through the app's minimal MCP client. Nothing here downloads a model.
+    /// </summary>
+    private static void AddResearch(IServiceCollection services)
+    {
+        services.AddSingleton<IConceptSource, Core.Research.ResearchConceptSource>();
+        services.AddSingleton<Core.Research.ResearchRun>();
+        services.AddSingleton<TMConcept.Documents.Web.WebPageFetcher>();
+        services.AddSingleton<TMConcept.Documents.Web.WikipediaFetcher>();
+        services.AddSingleton<TMConcept.Documents.Research.WikipediaResearchBackend>();
+        services.AddSingleton<TMConcept.Documents.Research.WikidataResearchBackend>();
+        services.AddSingleton<TMConcept.Documents.Research.UrlResearchBackend>();
+        services.AddSingleton<TMConcept.Documents.Research.TavilyResearchBackend>();
+        services.AddSingleton(TMConcept.Documents.Mcp.McpHttpTransport.Network);
+        services.AddSingleton<TMConcept.Documents.Mcp.McpConnector>();
+        services.AddSingleton<TMConcept.Documents.Research.ResearchBackendSet>();
     }
 
     private static void AddStorage(IServiceCollection services)
@@ -290,6 +311,7 @@ public static class DesktopServices
         services.AddTransient<TopicSectionViewModel>();
         services.AddTransient<IdeaSectionViewModel>();
         services.AddTransient<DocumentSectionViewModel>();
+        services.AddTransient<ResearchSectionViewModel>();
         services.AddTransient<DocumentLibraryViewModel>();
         services.AddTransient<ConceptDetailViewModel>();
         services.AddSingleton<Dialogs.IApiKeyDialog, Dialogs.ApiKeyDialog>();
@@ -348,6 +370,7 @@ public static class DesktopServices
         services.AddSingleton<Func<IEnumerable<SettingsSectionBase>>>(s => () => s.GetServices<SettingsSectionBase>());
         AddSection<GeneralSettingsViewModel, GeneralSettingsView>(services);
         AddSection<KeysSettingsViewModel, KeysSettingsView>(services);
+        AddSection<ResearchSettingsViewModel, ResearchSettingsView>(services);
         AddSection<StorageSettingsViewModel, StorageSettingsView>(services);
         AddSection<LocalAiSettingsViewModel, LocalAiSettingsView>(services);
         AddSection<VideoStylesSettingsViewModel, VideoStylesSettingsView>(services);

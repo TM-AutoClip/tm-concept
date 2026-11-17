@@ -211,6 +211,43 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
     }
 
     /// <summary>
+    /// Takes away the documents a research run added when the user chose not to keep them (0.1.22): no question (the choice was made on
+    /// the section), through the recycle bin like a delete. Returns the reason when some could not be taken away (empty = all went).
+    /// </summary>
+    public async Task<string> RemoveAddedAsync(IReadOnlyCollection<Guid> ids)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        if (ids.Count == 0 || session.Profile is not { } profile)
+        {
+            return string.Empty;
+        }
+
+        var documents = (await library.ListAsync(profile.Id, CancellationToken.None).ConfigureAwait(true)).Where(d => ids.Contains(d.Id)).ToList();
+        var items = documents.Select(d => (Core.DiskSpace.IDiskItem)new DocumentDiskItem(d, profile.Name, library, d.Bytes,
+            d.StoredFile.Length > 0 ? library.FileOf(d) : string.Empty)).ToList();
+        var reason = string.Empty;
+        if (items.Count > 0)
+        {
+            var result = await cleaner.RemoveAsync(items, CancellationToken.None).ConfigureAwait(true);
+            reason = result.Busy ? text["storage.busy"]
+                : result.Failed.Count > 0 ? text.Format("storage.item_failed", result.Failed[0].Item.Name, result.Failed[0].Reason)
+                : string.Empty;
+            logger.LogInformation("Research: {Count} fetched pages the user did not keep were taken away", result.Removed.Count);
+        }
+
+        await LoadAsync().ConfigureAwait(true);
+        Changed?.Invoke(this, EventArgs.Empty);
+        return reason;
+    }
+
+    /// <summary>Reads the documents again and tells the sections (research added some).</summary>
+    public async Task RefreshAsync()
+    {
+        await LoadAsync().ConfigureAwait(true);
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
     /// Installs the meaning model (after the confirmation that lists the download) and then makes the vectors of every passage that has
     /// none yet. Declining changes nothing: the documents stay searchable by their words.
     /// </summary>

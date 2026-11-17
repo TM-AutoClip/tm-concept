@@ -4,8 +4,8 @@
              xmlns:views="using:TMConcept.Desktop.Views"
              x:Class="TMConcept.Desktop.Views.ConceptsView"
              x:DataType="vm:ConceptsViewModel">
-  <!-- 0.1.13 layout, made for 1280×720 and wider (down to 1024×600): the shared bar (models, fine-tuning, word check) on one line; the three
-       generate sections side by side (4 parts of the height; 0.1.21 added "From documents", whose "Belgelerim" opens as a panel over the page); the concept list next to the detail panel (5 parts, the main working area).
+  <!-- 0.1.13 layout, made for 1280×720 and wider (down to 1024×600): the shared bar (models, fine-tuning, word check) on one line; the four
+       generate sections side by side (4 parts of the height; 0.1.21 added "From documents", whose "Belgelerim" opens as a panel over the page, 0.1.22 "From research"); the concept list next to the detail panel (5 parts, the main working area).
        While the detail panel edits a concept the sections fold away and the editor gets the whole height (ConceptsView.axaml.cs). Nothing
        on the page scrolls as a whole: the topic list, the concept list and the concept's text scroll inside their own areas. An unfolded
        bar line opens a panel over a dimmed page (the last children of the grid, drawn on top) instead of pushing it: at 720 px a pushed
@@ -22,10 +22,11 @@
       </Grid>
     </Border>
 
-    <Grid Name="Sections" Grid.Row="1" ColumnDefinitions="*,*,*" ColumnSpacing="12">
+    <Grid Name="Sections" Grid.Row="1" ColumnDefinitions="*,*,*,*" ColumnSpacing="12">
       <views:TopicSectionView Name="TopicSection" DataContext="{Binding Topics}" />
       <views:IdeaSectionView Name="IdeaSection" Grid.Column="1" DataContext="{Binding Ideas}" />
       <views:DocumentSectionView Name="DocumentSection" Grid.Column="2" DataContext="{Binding Documents}" />
+      <views:ResearchSectionView Name="ResearchSection" Grid.Column="3" DataContext="{Binding Research}" />
     </Grid>
 
     <Grid Grid.Row="2" ColumnDefinitions="5*,6*" ColumnSpacing="12">
