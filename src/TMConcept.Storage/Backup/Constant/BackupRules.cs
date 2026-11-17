@@ -18,6 +18,13 @@ public static class BackupRules
     /// <summary>Backups kept in the backup folder.</summary>
     public const int Keep = 10;
 
+    /// <summary>
+    /// The most bytes of document copies one backup carries (the whole backup is sealed in memory: several large PDFs would need gigabytes and
+    /// past 2 GB no backup could be written at all, which also stopped deleting a profile). Copies past it are left out (the largest first)
+    /// and logged; the backup still holds their records and passages, like a copy that is missing.
+    /// </summary>
+    public const long DocumentBytesMax = 256L * 1024 * 1024;
+
     /// <summary>Deleting this many concepts for good (or a whole profile) takes a backup first.</summary>
     public const int BulkChange = 20;
 }

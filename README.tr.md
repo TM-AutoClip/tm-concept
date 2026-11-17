@@ -45,17 +45,24 @@ veritabanını şifreli tutar.
   kalıcı silinebilir.
 - **Belgelerden** (üçüncü bölüm, 0.1.21). **Belgelerim** profilin kendi kaynaklarını tutar: PDF, Word (.docx), metin ve Markdown dosyaları,
   bir web sayfası (okunabilir metni, bir kez çekilir; hiçbir betik çalışmaz) ya da herhangi bir dilde bir Vikipedi makalesi (adresiyle ya da
-  başlığı ve dil koduyla). Uygulama her birinin kendi kopyasını veri klasöründe tutar (şifresiz); parçalara bölünmüş metni şifreli
-  veritabanındadır. Belgeler eklendikleri profile aittir. İstersen bir konu yaz ve kaç tane istediğini seç: **Belgelerden yaz** o kadar
+  başlığı ve dil koduyla; yalnız açık internetteki adresler: bu bilgisayardaki ya da yerel ağdaki bir adres, yönlendirmeyle gelse bile
+  alınmaz, bir sayfanın toplam 30 saniyesi var). Uygulama her birinin kendi kopyasını veri klasöründe tutar (şifresiz); parçalara bölünmüş
+  metni şifreli veritabanındadır. Belgeler eklendikleri profile aittir; bir profil silinince kopyaları geri dönüşüm kutusuna gider. İstersen bir konu yaz ve kaç tane istediğini seç: **Belgelerden yaz** o kadar
   konsepti bir seferde yazar, ya da **Konu bul** önce belgelerde o kadar konu arar, düğme sonra işaretli her konuya bir konsept yazar.
-  Her çağrıya yalnız modelin bağlamına sığan parçalar gider (8k bağlamlı küçük bir yerel model yaklaşık 3–4 bin token parça ve daha düşük
-  bir yanıt sınırı alır; ücretli bir model çağrı başına en çok 12 bin token, büyük bağlam pahalıya patlamasın diye). İstem modele yalnız
+  Her çağrıya yalnız modelin bağlamına sığan parçalar gider (8k bağlamlı küçük bir yerel model yaklaşık 3–4 bin token parça, daha düşük
+  bir yanıt sınırı ve o da yetmezse çağrı başına daha az konsept alır; ücretli bir model çağrı başına en çok 12 bin token, büyük bağlam
+  pahalıya patlamasın diye). Başka yazıdaki parçalar (Japonca, Rusça, Yunanca…) başlıkları ve adlarıyla birlikte cömert sayılır. Uzun
+  bir üretim ve konusuz her yeni basış aynı parçaları değil belgelerin başka yerlerini okur; bulunan bir konu, geldiği belgelerde kendi
+  dilindeki arama kelimeleriyle aranır. İstem modele yalnız
   belgelerdeki bilgileri kullanmasını ve kullandığı belgeleri söylemesini ister (detay panelinde *Kaynaklar* olarak görünür); belgeler
-  başka dilde olsa da konseptler videonun dilinde yazılır. Parçalar kelimelerine (BM25) ve isteğe bağlı anlam aramasını kurarsan
+  başka dilde olsa da konseptler videonun dilinde yazılır. Parçalar kelimelerine (BM25; ekli bir kelime kökünü de bulur, "Osmanlıların"
+  "Osmanlı"yı bulur) ve isteğe bağlı anlam aramasını kurarsan
   (multilingual-e5-small, yaklaşık 135 MB, yalnız onaylarsan indirilir, bu bilgisayarın işlemcisinde çalışır) anlamlarına göre seçilir.
   Metin katmanı olmayan taranmış PDF'ler saklanır ama kullanılamaz (yazı tanıma yok). Ayarlar → **Depolama** her belgeyi listeler;
   **Kullanılmayanları temizle** hiçbirini almaz, **Kapsamlı silme** ve bir belgenin **Sil**'i kopyasını geri dönüşüm kutusuna taşır ve
-  parçalarını siler. Yedekler belgeleri profillerle birlikte taşır (kayıtlar, parçalar ve kopyalar).
+  parçalarını siler (bir belge eklenirken hiçbir şey silinmez). Yedekler belgeleri profillerle birlikte taşır (kayıtlar, parçalar ve
+  kopyalar; kopyalar yedek başına en çok 256 MB, küçükten büyüğe: sınırı aşanlar alınmaz, günlüğe yazılır, kayıtları ve parçaları yine
+  yedektedir).
 - **Konseptten video.** Solda onaylı konseptler (tıklanan, listenin altında açılır; orada elle ya da yapay zekâyla düzenlenir), **Sıraya
   ekle**, sonra **Sırayla üret**. Modeller (motoruyla kod, görseller, ses) üstte tek bir katlanmış satırdır, yanında **şablon** seçici
   (yeni kurulumda boştur: kod modeli ve şablon seçilmeden video üretilmez). Video üretilirken her aşama

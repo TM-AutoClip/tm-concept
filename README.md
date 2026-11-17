@@ -46,18 +46,24 @@ needed) and narrates it with a **free local voice**. It runs on Windows and Linu
   forever (they still count against duplicates) until you delete them permanently.
 - **From documents** (the third section, 0.1.21). **My documents** holds the profile's own sources: PDF, Word (.docx), text and Markdown
   files, a web page (its readable text, fetched once; no script runs) or a Wikipedia article in any language (by its address, or by its
-  title and a language code). The app keeps its own copy of each one in its data folder (not encrypted); the text, cut into passages, is in
-  the encrypted database. Documents belong to the profile they were added in. Write an optional subject and choose how many: **Write from
+  title and a language code; only public addresses: an address on this computer or the local network is refused, also after a redirect,
+  and a page has 30 seconds in all). The app keeps its own copy of each one in its data folder (not encrypted); the text, cut into
+  passages, is in the encrypted database. Documents belong to the profile they were added in; deleting a profile moves its copies to the
+  recycle bin. Write an optional subject and choose how many: **Write from
   documents** writes that many concepts at once, or **Find topics** looks for that many topics in the documents first and the button then
   writes one concept per ticked topic. Each call gets only the passages that fit the model's context (a small local model with an 8k
-  context gets about 3–4 thousand tokens of passages and a lower answer limit; a paid model at most 12 thousand tokens per call, so a
-  big context does not cost much). The prompt tells the model to use only the documents' facts and to name the documents it used (the
+  context gets about 3–4 thousand tokens of passages, a lower answer limit and, when even that is not enough, fewer concepts per call; a
+  paid model at most 12 thousand tokens per call, so a big context does not cost much). Passages in another script (Japanese, Russian,
+  Greek…) are counted on the safe side, headings and titles included. A long run, and every new press without a subject, reads other
+  parts of the documents instead of the same passages; a found topic is searched in the documents it came from, with search words in
+  their language. The prompt tells the model to use only the documents' facts and to name the documents it used (the
   detail panel shows them as *Sources*); the concepts are written in the video's language even when the documents are in another one.
-  Passages are picked by their words (BM25) and, when you install the optional meaning search (multilingual-e5-small, about 135 MB,
+  Passages are picked by their words (BM25; a suffixed word also finds its stem, "Osmanlıların" finds "Osmanlı") and, when you install the optional meaning search (multilingual-e5-small, about 135 MB,
   downloaded only after you confirm it, run on this computer's processor), also by meaning. Scanned PDFs without a text layer are kept but
   cannot be used (no text recognition). Settings → **Storage** lists every document; **Clean up unused** never takes one, **Full delete**
-  and a document's **Delete** move its copy to the recycle bin and delete its passages. Backups carry the documents with the profiles (the
-  records, the passages and the copies).
+  and a document's **Delete** move its copy to the recycle bin and delete its passages (nothing is removed while a document is being added).
+  Backups carry the documents with the profiles (the records, the passages and the copies; the copies up to 256 MB per backup, the smallest
+  first: the copies past that are left out, logged, and their records and passages are still in the backup).
 - **Concept to video.** Approved concepts on the left (a click opens one under the list, where it can be edited by hand or with AI),
   **Add to queue**, then **Produce in order**. The models (code with its engine, images, voice) are one folded line on top, next to the
   **template** (empty on a new install: nothing is produced until a code model and a template are chosen). While a video

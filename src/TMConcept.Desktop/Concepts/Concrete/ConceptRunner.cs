@@ -168,6 +168,13 @@ public sealed class ConceptRunner(AppSession session, ConceptGenerator generator
             Settings.ModelsOpen = true;
             return Refused(text["concepts.no_model"], ActivityLevel.Error);
         }
+        catch (Core.Providers.ProviderException ex)
+        {
+            // Refused before anything was sent (a documents run whose model has no room for passages, or whose documents are not ready):
+            // the reason in the user's language, nothing was paid, so no failure notification.
+            logger.LogWarning("Concept generation not started ({Code}): {Message}", ex.Code, ex.Message);
+            return Refused(text.Format("concepts.not_started", ProviderErrors.Text(text, ex.Code)), ActivityLevel.Warning);
+        }
         catch (OperationCanceledException)
         {
             // Canceled before anything was sent: nothing was paid.
@@ -223,10 +230,24 @@ public sealed class ConceptRunner(AppSession session, ConceptGenerator generator
         return new RunPrice(model.Name, estimate, backfill);
     }
 
-    /// <summary>The estimate of <paramref name="brief"/> as the page shows it (empty without a profile, a brief or a concept model).</summary>
+    /// <summary>
+    /// The estimate of <paramref name="brief"/> as the page shows it (empty without a profile, a brief or a concept model). A run that would be
+    /// refused (a documents run without room or ready documents) shows the reason in the user's language instead of a price.
+    /// </summary>
     public async Task<EstimateLine> EstimateAsync(ConceptBrief? brief)
     {
-        if (await PriceAsync(brief).ConfigureAwait(true) is not { } price || brief is null)
+        RunPrice? priced;
+        try
+        {
+            priced = await PriceAsync(brief).ConfigureAwait(true);
+        }
+        catch (Core.Providers.ProviderException ex)
+        {
+            var reason = ProviderErrors.Text(text, ex.Code);
+            return new EstimateLine(reason, reason);
+        }
+
+        if (priced is not { } price || brief is null)
         {
             return new EstimateLine(string.Empty, string.Empty);
         }

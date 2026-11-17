@@ -28,7 +28,7 @@ namespace TMConcept.Desktop.ViewModels;
 /// </summary>
 public sealed partial class ProfileViewModel(AppSession session, IProfileStore profiles, ITemplateSource templates, IAppPaths paths, FileDialogs dialogs,
     IConfirmDialog confirm, IActivityLog activity, Localizer text, ILogger<ProfileViewModel> logger, StepPickerViewModel picker,
-    Core.Images.ImageDescriber describer, BackupService backup) : PageViewModelBase
+    Core.Images.ImageDescriber describer, BackupService backup, Core.Documents.DocumentLibrary documents, DiskSpace.RecycleBinDiscard bin) : PageViewModelBase
 {
     /// <summary>The model that describes a sample image (this profile's last choice).</summary>
     public StepPickerViewModel Picker { get; } = picker;
@@ -580,6 +580,7 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
                 await DeletePhotoFileAsync(photo, _editing.Id).ConfigureAwait(true);
             }
 
+            await DiscardDocumentsAsync(_editing.Id).ConfigureAwait(true);
             activity.Add(ActivityLevel.Info, text.Format("profile.deleted", _editing.Name), text.Format("profile.deleted", ActivityPlaceholders.Name));
             _editing = null;
             HasProfile = false;
@@ -765,6 +766,24 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
         {
             logger.LogWarning(ex, "The old channel photo copy could not be deleted");
             activity.Add(ActivityLevel.Warning, text.Format("profile.photo.delete_failed", ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// The copies of a deleted profile's documents go to the recycle bin (the backup taken before the delete holds them too); a failure is
+    /// logged and shown, the profile stays deleted.
+    /// </summary>
+    private async Task DiscardDocumentsAsync(Guid profileId)
+    {
+        try
+        {
+            await documents.DiscardProfileAsync(profileId, bin, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException or InvalidOperationException)
+        {
+            logger.LogError(ex, "The document copies of the deleted profile could not be moved to the recycle bin");
+            Status = text.Format("profile.documents.delete_failed", ex.Message);
+            activity.Add(ActivityLevel.Warning, Status);
         }
     }
 

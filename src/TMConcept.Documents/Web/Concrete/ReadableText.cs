@@ -44,16 +44,8 @@ public static partial class ReadableText
             name = DeclaredCharset(Encoding.ASCII.GetString(body, 0, Math.Min(body.Length, 4096)));
         }
 
-        Encoding encoding;
-        try
-        {
-            encoding = name.Length > 0 ? Encoding.GetEncoding(name) : Encoding.UTF8;
-        }
-        catch (ArgumentException)
-        {
-            encoding = Encoding.UTF8;
-        }
-
+        // The old code pages too (windows-1254 and iso-8859-9 of older Turkish pages); an unknown name is read as UTF-8.
+        var encoding = name.Length > 0 ? Extractors.LegacyEncodings.Named(name) ?? Encoding.UTF8 : Encoding.UTF8;
         return encoding.GetString(body);
     }
 

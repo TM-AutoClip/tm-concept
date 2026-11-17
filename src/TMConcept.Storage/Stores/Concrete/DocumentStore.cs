@@ -1,3 +1,4 @@
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using TMConcept.Core.Documents;
 using TMConcept.Storage.Database;
@@ -6,7 +7,9 @@ namespace TMConcept.Storage.Stores;
 
 /// <summary>
 /// <see cref="IDocumentStore"/>: the tables <c>documents</c>, <c>document_chunks</c> and <c>document_chunk_vectors</c> of the encrypted database
-/// (a document's passages and their vectors are deleted with it; a profile's documents with the profile).
+/// (a document's passages and their vectors are deleted with it; a profile's documents with the profile). A write the database refuses (a full
+/// disk, a profile deleted meanwhile) comes up as <see cref="InvalidOperationException"/> with the database's reason, which the documents
+/// panel shows; vectors of passages deleted meanwhile (their document was deleted during a vector run) are left out instead of failing.
 /// </summary>
 public sealed class DocumentStore(ConceptDatabase database) : IDocumentStore
 {
@@ -44,12 +47,19 @@ public sealed class DocumentStore(ConceptDatabase database) : IDocumentStore
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(chunks);
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-        db.Documents.Add(document);
-        db.DocumentChunks.AddRange(chunks);
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
+            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            db.Documents.Add(document);
+            db.DocumentChunks.AddRange(chunks);
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is DbUpdateException or SqliteException)
+        {
+            throw new InvalidOperationException("The document could not be saved: " + (ex.InnerException ?? ex).Message, ex);
+        }
     }
 
     /// <inheritdoc />
@@ -104,11 +114,19 @@ public sealed class DocumentStore(ConceptDatabase database) : IDocumentStore
 
         var ids = vectors.Select(v => v.ChunkId).ToList();
         var model = vectors[0].Model;
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-        await db.DocumentChunkVectors.Where(v => v.Model == model && ids.Contains(v.ChunkId)).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
-        db.DocumentChunkVectors.AddRange(vectors);
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
+            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            var present = (await db.DocumentChunks.Where(c => ids.Contains(c.Id)).Select(c => c.Id).ToListAsync(cancellationToken).ConfigureAwait(false)).ToHashSet();
+            await db.DocumentChunkVectors.Where(v => v.Model == model && ids.Contains(v.ChunkId)).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+            db.DocumentChunkVectors.AddRange(vectors.Where(v => present.Contains(v.ChunkId)));
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is DbUpdateException or SqliteException)
+        {
+            throw new InvalidOperationException("The passages' vectors could not be saved: " + (ex.InnerException ?? ex).Message, ex);
+        }
     }
 }

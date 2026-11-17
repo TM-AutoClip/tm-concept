@@ -11,8 +11,9 @@ namespace TMConcept.Core.Documents;
 /// (the same content is refused a second time in a profile); its text is read with managed code only, cut into passages
 /// (<see cref="DocumentChunker"/>) and saved in the encrypted database; when the meaning model is installed the passages' vectors are made
 /// right away (on this computer's processor). A copy whose text could not be read is taken away again. Deleting moves the copy to the
-/// recycle bin first (<see cref="IFolderDiscard"/>) and only then deletes the record with its passages and vectors. One add or vector run at a
-/// time.
+/// recycle bin first (<see cref="IFolderDiscard"/>) and only then deletes the record with its passages and vectors. One add, vector run or
+/// delete at a time (a delete waits for a running add), and <see cref="Busy"/> tells the storage manager not to clean up meanwhile (a copy
+/// being written has no record yet). A copy that could not be finished (canceled, a failed copy) is taken away again.
 /// </summary>
 public sealed class DocumentLibrary(IAppPaths paths, IDocumentStore store, IEnumerable<IDocumentExtractor> extractors, IEnumerable<IDocumentFetcher> fetchers,
     IDocumentEmbedder embedder, TimeProvider clock, ILogger<DocumentLibrary> logger)
@@ -21,6 +22,7 @@ public sealed class DocumentLibrary(IAppPaths paths, IDocumentStore store, IEnum
     public const int EmbedBatch = 16;
 
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private int _busy;
     private readonly IReadOnlyList<IDocumentExtractor> _extractors = [.. extractors];
     private readonly IReadOnlyList<IDocumentFetcher> _fetchers = [.. fetchers];
 
@@ -32,6 +34,9 @@ public sealed class DocumentLibrary(IAppPaths paths, IDocumentStore store, IEnum
 
     /// <summary>The meaning model.</summary>
     public IDocumentEmbedder Embedder => embedder;
+
+    /// <summary>Whether an add, a vector run or a delete is going on (the storage manager then removes nothing).</summary>
+    public bool Busy => Volatile.Read(ref _busy) > 0;
 
     /// <summary>The documents of a profile, the newest first.</summary>
     public Task<IReadOnlyList<SourceDocument>> ListAsync(Guid profileId, CancellationToken cancellationToken) => store.ListAsync(profileId, cancellationToken);
@@ -112,14 +117,50 @@ public sealed class DocumentLibrary(IAppPaths paths, IDocumentStore store, IEnum
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(discard);
         var file = document.StoredFile.Length > 0 ? FileOf(document) : string.Empty;
-        if (file.Length > 0 && File.Exists(file))
+        await EnterAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            await discard.DiscardAsync(file, cancellationToken).ConfigureAwait(false);
+            if (file.Length > 0 && File.Exists(file))
+            {
+                await discard.DiscardAsync(file, cancellationToken).ConfigureAwait(false);
+            }
+
+            await store.DeleteAsync(document.Id, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            Exit();
         }
 
-        await store.DeleteAsync(document.Id, cancellationToken).ConfigureAwait(false);
         logger.LogInformation("Document {Id} ({Kind}, {Chunks} passages) deleted{Bin}", document.Id, document.Kind, document.Chunks,
             discard.Permanent ? " for good" : ", its copy went to the recycle bin");
+    }
+
+    /// <summary>
+    /// Sends the copies of a deleted profile's documents (its folder) through <paramref name="discard"/> (the recycle bin): the database
+    /// deletes their records and passages with the profile, and the plain-text copies of a deleted channel should not stay readable on disk.
+    /// Nothing to do when the profile had none. Waits for a running add or vector run.
+    /// </summary>
+    public async Task DiscardProfileAsync(Guid profileId, IFolderDiscard discard, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(discard);
+        var folder = LibraryPaths.Resolve(Folder, profileId.ToString("N"));
+        await EnterAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (!Directory.Exists(folder))
+            {
+                return;
+            }
+
+            await discard.DiscardAsync(folder, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            Exit();
+        }
+
+        logger.LogInformation("The document copies of a deleted profile were {Where}", discard.Permanent ? "deleted for good" : "moved to the recycle bin");
     }
 
     /// <summary>
@@ -133,7 +174,7 @@ public sealed class DocumentLibrary(IAppPaths paths, IDocumentStore store, IEnum
             return 0;
         }
 
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await EnterAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             var missing = await store.ChunksWithoutVectorAsync(embedder.ModelId, cancellationToken).ConfigureAwait(false);
@@ -147,7 +188,7 @@ public sealed class DocumentLibrary(IAppPaths paths, IDocumentStore store, IEnum
         }
         finally
         {
-            _gate.Release();
+            Exit();
         }
     }
 
@@ -155,7 +196,7 @@ public sealed class DocumentLibrary(IAppPaths paths, IDocumentStore store, IEnum
         IDocumentExtractor extractor, SourceDocument document, IProgress<DocumentProgress>? progress, CancellationToken cancellationToken)
     {
         var name = document.OriginalName.Length > 0 ? document.OriginalName : document.Title;
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await EnterAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             if (await store.FindByContentAsync(profileId, sha, cancellationToken).ConfigureAwait(false) is { } existing)
@@ -167,8 +208,18 @@ public sealed class DocumentLibrary(IAppPaths paths, IDocumentStore store, IEnum
             var target = LibraryPaths.Resolve(Folder, relative);
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             var temporary = target + ".part";
-            await write(temporary, cancellationToken).ConfigureAwait(false);
-            File.Move(temporary, target, overwrite: true);
+            try
+            {
+                await write(temporary, cancellationToken).ConfigureAwait(false);
+                File.Move(temporary, target, overwrite: true);
+            }
+            catch
+            {
+                // A canceled or failed copy leaves no plain-text part behind (the error itself goes up).
+                File.Delete(temporary);
+                throw;
+            }
+
             IReadOnlyList<DocumentChunk> chunks;
             try
             {
@@ -230,8 +281,28 @@ public sealed class DocumentLibrary(IAppPaths paths, IDocumentStore store, IEnum
         }
         finally
         {
-            _gate.Release();
+            Exit();
         }
+    }
+
+    private async Task EnterAsync(CancellationToken cancellationToken)
+    {
+        Interlocked.Increment(ref _busy);
+        try
+        {
+            await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            Interlocked.Decrement(ref _busy);
+            throw;
+        }
+    }
+
+    private void Exit()
+    {
+        _gate.Release();
+        Interlocked.Decrement(ref _busy);
     }
 
     /// <summary>Embeds <paramref name="chunks"/> in batches and saves each batch at once (a cancel keeps what was made).</summary>

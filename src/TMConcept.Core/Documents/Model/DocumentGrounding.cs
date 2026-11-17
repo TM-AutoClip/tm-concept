@@ -6,6 +6,9 @@ namespace TMConcept.Core.Documents;
 /// </summary>
 public sealed record DocumentGrounding(IReadOnlyList<GroundingDocument> Documents, IReadOnlyList<GroundingPassage> Passages)
 {
+    /// <summary>Whether a search found the passages (false: no query, or nothing matched it, so they were spread over the documents).</summary>
+    public bool Matched { get; init; }
+
     /// <summary>No passages yet (a documents prompt measured before its passages are picked).</summary>
     public static DocumentGrounding Empty { get; } = new([], []);
 

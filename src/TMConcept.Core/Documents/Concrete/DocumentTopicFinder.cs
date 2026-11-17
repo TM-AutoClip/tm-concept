@@ -6,19 +6,25 @@ using TMConcept.Core.Models;
 using TMConcept.Core.Profiles;
 using TMConcept.Core.Providers;
 using TMConcept.Core.Runs;
+using TMConcept.Core.Text;
 
 namespace TMConcept.Core.Documents;
 
 /// <summary>
 /// "Find topics" of the documents section: ONE call to the topics step's model with the documents prompt
 /// (<see cref="ConceptPromptBuilder.BuildDocumentTopics"/>): the passages that fit the model's context (picked for the subject, or spread
-/// over the documents without one), the channel content and the profile's covered concepts; the answer is the asked number of topics in
-/// the interface language, each with the documents that cover it. The call is a run of its own (<see cref="RunKind.DocumentTopics"/>), so
-/// the month's spending counts it, also when it fails after being billed. An unreadable answer is asked again (at most twice).
+/// over the documents without one), the channel content, the profile's covered concepts, disliked topics and rated videos; the answer is
+/// the asked number of topics in the interface language, each with the documents that cover it and search words in their language. Like
+/// "Suggest topics", a topic equal (folded, see <see cref="TurkishFold"/>) to a concept title of the profile or to a picked suggestion is
+/// dropped and counted. The call is a run of its own (<see cref="RunKind.DocumentTopics"/>), so the month's spending counts it, also when it
+/// fails after being billed. An unreadable answer is asked again (at most twice).
 /// </summary>
-public sealed class DocumentTopicFinder(DocumentGrounder grounder, IPromptMemorySource memory, IRunStore runs, IChatClientFactory chats, ICostCalculator costs,
-    TimeProvider clock, ILogger<DocumentTopicFinder> logger)
+public sealed class DocumentTopicFinder(DocumentGrounder grounder, IPromptMemorySource memory, IConceptStore concepts, ITopicSuggestionStore suggestions,
+    IRunStore runs, IChatClientFactory chats, ICostCalculator costs, TimeProvider clock, ILogger<DocumentTopicFinder> logger)
 {
+    /// <summary>The concept statuses whose titles count as made: all of them (a trashed or produced concept is no new topic either).</summary>
+    private static readonly ConceptStatus[] AllStatuses = Enum.GetValues<ConceptStatus>();
+
     /// <summary>The asked number of topics kept within <see cref="DocumentLimits.TopicCountMin"/>–<see cref="DocumentLimits.TopicCountMax"/>.</summary>
     public static int Clamp(int count) => Math.Clamp(count, DocumentLimits.TopicCountMin, DocumentLimits.TopicCountMax);
 
@@ -40,8 +46,8 @@ public sealed class DocumentTopicFinder(DocumentGrounder grounder, IPromptMemory
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(model);
         count = Clamp(count);
-        var (prompt, _, maxOutput) = await PromptAsync(profile, model, subject, documents, count, language, true, cancellationToken).ConfigureAwait(false);
-        return costs.EstimateChat(model, costs.Tokens(prompt.System + prompt.User, language), 0, Math.Min(12 * count, maxOutput), Math.Min(OutputFor(count), maxOutput));
+        var (prompt, _, maxOutput, passages) = await PromptAsync(profile, model, subject, documents, count, language, true, cancellationToken).ConfigureAwait(false);
+        return costs.EstimateChat(model, costs.Tokens(prompt.System + prompt.User, language) + passages, 0, Math.Min(12 * count, maxOutput), Math.Min(OutputFor(count), maxOutput));
     }
 
     /// <summary>Finds <paramref name="count"/> topics; <paramref name="progress"/> gets the call's steps.</summary>
@@ -51,7 +57,7 @@ public sealed class DocumentTopicFinder(DocumentGrounder grounder, IPromptMemory
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(model);
         count = Clamp(count);
-        var (prompt, grounding, maxOutput) = await PromptAsync(profile, model.Model, subject, documents, count, language, false, cancellationToken).ConfigureAwait(false);
+        var (prompt, grounding, maxOutput, _) = await PromptAsync(profile, model.Model, subject, documents, count, language, false, cancellationToken).ConfigureAwait(false);
         var run = new Run
         {
             ProfileId = profile.Id,
@@ -95,10 +101,13 @@ public sealed class DocumentTopicFinder(DocumentGrounder grounder, IPromptMemory
 
                 return DocumentTopicParser.Parse(text, grounding, count);
             }, logger, cancellationToken).ConfigureAwait(false);
-            run.Accepted = topics.Count;
+            var earlier = await EarlierAsync(profile.Id, cancellationToken).ConfigureAwait(false);
+            var fresh = topics.Where(t => !earlier.Contains(TurkishFold.Fold(t.Text))).ToList();
+            run.Accepted = fresh.Count;
             run.Status = RunStatus.Succeeded;
-            logger.LogInformation("Document topics {Run}: {Count} topics for {Usd} USD{Cut}", run.Id, topics.Count, run.ActualUsd, cut ? " (cut off)" : string.Empty);
-            return new DocumentTopics(topics, run.ActualUsd, cut);
+            logger.LogInformation("Document topics {Run}: {Count} topics ({Repeats} already made or picked, dropped) for {Usd} USD{Cut}", run.Id, fresh.Count,
+                topics.Count - fresh.Count, run.ActualUsd, cut ? " (cut off)" : string.Empty);
+            return new DocumentTopics(fresh, run.ActualUsd, cut);
         }
         catch (ProviderException ex)
         {
@@ -125,7 +134,7 @@ public sealed class DocumentTopicFinder(DocumentGrounder grounder, IPromptMemory
         }
     }
 
-    private async Task<(ConceptPrompt Prompt, DocumentGrounding Grounding, int MaxOutput)> PromptAsync(Profile profile, CatalogModel model, string subject,
+    private async Task<(ConceptPrompt Prompt, DocumentGrounding Grounding, int MaxOutput, long EstimatedPassages)> PromptAsync(Profile profile, CatalogModel model, string subject,
         IReadOnlyList<Guid> documents, int count, string language, bool estimate, CancellationToken cancellationToken)
     {
         var past = await memory.ReadAsync(profile, cancellationToken).ConfigureAwait(false);
@@ -140,9 +149,28 @@ public sealed class DocumentTopicFinder(DocumentGrounder grounder, IPromptMemory
             throw new ProviderException("The model's context leaves no room for document passages.") { Code = "context" };
         }
 
-        var grounding = await grounder.GroundAsync(profile, documents, subject ?? string.Empty, budget, estimate, text => costs.Tokens(text, language), cancellationToken)
-            .ConfigureAwait(false);
-        return (ConceptPromptBuilder.BuildDocumentTopics(input with { Grounding = grounding }), grounding, lowered ?? maxOutput);
+        if (estimate)
+        {
+            // The price line reads no passage: the budget (or the whole of shorter documents) is charged as extra prompt tokens.
+            var passages = await grounder.EstimateTokensAsync(profile, documents, budget, cancellationToken).ConfigureAwait(false);
+            return (bare, DocumentGrounding.Empty, lowered ?? maxOutput, passages);
+        }
+
+        // Passages are counted for the documents' script, not the interface language (a Japanese article is not English text).
+        var grounding = await grounder.GroundAsync(profile, documents, subject ?? string.Empty, budget, false, PassageTokens.For(costs, profile.ContentLanguage),
+            cancellationToken).ConfigureAwait(false);
+        return (ConceptPromptBuilder.BuildDocumentTopics(input with { Grounding = grounding }), grounding, lowered ?? maxOutput, 0);
+    }
+
+    /// <summary>The folded concept titles of the profile (every status) and its picked suggestions: topics already made.</summary>
+    private async Task<HashSet<string>> EarlierAsync(Guid profileId, CancellationToken cancellationToken)
+    {
+        var all = await concepts.ListAsync(profileId, AllStatuses, false, cancellationToken).ConfigureAwait(false);
+        var picked = await suggestions.ListAsync(profileId, int.MaxValue, cancellationToken).ConfigureAwait(false);
+        return all.Select(c => TurkishFold.Fold(c.Title))
+            .Concat(picked.Where(s => s.Outcome == TopicOutcome.Picked).Select(s => TurkishFold.Fold(s.Text)))
+            .Where(t => t.Length > 0)
+            .ToHashSet(StringComparer.Ordinal);
     }
 
     private void Charge(Run run, CatalogModel model, ChatUsage usage, decimal? reported)

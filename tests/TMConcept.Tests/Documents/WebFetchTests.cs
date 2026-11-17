@@ -125,20 +125,165 @@ public sealed class WebFetchTests
         (error.Code, error.Detail).ShouldBe(("network", "No such host is known."));
     }
 
+    [Theory]
+    [InlineData("http://127.0.0.1:7100/admin")]
+    [InlineData("http://localhost/")]
+    [InlineData("192.168.1.1")]
+    [InlineData("http://10.0.0.5/")]
+    [InlineData("http://169.254.169.254/latest/meta-data/")]
+    [InlineData("http://[::1]/")]
+    [InlineData("http://[fe80::1]/")]
+    [InlineData("http://router/")]
+    [InlineData("http://printer.local/")]
+    public async Task AnAddressOnThisComputerOrTheLocalNetworkIsRefusedBeforeAnyRequest(string address)
+    {
+        var handler = new SavedAnswers().Add(HttpStatusCode.OK, "text/html", "<p>router admin</p>");
+        var fetcher = new WebPageFetcher(new DocumentTransport(() => handler), NullLogger<WebPageFetcher>.Instance);
+
+        (await Should.ThrowAsync<DocumentRejectedException>(() => fetcher.FetchAsync(address, string.Empty, None))).Code.ShouldBe("private");
+
+        handler.Requests.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task ARedirectToALocalAddressIsRefusedAndAPublicOneIsFollowed()
+    {
+        var handler = new SavedAnswers()
+            .Redirect(HttpStatusCode.Found, "/moved")
+            .Add(HttpStatusCode.OK, "text/html", "<p>Moved here.</p>")
+            .Redirect(HttpStatusCode.MovedPermanently, "http://192.168.0.1/login");
+        var fetcher = new WebPageFetcher(new DocumentTransport(() => handler), NullLogger<WebPageFetcher>.Instance);
+
+        var page = await fetcher.FetchAsync("https://example.org/old", string.Empty, None);
+        page.Url.ShouldBe("https://example.org/moved");
+        Encoding.UTF8.GetString(page.Content).ShouldContain("Moved here.");
+
+        (await Should.ThrowAsync<DocumentRejectedException>(() => fetcher.FetchAsync("https://example.org/trap", string.Empty, None))).Code.ShouldBe("private");
+        handler.Requests.Select(r => r.Uri.ToString()).ShouldBe(["https://example.org/old", "https://example.org/moved", "https://example.org/trap"],
+            "the local address is never asked");
+    }
+
+    [Theory]
+    [InlineData("127.0.0.1", false)]
+    [InlineData("10.1.2.3", false)]
+    [InlineData("172.16.0.1", false)]
+    [InlineData("172.32.0.1", true)]
+    [InlineData("100.64.0.1", false)]
+    [InlineData("169.254.169.254", false)]
+    [InlineData("0.0.0.0", false)]
+    [InlineData("224.0.0.1", false)]
+    [InlineData("::ffff:192.168.1.1", false)]
+    [InlineData("fd00::1", false)]
+    [InlineData("::", false)]
+    [InlineData("93.184.216.34", true)]
+    [InlineData("2606:4700::1111", true)]
+    public void OnlyPublicAddressesAreConnectedTo(string address, bool reachable) =>
+        NetworkAddresses.IsPublic(IPAddress.Parse(address)).ShouldBe(reachable);
+
+    [Fact]
+    public async Task ABodyThatTricklesIsCutOffAtTheTimeLimit()
+    {
+        var fetcher = new WebPageFetcher(new DocumentTransport(() => new TricklingAnswer()) { TimeLimit = TimeSpan.FromMilliseconds(300) },
+            NullLogger<WebPageFetcher>.Instance);
+
+        var error = await Should.ThrowAsync<DocumentRejectedException>(() => fetcher.FetchAsync("https://example.org/slow", string.Empty, None));
+
+        (error.Code, error.Detail).ShouldBe(("network", "0.3 s"));
+    }
+
+    [Fact]
+    public async Task APageSoBrokenThatReadingItRunsOutOfTimeIsRefusedWithAReason()
+    {
+        // Thousands of unclosed script tags: every pattern that looks for their end scans the rest of the page.
+        var html = "<html><body>" + string.Concat(Enumerable.Repeat("<script>x ", 400_000));
+        var handler = new SavedAnswers().Add(HttpStatusCode.OK, "text/html", html);
+        var fetcher = new WebPageFetcher(new DocumentTransport(() => handler), NullLogger<WebPageFetcher>.Instance);
+
+        var error = await Should.ThrowAsync<DocumentRejectedException>(() => fetcher.FetchAsync("https://example.org/broken", string.Empty, None));
+
+        error.Code.ShouldBe("not_text");
+        error.InnerException.ShouldBeOfType<System.Text.RegularExpressions.RegexMatchTimeoutException>();
+    }
+
+    [Fact]
+    public async Task AnOlderTurkishPageInWindows1254KeepsItsLetters()
+    {
+        var body = TMConcept.Documents.Extractors.LegacyEncodings.Named("windows-1254")!.GetBytes("<html><body><p>Ağaç, şişe, ılık, İstanbul, Göğüs.</p></body></html>");
+        var handler = new SavedAnswers().Add(HttpStatusCode.OK, "text/html; charset=windows-1254", body)
+            .Add(HttpStatusCode.OK, "text/html", TMConcept.Documents.Extractors.LegacyEncodings.Named("iso-8859-9")!
+                .GetBytes("<html><head><meta charset=\"iso-8859-9\"></head><body><p>Şeker ılık.</p></body></html>"));
+        var fetcher = new WebPageFetcher(new DocumentTransport(() => handler), NullLogger<WebPageFetcher>.Instance);
+
+        Encoding.UTF8.GetString((await fetcher.FetchAsync("https://example.org/eski", string.Empty, None)).Content).ShouldContain("Ağaç, şişe, ılık, İstanbul, Göğüs.");
+        Encoding.UTF8.GetString((await fetcher.FetchAsync("https://example.org/meta", string.Empty, None)).Content).ShouldContain("Şeker ılık.");
+    }
+
     private static ExtractedDocument MarkdownExtractorOf(string text) => TMConcept.Documents.Extractors.MarkdownExtractor.Parse(text);
+
+    /// <summary>Sends its headers at once and then its body a byte at a time, slower than any limit.</summary>
+    private sealed class TricklingAnswer : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var content = new StreamContent(new TricklingStream());
+            content.Headers.ContentType = System.Net.Http.Headers.MediaTypeHeaderValue.Parse("text/html");
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = content, RequestMessage = request });
+        }
+    }
+
+    /// <summary>A body that gives one byte every ten seconds.</summary>
+    private sealed class TricklingStream : Stream
+    {
+        public override bool CanRead => true;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => false;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+        public override void Flush()
+        {
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException("asynchronous only");
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken);
+            buffer.Span[0] = (byte)'x';
+            return 1;
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
 
     /// <summary>Answers requests in order from saved answers and records them (address and User-Agent).</summary>
     private sealed class SavedAnswers : HttpMessageHandler
     {
-        private readonly Queue<(HttpStatusCode Status, string Type, byte[] Body)> _answers = new();
+        private readonly Queue<(HttpStatusCode Status, string Type, byte[] Body, string? Location)> _answers = new();
 
         public List<(Uri Uri, string UserAgent)> Requests { get; } = [];
 
         public HttpRequestException? Failure { get; init; }
 
-        public SavedAnswers Add(HttpStatusCode status, string type, string body)
+        public SavedAnswers Add(HttpStatusCode status, string type, string body) => Add(status, type, Encoding.UTF8.GetBytes(body));
+
+        public SavedAnswers Add(HttpStatusCode status, string type, byte[] body)
         {
-            _answers.Enqueue((status, type, Encoding.UTF8.GetBytes(body)));
+            _answers.Enqueue((status, type, body, null));
+            return this;
+        }
+
+        public SavedAnswers Redirect(HttpStatusCode status, string location)
+        {
+            _answers.Enqueue((status, "text/html", [], location));
             return this;
         }
 
@@ -150,10 +295,16 @@ public sealed class WebFetchTests
                 throw Failure;
             }
 
-            var (status, type, body) = _answers.Dequeue();
+            var (status, type, body, location) = _answers.Dequeue();
             var content = new ByteArrayContent(body);
             content.Headers.ContentType = System.Net.Http.Headers.MediaTypeHeaderValue.Parse(type);
-            return Task.FromResult(new HttpResponseMessage(status) { Content = content, RequestMessage = request });
+            var response = new HttpResponseMessage(status) { Content = content, RequestMessage = request };
+            if (location is not null)
+            {
+                response.Headers.Location = new Uri(location, UriKind.RelativeOrAbsolute);
+            }
+
+            return Task.FromResult(response);
         }
     }
 }

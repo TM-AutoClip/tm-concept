@@ -27,6 +27,9 @@ public sealed class BackupHeader
     /// </summary>
     public List<BackupImage> Documents { get; set; } = [];
 
+    /// <summary>Document copies left out because the backup reached <see cref="BackupRules.DocumentBytesMax"/> (their records and passages are in).</summary>
+    public int DocumentsLeftOut { get; set; }
+
     /// <summary>API keys in the copy.</summary>
     public int KeyCount { get; set; }
 

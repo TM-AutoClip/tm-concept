@@ -2,7 +2,10 @@ using System.Text;
 
 namespace TMConcept.Documents.Extractors;
 
-/// <summary>Reads a text file whose encoding is not declared: a byte order mark wins, then strict UTF-8, otherwise Latin-1 (never fails).</summary>
+/// <summary>
+/// Reads a text file whose encoding is not declared: a byte order mark wins, then strict UTF-8, otherwise the Windows "ANSI" page of the
+/// text (<see cref="LegacyEncodings.DecodeAnsi"/>: Turkish when its letters are there, else Western; never fails).
+/// </summary>
 public static class TextFiles
 {
     /// <summary>The text of <paramref name="file"/>.</summary>
@@ -33,7 +36,7 @@ public static class TextFiles
         }
         catch (DecoderFallbackException)
         {
-            return Encoding.Latin1.GetString(bytes);
+            return LegacyEncodings.DecodeAnsi(bytes);
         }
     }
 }

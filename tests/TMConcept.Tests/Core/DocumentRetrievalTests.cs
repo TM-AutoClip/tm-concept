@@ -100,6 +100,65 @@ public sealed class DocumentRetrievalTests
     }
 
     [Fact]
+    public void ASuffixedWordFindsItsStemAtHalfTheWeight()
+    {
+        List<DocumentChunk> chunks =
+        [
+            Chunk(A, 0, "Osmanlı donanması Preveze'de kazandı."),
+            Chunk(A, 1, "Venedik tüccarları ipek aldı."),
+            Chunk(A, 2, "Silk caravans crossed the desert."),
+        ];
+
+        var turkish = new Bm25Ranker().Rank(Search("Osmanlıların zaferi", chunks));
+        var english = new Bm25Ranker().Rank(Search("caravan", chunks));
+
+        turkish.ShouldHaveSingleItem().Chunk.ShouldBe(chunks[0], "\"Osmanlıların\" finds \"Osmanlı\" by its stem");
+        english.ShouldHaveSingleItem().Chunk.ShouldBe(chunks[2], "\"caravan\" finds \"caravans\"");
+        new Bm25Ranker().Rank(Search("ipekler", chunks)).ShouldBeEmpty("a word of five letters or fewer matches only whole");
+        var exact = new Bm25Ranker().Rank(Search("osmanli osmanlilar", [Chunk(A, 0, "Osmanli"), Chunk(A, 1, "Osmanlilar")]));
+        exact.Count.ShouldBe(2);
+    }
+
+    [Fact]
+    public void ALaterBatchGetsPassagesTheEarlierOnesDidNotSendAndAnotherPhaseStartsElsewhere()
+    {
+        var chunks = Enumerable.Range(0, 40).Select(i => Chunk(A, i, "part " + i + " " + new string('x', 396))).ToList();
+        SourceDocument[] documents = [new() { Id = A, Title = "Long" }];
+        var retriever = new PassageRetriever([new Bm25Ranker()]);
+
+        var first = retriever.Select(Search(string.Empty, chunks, budget: 1_200), documents, Tokens);
+        var second = retriever.Select(Search(string.Empty, chunks, budget: 1_200) with { Used = first.Passages.Select(p => p.ChunkId).ToHashSet() }, documents, Tokens);
+        var again = retriever.Select(Search(string.Empty, chunks, budget: 1_200), documents, Tokens);
+        var elsewhere = retriever.Select(Search(string.Empty, chunks, budget: 1_200) with { Phase = 0.37 }, documents, Tokens);
+
+        first.Passages.Count.ShouldBeGreaterThan(3);
+        first.Passages.ShouldAllBe(p => p.ChunkId != Guid.Empty);
+        second.Passages.Select(p => p.ChunkId).Intersect(first.Passages.Select(p => p.ChunkId)).ShouldBeEmpty("the second batch reads other parts");
+        again.Passages.Select(p => p.ChunkId).ShouldBe(first.Passages.Select(p => p.ChunkId), "the same search gives the same passages");
+        elsewhere.Passages.Select(p => p.ChunkId).ShouldNotBe(first.Passages.Select(p => p.ChunkId));
+        PassageRetriever.Spread(chunks, 0.37).Select(c => c.Id).Distinct().Count().ShouldBe(chunks.Count, "a phase still spreads over every passage once");
+    }
+
+    [Fact]
+    public void PassagesInAnotherScriptAreCountedOnTheSafeSideWithTheirHeadings()
+    {
+        var costs = new TMConcept.Core.Costs.CostCalculator();
+        var japanese = new string('東', 600);
+        var count = PassageTokens.For(costs, TMConcept.Core.Profiles.ContentLanguages.English);
+
+        count(japanese).ShouldBeGreaterThanOrEqualTo(600, "about one token a character, not 3.6 characters a token");
+        PassageTokens.NonLatinLetters("Iğdır şehri, ДА, Ελλάδα 東京").ShouldBe(2 + 6 + 2);
+        count("Konstantinopel").ShouldBe(costs.Tokens("Konstantinopel", TMConcept.Core.Profiles.ContentLanguages.English));
+
+        var chunks = Enumerable.Range(0, 10).Select(i => new DocumentChunk { DocumentId = A, Ordinal = i, Heading = new string('見', 150), Text = japanese }).ToList();
+        var grounding = new PassageRetriever([new Bm25Ranker()]).Select(Search(string.Empty, chunks, budget: 3_000), [new SourceDocument { Id = A, Title = "東京" }],
+            count);
+        var sent = grounding.Passages.Sum(p => count(p.Locator + " " + p.Text) + PassageTokens.LineOverhead) + count("東京") + PassageTokens.DocumentOverhead;
+        sent.ShouldBeLessThanOrEqualTo(3_000, "an 8k model's passage budget holds the real tokens, headings and titles included");
+        grounding.Passages.Count.ShouldBe(3);
+    }
+
+    [Fact]
     public void NoMatchFallsBackToTheSpread()
     {
         var chunks = Enumerable.Range(0, 4).Select(i => Chunk(A, i, "word" + i)).ToList();

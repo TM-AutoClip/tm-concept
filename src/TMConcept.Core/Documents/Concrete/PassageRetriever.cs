@@ -7,8 +7,11 @@ namespace TMConcept.Core.Documents;
 /// keyword search always, the meaning search when there are vectors) is fused by reciprocal rank (k = 60), then passages are taken in that
 /// order while they fit the token budget, at most <see cref="DocumentLimits.PassagesPerDocumentMax"/> from one document while another still
 /// has some. Without a query, or when nothing matched, the passages are spread evenly over each document (start, middle, quarters, …) and
-/// over the documents. The chosen passages go to the prompt in document and passage order; the documents are numbered by their best passage
-/// (the most relevant document is [1]).
+/// over the documents, starting at the search's <see cref="DocumentSearch.Phase"/>. Passages an earlier batch of the run already sent
+/// (<see cref="DocumentSearch.Used"/>) come after all the others, so a long run walks through the documents instead of sending the same
+/// passages again. A passage costs its heading and its text (<see cref="PassageTokens"/>), and the first passage of a document also its title
+/// line. The chosen passages go to the prompt in document and passage order; the documents are numbered by their best passage (the most
+/// relevant document is [1]).
 /// </summary>
 public sealed class PassageRetriever(IEnumerable<IPassageRanker> rankers)
 {
@@ -25,18 +28,24 @@ public sealed class PassageRetriever(IEnumerable<IPassageRanker> rankers)
         ArgumentNullException.ThrowIfNull(documents);
         ArgumentNullException.ThrowIfNull(tokens);
         var order = Fused(search);
-        if (order.Count == 0)
+        var matched = order.Count > 0;
+        if (!matched)
         {
-            order = Spread(search.Chunks);
+            order = Spread(search.Chunks, search.Phase);
         }
 
-        var chosen = Fill(order, search.TokenBudget, tokens);
+        if (search.Used.Count > 0)
+        {
+            order = [.. order.Where(c => !search.Used.Contains(c.Id)), .. order.Where(c => search.Used.Contains(c.Id))];
+        }
+
         var titles = documents.ToDictionary(d => d.Id, d => d.Title);
+        var chosen = Fill(order, search.TokenBudget, tokens, titles);
         var numbers = chosen.Select(c => c.DocumentId).Distinct().Where(titles.ContainsKey).Select((id, i) => new GroundingDocument(i + 1, id, titles[id])).ToList();
         var byId = numbers.ToDictionary(n => n.Id, n => n.Number);
         var passages = chosen.Where(c => byId.ContainsKey(c.DocumentId)).OrderBy(c => byId[c.DocumentId]).ThenBy(c => c.Ordinal)
-            .Select(c => new GroundingPassage(byId[c.DocumentId], Locator(c), c.Text)).ToList();
-        return new DocumentGrounding(numbers, passages);
+            .Select(c => new GroundingPassage(byId[c.DocumentId], Locator(c), c.Text, c.Id)).ToList();
+        return new DocumentGrounding(numbers, passages) { Matched = matched };
     }
 
     /// <summary>Where a passage is: "p. 12 · Trade" (page and heading when known).</summary>
@@ -78,11 +87,12 @@ public sealed class PassageRetriever(IEnumerable<IPassageRanker> rankers)
 
     /// <summary>
     /// Every passage, spread: each document's passages in the order start, middle, first quarter, third quarter, … (the radical inverse of
-    /// base 2), the documents taking turns.
+    /// base 2), shifted by <paramref name="phase"/> (0.3 = the spread starts at 30 % of each document), the documents taking turns.
     /// </summary>
-    public static IReadOnlyList<DocumentChunk> Spread(IReadOnlyList<DocumentChunk> chunks)
+    public static IReadOnlyList<DocumentChunk> Spread(IReadOnlyList<DocumentChunk> chunks, double phase = 0)
     {
         ArgumentNullException.ThrowIfNull(chunks);
+        phase = double.IsFinite(phase) ? phase - Math.Floor(phase) : 0;
         var queues = chunks.GroupBy(c => c.DocumentId).Select(g =>
         {
             var list = g.OrderBy(c => c.Ordinal).ToList();
@@ -90,7 +100,7 @@ public sealed class PassageRetriever(IEnumerable<IPassageRanker> rankers)
             var seen = new HashSet<int>();
             for (var k = 0; picked.Count < list.Count; k++)
             {
-                var at = (int)Math.Floor(RadicalInverse(k) * list.Count);
+                var at = (int)Math.Floor(Fraction(RadicalInverse(k) + phase) * list.Count) % list.Count;
                 if (seen.Add(at))
                 {
                     picked.Add(list[at]);
@@ -126,8 +136,13 @@ public sealed class PassageRetriever(IEnumerable<IPassageRanker> rankers)
         return result;
     }
 
-    /// <summary>Takes passages in <paramref name="order"/> while they fit <paramref name="budget"/>, with the per-document cap first, then without it.</summary>
-    private static List<DocumentChunk> Fill(IReadOnlyList<DocumentChunk> order, int budget, Func<string, long> tokens)
+    private static double Fraction(double value) => value - Math.Floor(value);
+
+    /// <summary>
+    /// Takes passages in <paramref name="order"/> while they fit <paramref name="budget"/>, with the per-document cap first, then without it. A
+    /// passage costs its locator and text; the first one of a document also its DOCUMENTS line (<paramref name="titles"/>).
+    /// </summary>
+    private static List<DocumentChunk> Fill(IReadOnlyList<DocumentChunk> order, int budget, Func<string, long> tokens, IReadOnlyDictionary<Guid, string> titles)
     {
         var chosen = new List<DocumentChunk>();
         var taken = new HashSet<Guid>();
@@ -149,7 +164,12 @@ public sealed class PassageRetriever(IEnumerable<IPassageRanker> rankers)
                     continue;
                 }
 
-                var size = tokens(chunk.Text) + 12;
+                var size = tokens(Locator(chunk) + " " + chunk.Text) + PassageTokens.LineOverhead;
+                if (!perDocument.ContainsKey(chunk.DocumentId))
+                {
+                    size += tokens(titles.GetValueOrDefault(chunk.DocumentId, string.Empty)) + PassageTokens.DocumentOverhead;
+                }
+
                 if (used + size > budget)
                 {
                     continue;

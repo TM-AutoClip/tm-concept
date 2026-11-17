@@ -60,8 +60,9 @@ public static partial class ConceptPromptBuilder
 
     /// <summary>
     /// Builds the "Find topics" prompt of the documents section (Prompts/&lt;interface lang&gt;/topics-documents.txt): the channel content and
-    /// format, the profile's covered concepts, the optional subject, the documents and the passages picked for the call; the answer is
-    /// <see cref="DocumentTopicSchema"/>, topics in the interface language, each with the numbers of its documents.
+    /// format, the profile's covered concepts, its disliked topics and its disliked and liked videos (the suggestion memory of 0.1.18), the
+    /// optional subject, the documents and the passages picked for the call; the answer is <see cref="DocumentTopicSchema"/>, topics in the
+    /// interface language, each with the numbers of its documents and a few search words in the documents' language.
     /// </summary>
     public static ConceptPrompt BuildDocumentTopics(DocumentTopicPromptInput input)
     {
@@ -94,11 +95,14 @@ public static partial class ConceptPromptBuilder
         ? null
         : string.Concat(grounding.Documents.Select(d => string.Create(CultureInfo.InvariantCulture, $"\n{d.Number}: «{PromptText.Line(d.Title, DocumentLimits.TitleMax)}»")));
 
-    /// <summary>The passages of a grounded prompt ("[2] p. 12: «text»"), each guarded as user data; none = null.</summary>
+    /// <summary>
+    /// The passages of a grounded prompt ("[2] «p. 12 · Trade»: «text»"): the heading comes from the document too, so it is guarded as data
+    /// like the text (a heading that gives orders is only a heading); none = null.
+    /// </summary>
     private static string? PassageLines(DocumentGrounding grounding) => grounding.Passages.Count == 0
         ? null
         : string.Concat(grounding.Passages.Select(p => string.Create(CultureInfo.InvariantCulture,
-            $"\n[{p.Document}]{(p.Locator.Length > 0 ? " " + PromptText.Line(p.Locator, DocumentLimits.TitleMax) : string.Empty)}: «{PromptText.Data(p.Text, DocumentLimits.ChunkMaxCharacters * 2)}»")));
+            $"\n[{p.Document}]{(p.Locator.Length > 0 ? " «" + PromptText.Line(p.Locator, DocumentLimits.TitleMax) + "»" : string.Empty)}: «{PromptText.Data(p.Text, DocumentLimits.ChunkMaxCharacters * 2)}»")));
 
     /// <summary>
     /// Builds the prompt of an AI edit of one concept (Prompts/&lt;lang&gt;/concept-edit.txt): the same channel part, rules and answer format
@@ -238,7 +242,10 @@ public static partial class ConceptPromptBuilder
         };
     }
 
-    /// <summary>The answer schema of "Find topics" in documents: <c>{"topics": [{"topic": "…", "documents": [1]}]}</c>.</summary>
+    /// <summary>
+    /// The answer schema of "Find topics" in documents: <c>{"topics": [{"topic": "…", "documents": [1], "keywords": ["…"]}]}</c> (the keywords
+    /// in the documents' language find the topic's passages again).
+    /// </summary>
     public static JsonObject DocumentTopicSchema() => new()
     {
         ["type"] = "object",
@@ -254,8 +261,9 @@ public static partial class ConceptPromptBuilder
                     {
                         ["topic"] = new JsonObject { ["type"] = "string" },
                         ["documents"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "integer" } },
+                        ["keywords"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string" } },
                     },
-                    ["required"] = new JsonArray("topic", "documents"),
+                    ["required"] = new JsonArray("topic", "documents", "keywords"),
                     ["additionalProperties"] = false,
                 },
             },

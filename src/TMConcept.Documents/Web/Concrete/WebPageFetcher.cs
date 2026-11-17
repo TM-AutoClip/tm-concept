@@ -24,7 +24,7 @@ public sealed class WebPageFetcher(DocumentTransport transport, ILogger<WebPageF
             case "application/pdf":
                 return new FetchedDocument(DocumentKind.Web, Path.GetFileNameWithoutExtension(response.Address.AbsolutePath), url, string.Empty, response.Body, ".pdf");
             case "text/html" or "application/xhtml+xml" or "":
-                var (title, text) = ReadableText.FromHtml(ReadableText.Decode(response.Body, response.Charset));
+                var (title, text) = Readable(response, url);
                 if (text.Length == 0)
                 {
                     throw new DocumentRejectedException("not_text", "The page has no readable text.", url);
@@ -37,6 +37,23 @@ public sealed class WebPageFetcher(DocumentTransport transport, ILogger<WebPageF
                     url, string.Empty, Encoding.UTF8.GetBytes(ReadableText.Decode(response.Body, response.Charset)), ".md");
             default:
                 throw new DocumentRejectedException("not_text", "The address holds no page, text or PDF.", response.MediaType);
+        }
+    }
+
+    /// <summary>
+    /// The readable text of an HTML answer. A page so broken or hostile that a pattern runs out of its time limit is refused like a page without
+    /// text (its reason is logged), never left to hang or escape.
+    /// </summary>
+    private (string Title, string Text) Readable(WebResponse response, string url)
+    {
+        try
+        {
+            return ReadableText.FromHtml(ReadableText.Decode(response.Body, response.Charset));
+        }
+        catch (System.Text.RegularExpressions.RegexMatchTimeoutException ex)
+        {
+            Logger.LogWarning(ex, "The page at {Host} could not be read in time", response.Address.Host);
+            throw new DocumentRejectedException("not_text", "The page could not be read.", url, ex);
         }
     }
 }

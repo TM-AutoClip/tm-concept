@@ -227,12 +227,16 @@ public sealed class DocumentPageTests
         var library = h.Get<DocumentLibrary>();
         Directory.CreateDirectory(library.Folder);
         File.WriteAllText(Path.Combine(library.Folder, "orphan.part"), "left by an interrupted add");
+        File.SetLastWriteTimeUtc(Path.Combine(library.Folder, "orphan.part"), DateTime.UtcNow.AddHours(-2));
+        File.WriteAllText(Path.Combine(library.Folder, "adding.part"), "being written by an add right now");
 
         var report = await h.Get<IDiskCleaner>().ReportAsync(None);
         var documents = report.Items.Where(i => i.Area == DiskArea.Documents).ToList();
         documents.Count.ShouldBe(3, "two documents and the leftover copies");
         DiskSelection.Unused(report.Items).Where(i => i.Key.StartsWith("document:", StringComparison.Ordinal)).ShouldBeEmpty("clean-up never takes a document");
         DiskSelection.Unused(report.Items).ShouldContain(i => i.Key == DocumentDiskSource.LeftoverKey);
+        report.Items.Single(i => i.Key == DocumentDiskSource.LeftoverKey).Paths.ShouldHaveSingleItem().ShouldEndWith("orphan.part", Case.Sensitive,
+            "a fresh part may be an add writing its copy");
         DiskSelection.Full(report.Items).Count(i => i.Key.StartsWith("document:", StringComparison.Ordinal)).ShouldBe(2, "the full delete takes them");
         report.Totals.ShouldContain(t => t.Area == DiskArea.Documents);
 
@@ -246,6 +250,91 @@ public sealed class DocumentPageTests
         var full = DiskSelection.Full((await h.Get<IDiskCleaner>().ReportAsync(None)).Items).Where(i => i.Area == DiskArea.Documents).ToList();
         (await h.Get<IDiskCleaner>().RemoveAsync(full, None)).Removed.Count.ShouldBe(2);
         (await library.ListAsync(page.Documents.Library.Documents[0].Document.ProfileId, None)).ShouldBeEmpty("the full delete takes the records and passages too");
+    }
+
+    [AvaloniaFact]
+    public async Task ARefusedDocumentsRunSaysWhyInTheUsersLanguageWithoutAFailureNotification()
+    {
+        var fake = new FakeChat();
+        var notes = new RecordingNotifier();
+        using var h = new DesktopHarness(s =>
+        {
+            s.AddSingleton<IChatClientFactory>(fake);
+            s.AddSingleton<TMConcept.Core.Notifications.INotifier>(notes);
+        });
+        await PrepareAsync(h);
+        var text = h.Get<Localizer>();
+        text.Use("tr");
+        var page = await PageAsync(h);
+        await page.Documents.Library.AddFilesAsync([Write(h, "walls.txt", "The Theodosian walls had three lines.")]);
+
+        // The document is gone underneath the page (deleted elsewhere): the run is refused before anything is sent.
+        await h.Get<IDocumentStore>().DeleteAsync(page.Documents.Library.Documents[0].Document.Id, None);
+        page.Documents.Count = 1;
+        var reason = text["provider.fail.documents"];
+        await Until(() => page.Documents.Estimate == reason);
+        page.Documents.StatusIsError.ShouldBeFalse("the price line shows the reason, not \"Bir şey ters gitti\"");
+
+        await page.Documents.GenerateAsync();
+
+        page.Documents.Status.ShouldBe(text.Format("concepts.not_started", reason));
+        page.Documents.Status.ShouldStartWith("Konsept üretimi başlamadı: seçili belgelerden hiçbiri kullanılamıyor");
+        (page.Documents.StatusIsWarning, page.Documents.StatusIsError).ShouldBe((true, false));
+        notes.Sent.ShouldNotContain(n => n.Kind == TMConcept.Core.Notifications.NotificationKind.Failed);
+        fake.Requests.ShouldBeEmpty();
+    }
+
+    [AvaloniaFact]
+    public async Task FindTopicsDropsATopicThatIsAlreadyAConcept()
+    {
+        var fake = new FakeChat()
+            .Answer(_ => new ChatResponse("{\"topics\":[{\"topic\":\"Silk caravans\",\"documents\":[1],\"keywords\":[\"silk\"]},"
+                + "{\"topic\":\"The three lines of walls\",\"documents\":[1],\"keywords\":[\"walls\"]}]}", new ChatUsage(900, 0, 0, 100), null, "end_turn", "r"));
+        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
+        var profile = await PrepareAsync(h);
+        await h.Get<IConceptStore>().AddAsync([new Concept { ProfileId = profile.Id, Title = "SILK CARAVANS", Summary = "s", Content = "c", Language = ContentLanguages.English }],
+            None);
+        var page = await PageAsync(h);
+        var topicsRow = page.Settings.Picker.Row(PipelineSteps.Topics)!;
+        topicsRow.Selected = topicsRow.Options.First(o => o.Model?.Id == "claude-haiku-5-5");
+        await page.Documents.Library.AddFilesAsync([Write(h, "walls.md", "# Walls\nThe Theodosian walls had three lines. Silk came too.")]);
+
+        page.Documents.Count = 2;
+        await page.Documents.FindTopicsAsync();
+
+        page.Documents.Topics.ShouldHaveSingleItem().Text.ShouldBe("The three lines of walls", "a topic that is already a concept is not offered again");
+        page.Documents.Topics[0].Topic.Keywords.ShouldBe(["walls"]);
+        page.Documents.Topics[0].Topic.DocumentIds.ShouldBe([page.Documents.Library.Documents[0].Document.Id]);
+        fake.Requests[0].System.ShouldContain("\"keywords\"");
+    }
+
+    [AvaloniaFact]
+    public async Task DeletingAProfileSendsItsDocumentCopiesToTheRecycleBin()
+    {
+        var bin = new FakeBin();
+        using var h = new DesktopHarness(s =>
+        {
+            s.RemoveAll<IRecycleBin>();
+            s.AddSingleton<IRecycleBin>(bin);
+            s.AddSingleton<IConfirmDialog>(new FakeConfirm { Answer = true });
+        });
+        await FirstRunTests.CreateAsync(h);
+        var profiles = h.Get<ProfileViewModel>();
+        profiles.StartNew();
+        profiles.Name = "Byzantium";
+        profiles.ConceptText = "History.";
+        await profiles.SaveAsync();
+        var id = h.Get<AppSession>().Profile!.Id;
+        var library = h.Get<DocumentLibrary>();
+        await library.AddFileAsync(id, Write(h, "walls.txt", "The walls held."), null, None);
+        var folder = Path.Combine(library.Folder, id.ToString("N"));
+        Directory.GetFiles(folder).ShouldHaveSingleItem();
+
+        await profiles.DeleteAsync();
+
+        (await h.Get<IProfileStore>().ListAsync(None)).ShouldBeEmpty();
+        Directory.Exists(folder).ShouldBeFalse("the plain-text copies of a deleted channel do not stay on disk");
+        bin.Moved.ShouldContain(folder);
     }
 
     [AvaloniaFact]
@@ -292,6 +381,14 @@ public sealed class DocumentPageTests
         Named<Control>(view, "DocumentsPanel").IsVisible.ShouldBeTrue();
         Named<Button>(view, "AddFilesButton").IsEffectivelyVisible.ShouldBeTrue();
         window.Close();
+    }
+
+    /// <summary>Keeps every notification.</summary>
+    private sealed class RecordingNotifier : TMConcept.Core.Notifications.INotifier
+    {
+        public List<TMConcept.Core.Notifications.AppNotification> Sent { get; } = [];
+
+        public void Notify(TMConcept.Core.Notifications.AppNotification notification) => Sent.Add(notification);
     }
 
     /// <summary>A recycle bin that deletes what it is given.</summary>

@@ -14,7 +14,10 @@ internal sealed class MemoryDocumentStore : IDocumentStore
     /// <summary>A ready document of <paramref name="profileId"/> with one passage per text.</summary>
     public SourceDocument Add(Guid profileId, string title, params string[] passages)
     {
-        var document = new SourceDocument { ProfileId = profileId, Title = title, Chunks = passages.Length, Status = DocumentStatus.Ready, Sha256 = title };
+        var document = new SourceDocument
+        {
+            ProfileId = profileId, Title = title, Chunks = passages.Length, Characters = passages.Sum(p => p.Length), Status = DocumentStatus.Ready, Sha256 = title,
+        };
         Documents.Add(document);
         Chunks.AddRange(passages.Select((p, i) => new DocumentChunk { DocumentId = document.Id, ProfileId = profileId, Ordinal = i, Text = p }));
         return document;
@@ -46,8 +49,14 @@ internal sealed class MemoryDocumentStore : IDocumentStore
         return Task.CompletedTask;
     }
 
-    public Task<IReadOnlyList<DocumentChunk>> ChunksAsync(Guid profileId, IReadOnlyCollection<Guid> documentIds, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<DocumentChunk>>(Chunks.Where(c => c.ProfileId == profileId && documentIds.Contains(c.DocumentId)).ToList());
+    /// <summary>How many times passages were read (an estimate must read none).</summary>
+    public int ChunkReads { get; private set; }
+
+    public Task<IReadOnlyList<DocumentChunk>> ChunksAsync(Guid profileId, IReadOnlyCollection<Guid> documentIds, CancellationToken cancellationToken)
+    {
+        ChunkReads++;
+        return Task.FromResult<IReadOnlyList<DocumentChunk>>(Chunks.Where(c => c.ProfileId == profileId && documentIds.Contains(c.DocumentId)).ToList());
+    }
 
     public Task<IReadOnlyList<DocumentChunkVector>> VectorsAsync(Guid profileId, string model, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<DocumentChunkVector>>(Vectors.Where(v => v.ProfileId == profileId && v.Model == model).ToList());

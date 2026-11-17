@@ -81,17 +81,26 @@ public sealed class ExtractorTests
     [InlineData("utf8bom")]
     [InlineData("utf16")]
     [InlineData("latin1")]
+    [InlineData("windows1254")]
+    [InlineData("windows1252")]
     public async Task ATextFileIsReadInItsEncoding(string encoding)
     {
         using var paths = new TempPaths();
         Directory.CreateDirectory(paths.DataDirectory);
         var file = Path.Combine(paths.DataDirectory, "notes.txt");
-        var text = encoding == "latin1" ? "Café crème\r\nzweite Zeile" : "Ilık çay, ğ ş ı İ\r\nikinci satır";
+        var text = encoding switch
+        {
+            "latin1" => "Café crème\r\nzweite Zeile",
+            "windows1252" => "Café “crème” – 5 €\r\nzweite Zeile",
+            _ => "Ilık çay, ğ ş ı İ Ş Ğ\r\nikinci satır",
+        };
         byte[] bytes = encoding switch
         {
             "utf8bom" => [.. Encoding.UTF8.GetPreamble(), .. Encoding.UTF8.GetBytes(text)],
             "utf16" => [.. Encoding.Unicode.GetPreamble(), .. Encoding.Unicode.GetBytes(text)],
             "latin1" => Encoding.Latin1.GetBytes(text),
+            "windows1254" => LegacyEncodings.Named("windows-1254")!.GetBytes(text),
+            "windows1252" => LegacyEncodings.Western.GetBytes(text),
             _ => Encoding.UTF8.GetBytes(text),
         };
         await File.WriteAllBytesAsync(file, bytes, None);

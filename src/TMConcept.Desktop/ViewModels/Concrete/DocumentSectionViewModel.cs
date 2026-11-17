@@ -252,10 +252,12 @@ public sealed partial class DocumentSectionViewModel(AppSession session, Documen
             return null;
         }
 
-        var ticked = Topics.Where(t => t.Checked).Select(t => t.Text).ToList();
+        // A found topic goes with its documents and search words; a run without a subject starts reading the documents at another place
+        // at every press (the phase), so pressing again reaches other parts of a long document.
+        var ticked = Topics.Where(t => t.Checked).Select(t => t.Topic).ToList();
         return ticked.Count > 0
             ? new DocumentBrief(Subject, ticked.Count, Library.Chosen, ticked.Take(DocumentLimits.ConceptCountMax).ToList())
-            : Count is >= 1 ? new DocumentBrief(Subject, Asked(), Library.Chosen) : null;
+            : Count is >= 1 ? new DocumentBrief(Subject, Asked(), Library.Chosen) { Phase = System.Security.Cryptography.RandomNumberGenerator.GetInt32(1_000) / 1_000.0 } : null;
     }
 
     /// <inheritdoc />
@@ -323,7 +325,7 @@ public sealed partial class DocumentSectionViewModel(AppSession session, Documen
         var listed = Topics.Select(t => Core.Text.TurkishFold.Fold(t.Text)).ToHashSet(StringComparer.Ordinal);
         foreach (var topic in found.Where(t => listed.Add(Core.Text.TurkishFold.Fold(t.Text))))
         {
-            var item = new DocumentTopicItemViewModel(topic.Text, string.Join("; ", topic.Documents));
+            var item = new DocumentTopicItemViewModel(topic);
             item.PropertyChanged += OnTicked;
             Topics.Add(item);
         }

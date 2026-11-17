@@ -95,6 +95,84 @@ public sealed class ConceptSourceTests
         batch.Grounding.ShouldNotBeNull().Passages.ShouldHaveSingleItem();
     }
 
+    [Fact]
+    public async Task ATopicFoundInADocumentIsSearchedThereWithItsOwnWords()
+    {
+        var store = new MemoryDocumentStore();
+        var walls = store.Add(Channel.Id, "Walls", "The Theodosian walls had three lines.", "The moat was wide.");
+        var trade = store.Add(Channel.Id, "Trade", "Silk came by caravan to Constantinople.", "The emperor taxed the silk merchants.");
+        var found = new DocumentTopic("İpek kervanları", ["Trade"]) { DocumentIds = [trade.Id], Keywords = ["caravan", "silk"] };
+        var brief = new DocumentBrief(string.Empty, 0, [], [found]);
+
+        var batch = await Documents(store).PrepareAsync(Request(brief, 0, 1), CancellationToken.None);
+
+        batch.Topics.ShouldBe(["İpek kervanları"], "the topic is sent as the user saw it");
+        var grounding = batch.Grounding.ShouldNotBeNull();
+        grounding.Documents.ShouldHaveSingleItem().Id.ShouldBe(trade.Id, "a Turkish topic finds its English passages in its own document");
+        grounding.Passages[0].Text.ShouldContain("caravan");
+        brief.Topic(0).ShouldBe(found);
+
+        var misnumbered = new DocumentBrief(string.Empty, 0, [], [found with { DocumentIds = [walls.Id] }]);
+        var searched = await Documents(store).PrepareAsync(Request(misnumbered, 0, 1), CancellationToken.None);
+        searched.Grounding.ShouldNotBeNull().Passages[0].Text.ShouldContain("caravan", Case.Sensitive, "nothing about it in the cited document: all are searched");
+
+        store.Documents.Remove(trade);
+        var fallback = await Documents(store).PrepareAsync(Request(brief, 0, 1), CancellationToken.None);
+        fallback.Grounding.ShouldNotBeNull().Documents.ShouldHaveSingleItem().Id.ShouldBe(walls.Id, "its document is gone: the chosen ones are searched");
+    }
+
+    [Fact]
+    public async Task ALaterBatchOfTheRunGetsOtherPassages()
+    {
+        var store = new MemoryDocumentStore();
+        store.Add(Channel.Id, "Long", [.. Enumerable.Range(0, 120).Select(i => $"Chapter {i}: " + new string('x', 1_000))]);
+        var source = Documents(store);
+        var brief = new DocumentBrief(string.Empty, 4, []);
+
+        var first = (await source.PrepareAsync(Request(brief, 0, 2), CancellationToken.None)).Grounding.ShouldNotBeNull();
+        var used = first.Passages.Select(p => p.ChunkId).ToHashSet();
+        var second = (await source.PrepareAsync(Request(brief, 2, 2) with { Used = used }, CancellationToken.None)).Grounding.ShouldNotBeNull();
+
+        first.Passages.Count.ShouldBeLessThan(120, "the paid budget holds only part of the document");
+        second.Passages.Select(p => p.ChunkId).ShouldNotContain(id => used.Contains(id), "the second batch reads further");
+    }
+
+    [Fact]
+    public async Task ABatchThatLeavesNoRoomForPassagesGetsSmallerInsteadOfBeingRefused()
+    {
+        var store = new MemoryDocumentStore();
+        store.Add(Channel.Id, "Trade", "Silk came by caravan.");
+        var local = new CatalogModel { Provider = "ollama", Id = "small", ContextTokens = 8_192, MaxOutputTokens = 4_096 };
+
+        // A bare prompt of 3,500 tokens (history and wishes): three concepts of 900 tokens leave too little room, one leaves enough.
+        var request = new ConceptSourceRequest(Channel, new DocumentBrief(string.Empty, 3, []), local, 0, 3, 3_500, 2_700, 4_096, false);
+        var batch = await Documents(store).PrepareAsync(request, CancellationToken.None);
+
+        batch.Size.ShouldNotBeNull().ShouldBeInRange(1, 2);
+        batch.Grounding.ShouldNotBeNull().Passages.ShouldHaveSingleItem();
+        DocumentBudget.PassageTokens(local, 3_500, batch.MaxOutputTokens ?? 4_096).ShouldBeGreaterThanOrEqualTo(DocumentLimits.PassageTokensMin);
+        (await Documents(store).PrepareAsync(Request(new DocumentBrief(string.Empty, 2, []), 0, 2), CancellationToken.None)).Size.ShouldBeNull("room enough: as asked");
+    }
+
+    [Fact]
+    public async Task AnEstimateReadsNoPassageAndChargesTheBudget()
+    {
+        var store = new MemoryDocumentStore();
+        store.Add(Channel.Id, "Long", [.. Enumerable.Range(0, 200).Select(i => new string('x', 1_200))]);
+        store.Add(Channel.Id, "Short", "Silk.");
+
+        var estimate = await Documents(store).PrepareAsync(Request(new DocumentBrief(string.Empty, 2, []), 0, 2) with { Estimate = true }, CancellationToken.None);
+
+        store.ChunkReads.ShouldBe(0, "typing in the subject box must not decrypt every passage");
+        estimate.EstimatedTokens.ShouldBe(DocumentLimits.PassageTokensOnlineMax, "a long document fills the paid budget");
+        estimate.Grounding.ShouldNotBeNull().Passages.ShouldBeEmpty();
+
+        var small = new MemoryDocumentStore();
+        var shortOne = small.Add(Channel.Id, "Short", "Silk came by caravan.");
+        var few = await Documents(small).PrepareAsync(Request(new DocumentBrief(string.Empty, 1, [shortOne.Id]), 0, 1) with { Estimate = true }, CancellationToken.None);
+        few.EstimatedTokens.ShouldBeInRange(1, 100, "a short document costs what it holds");
+    }
+
     private static ConceptSourceRequest Request(ConceptBrief brief, int offset, int size) =>
         new(Channel, brief, Paid, offset, size, 3_000, size * 1_500L, 64_000, false);
 

@@ -202,6 +202,57 @@ public sealed class DocumentStorageTests
         }
     }
 
+    [Fact]
+    public async Task ABackupCarriesDocumentCopiesUpToItsLimitAndTheRecordsOfTheRest()
+    {
+        using var source = await StorageHarness.CreatedAsync();
+        var (profile, small) = await PrepareAsync(source, "Silk came by caravan.");
+        var large = Path.Combine(source.Paths.DataDirectory, "incoming", "chronicle.txt");
+        await File.WriteAllTextAsync(large, string.Join("\n\n", Enumerable.Range(0, 400).Select(i => $"Year {i}: the walls held.")), None);
+        var library = Library(source);
+        var kept = (await library.AddFileAsync(profile.Id, small, null, None)).Document;
+        var leftOut = (await library.AddFileAsync(profile.Id, large, null, None)).Document;
+        var service = Service(source);
+        service.DocumentBytesMax = new FileInfo(large).Length - 1;
+        await service.SetPasswordAsync(Password, None);
+        var file = Path.Combine(source.Paths.DataDirectory, "capped" + BackupRules.Extension);
+
+        await service.CreateAsync(file, BackupContents.Automatic, None);
+
+        using var target = new StorageHarness();
+        await Service(target).RestoreAsync(file, Password, target.Protector, None);
+        var store = new DocumentStore(target.Database);
+        (await store.ListAsync(profile.Id, None)).Select(d => d.Id).ShouldBe([kept.Id, leftOut.Id], ignoreOrder: true, "every record is in");
+        (await store.ChunksAsync(profile.Id, [leftOut.Id], None)).ShouldNotBeEmpty("the passages of a copy left out still come back");
+        File.Exists(Library(target).FileOf(kept)).ShouldBeTrue();
+        File.Exists(Library(target).FileOf(leftOut)).ShouldBeFalse("the copy past the limit is not in the backup");
+    }
+
+    [Fact]
+    public async Task VectorsOfADocumentDeletedDuringAVectorRunAreLeftOutAndAFailedCopyLeavesNothing()
+    {
+        using var h = await StorageHarness.CreatedAsync();
+        var (profile, file) = await PrepareAsync(h);
+        var store = new DocumentStore(h.Database);
+        var document = (await Library(h).AddFileAsync(profile.Id, file, null, None)).Document;
+        var chunk = (await store.ChunksAsync(profile.Id, [document.Id], None)).Single();
+        await store.DeleteAsync(document.Id, None);
+
+        await store.SaveVectorsAsync([new DocumentChunkVector { ChunkId = chunk.Id, ProfileId = profile.Id, Model = "fixed", Dimensions = 2, Vector = new byte[8] }], None);
+
+        (await h.QueryAsync(db => db.DocumentChunkVectors.CountAsync())).ShouldBe(0, "a deleted passage gets no vector and nothing fails");
+        var orphan = new SourceDocument { ProfileId = Guid.NewGuid(), Title = "x", Sha256 = "y" };
+        (await Should.ThrowAsync<InvalidOperationException>(() => store.AddAsync(orphan, [], None))).Message.ShouldStartWith("The document could not be saved:");
+
+        // The copy is canceled while it is written: no ".part" stays behind.
+        using var cancel = new CancellationTokenSource();
+        var library = new DocumentLibrary(h.Paths, new CancelOnLookup(store, cancel), [new PlainTextExtractor()], [], new FixedEmbedder(false), TimeProvider.System,
+            NullLogger<DocumentLibrary>.Instance);
+        await Should.ThrowAsync<OperationCanceledException>(() => library.AddFileAsync(profile.Id, file, null, cancel.Token));
+        Directory.GetFiles(library.Folder, "*.part", SearchOption.AllDirectories).ShouldBeEmpty();
+        library.Busy.ShouldBeFalse();
+    }
+
     private static BackupService Service(StorageHarness h) =>
         new(h.Paths, h.Key, h.Vault, h.Database, KdfParameters.Fast, TimeProvider.System, NullLogger<BackupService>.Instance);
 
@@ -232,6 +283,39 @@ public sealed class DocumentStorageTests
         public override IReadOnlyList<string> Extensions { get; } = [".md"];
 
         protected override ExtractedDocument Read(string file, CancellationToken cancellationToken) => throw new InvalidDataException("damaged");
+    }
+
+    /// <summary>A store that cancels the add right after its duplicate check, so the copy is canceled while it is written.</summary>
+    private sealed class CancelOnLookup(IDocumentStore inner, CancellationTokenSource cancel) : IDocumentStore
+    {
+        public Task<IReadOnlyList<SourceDocument>> ListAsync(Guid profileId, CancellationToken cancellationToken) => inner.ListAsync(profileId, cancellationToken);
+
+        public Task<IReadOnlyList<SourceDocument>> ListAllAsync(CancellationToken cancellationToken) => inner.ListAllAsync(cancellationToken);
+
+        public Task<SourceDocument?> FindAsync(Guid id, CancellationToken cancellationToken) => inner.FindAsync(id, cancellationToken);
+
+        public async Task<SourceDocument?> FindByContentAsync(Guid profileId, string sha256, CancellationToken cancellationToken)
+        {
+            var found = await inner.FindByContentAsync(profileId, sha256, CancellationToken.None);
+            await cancel.CancelAsync();
+            return found;
+        }
+
+        public Task AddAsync(SourceDocument document, IReadOnlyList<DocumentChunk> chunks, CancellationToken cancellationToken) =>
+            inner.AddAsync(document, chunks, cancellationToken);
+
+        public Task DeleteAsync(Guid id, CancellationToken cancellationToken) => inner.DeleteAsync(id, cancellationToken);
+
+        public Task<IReadOnlyList<DocumentChunk>> ChunksAsync(Guid profileId, IReadOnlyCollection<Guid> documentIds, CancellationToken cancellationToken) =>
+            inner.ChunksAsync(profileId, documentIds, cancellationToken);
+
+        public Task<IReadOnlyList<DocumentChunkVector>> VectorsAsync(Guid profileId, string model, CancellationToken cancellationToken) =>
+            inner.VectorsAsync(profileId, model, cancellationToken);
+
+        public Task<IReadOnlyList<DocumentChunk>> ChunksWithoutVectorAsync(string model, CancellationToken cancellationToken) =>
+            inner.ChunksWithoutVectorAsync(model, cancellationToken);
+
+        public Task SaveVectorsAsync(IReadOnlyList<DocumentChunkVector> vectors, CancellationToken cancellationToken) => inner.SaveVectorsAsync(vectors, cancellationToken);
     }
 
     /// <summary>A recycle bin that deletes what it is given, or fails.</summary>

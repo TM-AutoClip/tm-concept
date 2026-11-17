@@ -39,6 +39,9 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
 
     private static readonly byte[] Magic = Encoding.ASCII.GetBytes("TMCBAK03");
 
+    /// <summary>The most bytes of document copies in one backup (<see cref="BackupRules.DocumentBytesMax"/>; tests set a small one).</summary>
+    internal long DocumentBytesMax { get; set; } = BackupRules.DocumentBytesMax;
+
     // Every backup file starts with "TMCBAK" and its two-digit format.
     private static readonly byte[] MagicFamily = Encoding.ASCII.GetBytes("TMCBAK");
 
@@ -203,15 +206,33 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
                     }
                 }
 
-                // The app's copies of the documents (the documents folder; the rows are in the copy only when the profiles are).
-                foreach (var file in (await db.Documents.Select(d => d.StoredFile).ToListAsync(cancellationToken).ConfigureAwait(false)).Where(f => f.Length > 0)
-                    .Distinct(StringComparer.Ordinal))
+                // The app's copies of the documents (the documents folder; the rows are in the copy only when the profiles are), the smallest
+                // first, up to DocumentBytesMax: past it the largest are left out with their records and passages kept.
+                var stored = (await db.Documents.Select(d => d.StoredFile).ToListAsync(cancellationToken).ConfigureAwait(false)).Where(f => f.Length > 0)
+                    .Distinct(StringComparer.Ordinal).Select(f => (File: f, Size: DocumentSize(f))).OrderBy(d => d.Size).ToList();
+                var documentBytes = 0L;
+                var leftOut = new List<long>();
+                foreach (var (file, size) in stored)
                 {
+                    if (documentBytes + size > DocumentBytesMax)
+                    {
+                        leftOut.Add(size);
+                        continue;
+                    }
+
                     if (await ReadDocumentAsync(file, cancellationToken).ConfigureAwait(false) is { } bytes)
                     {
+                        documentBytes += bytes.Length;
                         images.Add(bytes);
                         header.Documents.Add(new BackupImage { Path = file, Length = bytes.Length, Sha256 = Convert.ToHexStringLower(SHA256.HashData(bytes)) });
                     }
+                }
+
+                header.DocumentsLeftOut = leftOut.Count;
+                if (leftOut.Count > 0)
+                {
+                    logger.LogWarning("Backup: {Count} document copies ({Megabytes} MB) were left out, the backup holds {Limit} MB of copies at most; their records and passages are in it",
+                        leftOut.Count, leftOut.Sum() >> 20, DocumentBytesMax >> 20);
                 }
             }
 
@@ -219,7 +240,13 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
             var databaseBytes = await File.ReadAllBytesAsync(copy, cancellationToken).ConfigureAwait(false);
             header.DatabaseLength = databaseBytes.Length;
             var headerBytes = JsonSerializer.SerializeToUtf8Bytes(header, StorageJsonContext.Default.BackupHeader);
-            plain = new byte[4 + headerBytes.Length + dek.Length + databaseBytes.Length + images.Sum(i => i.Length)];
+            var total = 4L + headerBytes.Length + dek.Length + databaseBytes.Length + images.Sum(i => (long)i.Length);
+            if (total > Array.MaxLength)
+            {
+                throw new InvalidOperationException($"The backup would hold {total >> 20} MB; one backup file holds {Array.MaxLength >> 20} MB at most.");
+            }
+
+            plain = new byte[total];
             BinaryPrimitives.WriteInt32LittleEndian(plain, headerBytes.Length);
             var at = 4;
             foreach (var part in new[] { headerBytes, dek, databaseBytes }.Concat(images))
@@ -472,6 +499,21 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
         }
 
         return null;
+    }
+
+    /// <summary>The size of a document's copy (0 when it is missing or cannot be read; the read then says why).</summary>
+    private long DocumentSize(string stored)
+    {
+        try
+        {
+            var file = new FileInfo(Core.Paths.LibraryPaths.Resolve(DocumentsFolder, stored));
+            return file.Exists ? file.Length : 0;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarning(ex, "The size of a document's copy could not be read for the backup");
+            return 0;
+        }
     }
 
     private async Task<byte[]?> ReadDocumentAsync(string stored, CancellationToken cancellationToken)
