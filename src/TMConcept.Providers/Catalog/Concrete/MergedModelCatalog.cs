@@ -1,3 +1,4 @@
+using TMConcept.Core.AppOllama;
 using TMConcept.Core.Endpoints;
 using TMConcept.Core.Models;
 
@@ -7,22 +8,33 @@ namespace TMConcept.Providers.Catalog;
 /// The app's <see cref="IModelCatalog"/>: the embedded catalogs (<see cref="EmbeddedModelCatalog"/>, with their price updates) plus the
 /// models of the user's local servers (<see cref="EndpointRegistry"/>: free, chat, no key). The endpoint part is rebuilt in one step whenever
 /// the saved servers change, so a picker that loads after a change offers the new models, and a step choice of a deleted server's model is
-/// not found (shown as no longer offered). Prices and built-in prices concern only the embedded models.
+/// not found (shown as no longer offered). The installed models of the app's own Ollama copy (<see cref="AppModelRegistry"/>, provider
+/// <see cref="ModelProviders.AppOllama"/>) are added the same way and follow their registry's changes. Prices and built-in prices concern
+/// only the embedded models.
 /// </summary>
 public sealed class MergedModelCatalog : IModelCatalog
 {
     private readonly EmbeddedModelCatalog _embedded;
     private readonly EndpointRegistry _endpoints;
+    private readonly AppModelRegistry? _appModels;
     private volatile IReadOnlyList<CatalogModel> _local = [];
 
-    /// <summary>Merges <paramref name="embedded"/> with the models of <paramref name="endpoints"/> and follows their changes.</summary>
-    public MergedModelCatalog(EmbeddedModelCatalog embedded, EndpointRegistry endpoints)
+    /// <summary>
+    /// Merges <paramref name="embedded"/> with the models of <paramref name="endpoints"/> and of <paramref name="appModels"/> (when given) and
+    /// follows their changes.
+    /// </summary>
+    public MergedModelCatalog(EmbeddedModelCatalog embedded, EndpointRegistry endpoints, AppModelRegistry? appModels = null)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
         _embedded = embedded;
         _endpoints = endpoints;
+        _appModels = appModels;
         Rebuild();
         endpoints.Changed += (_, _) => Rebuild();
+        if (appModels is not null)
+        {
+            appModels.Changed += (_, _) => Rebuild();
+        }
     }
 
     /// <inheritdoc />
@@ -33,7 +45,7 @@ public sealed class MergedModelCatalog : IModelCatalog
 
     /// <inheritdoc />
     public CatalogModel? Find(string provider, string id) =>
-        EndpointCodes.IsEndpoint(provider) ? _local.FirstOrDefault(m => m.Provider == provider && m.Id == id) : _embedded.Find(provider, id);
+        EndpointCodes.IsEndpoint(provider) || provider == ModelProviders.AppOllama ? _local.FirstOrDefault(m => m.Provider == provider && m.Id == id) : _embedded.Find(provider, id);
 
     /// <inheritdoc />
     public CatalogModel? BuiltIn(string provider, string id) => _embedded.BuiltIn(provider, id);
@@ -45,5 +57,5 @@ public sealed class MergedModelCatalog : IModelCatalog
     /// <inheritdoc />
     public void ApplyPrices(IReadOnlyList<PriceTable> tables) => _embedded.ApplyPrices(tables);
 
-    private void Rebuild() => _local = _endpoints.All.SelectMany(EndpointCodes.Catalog).ToList();
+    private void Rebuild() => _local = [.. _appModels?.Catalog ?? [], .. _endpoints.All.SelectMany(EndpointCodes.Catalog)];
 }
