@@ -1041,7 +1041,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
 
         var engine = _engines.FirstOrDefault(e => e.Kind == Picker.Row(PipelineSteps.VideoCode)?.Engine?.Kind);
         var estimate = _estimator.Estimate(queued, profile, engine, code, Picker.Model(PipelineSteps.Images), Picker.Model(PipelineSteps.Speech),
-            SelectedStyle?.Subtitles ?? true);
+            SelectedStyle?.Subtitles ?? true, SelectedStyle);
         QueueEstimate = _text.Format("concepts.estimate.tiny", _text.Usd(estimate.MinUsd), _text.Usd(estimate.MaxUsd));
         QueueEstimateTip = _text.Format("video.estimate", queued.Count, _text.Usd(estimate.MinUsd), _text.Usd(estimate.MaxUsd));
     }

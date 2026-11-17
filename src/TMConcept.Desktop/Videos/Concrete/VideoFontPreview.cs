@@ -5,9 +5,10 @@ using TMConcept.Core.Styles;
 namespace TMConcept.Desktop.Videos;
 
 /// <summary>
-/// The font family that shows a video font's name in the font itself (template editor). The font files ship as app resources in
-/// <see cref="AssetFolder"/> (the file names of <see cref="VideoFont.RegularFile"/>); while a file is not there, the name is drawn in a font
-/// installed on the computer with the same family name, or else in the interface font.
+/// The font family that shows a video font's name in the font itself (template editor). The regular weights of the bundled video fonts
+/// (Core's Styles/Files/Fonts) are linked into the app resources at <see cref="AssetFolder"/> (the file names of
+/// <see cref="VideoFont.RegularFile"/>); should a file be missing, the name is drawn in a font installed on the computer with the same family
+/// name, or else in the interface font.
 /// </summary>
 public static class VideoFontPreview
 {

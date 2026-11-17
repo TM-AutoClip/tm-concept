@@ -12,6 +12,20 @@ namespace TMConcept.Tests.Desktop;
 public sealed class StyleSettingsTests
 {
     [AvaloniaFact]
+    public void EveryVideoFontShipsAsAnAppResourceSoItsNameIsShownInItself()
+    {
+        foreach (var font in VideoFonts.All)
+        {
+            Avalonia.Platform.AssetLoader.Exists(new Uri(TMConcept.Desktop.Videos.VideoFontPreview.AssetFolder + "/" + font.RegularFile))
+                .ShouldBeTrue(font.RegularFile + " is linked from Core into the app resources");
+            var family = TMConcept.Desktop.Videos.VideoFontPreview.For(font);
+            family.Key.ShouldNotBeNull(font.Id + " uses the bundled file, not a system font").Source.ToString()
+                .ShouldStartWith(TMConcept.Desktop.Videos.VideoFontPreview.AssetFolder);
+            family.Name.ShouldBe(font.Family);
+        }
+    }
+
+    [AvaloniaFact]
     public async Task ATemplateIsAddedEditedAndDeletedAfterAskingAndTheFormShowsAPreview()
     {
         var confirm = new FakeConfirm();

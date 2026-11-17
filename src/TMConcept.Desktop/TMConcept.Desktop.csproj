@@ -75,8 +75,9 @@
     <!-- Language files are embedded (WithCulture=false: the .en/.tr suffix is not a satellite culture). -->
     <EmbeddedResource Include="Lang\*.json" LogicalName="TMConcept.Lang.%(Filename)%(Extension)" WithCulture="false" />
     <AvaloniaResource Include="Assets\Fonts\*.ttf" />
-    <!-- The video fonts of the templates (OFL) once they ship there: the template editor shows each name in its own font. -->
-    <AvaloniaResource Include="Assets\VideoFonts\*.ttf" />
+    <!-- The video fonts of the templates (OFL) live in Core (embedded for the renderer); their regular weights are linked here too, so the
+         template editor shows each name in its own font (avares://TMConcept/Assets/VideoFonts/<file>). -->
+    <AvaloniaResource Include="..\TMConcept.Core\Styles\Files\Fonts\**\*-Regular.ttf" Link="Assets\VideoFonts\%(Filename)%(Extension)" />
     <AvaloniaResource Include="Assets\app.ico;Assets\app-256.png" />
     <None Include="Assets\Licenses\*.txt" CopyToOutputDirectory="PreserveNewest" LinkBase="licenses" />
   </ItemGroup>

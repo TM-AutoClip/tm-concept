@@ -244,6 +244,70 @@ public sealed class VideoPageTests
         File.ReadAllText(Path.Combine(folder, VideoFolders.NarrationFile)).ShouldContain("siege");
     }
 
+    /// <summary>
+    /// End to end (0.1.19): the template stored in Settings, picked on the page, reaches the render input (palette tokens and theme, font,
+    /// title), the project (font files), the prompt (template block) and the mux (progress bar and closing card in the overlay, the channel
+    /// photo saved with the profile in the database placed on the card).
+    /// </summary>
+    [AvaloniaFact]
+    public async Task ATemplatePickedOnThePageReachesTheRenderInputTheFontsTheOverlayAndTheChannelPhoto()
+    {
+        var engine = new FakeEngine();
+        var chat = new FakeChat().Answer(_ => Code(engine.SampleCode));
+        using var h = Harness(chat, engine);
+        var (page, concept) = await OpenAsync(h, chooseStyle: false);
+
+        // The channel photo is a copy in the library, stored on the profile (the database column of Version0119).
+        var library = h.Get<IAppPaths>().LibraryDirectory;
+        var photo = Path.Combine(library, "Byzantium", "channel", "0123456789-me.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(photo)!);
+        await File.WriteAllBytesAsync(photo, [0x89, 0x50, 0x4E, 0x47]);
+        var profile = (await h.Get<IProfileStore>().GetAsync(concept.ProfileId, CancellationToken.None)).ShouldNotBeNull();
+        profile.ChannelPhoto = LibraryPaths.Relative(library, photo);
+        await h.Get<IProfileStore>().SaveAsync(profile, CancellationToken.None);
+
+        var style = new VideoStyle
+        {
+            Name = "Ocean",
+            Subtitles = true,
+            ProgressBar = true,
+            FontId = "poppins",
+            PaletteId = "ocean",
+            TitleStyle = TitleStyle.Boxed,
+            TitlePosition = TitlePosition.MiddleCenter,
+            Closing = ClosingPlacement.Screen,
+            ClosingPlatform = ClosingPlatform.YouTube,
+        };
+        await h.Get<IVideoStyleStore>().SaveAsync(style, CancellationToken.None);
+        await page.ActivateAsync();
+        page.SelectedStyle = page.Styles.Single(s => s.Id == style.Id);
+        await page.EnqueueAsync(page.Approved.Single());
+        await page.ProduceAllAsync();
+
+        page.Produced.Single().Title.ShouldBe("Greek fire");
+        var input = engine.Input.ShouldNotBeNull();
+        var rendered = input.Style.ShouldNotBeNull("the template reaches the render input");
+        rendered.Colors.Background.ShouldBe("#06202B");
+        rendered.Colors.Accent.ShouldBe("#2EC4F1");
+        input.Theme.Background.ShouldBe("#06202B", "the theme follows the palette");
+        rendered.Font.ShouldBe("Poppins");
+        rendered.FontRegular.ShouldBe("fonts/Poppins-Regular.ttf");
+        rendered.TitleStyle.ShouldNotBeNullOrEmpty();
+        rendered.Subtitles.ShouldBeTrue();
+        rendered.ProgressBar.ShouldBeTrue();
+        rendered.EndCardSeconds.ShouldBeGreaterThan(0, "a closing card on screen");
+        engine.Fonts.ShouldContain("Poppins-Regular.ttf", "the font files are copied into the project");
+        chat.Requests.Single().System.ShouldContain("Poppins");
+
+        var mux = ((FakeMedia)h.Get<IMediaTools>()).Overlays.Single();
+        mux.AssText.ShouldNotBeNull().ShouldContain("Poppins", Case.Sensitive, "subtitles in the template font");
+        mux.AssText.ShouldContain("Byzantium", Case.Sensitive, "the closing card names the channel");
+        mux.Files.ShouldContain("fonts/Poppins-Regular.ttf");
+        var placed = mux.Overlay.Photo.ShouldNotBeNull("the channel photo is placed on the closing card");
+        mux.Files.ShouldContain(placed.File);
+        placed.StartSeconds.ShouldBeGreaterThan(0);
+    }
+
     [AvaloniaFact]
     public async Task TheTemplateChoiceIsKeptAcrossRestartsAndEachVideoKeepsTheCopyItStartedWith()
     {
