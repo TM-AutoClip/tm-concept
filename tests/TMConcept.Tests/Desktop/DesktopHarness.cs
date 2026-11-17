@@ -31,6 +31,7 @@ internal sealed class DesktopHarness : IDisposable
             s.AddSingleton(new TMConcept.Desktop.Updates.UpdateTransport(() => new NoNetworkHandler()));
             s.AddSingleton(new TMConcept.Engines.Tools.DownloadTransport(() => new NoNetworkHandler()));
             s.AddSingleton(new TMConcept.Documents.Web.DocumentTransport(() => new NoNetworkHandler()));
+            s.AddSingleton(new TMConcept.Documents.Mcp.McpHttpTransport(() => new NoNetworkHandler()));
 
             // The graphics card coordinator reads a fixed 16 GB card with 14 GB free and never waits (nothing native, any test machine).
             s.AddSingleton<TMConcept.Core.Hardware.IVramProbe>(new Core.FakeVramProbe(new TMConcept.Core.Hardware.VramReading(16L << 30, 14L << 30, true, "test")));
