@@ -1,14 +1,23 @@
 namespace TMConcept.Desktop.Updates;
 
 /// <summary>
-/// Where and how often the app looks for a new version of itself: the latest release of the project on GitHub, read without a token
+/// Where and how often the app looks for a new version of itself: the project's release list on GitHub, read without a token
 /// (GitHub allows 60 such reads an hour per address), at most once a day, with a plain program name as its User-Agent (nothing about the
 /// user or the computer is sent).
 /// </summary>
 public static class UpdateRules
 {
-    /// <summary>The latest published release (drafts and pre-releases are not "latest").</summary>
-    public static readonly Uri LatestRelease = new("https://api.github.com/repos/TM-AutoClip/tm-concept/releases/latest");
+    /// <summary>
+    /// The project's releases, newest first, 100 per page (the update window lists the notes of every version between the running one and
+    /// the newest; drafts and pre-releases are left out by the app).
+    /// </summary>
+    public static readonly Uri Releases = new("https://api.github.com/repos/TM-AutoClip/tm-concept/releases?per_page=100");
+
+    /// <summary>Where a "next page" address of the release list must start (GitHub's Link header; anything else is not followed).</summary>
+    public const string ApiPrefix = "https://api.github.com/";
+
+    /// <summary>The most pages of the release list read in one look (each one counts against the hourly limit).</summary>
+    public const int MaxPages = 5;
 
     /// <summary>The releases page (shown when the app cannot install a release itself).</summary>
     public static readonly Uri ReleasesPage = new("https://github.com/TM-AutoClip/tm-concept/releases");

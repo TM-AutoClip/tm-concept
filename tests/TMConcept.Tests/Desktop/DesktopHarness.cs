@@ -8,10 +8,17 @@ namespace TMConcept.Tests.Desktop;
 /// <summary>The real composition root on a temporary data folder (portable mode, cheap key derivation).</summary>
 internal sealed class DesktopHarness : IDisposable
 {
-    private readonly string _folder = Path.Combine(Path.GetTempPath(), "tmconcept-tests", "desktop-" + Guid.NewGuid().ToString("N"));
+    private readonly string _folder;
 
     public DesktopHarness(Action<IServiceCollection>? overrides = null)
+        : this(Path.Combine(Path.GetTempPath(), "tmconcept-tests", "desktop-" + Guid.NewGuid().ToString("N")), overrides)
     {
+    }
+
+    /// <summary>On <paramref name="folder"/> (a test that puts files there first); removed at the end.</summary>
+    public DesktopHarness(string folder, Action<IServiceCollection>? overrides = null)
+    {
+        _folder = folder;
         Paths = new AppPaths(_folder, DesktopServices.CurrentOs);
         Services = DesktopServices.Build(Paths, s =>
         {

@@ -260,6 +260,14 @@ public static class DesktopServices
         services.AddSingleton<Updates.AppUpdater>();
         services.AddSingleton<Dialogs.IAppUpdateDialog, Dialogs.AppUpdateDialog>();
         services.AddSingleton<Components.ComponentReinstaller>();
+
+        // The storage manager (Settings → Storage): components and leftovers as rows, who uses them, and a removal through the recycle bin.
+        services.AddSingleton<Core.DiskSpace.IComponentUsage, Core.DiskSpace.ComponentUsage>();
+        services.AddSingleton<Core.DiskSpace.IDiskItemSource, Core.DiskSpace.ComponentDiskSource>();
+        services.AddSingleton<Core.DiskSpace.IDiskItemSource, DiskSpace.LeftoverDiskSource>();
+        services.AddSingleton<DiskSpace.RecycleBinDiscard>();
+        services.AddSingleton<DiskSpace.PermanentDiscard>();
+        services.AddSingleton<DiskSpace.IDiskCleaner, DiskSpace.DiskCleaner>();
         services.AddSingleton<VersionCheck>();
 
         services.AddSingleton<Reports.SystemReport>();
@@ -290,6 +298,7 @@ public static class DesktopServices
         services.AddSingleton<Func<IEnumerable<SettingsSectionBase>>>(s => () => s.GetServices<SettingsSectionBase>());
         AddSection<GeneralSettingsViewModel, GeneralSettingsView>(services);
         AddSection<KeysSettingsViewModel, KeysSettingsView>(services);
+        AddSection<StorageSettingsViewModel, StorageSettingsView>(services);
         AddSection<VoiceSettingsViewModel, VoiceSettingsView>(services);
         AddSection<BackupSettingsViewModel, BackupSettingsView>(services);
         AddSection<AboutSettingsViewModel, AboutSettingsView>(services);

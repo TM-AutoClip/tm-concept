@@ -6,12 +6,25 @@
         Title="{DynamicResource appupdate.window}"
         Width="640" Height="560" MinWidth="420" MinHeight="360"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
-  <!-- A newer version of the app: its version and notes; installed only after "Download and install" (then the app restarts). -->
+  <!-- A newer version of the app: the notes of every version since the running one (oldest first); only the newest is installed, after
+       "Download and install" (then the app restarts). -->
   <Grid Margin="24" RowDefinitions="Auto,*,Auto,Auto,Auto" RowSpacing="12">
-    <TextBlock Name="UpdateTitle" Text="{Binding Title}" Classes="h2" TextWrapping="Wrap" />
+    <StackPanel Spacing="4">
+      <TextBlock Name="UpdateTitle" Text="{Binding Title}" Classes="h2" TextWrapping="Wrap" />
+      <TextBlock Name="UpdateSubtitle" Text="{Binding Subtitle}" Classes="muted" TextWrapping="Wrap" />
+    </StackPanel>
     <Border Grid.Row="1" BorderBrush="{DynamicResource tm-border}" BorderThickness="1" CornerRadius="4">
       <ScrollViewer Padding="12,8">
-        <SelectableTextBlock Name="Notes" Text="{Binding Notes}" TextWrapping="Wrap" />
+        <ItemsControl Name="Notes" ItemsSource="{Binding Versions}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="d:ReleaseNoteRow">
+              <StackPanel Spacing="6" Margin="0,0,0,16">
+                <TextBlock Text="{Binding Header}" FontWeight="SemiBold" FontSize="15" />
+                <SelectableTextBlock Text="{Binding Notes}" TextWrapping="Wrap" />
+              </StackPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
       </ScrollViewer>
     </Border>
     <StackPanel Grid.Row="2" Spacing="6">

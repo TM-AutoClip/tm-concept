@@ -10,7 +10,8 @@ using TMConcept.Desktop.Updates;
 namespace TMConcept.Desktop.Dialogs;
 
 /// <summary>
-/// The window that offers a newer version: the version, the release notes, and "Download and install" (only when the app can install it
+/// The window that offers a newer version: "A new update is available", the notes of every version between the running one and the newest
+/// (oldest first, in the app's language), and "Download and install" of the newest (only when the app can install it
 /// itself; otherwise why not and the release page). The download shows its progress and can be cancelled; a failure stays on screen with
 /// its reason; on success the app restarts as the new version.
 /// </summary>
@@ -18,6 +19,7 @@ public sealed partial class AppUpdateViewModel(UpdateOffer offer, AppUpdater upd
     : ObservableObject, IDisposable
 {
     private CancellationTokenSource? _cancel;
+    private IReadOnlyList<ReleaseNoteRow>? _versions;
 
     /// <summary>Raised when the window should close.</summary>
     public event EventHandler? CloseRequested;
@@ -25,11 +27,19 @@ public sealed partial class AppUpdateViewModel(UpdateOffer offer, AppUpdater upd
     /// <summary>The offer.</summary>
     public UpdateOffer Offer { get; } = offer;
 
-    /// <summary>"TM Concept 0.1.18 is available (you have 0.1.17)".</summary>
-    public string Title => text.Format("appupdate.title", Offer.Version, Offer.Current);
+    /// <summary>"A new update is available".</summary>
+    public string Title => text["appupdate.title"];
 
-    /// <summary>The release notes as published.</summary>
-    public string Notes => Offer.Notes.Length > 0 ? Offer.Notes : text["appupdate.no_notes"];
+    /// <summary>"You have 0.1.17; the newest is 0.1.20 (3 new versions)."</summary>
+    public string Subtitle => Versions.Count > 1
+        ? text.Format("appupdate.subtitle.many", Offer.Current, Offer.Version, Versions.Count)
+        : text.Format("appupdate.subtitle", Offer.Current, Offer.Version);
+
+    /// <summary>
+    /// Every newer version, oldest first, with its notes in the app's language (no SHA-256 block, Markdown as plain text); just the newest
+    /// when the offer names no others.
+    /// </summary>
+    public IReadOnlyList<ReleaseNoteRow> Versions => _versions ??= Rows();
 
     /// <summary>Whether the app can install it itself.</summary>
     public bool CanInstall => Offer.CanInstall;
@@ -121,6 +131,19 @@ public sealed partial class AppUpdateViewModel(UpdateOffer offer, AppUpdater upd
     {
         _cancel?.Cancel();
         CloseRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private List<ReleaseNoteRow> Rows()
+    {
+        var versions = Offer.Versions.Count > 0 ? Offer.Versions : [new VersionNotes(Offer.Version, Offer.Notes, null)];
+        return versions.Select(v =>
+        {
+            var notes = ReleaseNotesText.For(v.Body, text.Language);
+            var header = v.PublishedAt is { } at
+                ? v.Version + " · " + at.ToLocalTime().ToString("d MMMM yyyy", text.Culture)
+                : v.Version.ToString();
+            return new ReleaseNoteRow(header, notes.Length > 0 ? notes : text["appupdate.no_notes"]);
+        }).ToList();
     }
 
     /// <inheritdoc />

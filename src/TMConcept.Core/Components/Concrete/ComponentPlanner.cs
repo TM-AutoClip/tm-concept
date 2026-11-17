@@ -215,19 +215,31 @@ public sealed class ComponentPlanner(IEnumerable<IComponentSource> sources, ILog
         return total;
     }
 
-    /// <summary>Removes a component's folders (it is downloaded again the next time a setting needs it).</summary>
-    public async Task RemoveAsync(IComponent component, CancellationToken cancellationToken)
+    /// <summary>
+    /// Whether an install or a removal runs now (the storage manager refuses to clean up meanwhile: a download in progress is not a
+    /// leftover).
+    /// </summary>
+    public bool Busy => _gate.CurrentCount == 0;
+
+    /// <summary>
+    /// Removes a component: each of its folders goes through <paramref name="discard"/> (the recycle bin; for good only after the user
+    /// confirmed it) under the install gate, then the install record forgets it. It is downloaded again the next time a setting needs it.
+    /// The caller ends the speech and Python workers and frees the graphics card first (the storage manager does). A folder that could not
+    /// be taken stops the removal with the error; what was taken stays taken and the record still names the component until all is gone.
+    /// </summary>
+    public async Task RemoveAsync(IComponent component, DiskSpace.IFolderDiscard discard, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(component);
+        ArgumentNullException.ThrowIfNull(discard);
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            foreach (var folder in component.Folders().Where(Directory.Exists))
+            foreach (var folder in component.Folders().Where(f => Directory.Exists(f) || File.Exists(f)))
             {
-                await Task.Run(() => Directory.Delete(folder, recursive: true), cancellationToken).ConfigureAwait(false);
+                await discard.DiscardAsync(folder, cancellationToken).ConfigureAwait(false);
             }
 
-            logger.LogInformation("{Component} removed", component.Code);
+            logger.LogInformation("{Component} removed ({Way})", component.Code, discard.Permanent ? "deleted permanently" : "moved to the recycle bin");
             try
             {
                 record?.Removed(component.Code);

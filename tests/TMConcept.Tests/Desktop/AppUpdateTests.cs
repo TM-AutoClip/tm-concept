@@ -86,14 +86,14 @@ public sealed class AppUpdateTests
         github.Requests.Count.ShouldBe(1, "the second look within a day is the kept answer");
         github.Requests[0].Headers.UserAgent.ToString().ShouldBe(UpdateRules.UserAgent);
         github.Requests[0].Headers.Authorization.ShouldBeNull("no token");
-        github.Requests[0].RequestUri.ShouldBe(UpdateRules.LatestRelease);
+        github.Requests[0].RequestUri.ShouldBe(UpdateRules.Releases);
 
         (await feed.LatestAsync(true, CancellationToken.None))!.Tag.ShouldBe("v0.1.18");
         github.Requests.Count.ShouldBe(2);
         github.Requests[1].Headers.IfNoneMatch.ToString().ShouldBe("\"r1\"", "an unchanged release costs nothing of the hourly limit (304)");
 
         clock.Advance(TimeSpan.FromDays(1.1));
-        github.Release = Release("v0.1.19", "newer");
+        github.Releases = [Release("v0.1.19", "newer"), Release("v0.1.18", "notes")];
         (await feed.LatestAsync(false, CancellationToken.None))!.Tag.ShouldBe("v0.1.19");
     }
 
@@ -287,6 +287,173 @@ public sealed class AppUpdateTests
         StartOptions.Parse([]).WaitForProcess.ShouldBeNull();
     }
 
+    [Fact]
+    public async Task EveryNewerPublishedVersionIsOfferedOldestFirstAndOnlyTheNewestIsInstalled()
+    {
+        var newest = Release("v0.1.20", Notes(NewProgram).Replace("0.1.18", "0.1.20", StringComparison.Ordinal));
+        var draft = Release("v0.1.21", "draft");
+        draft.Draft = true;
+        var candidate = Release("v0.1.22-rc.1", "pre-release");
+        candidate.Prerelease = true;
+        var github = new FakeGitHub(candidate, draft, newest, Release("v0.1.19", "## English\n- Nineteen."), Release("v0.1.18", "## English\n- Eighteen."),
+            Release("v0.1.17", "running"), Release("v0.1.16", "older"));
+        using var h = Harness(github, out _, out _);
+
+        var offer = (await Updater(h).CheckAsync(true, CancellationToken.None)).ShouldNotBeNull();
+
+        offer.Version.ToString().ShouldBe("0.1.20", "drafts and pre-releases are never offered");
+        offer.Versions.Select(v => v.Version.ToString()).ShouldBe(["0.1.18", "0.1.19", "0.1.20"], "every version since the running one, oldest first");
+        offer.Asset!.Name.ShouldBe("TMConcept-0.1.20-win-x64.exe", "only the newest file is downloaded");
+        offer.Sha256.ShouldBe(Hash(NewProgram), "the newest file is still checked against its notes");
+        github.Requests.Count.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task TheReleaseListIsReadPageByPageAndOnlyTheFirstPageCarriesTheETag()
+    {
+        var github = new FakeGitHub(Release("v0.1.22", "a"), Release("v0.1.21", "b"), Release("v0.1.20", "c"), Release("v0.1.19", "d"), Release("v0.1.18", "e"))
+        {
+            PageSize = 2,
+        };
+        using var h = Harness(github, out _, out var clock);
+        var feed = h.Get<ReleaseFeed>();
+
+        (await feed.ReleasesAsync(true, CancellationToken.None)).Select(r => r.Tag).ShouldBe(["v0.1.22", "v0.1.21", "v0.1.20", "v0.1.19", "v0.1.18"]);
+        github.Requests.Count.ShouldBe(3, "five releases in pages of two");
+        github.Requests[1].RequestUri!.Query.ShouldContain("page=2", Case.Sensitive, "the Link header's next page is followed");
+
+        // The next look sends the first page's ETag; unchanged, it is one request and the kept list.
+        (await feed.ReleasesAsync(true, CancellationToken.None)).Count.ShouldBe(5);
+        github.Requests.Count.ShouldBe(4);
+        github.Requests[3].Headers.IfNoneMatch.ToString().ShouldBe("\"r-v0.1.22\"");
+
+        // Within a day the kept list is used without asking.
+        (await feed.ReleasesAsync(false, CancellationToken.None)).Count.ShouldBe(5);
+        github.Requests.Count.ShouldBe(4);
+        clock.Advance(TimeSpan.FromDays(1.1));
+        github.Releases.Insert(0, Release("v0.1.23", "f"));
+        (await feed.ReleasesAsync(false, CancellationToken.None))[0].Tag.ShouldBe("v0.1.23");
+    }
+
+    [Fact]
+    public async Task AListReadOnlyInPartIsKeptWithoutAnETagAndAskedAgainAfterTheLimit()
+    {
+        var github = new FakeGitHub(Release("v0.1.20", "a"), Release("v0.1.19", "b"), Release("v0.1.18", "c")) { PageSize = 2 };
+        using var h = Harness(github, out _, out var clock);
+        var feed = h.Get<ReleaseFeed>();
+        github.Limited = clock.GetUtcNow().AddMinutes(30);
+        github.LimitedFromPage = 2;
+
+        (await feed.ReleasesAsync(true, CancellationToken.None)).Select(r => r.Tag).ShouldBe(["v0.1.20", "v0.1.19"], "the pages read so far are used");
+        feed.State().ETag.ShouldBeNull("a partial list is never confirmed by a 304");
+        (await feed.ReleasesAsync(true, CancellationToken.None)).Count.ShouldBe(2);
+        github.Requests.Count.ShouldBe(2, "not asked again before GitHub's reset time");
+
+        clock.Advance(TimeSpan.FromMinutes(31));
+        github.Limited = null;
+        (await feed.ReleasesAsync(true, CancellationToken.None)).Count.ShouldBe(3);
+        github.Requests[2].Headers.IfNoneMatch.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task ACheckFileFrom0117WithOnlyTheLatestReleaseIsLookedAtAgainAtOnce()
+    {
+        var github = new FakeGitHub(Release("v0.1.19", "b"), Release("v0.1.18", "a"));
+        using var h = Harness(github, out _, out var clock);
+        var at = clock.GetUtcNow().ToString("O", System.Globalization.CultureInfo.InvariantCulture);
+        File.WriteAllText(h.Paths.UpdateCheckFile, "{ \"CheckedAtUtc\": \"" + at + "\", \"ETag\": \"\\\"r1\\\"\", \"Release\": { \"tag_name\": \"v0.1.18\" } }");
+
+        (await h.Get<ReleaseFeed>().ReleasesAsync(false, CancellationToken.None)).Count.ShouldBe(2);
+        github.Requests.ShouldHaveSingleItem().Headers.IfNoneMatch.ShouldBeEmpty("the old file has no list to confirm");
+    }
+
+    [Fact]
+    public void TheNotesShowOnlyTheAppsLanguageWithoutTheSha256Block()
+    {
+        var hash = new string('a', 64);
+        var notes = string.Join('\n',
+            "# TM Concept 0.1.19",
+            string.Empty,
+            "[English](#english) · [Türkçe](#türkçe)",
+            string.Empty,
+            "## English",
+            string.Empty,
+            "### What changed since 0.1.18",
+            string.Empty,
+            "**Storage**",
+            "- A new **Storage** tab in `Settings`: see what takes",
+            "  space and [remove it](https://example.org).",
+            "  - Old voices go to the recycle bin.",
+            string.Empty,
+            "## Türkçe",
+            string.Empty,
+            "### 0.1.18'den bu yana değişenler",
+            string.Empty,
+            "**Depolama**",
+            "- Ayarlar'da yeni **Depolama** sekmesi.",
+            string.Empty,
+            "## SHA-256",
+            string.Empty,
+            "```",
+            hash + "  TMConcept-0.1.19-win-x64.exe  (60.1 MiB)",
+            "```");
+
+        ReleaseNotesText.For(notes, "tr").ShouldBe("0.1.18'den bu yana değişenler\n\nDepolama\n• Ayarlar'da yeni Depolama sekmesi.");
+        ReleaseNotesText.For(notes, "en").ShouldBe(
+            "What changed since 0.1.18\n\nStorage\n• A new Storage tab in Settings: see what takes space and remove it.\n  • Old voices go to the recycle bin.");
+        ReleaseNotesText.For(notes, "de").ShouldStartWith("What changed", Case.Sensitive, "another language falls back to English");
+        ReleaseNotesText.For(notes.Replace("## Türkçe", "## Notes", StringComparison.Ordinal), "tr").ShouldStartWith("What changed", Case.Sensitive,
+            "no Turkish section: English");
+        ReleaseNotesText.For(notes, "tr").ShouldNotContain(hash);
+        ReleaseNotesText.For(notes, "en").ShouldNotContain("SHA-256");
+
+        // Notes without language sections are shown whole, still without the SHA-256 block (also when it is a lower heading).
+        var plain = "## Changes\n- Faster images.\n\n### SHA-256\n" + hash + "  TMConcept-0.1.19-win-x64.exe\n\n## Thanks\n- Everyone.";
+        ReleaseNotesText.For(plain, "tr").ShouldBe("Changes\n• Faster images.\n\nThanks\n• Everyone.");
+        ReleaseNotesText.For(null, "en").ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void TheRealReleaseNotesOf0117ReadInBothLanguages()
+    {
+        var file = Path.Combine(TMConcept.Tests.Architecture.RepositoryFiles.Root, "docs", "release-notes", "v0.1.17.md");
+        var body = File.ReadAllText(file) + "\n## SHA-256\n\n" + new string('b', 64) + "  TMConcept-0.1.17-win-x64.exe  (60.1 MiB)\n";
+
+        var turkish = ReleaseNotesText.For(body, "tr");
+        var english = ReleaseNotesText.For(body, "en");
+
+        turkish.ShouldStartWith("0.1.16'dan bu yana değişenler");
+        turkish.ShouldNotContain("What changed");
+        english.ShouldStartWith("What changed since 0.1.16");
+        english.ShouldNotContain("değişenler");
+        (turkish + english).ShouldNotContain("**");
+        (turkish + english).ShouldNotContain(new string('b', 64));
+    }
+
+    [Fact]
+    public void TheWindowListsEveryVersionInTheAppsLanguage()
+    {
+        using var h = new DesktopHarness();
+        var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
+        text.Use("tr");
+        var offer = new UpdateOffer(new AppVersion(0, 1, 20, string.Empty), "0.1.17", "## English\n- Twenty.\n\n## Türkçe\n- Yirmi.", UpdateRules.ReleasesPage, null,
+            null, "no_asset")
+        {
+            Versions =
+            [
+                new VersionNotes(new AppVersion(0, 1, 19, string.Empty), "## English\n- Nineteen.\n\n## Türkçe\n- On dokuz.", null),
+                new VersionNotes(new AppVersion(0, 1, 20, string.Empty), "## English\n- Twenty.\n\n## Türkçe\n- Yirmi.", null),
+            ],
+        };
+
+        using var model = new TMConcept.Desktop.Dialogs.AppUpdateViewModel(offer, h.Get<AppUpdater>(), h.Get<TMConcept.Desktop.Os.IShellLauncher>(), text,
+            NullLogger.Instance);
+
+        model.Title.ShouldBe("Yeni güncelleme var");
+        model.Subtitle.ShouldContain("0.1.17");
+        model.Versions.Select(v => (v.Header, v.Notes)).ShouldBe([("0.1.19", "• On dokuz."), ("0.1.20", "• Yirmi.")]);
+    }
+
     private static AppUpdater Updater(DesktopHarness h) => new(h.Get<ReleaseFeed>(), h.Get<SelfReplacer>(), h.Get<ToolDownloader>(), h.Get<UiPreferencesFile>(),
         h.Get<IAppRestarter>(), h.Get<TMConcept.Desktop.Startup.AppSession>(), h.Get<TMConcept.Speech.Speech.SpeechWorkerClient>(), h.Get<TimeProvider>(),
         NullLogger<AppUpdater>.Instance)
@@ -384,19 +551,28 @@ public sealed class AppUpdateTests
         }
     }
 
-    /// <summary>GitHub's latest-release endpoint: the release with ETag "r1" (304 for it), or a rate-limit refusal.</summary>
-    private sealed class FakeGitHub(GitHubRelease release) : HttpMessageHandler
+    /// <summary>
+    /// GitHub's release list: the releases (newest first) with ETag "r1" while the newest is v0.1.18 (304 for it), pages of
+    /// <see cref="PageSize"/> with a Link header when it is set, or a rate-limit refusal (from page <see cref="LimitedFromPage"/> on).
+    /// </summary>
+    private sealed class FakeGitHub(params GitHubRelease[] releases) : HttpMessageHandler
     {
-        public GitHubRelease Release { get; set; } = release;
+        public List<GitHubRelease> Releases { get; set; } = [.. releases];
 
         public DateTimeOffset? Limited { get; set; }
+
+        public int LimitedFromPage { get; set; } = 1;
+
+        public int PageSize { get; set; }
 
         public List<HttpRequestMessage> Requests { get; } = [];
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Requests.Add(request);
-            if (Limited is { } reset)
+            var query = System.Web.HttpUtility.ParseQueryString(request.RequestUri!.Query);
+            var page = int.TryParse(query["page"], out var number) ? number : 1;
+            if (Limited is { } reset && page >= LimitedFromPage)
             {
                 var refused = new HttpResponseMessage(HttpStatusCode.Forbidden);
                 refused.Headers.Add("X-RateLimit-Remaining", "0");
@@ -404,18 +580,26 @@ public sealed class AppUpdateTests
                 return Task.FromResult(refused);
             }
 
-            var etag = "\"r-" + Release.Tag + "\"";
-            etag = Release.Tag == "v0.1.18" ? "\"r1\"" : etag;
-            if (request.Headers.IfNoneMatch.Any(t => t.Tag == etag))
+            var newest = Releases.FirstOrDefault()?.Tag ?? "none";
+            var etag = newest == "v0.1.18" ? "\"r1\"" : "\"r-" + newest + "\"";
+            if (page == 1 && request.Headers.IfNoneMatch.Any(t => t.Tag == etag))
             {
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotModified));
             }
 
+            var size = PageSize > 0 ? PageSize : Math.Max(Releases.Count, 1);
+            var slice = Releases.Skip((page - 1) * size).Take(size).ToList();
             var response = new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(Release), Encoding.UTF8, "application/json"),
+                Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(slice), Encoding.UTF8, "application/json"),
             };
             response.Headers.ETag = new System.Net.Http.Headers.EntityTagHeaderValue(etag);
+            if (page * size < Releases.Count)
+            {
+                var next = $"https://api.github.com/repositories/1/releases?per_page={size}&page={page + 1}";
+                response.Headers.Add("Link", $"<{next}>; rel=\"next\", <https://api.github.com/repositories/1/releases?page=9>; rel=\"last\"");
+            }
+
             return Task.FromResult(response);
         }
     }

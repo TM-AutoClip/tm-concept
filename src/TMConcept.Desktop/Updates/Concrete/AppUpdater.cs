@@ -8,7 +8,8 @@ namespace TMConcept.Desktop.Updates;
 
 /// <summary>
 /// The app's own updates (the developer, 16 Nov 2026): looks for a newer release on GitHub (<see cref="ReleaseFeed"/>: at start at most once
-/// a day when <see cref="UiPreferences.CheckForUpdates"/> is on, and on "Check now"), offers it with its version and notes, and only after
+/// a day when <see cref="UiPreferences.CheckForUpdates"/> is on, and on "Check now"), offers it with the notes of every version between the
+/// running one and the newest (17 Nov 2026: no server, GitHub's release list; only the newest is downloaded), and only after
 /// the user confirmed downloads the file for this computer (with progress, retries and resume, <see cref="Engines.Tools.ToolDownloader"/>),
 /// checks it against the SHA-256 the release notes give (missing or different = refused), stops the idle speech worker, replaces the
 /// program (<see cref="SelfReplacer"/>) and starts it again; the database chain runs at that next start. Nothing is downloaded without the
@@ -32,7 +33,8 @@ public sealed class AppUpdater(ReleaseFeed feed, SelfReplacer replacer, Engines.
     /// </summary>
     public async Task<UpdateOffer?> CheckAsync(bool force, CancellationToken cancellationToken)
     {
-        var release = await feed.LatestAsync(force, cancellationToken).ConfigureAwait(false);
+        var releases = await feed.ReleasesAsync(force, cancellationToken).ConfigureAwait(false);
+        var release = releases.FirstOrDefault();
         if (release is null || !AppVersion.TryParse(release.Tag, out var latest))
         {
             return null;
@@ -43,6 +45,14 @@ public sealed class AppUpdater(ReleaseFeed feed, SelfReplacer replacer, Engines.
             logger.LogInformation("Update check: {Current} is up to date (latest {Latest})", Current, latest);
             return null;
         }
+
+        // Every published version between the running one and the newest, oldest first: the window shows all their notes.
+        var versions = releases
+            .Select(r => (Release: r, Ok: AppVersion.TryParse(r.Tag, out var version), Version: version))
+            .Where(r => r.Ok && r.Version.IsNewerThan(current))
+            .OrderBy(r => r.Version)
+            .Select(r => new VersionNotes(r.Version, r.Release.Body ?? string.Empty, r.Release.PublishedAt))
+            .ToList();
 
         var asset = Rid.Length == 0 ? null : ReleaseNotes.AssetFor(release, Rid);
         if (asset is not null && !asset.DownloadUrl.StartsWith(DownloadPrefix, StringComparison.Ordinal))
@@ -61,9 +71,9 @@ public sealed class AppUpdater(ReleaseFeed feed, SelfReplacer replacer, Engines.
 
         var problem = !replacer.IsPackaged ? "not_packaged" : asset is null ? "no_asset" : hash is null ? "no_hash" : string.Empty;
         var page = Uri.TryCreate(release.Page, UriKind.Absolute, out var address) && address.Scheme == Uri.UriSchemeHttps ? address : UpdateRules.ReleasesPage;
-        logger.LogInformation("Update check: {Latest} is newer than {Current} (file {File}; {State})", latest, Current, asset?.Name ?? "none",
-            problem.Length == 0 ? "can be installed" : problem);
-        return new UpdateOffer(latest, Current, release.Body ?? string.Empty, page, asset, hash, problem);
+        logger.LogInformation("Update check: {Latest} is newer than {Current} ({Count} newer version(s); file {File}; {State})", latest, Current,
+            versions.Count, asset?.Name ?? "none", problem.Length == 0 ? "can be installed" : problem);
+        return new UpdateOffer(latest, Current, release.Body ?? string.Empty, page, asset, hash, problem) { Versions = versions };
     }
 
     /// <summary>

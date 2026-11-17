@@ -1,0 +1,129 @@
+using TMConcept.Core.Components;
+using TMConcept.Core.DiskSpace;
+using TMConcept.Desktop.Localization;
+using TMConcept.Desktop.Paths;
+using TMConcept.Speech.Python;
+
+namespace TMConcept.Desktop.DiskSpace;
+
+/// <summary>
+/// The space no component owns, as storage rows (only what is safe to lose: made again when needed, or never needed again):
+/// <list type="bullet">
+/// <item>unfinished downloads (<c>tools/downloads</c>) and the Python voices' helper folders (<c>speech-py/scripts</c>, <c>locks</c>,
+/// <c>home</c>: written again at the next install or narration);</item>
+/// <item>folders inside <c>tools/</c> that no component owns (an older pinned version, a build for another graphics setting);</item>
+/// <item>old components folders next to <c>tools/</c> left by "Reinstall from scratch" (<c>tools.old-*</c>, <c>tools.failed-*</c>,
+/// <c>tools.aside-*</c>);</item>
+/// <item>the work caches: cached narration, voice sample files, run folders and scene images older than the work keep time (the clean-up
+/// takes those; the recent ones that a retry still uses go only with the full delete).</item>
+/// </list>
+/// The database, keys, settings, backups, logs and the videos in the library are never rows here.
+/// </summary>
+public sealed class LeftoverDiskSource(AppPaths paths, PythonLayout python, ComponentPlanner planner, Localizer text, TimeProvider clock) : IDiskItemSource
+{
+    /// <summary>The names an old components folder starts with (next to <c>tools</c>).</summary>
+    public static readonly IReadOnlyList<string> AsidePrefixes =
+        [Components.ComponentReinstaller.AsidePrefix, Components.ComponentReinstaller.FailedPrefix, ".aside-"];
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<IDiskItem>> ListAsync(UsageMap usage, CancellationToken cancellationToken) =>
+        Task.Run<IReadOnlyList<IDiskItem>>(() => List().Where(i => i.Bytes > 0).ToList(), cancellationToken);
+
+    private IEnumerable<IDiskItem> List()
+    {
+        var tools = paths.ToolsDirectory;
+        var downloads = Path.Combine(tools, "downloads");
+        yield return Folder("tools:downloads", "storage.item.downloads", DiskArea.Tools, [downloads], true);
+
+        string[] helpers = [python.ScriptsFolder, python.LocksFolder, python.HomeFolder];
+        yield return Folder("tools:speech-py-helpers", "storage.item.python_helpers", DiskArea.Tools, helpers, true);
+
+        var owned = planner.All.SelectMany(c => c.Folders()).Concat(helpers).Append(downloads).Select(Full).ToList();
+        var unowned = Unowned(tools, owned).ToList();
+        yield return Folder("tools:unowned", "storage.item.unowned", DiskArea.Tools, unowned, true);
+
+        var parent = Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(tools));
+        var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(tools));
+        if (parent is not null && Directory.Exists(parent))
+        {
+            foreach (var aside in Directory.EnumerateDirectories(parent, name + ".*").Order(StringComparer.Ordinal))
+            {
+                var suffix = Path.GetFileName(aside)[name.Length..];
+                if (AsidePrefixes.Any(p => suffix.StartsWith(p, StringComparison.Ordinal)))
+                {
+                    yield return new FolderDiskItem("tools:aside:" + Path.GetFileName(aside), text.Format("storage.item.aside", Path.GetFileName(aside)),
+                        DiskArea.Tools, DiskSizes.Of(aside), [aside], true, true);
+                }
+            }
+        }
+
+        var work = paths.WorkDirectory;
+        yield return Folder("work:speech-cache", "storage.item.speech_cache", DiskArea.Work, [Path.Combine(work, "speech-cache")], true);
+        yield return Folder("work:voices", "storage.item.voice_files", DiskArea.Work, [Path.Combine(work, "voices")], true);
+        foreach (var (kind, oldKey, recentKey) in new[]
+        {
+            ("videos", "storage.item.runs.old", "storage.item.runs.recent"),
+            ("scene-images", "storage.item.scene_images.old", "storage.item.scene_images.recent"),
+        })
+        {
+            var folder = Path.Combine(work, kind);
+            var children = Directory.Exists(folder) ? Directory.EnumerateDirectories(folder).ToList() : [];
+            var old = children.Where(c => clock.GetUtcNow() - Directory.GetLastWriteTimeUtc(c) > Core.Videos.VideoPipeline.WorkKeep).ToList();
+            var recent = children.Except(old).ToList();
+            yield return Folder("work:" + kind + ":old", oldKey, DiskArea.Work, old, true);
+            yield return Folder("work:" + kind + ":recent", recentKey, DiskArea.Work, recent, false);
+        }
+    }
+
+    /// <summary>
+    /// The folders under <paramref name="root"/> that neither are, nor lie inside, nor hold an owned folder: what an older version or another
+    /// setting left. Files are never taken (markers next to versions stay).
+    /// </summary>
+    public static IEnumerable<string> Unowned(string root, IReadOnlyList<string> owned)
+    {
+        ArgumentNullException.ThrowIfNull(root);
+        ArgumentNullException.ThrowIfNull(owned);
+        if (!Directory.Exists(root))
+        {
+            yield break;
+        }
+
+        var pending = new Stack<string>([Full(root)]);
+        while (pending.TryPop(out var folder))
+        {
+            IEnumerable<string> children;
+            try
+            {
+                children = Directory.EnumerateDirectories(folder).Select(Full).ToList();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                continue;
+            }
+
+            foreach (var child in children.Order(StringComparer.Ordinal))
+            {
+                if (owned.Any(o => Same(o, child) || FolderDiscardBase.Inside(child, o)))
+                {
+                    continue;
+                }
+
+                if (owned.Any(o => FolderDiscardBase.Inside(o, child)))
+                {
+                    pending.Push(child);
+                    continue;
+                }
+
+                yield return child;
+            }
+        }
+    }
+
+    private FolderDiskItem Folder(string key, string nameKey, DiskArea area, IReadOnlyList<string> folders, bool cleanup) =>
+        new(key, text[nameKey], area, DiskSizes.Of(folders), folders, cleanup, true);
+
+    private static string Full(string path) => Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+
+    private static bool Same(string a, string b) =>
+        string.Equals(Full(a), Full(b), OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+}

@@ -258,6 +258,15 @@ Google onun için sağlama değeri yayımlamıyor. Ayarlar → **Genel** → *Ku
 ya da artık kullanılamayan *eksik* diye işaretlenir), kaldırabilir ve bir motorun örnek
 videosunu modelsiz, ağsız render edebilir.
 
+**Depolama.** Program küçük başlar ve yalnız seçimlerinin gerektirdiğini indirir; Ayarlar → **Depolama** neyin yer kapladığını gösterir:
+programlar, modeller, iş önbellekleri, yedekler ve günlükler için toplamlar, ve her bileşenin boyutu, *kullanılıyor*, *kullanılmıyor* ya da
+*yarım* olduğu, hangi profilin hangi adımda kullandığı (bütün profillerin kayıtlı model seçimlerinden). 10 GB'lık bir sesten 5 GB'lık birine
+mi geçtin? Eskisi *kullanılmıyor* görünür. **Seçilenleri kaldır** işaretli satırları kaldırır, **Kullanılmayanları temizle** hiçbir profilin
+kullanmadığı bileşenleri ve kendiliğinden yeniden oluşan artıkları (yarım indirmeler, eski bileşen sürümleri ve klasörleri, önbellekteki
+seslendirmeler, 7 günden eski iş klasörleri) kaldırır, **Kapsamlı silme** bütün bileşenleri ve önbellekleri kaldırır. Her şey geri dönüşüm
+kutusuna gider (kutu alamazsa kalıcı silme ancak ayrı bir onayla); video, üretim, seslendirme ya da kurulum sürerken hiçbir şey kaldırılmaz.
+Veritabanın, profillerin, konseptlerin, videoların, yedeklerin ve günlüklerin orada asla silinmez.
+
 Fiyatlar kendiliğinden, günde en çok bir kez güncellenir: program bu deponun `pricing/prices.json` dosyasını ve OpenRouter'ın herkese açık
 model listesini okur (anahtar gönderilmez), denetler ve son iyi kopyayı saklar; internet yoksa yerleşik tablo kullanılır. Tahmin
 kutuları tarihi ve kaynağı gösterir; Üretilen videolar sayfası bu ayın harcamasını gösterir.
@@ -296,8 +305,10 @@ Sonra modelleri onları kullanan sayfalarda seç (yukarıya bak). Ücretli hiçb
 
 ## Güncelleme
 
-**Programın içinden:** TM Concept açılışta (günde en çok bir kez) projenin GitHub'daki son sürümüne bakar (hesap gerekmez, sana dair hiçbir
-şey gönderilmez) ve daha yeni bir sürüm varsa sürüm numarasını ve sürüm notlarını gösterir. **İndir ve kur**, sistemine uygun dosyayı
+**Programın içinden:** TM Concept açılışta (günde en çok bir kez) projenin GitHub'daki sürüm listesine bakar (hesap gerekmez, bizim bir
+sunucumuz yok, sana dair hiçbir şey gönderilmez) ve daha yeni bir sürüm varsa seninki ile en yenisi arasındaki her sürümün notlarını, eskiden
+yeniye, programın dilinde gösterir. Yalnız en yenisi indirilir: veritabanı yükseltme adımlarının hepsi onda var, aradaki sürümleri atlamak
+güvenlidir. **İndir ve kur**, sistemine uygun dosyayı
 indirir, sürüm notlarındaki SHA-256 ile karşılaştırır (SHA-256'sı olmayan ya da tutmayan dosya asla kurulmaz), program dosyasını aynı yerde
 değiştirir ve yeni sürümü açar. Pencereyi kapatmak (X ile de) süren indirmeyi iptal eder. Windows'ta önceki program, yeni sürüm
 veritabanını ve ana penceresini açana kadar yenisinin yanında `TMConcept.exe.old` olarak kalır: veritabanı yükseltmesi başarısız olursa
@@ -405,4 +416,5 @@ Version0118` (ya da `tools/database-step.sh Version0118`) çalıştır: EF Core'
 bir adımı asla değiştirme, elle SQL asla yazma. Ayrıntı: [docs/database.md](docs/database.md).
 
 **Sürümler** sürüm notlarında her dosyanın SHA-256'sını listelemelidir (`tools/package.py` satırları yazdırır); programın kendi güncelleyicisi
-yalnız SHA-256'sı orada olan dosyayı kurar.
+yalnız SHA-256'sı orada olan dosyayı kurar. Notlardaki `## English` ve `## Türkçe` bölümleri kalmalı: güncelleme penceresi yalnız programın
+dilindekini (yoksa İngilizcesini) gösterir, SHA-256 bloğunu asla göstermez.
