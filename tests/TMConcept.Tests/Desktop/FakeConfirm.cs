@@ -15,10 +15,13 @@ internal sealed class FakeConfirm : IConfirmDialog
 
     public List<string> Messages { get; } = [];
 
+    public List<bool> Dangers { get; } = [];
+
     public Task<ConfirmResult> AskAsync(string title, string message, string confirmText, bool danger, string? checkbox = null, string? cancelText = null)
     {
         Asked.Add(title);
         Messages.Add(message);
+        Dangers.Add(danger);
         return Task.FromResult(new ConfirmResult(Answers.Count > 0 ? Answers.Dequeue() : Answer, Checked));
     }
 }

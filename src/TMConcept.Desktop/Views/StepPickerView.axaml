@@ -28,7 +28,8 @@
                   <ComboBox ItemsSource="{Binding Options}" SelectedItem="{Binding Selected}" MinWidth="220" MaxWidth="520" Margin="0,0,8,4">
                     <ComboBox.ItemTemplate>
                       <DataTemplate x:DataType="vm:StepOption">
-                        <TextBlock Text="{Binding Label}" Classes.ok="{Binding IsOk}" Classes.warning="{Binding IsWarning}" Classes.error="{Binding IsError}" />
+                        <TextBlock Text="{Binding Label}" Classes.ok="{Binding IsOk}" Classes.warning="{Binding IsWarning}" Classes.caution="{Binding IsCaution}"
+                                   Classes.error="{Binding IsError}" />
                       </DataTemplate>
                     </ComboBox.ItemTemplate>
                   </ComboBox>
@@ -70,7 +71,8 @@
                 <Border Classes="badge" HorizontalAlignment="Left" IsVisible="{Binding ShowRecommended}">
                   <TextBlock Text="{Binding Recommended}" Classes="small" />
                 </Border>
-                <TextBlock Text="{Binding Note}" Classes="small" Classes.warning="{Binding NoteIsWarning}" Classes.error="{Binding NoteIsError}" Classes.ok="{Binding NoteIsOk}" TextWrapping="Wrap"
+                <TextBlock Text="{Binding Note}" Classes="small" Classes.warning="{Binding NoteIsWarning}" Classes.caution="{Binding NoteIsCaution}" Classes.error="{Binding NoteIsError}"
+                           Classes.ok="{Binding NoteIsOk}" TextWrapping="Wrap"
                            MaxLines="{Binding $parent[ItemsControl].((vm:StepPickerViewModel)DataContext).NoteLines}" TextTrimming="CharacterEllipsis"
                            ToolTip.Tip="{Binding Note}"
                            IsVisible="{Binding Note, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />

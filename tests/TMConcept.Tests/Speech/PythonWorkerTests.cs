@@ -141,7 +141,7 @@ public sealed class PythonWorkerTests
         var engine = Engine(setup.Paths, client, nvidia, PythonVoices.XttsV2);
         var source = new PythonModelSource([engine]);
         var coordinator = new GpuCoordinator(new ModelDirectory([source]), new FakeVramProbe(new VramReading(12 * GiB, 11 * GiB, true, "test")),
-            TimeProvider.System, new GpuCoordinatorOptions(TimeSpan.FromMilliseconds(1), TimeSpan.FromSeconds(5)), NullLogger<GpuCoordinator>.Instance);
+            Core.TestWaiters.Fast(), TimeProvider.System, NullLogger<GpuCoordinator>.Instance);
         var xtts = new CatalogModel { Provider = ModelProviders.Local, Id = SpeechEngines.XttsV2, Capabilities = ModelCapability.Speech, MinVideoMemoryGb = 4 };
 
         await using (var lease = await coordinator.AcquireAsync(xtts, TestContext.Current.CancellationToken))

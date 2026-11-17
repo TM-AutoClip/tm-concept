@@ -55,11 +55,16 @@
         <Border Classes="card" Padding="10,8">
           <DockPanel>
             <StackPanel DockPanel.Dock="Top" Spacing="2" Margin="0,0,0,6">
-              <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+              <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
                 <TextBlock Text="{Binding QueueHeader}" Classes="h2" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                <Button Name="ProduceAllButton" Grid.Column="1" Classes="accent" Content="{DynamicResource video.produce_all}"
+                <!-- Night mode: not kept, may be changed while the queue runs (read at every decision). -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                  <CheckBox Name="NightModeBox" IsChecked="{Binding NightMode}" Content="{DynamicResource video.night}" />
+                  <views:HelpTip Text="{DynamicResource video.night.hint}" />
+                </StackPanel>
+                <Button Name="ProduceAllButton" Grid.Column="2" Classes="accent" Content="{DynamicResource video.produce_all}"
                         Command="{Binding ProduceAllCommand}" IsEnabled="{Binding Idle}" />
-                <Button Grid.Column="2" Content="{DynamicResource common.cancel}" Command="{Binding CancelCommand}" IsVisible="{Binding Busy}" />
+                <Button Grid.Column="3" Content="{DynamicResource common.cancel}" Command="{Binding CancelCommand}" IsVisible="{Binding Busy}" />
               </Grid>
               <TextBlock Name="QueueEstimate" Text="{Binding QueueEstimate}" ToolTip.Tip="{Binding QueueEstimateTip}" Classes="tiny"
                          IsVisible="{Binding QueueEstimate, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />

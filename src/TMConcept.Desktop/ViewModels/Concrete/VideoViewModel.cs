@@ -34,6 +34,11 @@ namespace TMConcept.Desktop.ViewModels;
 /// choices when the item starts, and so is the subtitles choice (kept on this computer, <see cref="Paths.UiPreferences.Subtitles"/>; until
 /// 0.1.16 each queue item kept the choice it was added with, so turning subtitles off did not reach the queued videos). Cancel stops after
 /// the running step.
+/// <para>0.1.18 stop rules (<see cref="IVideoQueueRunner"/>): with "Night mode" off (the default at every start) any failed video stops the
+/// whole queue (its error on the page, a notification and a red line); with it on (for when nobody is at the computer, a checkbox next to
+/// "Produce in order", read at every decision so it can be ticked while the queue runs) a failed video is reported and the next one is made
+/// after 10 s, a memory shortfall fails the video instead of asking, and three failures in a row stop the queue. Cancel in the memory
+/// question stops the queue in both modes.</para>
 /// </summary>
 public sealed partial class VideoViewModel : PageViewModelBase
 {
@@ -54,6 +59,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
     private readonly Func<ProductionProgressViewModel> _progress;
     private readonly ConceptEvents _events;
     private readonly INotifier _notifier;
+    private readonly IVideoQueueRunner _runner;
     private readonly IActivityLog _activity;
     private readonly Localizer _text;
     private readonly ILogger<VideoViewModel> _logger;
@@ -69,7 +75,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
     public VideoViewModel(AppSession session, IConceptStore concepts, IQueueStore queue, IProfileStore profiles, VideoPipeline pipeline,
         IEnumerable<IVideoEngine> engines, StepModelResolver resolver, Core.Media.IMediaTools media, VideoCostEstimator estimator, StepPickerViewModel picker,
         ConceptDetailViewModel detail, ConceptActions actions, VideoRows rows, VideoFiles files, PlayerViewModel player,
-        Func<ProductionProgressViewModel> progress, ConceptEvents events, INotifier notifier, IActivityLog activity, Localizer text,
+        Func<ProductionProgressViewModel> progress, ConceptEvents events, INotifier notifier, IVideoQueueRunner runner, IActivityLog activity, Localizer text,
         Paths.UiPreferencesFile preferences, ILogger<VideoViewModel> logger)
     {
         _session = session;
@@ -87,6 +93,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
         _progress = progress;
         _events = events;
         _notifier = notifier;
+        _runner = runner;
         _activity = activity;
         _text = text;
         _logger = logger;
@@ -210,6 +217,13 @@ public sealed partial class VideoViewModel : PageViewModelBase
 
     /// <summary>The queue is not being made.</summary>
     public bool Idle => !Busy;
+
+    /// <summary>
+    /// Night mode (not kept: off at every start): a failed video does not stop the queue, 10 s pass between videos, three failures in a row
+    /// stop it. It can be changed while the queue runs; every decision reads it then.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool NightMode { get; set; }
 
     /// <inheritdoc />
     public override async Task ActivateAsync()
@@ -377,12 +391,12 @@ public sealed partial class VideoViewModel : PageViewModelBase
             }
 
             // The queue is read again before every item: ✕, ↑↓ and new items during the run count; a failed item is tried once per press.
-            while (!cancel.IsCancellationRequested)
+            var result = await _runner.RunAsync(async _ =>
             {
                 var next = (await _queue.ListAsync(profile.Id, CancellationToken.None).ConfigureAwait(true)).FirstOrDefault(i => !tried.Contains(i.Id));
                 if (next is null)
                 {
-                    break;
+                    return null;
                 }
 
                 tried.Add(next.Id);
@@ -393,8 +407,9 @@ public sealed partial class VideoViewModel : PageViewModelBase
                     row = Queue.FirstOrDefault(r => r.Item.Id == next.Id) ?? new QueueRowViewModel(next, "?");
                 }
 
-                await ProduceAsync(row, cancel.Token).ConfigureAwait(true);
-            }
+                return row;
+            }, ProduceAsync, () => NightMode, cancel.Token).ConfigureAwait(true);
+            Ended(result);
         }
         catch (OperationCanceledException)
         {
@@ -442,7 +457,10 @@ public sealed partial class VideoViewModel : PageViewModelBase
                 return;
             }
 
-            await ProduceAsync(row, cancel.Token).ConfigureAwait(true);
+            if (await ProduceAsync(row, cancel.Token).ConfigureAwait(true) == QueueItemOutcome.Stopped)
+            {
+                Status = _text["video.queue.stopped.memory"];
+            }
         }
         catch (OperationCanceledException)
         {
@@ -649,8 +667,35 @@ public sealed partial class VideoViewModel : PageViewModelBase
         return false;
     }
 
-    private async Task ProduceAsync(QueueRowViewModel row, CancellationToken cancellationToken)
+    /// <summary>
+    /// How a run of the queue ended, on the page's (red) status line and in the activity panel. A failure with night mode off: the video's own
+    /// red line and notification said why, so the stop is a yellow line under it (its notification stays the last one). Three failures in a
+    /// row in night mode: a red line and a notification of their own. The memory question's Cancel: a yellow line. A queue that ran out of
+    /// items or was canceled says nothing more.
+    /// </summary>
+    private void Ended(QueueRunResult result)
     {
+        switch (result.End)
+        {
+            case QueueRunEnd.Failed:
+                Status = _text["video.queue.stopped.error"];
+                _activity.Add(ActivityLevel.Warning, Status);
+                break;
+            case QueueRunEnd.FailuresInRow:
+                Status = _text.Format("video.queue.stopped.night", VideoQueueRunner.FailuresInRow);
+                _activity.Add(ActivityLevel.Error, Status);
+                _notifier.Notify(new AppNotification(NotificationKind.Failed, _text["video.queue.stopped.title"], Status));
+                break;
+            case QueueRunEnd.Stopped:
+                Status = _text["video.queue.stopped.memory"];
+                _activity.Add(ActivityLevel.Warning, Status);
+                break;
+        }
+    }
+
+    private async Task<QueueItemOutcome> ProduceAsync(QueueRowViewModel row, CancellationToken cancellationToken)
+    {
+        var outcome = QueueItemOutcome.Failed;
         row.Error = string.Empty;
         row.Busy = true;
         _running = row.Item.Id;
@@ -662,7 +707,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
             if (stored is null || concept is not { Status: ConceptStatus.Queued })
             {
                 _logger.LogInformation("Queue item skipped: it was removed or its concept is no longer queued");
-                return;
+                return outcome = QueueItemOutcome.Skipped;
             }
 
             if (await _profiles.GetAsync(row.Item.ProfileId, CancellationToken.None).ConfigureAwait(true) is not { } profile)
@@ -670,7 +715,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
                 row.Error = _text["video.error.concept"];
                 _activity.Add(ActivityLevel.Error, _text.Format("video.failed", row.Title, row.Error, _text.Usd(0)),
                     _text.Format("video.failed", ActivityPlaceholders.Title, row.Error, _text.Usd(0)));
-                return;
+                return outcome;
             }
 
             // Everything is the choice of now: the subtitles checkbox (an item queued before it was changed follows it too) and the profile's
@@ -689,7 +734,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
                 row.Error = ex.Missing == "key" ? _text.Format("concepts.no_key", choice?.Provider ?? string.Empty) : _text["video.no_model"];
                 _activity.Add(ActivityLevel.Error, _text.Format("video.failed", row.Title, row.Error, _text.Usd(0)),
                     _text.Format("video.failed", ActivityPlaceholders.Title, row.Error, _text.Usd(0)));
-                return;
+                return outcome;
             }
 
             options.Engine = StepModelResolver.Options(choice).Engine;
@@ -704,9 +749,15 @@ public sealed partial class VideoViewModel : PageViewModelBase
             var made = false;
             try
             {
-                var record = await _pipeline.RunAsync(new VideoJob(concept, profile, options, model), progress.Reporter, cancellationToken)
-                    .ConfigureAwait(true);
+                // Night mode is read when a memory shortfall happens (ticked meanwhile: nobody is asked, the video fails).
+                VideoRecord record;
+                using (MemoryShortfallScope.Begin(() => NightMode))
+                {
+                    record = await _pipeline.RunAsync(new VideoJob(concept, profile, options, model), progress.Reporter, cancellationToken).ConfigureAwait(true);
+                }
+
                 made = true;
+                outcome = QueueItemOutcome.Made;
                 await _queue.RemoveAsync(row.Item.Id, CancellationToken.None).ConfigureAwait(true);
                 Report(record);
             }
@@ -735,13 +786,22 @@ public sealed partial class VideoViewModel : PageViewModelBase
             _notifier.Notify(new AppNotification(NotificationKind.Failed, _text["video.failed.title"],
                 string.Join('\n', noted.Prepend(_text.Format("video.failed", row.Title, reason, _text.Usd(ex.SpentUsd))))));
         }
+        catch (MemoryShortfallCanceledException)
+        {
+            // Cancel in the memory question: the whole queue stops (the app stays open); the activity panel has the step already.
+            row.Error = _text["video.queue.stopped.memory"];
+            outcome = QueueItemOutcome.Stopped;
+        }
         catch (OperationCanceledException)
         {
             row.Error = _text["video.canceled"];
             _activity.Add(ActivityLevel.Warning, _text.Format("video.canceled.log", row.Title), _text.Format("video.canceled.log", ActivityPlaceholders.Title));
+            outcome = QueueItemOutcome.Canceled;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or Core.Speech.SpeechException)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
+            // Any other error (a file gone, the graphics card gone, a crash of a step) fails the video the same way: with night mode off the
+            // queue stops on it, with night mode on the next video is made.
             _logger.LogError(ex, "Video failed");
             row.Error = ex.Message;
             _activity.Add(ActivityLevel.Error, _text.Format("video.failed", row.Title, ex.Message, _text.Usd(0)),
@@ -756,6 +816,8 @@ public sealed partial class VideoViewModel : PageViewModelBase
             // The job's buffers (scene images, audio, model answers) are garbage now: give the memory back (small machines).
             Memory.MemoryRelease.Now(_logger, "a video job");
         }
+
+        return outcome;
     }
 
     /// <summary>Where the scene images come from for a saved images choice: a model, the sample images, or none.</summary>

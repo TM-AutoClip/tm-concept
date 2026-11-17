@@ -177,22 +177,27 @@ public sealed class LocalImageTests
     [Theory]
     // A 16 GB card with 13 GiB free holds Z-Image Q8 (6.6 GB) and its working memory: on the card, 1 GiB kept free.
     [InlineData("z-image-turbo-q8", 16, 13.0, true, 32.0, ImageMemoryLevel.Card, "--vae-tiling --max-vram -1")]
-    // The 12.3 GB BF16 model on the same card does not fit; main memory holds its 20.7 GB: offloaded.
-    [InlineData("z-image-turbo-full", 16, 13.0, true, 32.0, ImageMemoryLevel.Offload, "--vae-tiling --max-vram -1 --offload-to-cpu")]
-    // A 6 GB card with 4.5 GiB free: 3.5 GiB after the 1 GiB reserve is less than the 2.3 GiB model and 2.5 GiB working memory: offloaded.
-    [InlineData("flux2-klein-4b", 6, 4.5, true, 16.0, ImageMemoryLevel.Offload, "--vae-tiling --max-vram -1 --offload-to-cpu")]
+    // The 12.3 GB BF16 model on the same card does not fit; main memory holds what the card cannot: sd.cpp places it, memory-mapped.
+    [InlineData("z-image-turbo-full", 16, 13.0, true, 32.0, ImageMemoryLevel.MainMemory, "--vae-tiling --max-vram -1 --mmap")]
+    // A 6 GB card with 4.5 GiB free: 3.5 GiB after the 1 GiB reserve is less than the 2.3 GiB model and 2.5 GiB working memory: main memory.
+    [InlineData("flux2-klein-4b", 6, 4.5, true, 16.0, ImageMemoryLevel.MainMemory, "--vae-tiling --max-vram -1 --mmap")]
     // A 32 GB card, 30 GiB free: 2 GiB kept free (size / 16).
     [InlineData("qwen-image-q8", 32, 30.0, true, 64.0, ImageMemoryLevel.Card, "--vae-tiling --max-vram -2")]
     // An estimated reading keeps an eighth: 24 GB card, estimate 20.5 GiB, 3 GiB kept.
-    [InlineData("qwen-image-q6", 24, 20.5, false, 64.0, ImageMemoryLevel.Offload, "--vae-tiling --max-vram -3 --offload-to-cpu")]
+    [InlineData("qwen-image-q6", 24, 20.5, false, 64.0, ImageMemoryLevel.MainMemory, "--vae-tiling --max-vram -3 --mmap")]
     // Too little to work in at all: refused.
     [InlineData("flux2-klein-4b", 4, 2.0, true, 16.0, ImageMemoryLevel.Refused, "")]
-    // The card cannot hold it and main memory is too small for the weights: refused.
-    [InlineData("qwen-image", 16, 13.0, true, 8.0, ImageMemoryLevel.Refused, "")]
+    // The card cannot hold it, main memory holds what is left over (6.1 of 8 GiB): main memory.
+    [InlineData("qwen-image", 16, 13.0, true, 8.0, ImageMemoryLevel.MainMemory, "--vae-tiling --max-vram -1 --mmap")]
+    // The card cannot hold it and main memory is short too: the diffusion weights are read from the disk (0.1.17 refused it).
+    [InlineData("qwen-image", 16, 13.0, true, 4.0, ImageMemoryLevel.Disk, "--vae-tiling --max-vram -1 --mmap --params-backend diffusion=disk,te=cpu,vae=cpu")]
+    // The developer's 6 GB laptop (0.1.17's refusal): Z-Image Q8 with 4.3 GiB free; 2.2 GiB of main memory: the disk; 16 GiB: main memory.
+    [InlineData("z-image-turbo", 6, 4.3, true, 2.2, ImageMemoryLevel.Disk, "--vae-tiling --max-vram -1 --mmap --params-backend diffusion=disk,te=cpu,vae=cpu")]
+    [InlineData("z-image-turbo", 6, 4.3, true, 16.0, ImageMemoryLevel.MainMemory, "--vae-tiling --max-vram -1 --mmap")]
     public void TheMemoryPlanFollowsTheFreeMemory(string id, int cardGb, double freeGib, bool measured, double mainGib, ImageMemoryLevel level, string flags)
     {
         var model = LocalImageModels.All.Single(m => m.Id == id);
-        var reading = new VramReading(cardGb * GiB, (long)(freeGib * GiB), measured, "test");
+        var reading = new VramReading(cardGb == 6 ? (long)(5.9 * GiB) : cardGb * GiB, (long)(freeGib * GiB), measured, "test");
 
         var plan = ImageMemoryPlanner.Plan(model, ImageBackend.Vulkan, reading, (long)(mainGib * GiB));
 
@@ -206,45 +211,48 @@ public sealed class LocalImageTests
     }
 
     [Fact]
-    public void ALowBudgetOfThisAppAloneOffloadsButNeverRefuses()
+    public void ALowBudgetOfThisAppAloneUsesMainMemoryButNeverRefuses()
     {
         var model = LocalImageModels.All.Single(m => m.Id == "flux2-klein-4b");
 
         // The window in the background: Windows lowered this app's budget to 2 GiB, while 12 GiB of the card are free across all processes.
         var budget = new VramReading(16 * GiB, 2 * GiB, true, "DXGI budget") { SystemFreeBytes = 12 * GiB };
-        ImageMemoryPlanner.Plan(model, ImageBackend.Vulkan, budget, 32 * GiB).Level.ShouldBe(ImageMemoryLevel.Offload);
+        ImageMemoryPlanner.Plan(model, ImageBackend.Vulkan, budget, 32 * GiB).Level.ShouldBe(ImageMemoryLevel.MainMemory);
 
-        // The same 2 GiB measured across all processes is a real shortage: refused.
+        // The same 2 GiB measured across all processes is a real shortage: 1 GiB after the reserve is too little to work in even from the disk.
         ImageMemoryPlanner.Plan(model, ImageBackend.Vulkan, new VramReading(16 * GiB, 2 * GiB, true, "PDH"), 32 * GiB).Level.ShouldBe(ImageMemoryLevel.Refused);
     }
 
     [Fact]
-    public void TheProcessorBuildGetsNoMemoryOptionsAndAnUnknownCardIsOffloaded()
+    public void TheProcessorBuildGetsNoMemoryOptionsAndAnUnknownCardIsPlacedBySdCpp()
     {
         var processor = ImageMemoryPlanner.Plan(LocalImageModels.ZImageTurbo, ImageBackend.Cpu, VramReading.None, null);
         processor.Level.ShouldBe(ImageMemoryLevel.Processor);
         processor.Flags.ShouldBeEmpty();
         var unknown = ImageMemoryPlanner.Plan(LocalImageModels.ZImageTurbo, ImageBackend.Vulkan, VramReading.None, null);
-        unknown.Level.ShouldBe(ImageMemoryLevel.Offload);
-        unknown.Flags.ShouldBe(["--vae-tiling", "--max-vram", "-1", "--offload-to-cpu"]);
+        unknown.Level.ShouldBe(ImageMemoryLevel.MainMemory);
+        unknown.Flags.ShouldBe(["--vae-tiling", "--max-vram", "-1", "--mmap"]);
 
         // Unknown main memory is not held against a model.
         ImageMemoryPlanner.Plan(LocalImageModels.ZImageTurboFull, ImageBackend.Cuda, new VramReading(16 * GiB, 13 * GiB, true, "t"), null).Level
-            .ShouldBe(ImageMemoryLevel.Offload);
+            .ShouldBe(ImageMemoryLevel.MainMemory);
     }
 
     [Fact]
-    public void AnOutOfMemoryEndStepsDownOneLevelUntilTheTextEncoderRunsOnTheProcessor()
+    public void AnOutOfMemoryEndStepsDownCardMainMemoryDiskUntilTheTextEncoderRunsOnTheProcessor()
     {
         var card = ImageMemoryPlanner.Plan(LocalImageModels.ZImageTurbo, ImageBackend.Vulkan, new VramReading(16 * GiB, 13 * GiB, true, "t"), null);
         card.Level.ShouldBe(ImageMemoryLevel.Card);
 
-        var offload = ImageMemoryPlanner.StepDown(card).ShouldNotBeNull();
-        offload.Level.ShouldBe(ImageMemoryLevel.Offload);
-        offload.Flags.ShouldBe(["--vae-tiling", "--max-vram", "-1", "--offload-to-cpu"]);
-        var encoder = ImageMemoryPlanner.StepDown(offload).ShouldNotBeNull();
-        encoder.Level.ShouldBe(ImageMemoryLevel.OffloadTextEncoder);
-        encoder.Flags.ShouldBe(["--vae-tiling", "--max-vram", "-1", "--offload-to-cpu", "--backend", "te=cpu"]);
+        var main = ImageMemoryPlanner.StepDown(card).ShouldNotBeNull();
+        main.Level.ShouldBe(ImageMemoryLevel.MainMemory);
+        main.Flags.ShouldBe(["--vae-tiling", "--max-vram", "-1", "--mmap"]);
+        var disk = ImageMemoryPlanner.StepDown(main).ShouldNotBeNull();
+        disk.Level.ShouldBe(ImageMemoryLevel.Disk);
+        disk.Flags.ShouldBe(["--vae-tiling", "--max-vram", "-1", "--mmap", "--params-backend", "diffusion=disk,te=cpu,vae=cpu"]);
+        var encoder = ImageMemoryPlanner.StepDown(disk).ShouldNotBeNull();
+        encoder.Level.ShouldBe(ImageMemoryLevel.DiskTextEncoder);
+        encoder.Flags.ShouldBe(["--vae-tiling", "--max-vram", "-1", "--mmap", "--params-backend", "diffusion=disk,te=cpu,vae=cpu", "--backend", "te=cpu"]);
         ImageMemoryPlanner.StepDown(encoder).ShouldBeNull();
 
         ImageMemoryPlanner.IsOutOfMemory("ggml_vulkan: Device memory allocation of size 3154 failed: ErrorOutOfDeviceMemory").ShouldBeTrue();
@@ -252,6 +260,63 @@ public sealed class LocalImageTests
         ImageMemoryPlanner.IsOutOfMemory("model manager cannot make enough memory available on Vulkan0").ShouldBeTrue();
         ImageMemoryPlanner.IsOutOfMemory("failed to load model").ShouldBeFalse();
         ImageMemoryPlanner.IsOutOfMemory(string.Empty).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void EveryModelClassGivesItsOwnMemoryFiguresPerCardClass()
+    {
+        var catalog = new CatalogModel { Provider = ModelProviders.Local, Id = "x", Capabilities = ModelCapability.Image };
+        var zImage = SdCppModelSource.For(catalog, LocalImageModels.ZImageTurbo, null!);
+        var flux = SdCppModelSource.For(catalog, LocalImageModels.Flux2Klein, null!);
+        zImage.ShouldBeOfType<ZImageLocalModel>();
+        flux.ShouldBeOfType<SdCppLocalModel>();
+
+        var six = new VramReading((long)(5.9 * GiB), (long)(4.3 * GiB), true, "PDH");
+        var four = new VramReading((long)(3.9 * GiB), 3 * GiB, true, "PDH");
+        var sixteen = new VramReading(16 * GiB, 13 * GiB, true, "PDH");
+        zImage.MemorySettings(six).ShouldBe(ZImageLocalModel.UpTo6Gb, "Z-Image on a 6 GB card: its own figures");
+        zImage.MemorySettings(sixteen).ShouldBe(ImageMemoryPlanner.DefaultSettings);
+        flux.MemorySettings(six).ShouldBe(ImageMemoryPlanner.DefaultSettings);
+        flux.MemorySettings(four).MinimumWorkingBytes.ShouldBeLessThan(ImageMemoryPlanner.DefaultSettings.MinimumWorkingBytes, "a 4 GB card: less to work in");
+
+        // The developer's laptop through the model's own class: Z-Image Q8 runs (from the disk), it is never refused, and the plan of every
+        // local model is the same as a placement for the graphics card coordinator.
+        var plan = zImage.PlanImage(ImageBackend.Cuda, new MemorySnapshot(six, (long)(2.2 * GiB)));
+        plan.Level.ShouldBe(ImageMemoryLevel.Disk);
+        plan.ToMemoryPlan().Placement.ShouldBe(MemoryPlacement.Disk);
+        plan.ToMemoryPlan().Slower.ShouldBeTrue();
+        plan.ToMemoryPlan().Arguments.ShouldBe(plan.Flags);
+    }
+
+    [Fact]
+    public void ThePlanNeverChangesTheModelAndRefusesOnlyWithoutWorkingMemory()
+    {
+        // Every model, every card class, free memory from almost nothing to all of it, main memory from 1 GiB to 64 GiB: a refusal only
+        // when the card has less than the working memory left after the reserve; the arguments always name the same weights files.
+        foreach (var model in LocalImageModels.All)
+        {
+            var local = SdCppModelSource.For(new CatalogModel { Provider = ModelProviders.Local, Id = model.Id, Capabilities = ModelCapability.Image }, model, null!);
+            foreach (var card in new[] { 4.0, 5.9, 8, 12, 16, 24, 32 })
+            {
+                foreach (var free in new[] { 0.5, 1.5, 2.5, 3.3, 4.3, 6, 10, 20, 30 }.Where(f => f <= card))
+                {
+                    foreach (var main in new double[] { 1, 2.2, 4, 16, 64 })
+                    {
+                        var reading = new VramReading((long)(card * GiB), (long)(free * GiB), true, "PDH");
+                        var plan = local.PlanImage(ImageBackend.Vulkan, new MemorySnapshot(reading, (long)(main * GiB)));
+                        var usable = reading.FreeBytes - (plan.ReserveGib * GiB);
+                        if (plan.Level == ImageMemoryLevel.Refused)
+                        {
+                            usable.ShouldBeLessThan(local.MemorySettings(reading).MinimumWorkingBytes, $"{model.Id} on {card} GB with {free} GiB free");
+                            continue;
+                        }
+
+                        var arguments = SdCppImageEngine.Arguments(model, "p", null, 512, 512, 1, "o.png", f => f.ExecutablePath, plan.Flags);
+                        model.Files.ShouldAllBe(f => arguments.Contains(f.ExecutablePath), "the model never changes, only where its weights live");
+                    }
+                }
+            }
+        }
     }
 
     [Fact]

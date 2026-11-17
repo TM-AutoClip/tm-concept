@@ -40,6 +40,10 @@ needed) and narrates it with a **free local voice**. It runs on Windows and Linu
   is made, every step shows with its time and cost, the code model's tokens and what was paid so far. The made videos are on the right
   with a preview player, **Open in player**, **Open folder** and **Fix the concept, produce again**. The model writes one code file; a
   safety check runs before anything is executed; a failed check or render gets one repair request. Videos are at most 3 minutes.
+  **When a video fails, the whole queue stops** (the error is on the page, in a notification and in red in the activity panel; start the
+  queue again when it is fixed). **Night mode** (the checkbox next to **Produce in order**, off at every start, may be ticked while the
+  queue runs) is for when you are not at the computer: a failed video is reported and the next one is made, 10 seconds pass between videos,
+  a lack of memory fails that video instead of asking, and 3 failed videos in a row stop the queue completely (so no money is wasted).
 - **Produced videos.** Thumbnail, a built-in player (play/pause, seek bar, time, volume, full screen; nothing starts by itself), the whole
   narration scene by scene and the whole concept text, details (engine, models, cost per step, voice notes), open in the system player,
   open the folder, produce again, delete a version and, if you want, move its files to the recycle bin.
@@ -147,13 +151,16 @@ the model that describes a sample image. Each step says what it is for:
   - **32 GB**: Qwen-Image (Q8)
 
   A model is downloaded only when you choose it and confirm. Licenses: most are Apache-2.0 (free for any use); **FLUX.2 klein 9B is
-  non-commercial** (red badge: not for monetized videos); FLUX.3 Image Klein (FLUX Kommunity License: by Black Forest Labs' announcement free
+  non-commercial** (orange badge: not for monetized videos; red only ever means "this card cannot run it"); FLUX.3 Image Klein (FLUX Kommunity License: by Black Forest Labs' announcement free
   commercial use under 5 million USD annual revenue), Stable Diffusion 3.5 Medium (Stability AI Community License: under 1 million USD) and
   SDXL Lightning (OpenRAIL++ use restrictions) have conditions (yellow badge). Each of these asks you to accept its license once, before its
   first download. Before every picture the app measures the card's **free** memory: the VAE is always tiled, about an eighth (at least
-  1 GB) is kept free for Windows and other programs, a model whose weights do not fit on the card keeps them in main memory (slower), and a
-  picture that runs out of memory is tried once more one step lower. When neither the card nor main memory has room, the image step stops
-  with the figures and asks you to close programs or choose a smaller model. NVIDIA, AMD and Intel cards work: *Settings → General → Image acceleration* picks the build (Automatic: NVIDIA CUDA for an NVIDIA card with its driver,
+  1 GB) is kept free for Windows and other programs. The chosen model is never swapped for another one; only where its weights live
+  changes: on the card when they fit, otherwise in main memory (stable-diffusion.cpp places them itself, memory-mapped), and only when main
+  memory is short too, read from the disk. Anything but the card is slower and shows a yellow line in the activity panel (so does a fall
+  back to the processor build); cancel and choose another model if you like. A picture that runs out of memory is tried again one level
+  lower each time. Each model family has its own memory figures per card class (Z-Image Turbo, for example, needs less working memory on
+  a 6 GB card). NVIDIA, AMD and Intel cards work: *Settings → General → Image acceleration* picks the build (Automatic: NVIDIA CUDA for an NVIDIA card with its driver,
   Vulkan for AMD and Intel cards, the processor without a card or with only a virtual one; Linux x64 uses Vulkan or the processor). On
   Windows every build needs the Microsoft Visual C++ 2015–2022 runtime (x64); a video that would need it and does not find it stops before
   anything is paid for and names the download. There is no build for Linux ARM64.
@@ -212,7 +219,12 @@ now* with the reason; nothing starts with it until it is back or you choose anot
 **One local model on the graphics card at a time.** Models of a local server on this computer (Ollama, LM Studio, llama-server,
 Lemonade…) and the local image models share the graphics card: before a local model starts, the one used before it is unloaded (when its
 server can be asked to) and the app waits until the card's memory is free again; online models and the sherpa-onnx voices (they run on the
-processor) never wait; a Python voice on an NVIDIA card takes the card like the image models. The free memory is measured each time: on Windows the smaller of what Task Manager shows and what Windows lets (the latter alone never refuses a picture: it may only make sd-cli offload)
+processor) never wait; a Python voice on an NVIDIA card takes the card like the image models. After a model is unloaded (also when the
+card was freed at the end of a video) the app waits 3 seconds and measures the free memory; if it is not enough it waits 2.5 seconds and
+measures again; if it is still not enough a window shows the card's total and free memory, what the model needs and the free main memory:
+close programs that use the card or memory (games, browsers) and press **Try again** (it waits 5 seconds and measures again, as often as you
+like), or **Cancel** (the video queue stops; the app stays open). Every step is a line in the activity panel. In night mode nobody is asked:
+that video fails. The free memory is measured each time: on Windows the smaller of what Task Manager shows and what Windows lets (the latter alone never refuses a picture: it may only make sd-cli offload)
 the app use, on Linux the AMD driver's files or `nvidia-smi`. Graphics memory classes are 4, 6, 8, 12, 16, 24 and 32 GB: a card counts in
 the class it reports within 8 % (a "16 GB" card that reports 15.8 GB is a 16 GB card; an 11 GB card is an 8 GB card) and can use its own class and every
 lower one; a model of a higher class is shown in red. What Ollama or LM Studio on this computer still holds from before (an earlier run;

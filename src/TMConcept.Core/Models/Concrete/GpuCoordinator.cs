@@ -8,11 +8,17 @@ namespace TMConcept.Core.Models;
 /// the same model needs no reload); it is unloaded only when another local model asks for the card, or by <see cref="FreeAsync"/>. Before the
 /// first card lease of a run, every <see cref="IResidentModelSweep"/> frees what local servers still hold from before. A model whose unload
 /// could not be confirmed (<see cref="ModelUnloadException"/>, or any other failure) is not forgotten: it is asked again at every later change
-/// of model and by <see cref="FreeAsync"/>; meanwhile the next model gets the card with the memory measured after the failed unload (sd-cli
-/// and the voices plan from that reading). Waiting leases are not ordered. Each change is logged (model codes and memory figures only).
+/// of model and by <see cref="FreeAsync"/>; meanwhile the next model gets the card with the memory measured after the failed unload.
+/// <para>Every handover (a model that is not on the card yet) runs the memory check of <see cref="IMemoryWaiter"/> with the model's own plan
+/// (<see cref="ILocalModel.PlanMemory"/>): 3 s after the last unload (a swap here, or <see cref="FreeAsync"/> at the end of a video: 0.1.17
+/// skipped the wait there), a second reading 2.5 s later, then the user's question. The check runs OUTSIDE the coordinator's lock with the
+/// lease already counted, so an open question keeps other models waiting for the card (as any lease does) but never blocks a release or
+/// <see cref="FreeAsync"/>; a second lease of the same model waits for the running check. A placement off the card (main memory, disk) is
+/// reported (<see cref="IMemoryNotices"/>) and logged as a warning.</para>
+/// Waiting leases are not ordered. Each change is logged (model codes and memory figures only).
 /// </summary>
-public sealed class GpuCoordinator(IModelDirectory directory, IVramProbe probe, TimeProvider clock, GpuCoordinatorOptions options, ILogger<GpuCoordinator> logger,
-    IEnumerable<IResidentModelSweep>? sweeps = null)
+public sealed class GpuCoordinator(IModelDirectory directory, IVramProbe probe, IMemoryWaiter waiter, TimeProvider clock, ILogger<GpuCoordinator> logger,
+    IEnumerable<IResidentModelSweep>? sweeps = null, ISystemMemory? memory = null, IMemoryNotices? notices = null)
     : IGpuCoordinator
 {
     private const double Gibibyte = 1024.0 * 1024 * 1024;
@@ -26,6 +32,11 @@ public sealed class GpuCoordinator(IModelDirectory directory, IVramProbe probe, 
     // Models whose unload failed: they may still hold memory, so they are asked again later (never the one about to be used).
     private readonly List<ILocalModel> _stuck = [];
     private ILocalModel? _loaded;
+
+    // Whether the model on the card passed its memory check; the check of it that is running now (a second lease of it waits for it).
+    private bool _verified;
+    private TaskCompletionSource? _checking;
+    private DateTimeOffset? _unloadedAt;
     private int _users;
     private bool _swept;
     private TaskCompletionSource _idle = Completed();
@@ -96,6 +107,8 @@ public sealed class GpuCoordinator(IModelDirectory directory, IVramProbe probe, 
         while (true)
         {
             Task? busy = null;
+            TaskCompletionSource? check = null;
+            DateTimeOffset? unloadedAt = null;
             await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
@@ -116,9 +129,7 @@ public sealed class GpuCoordinator(IModelDirectory directory, IVramProbe probe, 
                         var previous = _loaded;
                         await UnloadAsync(previous, cancellationToken).ConfigureAwait(false);
                         await RetryStuckAsync(model, previous, cancellationToken).ConfigureAwait(false);
-                        var freed = await WaitForMemoryAsync(need, cancellationToken).ConfigureAwait(false);
-                        logger.LogInformation("Graphics card: {Previous} unloaded for {Model}; {Free:0.0} of {Total:0.0} GiB free ({Source})", previous.Key, model.Key,
-                            freed.FreeBytes / Gibibyte, freed.TotalBytes / Gibibyte, freed.Source);
+                        logger.LogInformation("Graphics card: {Previous} unloaded for {Model}", previous.Key, model.Key);
                     }
                 }
                 else if (_loaded is null)
@@ -129,7 +140,24 @@ public sealed class GpuCoordinator(IModelDirectory directory, IVramProbe probe, 
 
                 if (busy is null)
                 {
-                    return await GrantNowAsync(model, held, cancellationToken).ConfigureAwait(false);
+                    if (_loaded is not null && _verified)
+                    {
+                        return await GrantNowAsync(model, held, cancellationToken).ConfigureAwait(false);
+                    }
+
+                    if (_checking is { } running)
+                    {
+                        // Another flow is checking the memory for this same model: wait for it, then look again.
+                        busy = running.Task;
+                    }
+                    else
+                    {
+                        // This flow checks: the model takes the card now (counted as a user, so no other model unloads it meanwhile), the
+                        // check runs after the lock is released.
+                        check = _checking = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                        unloadedAt = _unloadedAt;
+                        Reserve(model, held);
+                    }
                 }
             }
             finally
@@ -137,31 +165,22 @@ public sealed class GpuCoordinator(IModelDirectory directory, IVramProbe probe, 
                 _gate.Release();
             }
 
-            await busy.WaitAsync(cancellationToken).ConfigureAwait(false);
+            if (check is not null)
+            {
+                return await CheckAndGrantAsync(model, need, held, unloadedAt, check, cancellationToken).ConfigureAwait(false);
+            }
+
+            await busy!.WaitAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 
-    /// <summary>
-    /// Loads <paramref name="model"/>, reads the memory it may use and hands out the lease (called with the gate held). The user count goes up
-    /// only after the last step that can fail or be cancelled: a Stop during the load or the reading leaves no count behind (a count without a
-    /// lease would keep every other local model waiting until the app is restarted).
-    /// </summary>
-    private async Task<IGpuLease> GrantNowAsync(ILocalModel model, List<string> held, CancellationToken cancellationToken)
+    /// <summary>The model takes the card before its check (called with the gate held): a user is counted, the flow holds its key.</summary>
+    private void Reserve(ILocalModel model, List<string> held)
     {
-        var changed = _loaded is null;
-        if (!model.IsLoaded)
-        {
-            await model.LoadAsync(cancellationToken).ConfigureAwait(false);
-        }
-
+        var changed = !ReferenceEquals(_loaded, model);
         _loaded = model;
+        _verified = false;
         _stuck.Remove(model);
-        if (changed)
-        {
-            Changed?.Invoke(this, EventArgs.Empty);
-        }
-
-        var memory = await probe.MeasureAsync(null, cancellationToken).ConfigureAwait(false);
         if (_users++ == 0)
         {
             _idle = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -172,7 +191,104 @@ public sealed class GpuCoordinator(IModelDirectory directory, IVramProbe probe, 
             held.Add(model.Key);
         }
 
-        return new GpuLease(model, true, memory, lease => ReleaseAsync(lease, held));
+        if (changed)
+        {
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>
+    /// The memory check of a handover, outside the gate: wait and measure (<see cref="IMemoryWaiter"/>), then load and hand out the lease. A
+    /// failure, a cancellation or the user's Cancel gives the reserved lease back (no user count is left behind) and goes to the caller.
+    /// </summary>
+    private async Task<IGpuLease> CheckAndGrantAsync(ILocalModel model, ModelMemoryNeed? need, List<string> held, DateTimeOffset? unloadedAt,
+        TaskCompletionSource check, CancellationToken cancellationToken)
+    {
+        var lease = new GpuLease(model, true, VramReading.None, l => ReleaseAsync(l, held));
+        try
+        {
+            MemoryPlan? plan = null;
+            await waiter.WaitAsync(model, unloadedAt, async token =>
+            {
+                var reading = await probe.MeasureAsync(null, token).ConfigureAwait(false);
+                var free = memory?.AvailableBytes();
+                plan = model.PlanMemory(new MemorySnapshot(reading, free), need);
+                logger.LogInformation("{Model}: memory plan {Placement} ({Free:0.0} of {Total:0.0} GiB graphics memory free, {Source})", model.Key, plan.Placement,
+                    reading.FreeBytes / Gibibyte, reading.TotalBytes / Gibibyte, reading.Source);
+                return plan.Runs || !reading.Measured
+                    ? null
+                    : new MemoryShortfall(model.Name, reading.TotalBytes, Math.Max(reading.FreeBytes, reading.SystemFreeBytes ?? 0), reading.Source,
+                        plan.NeededVideoBytes, free, plan.NeededMainBytes);
+            }, cancellationToken).ConfigureAwait(false);
+
+            if (plan is { Slower: true })
+            {
+                logger.LogWarning(Activity.LogEvents.OnScreen, "{Model} does not fit on the graphics card; it uses {Placement} and runs slower", model.Key,
+                    plan.Placement);
+                notices?.Report(new MemoryNotice(MemoryNoticeKind.Placed, model.Name, model.Key) { Placement = plan.Placement });
+            }
+
+            if (!model.IsLoaded)
+            {
+                await model.LoadAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            var reading = await probe.MeasureAsync(null, cancellationToken).ConfigureAwait(false);
+            await SettleCheckAsync(check, true).ConfigureAwait(false);
+            return new GpuLease(model, true, reading, l => ReleaseAsync(l, held));
+        }
+        catch
+        {
+            await SettleCheckAsync(check, false).ConfigureAwait(false);
+            await lease.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    /// <summary>Ends a check: the model counts as verified when it passed (and is still the one on the card); flows waiting for it look again.</summary>
+    private async Task SettleCheckAsync(TaskCompletionSource check, bool passed)
+    {
+        await _gate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
+        try
+        {
+            if (ReferenceEquals(_checking, check))
+            {
+                _checking = null;
+                _verified = passed;
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        check.TrySetResult();
+    }
+
+    /// <summary>
+    /// A lease of the model already on the card and checked (called with the gate held). The user count goes up only after the last step that
+    /// can fail or be cancelled: a Stop during the load or the reading leaves no count behind (a count without a lease would keep every other
+    /// local model waiting until the app is restarted).
+    /// </summary>
+    private async Task<IGpuLease> GrantNowAsync(ILocalModel model, List<string> held, CancellationToken cancellationToken)
+    {
+        if (!model.IsLoaded)
+        {
+            await model.LoadAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        var reading = await probe.MeasureAsync(null, cancellationToken).ConfigureAwait(false);
+        if (_users++ == 0)
+        {
+            _idle = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+
+        lock (held)
+        {
+            held.Add(model.Key);
+        }
+
+        return new GpuLease(model, true, reading, lease => ReleaseAsync(lease, held));
     }
 
     private async ValueTask ReleaseAsync(GpuLease lease, List<string> held)
@@ -198,7 +314,8 @@ public sealed class GpuCoordinator(IModelDirectory directory, IVramProbe probe, 
 
     /// <summary>
     /// Unloads <paramref name="model"/>; true when it is gone. A failure is logged and the model is kept to be asked again later; the card no
-    /// longer counts it as the loaded model, and the next model measures what is really free. Called with the gate held.
+    /// longer counts it as the loaded model, and the next model measures what is really free. The time is kept: the next model's memory check
+    /// waits for the driver from then on. Called with the gate held.
     /// </summary>
     private async Task<bool> UnloadAsync(ILocalModel model, CancellationToken cancellationToken)
     {
@@ -220,9 +337,11 @@ public sealed class GpuCoordinator(IModelDirectory directory, IVramProbe probe, 
                 + "and the unload is asked again at the next change", model.Key, ex.Message);
         }
 
+        _unloadedAt = clock.GetUtcNow();
         if (ReferenceEquals(_loaded, model))
         {
             _loaded = null;
+            _verified = false;
             Changed?.Invoke(this, EventArgs.Empty);
         }
 
@@ -263,28 +382,6 @@ public sealed class GpuCoordinator(IModelDirectory directory, IVramProbe probe, 
             {
                 logger.LogWarning(ex, "What local servers held from before could not be freed");
             }
-        }
-    }
-
-    /// <summary>
-    /// Reads the card's memory until it reaches <paramref name="need"/>, stops rising (two readings one <see cref="GpuCoordinatorOptions.PollInterval"/>
-    /// apart) or <see cref="GpuCoordinatorOptions.RecoveryTimeout"/> passes; an estimate (nothing measurable) is not waited for.
-    /// </summary>
-    private async Task<VramReading> WaitForMemoryAsync(ModelMemoryNeed? need, CancellationToken cancellationToken)
-    {
-        var target = need?.VideoMemoryBytes ?? 0;
-        var deadline = clock.GetUtcNow() + options.RecoveryTimeout;
-        long last = -1;
-        while (true)
-        {
-            var reading = await probe.MeasureAsync(null, cancellationToken).ConfigureAwait(false);
-            if (!reading.Measured || (target > 0 && reading.FreeBytes >= target) || (last >= 0 && reading.FreeBytes <= last) || clock.GetUtcNow() >= deadline)
-            {
-                return reading;
-            }
-
-            last = reading.FreeBytes;
-            await Task.Delay(options.PollInterval, clock, cancellationToken).ConfigureAwait(false);
         }
     }
 

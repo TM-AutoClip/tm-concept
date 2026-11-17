@@ -278,6 +278,7 @@ public sealed class ImageBackendTests
         // A 16 GB card with 13 GiB free holds the 2.5 GB FLUX.2 klein: on the card, tiled VAE, 1 GiB kept free.
         string.Join(' ', start.Arguments.TakeLast(3)).ShouldBe("--vae-tiling --max-vram -1");
         start.Arguments.ShouldNotContain("--offload-to-cpu");
+        start.Arguments.ShouldNotContain("--mmap");
         runner.InsideLease.ShouldBe([true], "sd-cli runs inside the model's graphics card lease");
         start.Environment.Keys.ShouldBe([OperatingSystem.IsWindows() ? "PATH" : "LD_LIBRARY_PATH"]);
     }
@@ -331,6 +332,7 @@ public sealed class ImageBackendTests
     [Fact]
     public async Task UnderAutomaticAFailedGpuBuildIsFollowedByTheInstalledProcessorBuild()
     {
+        var notices = new RecordingNotices();
         using var paths = new TempPaths();
         var installer = Installer(paths, "win-x64");
         Install(installer, ToolKind.ImageRuntimeVulkan);
@@ -340,11 +342,15 @@ public sealed class ImageBackendTests
         var selector = new ImageBackendSelector(new FakeGpu(new GpuReport([Amd], false, true)), new FakeSetting(), installer);
         var vulkan = installer.Status(ToolKind.ImageRuntimeVulkan).ExecutablePath;
         var runner = new PictureRunner(Png(8, 8, (x, y) => [(byte)(x * 30), (byte)(y * 30), 7])) { FailFor = vulkan };
-        var engine = Engine(installer, store, selector, new FakeProbe(), runner);
+        var engine = Engine(installer, store, selector, new FakeProbe(), runner, notices: notices);
         var model = new ResolvedModel(new CatalogModel { Provider = ModelProviders.Local, Id = LocalImageModels.Flux2Klein.Id }, new ApiKey(), string.Empty);
 
         (await engine.GenerateAsync(new ImageRequest("a map", 512, 512, Path.Combine(paths.WorkDirectory, "1.png"), model), CancellationToken.None)).CostUsd.ShouldBe(0);
         runner.Programs.ShouldBe([vulkan, installer.Status(ToolKind.ImageRuntimeCpu).ExecutablePath]);
+
+        // 0.1.18: the switch to the processor build (the same model, much slower) is said on screen, no longer silent.
+        notices.Kinds.ShouldContain(MemoryNoticeKind.ProcessorFallback);
+        runner.Runs.ShouldAllBe(r => r.Contains(store.File(LocalImageModels.Flux2Klein, LocalImageModels.Flux2Klein.Diffusion)), "the model never changes");
 
         // The next picture of the session goes to the processor build at once.
         await engine.GenerateAsync(new ImageRequest("ships", 512, 512, Path.Combine(paths.WorkDirectory, "2.png"), model), CancellationToken.None);
@@ -360,7 +366,7 @@ public sealed class ImageBackendTests
     }
 
     [Fact]
-    public async Task ARunThatEndsOutOfMemoryIsTriedOnceMoreOneLevelLower()
+    public async Task ARunThatEndsOutOfMemoryStepsDownLevelByLevelWithTheSameModel()
     {
         using var paths = new TempPaths();
         var installer = Installer(paths, "win-x64");
@@ -375,21 +381,28 @@ public sealed class ImageBackendTests
         await engine.GenerateAsync(new ImageRequest("a map", 512, 512, Path.Combine(paths.WorkDirectory, "1.png"), model), CancellationToken.None);
 
         runner.Runs.Count.ShouldBe(2);
-        runner.Runs[0].ShouldNotContain("--offload-to-cpu");
-        runner.Runs[1].ShouldContain("--offload-to-cpu", "one level lower: the weights stay in main memory");
+        runner.Runs[0].ShouldNotContain("--mmap");
+        runner.Runs[1].ShouldContain("--mmap", "one level lower: what does not fit stays in main memory");
+        runner.Runs[1].ShouldNotContain("--offload-to-cpu", "sd.cpp places the weights itself (auto-fit)");
         runner.InsideLease.ShouldBe([true, true]);
 
-        // Out of memory twice: the second failure is the answer (only one more try), with sd-cli's own words.
-        var twice = new PictureRunner([]) { OutOfMemoryRuns = 2 };
-        var failing = Engine(installer, store, selector, new FakeProbe(), twice);
+        // Out of memory at every level: card, main memory, disk, disk with the text encoder on the processor; then sd-cli's own words. The
+        // model (its files) never changes, only the options.
+        var always = new PictureRunner([]) { OutOfMemoryRuns = 9 };
+        var failing = Engine(installer, store, selector, new FakeProbe(), always);
         var error = await Should.ThrowAsync<InvalidOperationException>(() =>
             failing.GenerateAsync(new ImageRequest("a map", 512, 512, Path.Combine(paths.WorkDirectory, "2.png"), model), CancellationToken.None));
         error.Message.ShouldContain("cannot make enough memory available");
-        twice.Runs.Count.ShouldBe(2);
+        always.Runs.Count.ShouldBe(4);
+        always.Runs[2].ShouldContain("diffusion=disk,te=cpu,vae=cpu");
+        always.Runs[3].ShouldContain("te=cpu");
+        always.Runs[3].ShouldContain("--backend");
+        var diffusion = store.File(LocalImageModels.Flux2Klein, LocalImageModels.Flux2Klein.Diffusion);
+        always.Runs.ShouldAllBe(r => r.Contains(diffusion));
     }
 
     [Fact]
-    public async Task AModelThatFitsNeitherOnTheCardNorInMainMemoryIsRefusedWithTheFigures()
+    public async Task AModelThatFitsNeitherOnTheCardNorInMainMemoryRunsFromTheDisk()
     {
         using var paths = new TempPaths();
         var installer = Installer(paths, "win-x64");
@@ -397,18 +410,61 @@ public sealed class ImageBackendTests
         var store = new LocalImageStore(paths, new ToolDownloader(DownloadTransport.Network, NullLogger<ToolDownloader>.Instance), NullLogger<LocalImageStore>.Instance);
         Weights(paths, LocalImageModels.QwenImage);
         var selector = new ImageBackendSelector(new FakeGpu(new GpuReport([Amd], false, true)), new FakeSetting { Value = ImageAcceleration.Vulkan }, installer);
-        var runner = new PictureRunner([]);
-        // 16 GB card, 13 GiB free (the 11.9 GB diffusion model and its working memory do not fit), 8 GiB of main memory free.
-        var engine = Engine(installer, store, selector, new FakeProbe(), runner, mainMemory: 8 * GiB);
+        var runner = new PictureRunner(Png(8, 8, (x, y) => [(byte)(x * 30), (byte)(y * 30), 7]));
+        // 16 GB card, 13 GiB free (the 11.9 GB diffusion model and its working memory do not fit), 3 GiB of main memory free: the disk level,
+        // no question (0.1.17 refused it), and a yellow line says it is slower.
+        var notices = new RecordingNotices();
+        var engine = Engine(installer, store, selector, new FakeProbe(), runner, mainMemory: 3 * GiB, notices: notices);
         var model = new ResolvedModel(new CatalogModel { Provider = ModelProviders.Local, Id = LocalImageModels.QwenImage.Id }, new ApiKey(), string.Empty);
 
-        var error = await Should.ThrowAsync<InvalidOperationException>(() =>
-            engine.GenerateAsync(new ImageRequest("a map", 512, 512, Path.Combine(paths.WorkDirectory, "1.png"), model), CancellationToken.None));
+        await engine.GenerateAsync(new ImageRequest("a map", 512, 512, Path.Combine(paths.WorkDirectory, "1.png"), model), CancellationToken.None);
 
-        error.Message.ShouldContain("Qwen-Image cannot run on this computer now");
-        error.Message.ShouldContain("main memory");
-        error.Message.ShouldContain("online image model");
-        runner.Runs.ShouldBeEmpty();
+        runner.Runs.Count.ShouldBe(1);
+        runner.Runs[0].ShouldContain("diffusion=disk,te=cpu,vae=cpu");
+        notices.Placed.ShouldBe([MemoryPlacement.Disk]);
+    }
+
+    [Fact]
+    public async Task TooLittleGraphicsMemoryEvenForTheDiskWaitsAndAsksAndRetryRuns()
+    {
+        using var paths = new TempPaths();
+        var installer = Installer(paths, "win-x64");
+        Install(installer, ToolKind.ImageRuntimeVulkan);
+        var store = new LocalImageStore(paths, new ToolDownloader(DownloadTransport.Network, NullLogger<ToolDownloader>.Instance), NullLogger<LocalImageStore>.Instance);
+        Weights(paths, LocalImageModels.ZImageTurbo);
+        var selector = new ImageBackendSelector(new FakeGpu(new GpuReport([Amd], false, true)), new FakeSetting { Value = ImageAcceleration.Vulkan }, installer);
+        var runner = new PictureRunner(Png(8, 8, (x, y) => [(byte)(x * 30), (byte)(y * 30), 7]));
+        var model = new ResolvedModel(new CatalogModel { Provider = ModelProviders.Local, Id = LocalImageModels.ZImageTurbo.Id, Name = "Z-Image Turbo" },
+            new ApiKey(), string.Empty);
+
+        // A game holds the 6 GB card (1.5 GiB free: 0.5 GiB after the reserve); the user closes it and presses Retry: 4.3 GiB free.
+        var low = new VramReading((long)(5.9 * GiB), (long)(1.5 * GiB), true, "PDH");
+        var freed = new VramReading((long)(5.9 * GiB), (long)(4.3 * GiB), true, "PDH");
+        var handler = new Core.ScriptedShortfallHandler(MemoryShortfallChoice.Retry);
+        var engine = Engine(installer, store, selector, new FakeProbe(), runner, mainMemory: (long)(2.2 * GiB), vram: new Core.FakeVramProbe(low, low, freed),
+            waiter: Core.TestWaiters.Fast(handler));
+
+        await engine.GenerateAsync(new ImageRequest("a map", 512, 512, Path.Combine(paths.WorkDirectory, "1.png"), model), CancellationToken.None);
+
+        handler.Asked.Count.ShouldBe(1);
+        handler.Asked[0].CardFreeBytes.ShouldBe((long)(1.5 * GiB));
+        handler.Asked[0].CardTotalBytes.ShouldBe((long)(5.9 * GiB));
+        handler.Asked[0].Source.ShouldBe("PDH");
+        handler.Asked[0].FreeMainBytes.ShouldBe((long)(2.2 * GiB));
+        // The developer's laptop after Retry: Z-Image Q8 runs from the disk (2.2 GiB of main memory is too little for its weights), never refused.
+        runner.Runs.Count.ShouldBe(1);
+        runner.Runs[0].ShouldContain("diffusion=disk,te=cpu,vae=cpu");
+
+        // Nobody to ask (night mode): the same shortfall fails the picture with the figures.
+        using (MemoryShortfallScope.Begin(() => true))
+        {
+            var night = Engine(installer, store, selector, new FakeProbe(), runner, mainMemory: (long)(2.2 * GiB), vram: new Core.FakeVramProbe(low),
+                waiter: Core.TestWaiters.Fast(handler));
+            var error = await Should.ThrowAsync<MemoryShortfallException>(() =>
+                night.GenerateAsync(new ImageRequest("a map", 512, 512, Path.Combine(paths.WorkDirectory, "2.png"), model), CancellationToken.None));
+            error.Message.ShouldContain("Z-Image Turbo");
+            handler.Asked.Count.ShouldBe(1, "night mode asks nobody");
+        }
     }
 
     [Fact]
@@ -603,12 +659,25 @@ public sealed class ImageBackendTests
 
     /// <summary>The engine with a coordinator that grants every lease at once, a 16 GB card with 13 GiB free and 24 GiB of free main memory.</summary>
     private static SdCppImageEngine Engine(ToolInstaller installer, LocalImageStore store, ImageBackendSelector selector,
-        TMConcept.Engines.Hardware.IComputeRuntimeProbe probe, PictureRunner runner, VramReading? memory = null, long? mainMemory = 24 * GiB)
+        TMConcept.Engines.Hardware.IComputeRuntimeProbe probe, PictureRunner runner, VramReading? memory = null, long? mainMemory = 24 * GiB,
+        IMemoryNotices? notices = null, IVramProbe? vram = null, IMemoryWaiter? waiter = null)
     {
         var gpu = new FakeCoordinator();
         runner.Coordinator = gpu;
-        return new SdCppImageEngine(installer, store, selector, probe, runner, gpu, new FakeVram(memory ?? new VramReading(16 * GiB, 13 * GiB, true, "test")),
-            new FakeMainMemory(mainMemory), NullLogger<SdCppImageEngine>.Instance);
+        return new SdCppImageEngine(installer, store, selector, probe, runner, gpu, vram ?? new FakeVram(memory ?? new VramReading(16 * GiB, 13 * GiB, true, "test")),
+            new FakeMainMemory(mainMemory), waiter ?? Core.TestWaiters.Fast(), NullLogger<SdCppImageEngine>.Instance, notices);
+    }
+
+    /// <summary>Keeps every memory notice.</summary>
+    internal sealed class RecordingNotices : IMemoryNotices
+    {
+        public List<MemoryNotice> Notices { get; } = [];
+
+        public IReadOnlyList<MemoryNoticeKind> Kinds => Notices.Select(n => n.Kind).ToList();
+
+        public IReadOnlyList<MemoryPlacement> Placed => Notices.Where(n => n.Kind == MemoryNoticeKind.Placed).Select(n => n.Placement).ToList();
+
+        public void Report(MemoryNotice notice) => Notices.Add(notice);
     }
 
     /// <summary>Grants every lease at once and counts the leases held now.</summary>

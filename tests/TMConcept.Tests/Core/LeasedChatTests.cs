@@ -16,8 +16,7 @@ public sealed class LeasedChatTests
         var llm = new FakeLocalModel("qwen3");
         var image = new FakeLocalModel("z-image");
         var gpu = new GpuCoordinator(new ModelDirectory([new Source(llm), new Source(image)]),
-            new FakeVramProbe(new VramReading(16L << 30, 14L << 30, true, "test")), TimeProvider.System, new GpuCoordinatorOptions(TimeSpan.FromMilliseconds(1),
-                TimeSpan.FromSeconds(2)), NullLogger<GpuCoordinator>.Instance);
+            new FakeVramProbe(new VramReading(16L << 30, 14L << 30, true, "test")), TestWaiters.Fast(), TimeProvider.System, NullLogger<GpuCoordinator>.Instance);
         ILocalModel? onCardWhileAnswering = null;
         var fake = new FakeChat().Answer(_ =>
         {

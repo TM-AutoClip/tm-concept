@@ -17,6 +17,12 @@ public sealed record StepOption(StepOptionKind Kind, CatalogModel? Model, string
     /// <summary>Yellow: it may run but slowly or unknown (the processor build, a card whose memory could not be read), or its license has conditions.</summary>
     public bool IsWarning { get; init; }
 
-    /// <summary>Red: a local model of a higher memory class than this card's (it cannot run here), or a non-commercial license.</summary>
+    /// <summary>
+    /// Orange: a non-commercial license (0.1.18, the developer: red means only "cannot run on this card"; the model runs, the license limits
+    /// its use).
+    /// </summary>
+    public bool IsCaution { get; init; }
+
+    /// <summary>Red: only a local model of a higher memory class than this card's (it cannot run here).</summary>
     public bool IsError { get; init; }
 }

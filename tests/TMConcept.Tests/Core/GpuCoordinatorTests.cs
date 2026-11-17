@@ -13,10 +13,9 @@ namespace TMConcept.Tests.Core;
 public sealed class GpuCoordinatorTests
 {
     private const long GiB = 1024L * 1024 * 1024;
-    private static readonly GpuCoordinatorOptions Fast = new(TimeSpan.FromMilliseconds(1), TimeSpan.FromSeconds(5));
 
     private static GpuCoordinator Coordinator(FakeVramProbe? probe = null, params ILocalModelSource[] sources) =>
-        new(new ModelDirectory(sources), probe ?? new FakeVramProbe(new VramReading(16 * GiB, 14 * GiB, true, "test")), TimeProvider.System, Fast,
+        new(new ModelDirectory(sources), probe ?? new FakeVramProbe(new VramReading(16 * GiB, 14 * GiB, true, "test")), TestWaiters.Fast(), TimeProvider.System,
             NullLogger<GpuCoordinator>.Instance);
 
     [Fact]
@@ -67,7 +66,7 @@ public sealed class GpuCoordinatorTests
             gpu.Loaded.ShouldBe(image);
         }
 
-        probe.Reads.ShouldBeGreaterThanOrEqualTo(3, "the memory was read until it reached the image model's need");
+        probe.Reads.ShouldBeGreaterThanOrEqualTo(3, "the memory was read after the unload, before the image model got the card");
         changes.ShouldBe(3, "loaded, unloaded, loaded");
 
         // Back to the first model: the image model is unloaded (it has nothing loaded, but the call is safe) and the LLM loads again.
@@ -79,18 +78,111 @@ public sealed class GpuCoordinatorTests
     }
 
     [Fact]
-    public async Task TheWaitEndsWhenTheMemoryStopsRising()
+    public async Task AModelThatDoesNotFitGoesToMainMemoryWithoutAQuestionAndSaysSo()
     {
-        // 8 GB free, then 8 GB again: the driver gave back all it will; the 12 GB model goes ahead (its weights move to main memory).
+        // 8 GB free, a 12 GB model that places itself (a server: what does not fit goes to main memory): it goes ahead, slower, with a warning.
         var probe = new FakeVramProbe(new VramReading(16 * GiB, 8 * GiB, true, "test"));
-        var gpu = Coordinator(probe);
+        var notices = new Engines.ImageBackendTests.RecordingNotices();
+        var handler = new ScriptedShortfallHandler(MemoryShortfallChoice.Cancel);
+        var gpu = new GpuCoordinator(new ModelDirectory([]), probe, TestWaiters.Fast(handler), TimeProvider.System, NullLogger<GpuCoordinator>.Instance,
+            notices: notices);
         await (await gpu.AcquireAsync(new FakeLocalModel("a"), null, CancellationToken.None)).DisposeAsync();
         var reads = probe.Reads;
 
         await using var lease = await gpu.AcquireAsync(new FakeLocalModel("b", videoGb: 12), null, CancellationToken.None);
 
-        (probe.Reads - reads).ShouldBe(3, "two readings to see it stop rising, one for the lease");
+        (probe.Reads - reads).ShouldBe(2, "one reading for the check, one for the lease");
         lease.Memory.FreeBytes.ShouldBe(8 * GiB);
+        handler.Asked.ShouldBeEmpty();
+        notices.Placed.ShouldBe([MemoryPlacement.MainMemory]);
+    }
+
+    [Fact]
+    public async Task AfterFreeTheNextModelWaitsThreeSecondsBeforeItMeasures()
+    {
+        // The 0.1.17 incident path: the voice was freed (FreeAsync) and the image model's lease measured at once, with no wait at all.
+        var clock = new CountingTimeProvider();
+        var probe = new FakeVramProbe(new VramReading(6 * GiB, (long)(4.3 * GiB), true, "PDH"));
+        var waiter = new MemoryWaiter(clock, MemoryWaitOptions.Default, NullLogger<MemoryWaiter>.Instance);
+        var gpu = new GpuCoordinator(new ModelDirectory([]), probe, waiter, clock, NullLogger<GpuCoordinator>.Instance);
+        await (await gpu.AcquireAsync(new FakeLocalModel("f5-tts"), null, CancellationToken.None)).DisposeAsync();
+        await gpu.FreeAsync(CancellationToken.None);
+        var reads = probe.Reads;
+
+        var leasing = gpu.AcquireAsync(new FakeLocalModel("z-image-turbo", videoGb: 4), null, CancellationToken.None);
+        await clock.AdvanceAfterTimerAsync(1, TimeSpan.FromSeconds(2.9));
+        probe.Reads.ShouldBe(reads, "nothing is measured before 3 s");
+        clock.Advance(TimeSpan.FromSeconds(0.1));
+        await using var lease = await leasing.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+        lease.OnCard.ShouldBeTrue();
+        (probe.Reads - reads).ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task CancelInTheMemoryQuestionGivesTheCardBackAndNothingWaitsForTheQuestion()
+    {
+        // A voice that cannot leave weights off the card (its minimum is three quarters of its 8 GB class) finds 2 GiB free.
+        var probe = new FakeVramProbe(new VramReading(16 * GiB, 2 * GiB, true, "PDH"));
+        var handler = new ScriptedShortfallHandler(MemoryShortfallChoice.Cancel) { Hold = true };
+        using var close = new CancellationTokenSource();
+        var gpu = new GpuCoordinator(new ModelDirectory([]), probe, TestWaiters.Fast(handler), TimeProvider.System, NullLogger<GpuCoordinator>.Instance);
+        var voice = new StrictModel("voxcpm2", 8);
+
+        var asking = Task.Run(() => gpu.AcquireAsync(voice, null, close.Token), TestContext.Current.CancellationToken);
+        await CountingTimeProvider.UntilAsync(() => handler.Asked.Count == 1);
+
+        // While the question is open: freeing the card and leasing an online model never wait for it.
+        await gpu.FreeAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await (await gpu.AcquireAsync(new OnlineModel(new CatalogModel { Provider = "openai", Id = "gpt" }, true), null, CancellationToken.None)
+            .WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken)).DisposeAsync();
+        handler.Asked[0].NeededVideoBytes.ShouldBe(8 * GiB / 4 * 3);
+        handler.Asked[0].CardFreeBytes.ShouldBe(2 * GiB);
+
+        // The queue's Cancel closes the question; the card is given back (no user count left), the next model gets it.
+        await close.CancelAsync();
+        await Should.ThrowAsync<OperationCanceledException>(() => asking);
+        using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await using var next = await gpu.AcquireAsync(new FakeLocalModel("llm", videoGb: 1), null, limit.Token);
+        next.OnCard.ShouldBeTrue();
+        voice.Loads.ShouldBe(0, "a model whose memory is not free is never loaded");
+    }
+
+    [Fact]
+    public async Task TheUsersCancelThrowsTheQueueStopAndRetryGoesOn()
+    {
+        var probe = new FakeVramProbe(new VramReading(16 * GiB, 2 * GiB, true, "PDH"));
+        var cancel = new ScriptedShortfallHandler(MemoryShortfallChoice.Cancel);
+        var gpu = new GpuCoordinator(new ModelDirectory([]), probe, TestWaiters.Fast(cancel), TimeProvider.System, NullLogger<GpuCoordinator>.Instance);
+        await TestWaiters.CatchAsync<MemoryShortfallCanceledException>(() => gpu.AcquireAsync(new StrictModel("voxcpm2", 8), null, CancellationToken.None));
+
+        // Retry after the user closed a game: 2 GiB, 2 GiB, then 12 GiB.
+        var freed = new FakeVramProbe(new VramReading(16 * GiB, 2 * GiB, true, "PDH"), new VramReading(16 * GiB, 2 * GiB, true, "PDH"),
+            new VramReading(16 * GiB, 12 * GiB, true, "PDH"));
+        var retry = new ScriptedShortfallHandler(MemoryShortfallChoice.Retry);
+        var again = new GpuCoordinator(new ModelDirectory([]), freed, TestWaiters.Fast(retry), TimeProvider.System, NullLogger<GpuCoordinator>.Instance);
+        var voice = new StrictModel("voxcpm2", 8);
+        await using var lease = await again.AcquireAsync(voice, null, CancellationToken.None);
+        retry.Asked.Count.ShouldBe(1);
+        voice.Loads.ShouldBe(1);
+        lease.Memory.FreeBytes.ShouldBe(12 * GiB);
+    }
+
+    /// <summary>A model that must find three quarters of its class free on the card (as a PyTorch voice).</summary>
+    private sealed class StrictModel(string id, int videoGb)
+        : LocalModelBase(new CatalogModel { Provider = ModelProviders.Local, Id = id, Name = id, Capabilities = ModelCapability.Speech, MinVideoMemoryGb = videoGb })
+    {
+        public int Loads { get; private set; }
+
+        public override ModelDevice Device => ModelDevice.Gpu;
+
+        protected override long MinimumCardBytes(ModelMemoryNeed need) => need.VideoMemoryBytes / 4 * 3;
+
+        protected override Task OnLoadAsync(CancellationToken cancellationToken)
+        {
+            Loads++;
+            return Task.CompletedTask;
+        }
     }
 
     [Fact]
@@ -198,7 +290,7 @@ public sealed class GpuCoordinatorTests
     public async Task AStopWhileTheMemoryIsReadLeavesNoUserBehind()
     {
         var probe = new CancelingProbe();
-        var gpu = new GpuCoordinator(new ModelDirectory([]), probe, TimeProvider.System, Fast, NullLogger<GpuCoordinator>.Instance);
+        var gpu = new GpuCoordinator(new ModelDirectory([]), probe, TestWaiters.Fast(), TimeProvider.System, NullLogger<GpuCoordinator>.Instance);
         var llm = new FakeLocalModel("llm");
 
         // Stop pressed during the short memory reading after the load (nvidia-smi runs with the caller's token).
@@ -215,8 +307,8 @@ public sealed class GpuCoordinatorTests
     public async Task WhatServersHoldFromBeforeIsSweptOnceBeforeTheFirstCardLease()
     {
         var sweep = new CountingSweep();
-        var gpu = new GpuCoordinator(new ModelDirectory([]), new FakeVramProbe(new VramReading(16 * GiB, 14 * GiB, true, "test")), TimeProvider.System, Fast,
-            NullLogger<GpuCoordinator>.Instance, [sweep]);
+        var gpu = new GpuCoordinator(new ModelDirectory([]), new FakeVramProbe(new VramReading(16 * GiB, 14 * GiB, true, "test")), TestWaiters.Fast(),
+            TimeProvider.System, NullLogger<GpuCoordinator>.Instance, [sweep]);
         var llm = new FakeLocalModel("llm");
 
         await (await gpu.AcquireAsync(new OnlineModel(new CatalogModel { Provider = "openai", Id = "gpt" }, true), null, CancellationToken.None)).DisposeAsync();

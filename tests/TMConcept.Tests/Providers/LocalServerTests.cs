@@ -338,8 +338,8 @@ public sealed class LocalServerTests
         var directory = new ModelDirectory([
             new EndpointModelSource(registry, [new OllamaModelControl(transport), new LmStudioModelControl(transport)], NullLogger<EndpointModelSource>.Instance),
             new FakeModelSource(image)]);
-        var gpu = new GpuCoordinator(directory, new FakeVramProbe(new VramReading(16L << 30, 14L << 30, true, "test")), TimeProvider.System,
-            new GpuCoordinatorOptions(TimeSpan.FromMilliseconds(1), TimeSpan.FromSeconds(2)), NullLogger<GpuCoordinator>.Instance);
+        var gpu = new GpuCoordinator(directory, new FakeVramProbe(new VramReading(16L << 30, 14L << 30, true, "test")), TestWaiters.Fast(), TimeProvider.System,
+            NullLogger<GpuCoordinator>.Instance);
         var chats = new LeasedChatClientFactory(new SingleChatFactory(transport), gpu);
 
         await chats.Create(EndpointCodes.Catalog(endpoint)[0], string.Empty).SendAsync(new ChatRequest("s", "u"), None);

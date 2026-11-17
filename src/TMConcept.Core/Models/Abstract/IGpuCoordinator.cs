@@ -6,8 +6,9 @@ namespace TMConcept.Core.Models;
 /// One local model on the graphics card at a time, for the whole app (0.1.17, the developer: load → use → unload → next; the video queue, the
 /// concept page, topics, the AI edit, image description and the duplicate check all share the card). Every use of a model goes through a
 /// lease: <c>await using var lease = await gpu.AcquireAsync(model, null, token);</c>. For a local model on the card it waits until no other
-/// local model is in use, asks the one on the card to unload (<see cref="ILocalModel.UnloadAsync"/>), waits until the card's free memory
-/// stops rising (or reaches the need, at most a few seconds), loads the new one and measures the memory it may use
+/// local model is in use, asks the one on the card to unload (<see cref="ILocalModel.UnloadAsync"/>), checks the memory with the new model's
+/// own plan (<see cref="IMemoryWaiter"/>: 3 s after the unload, again 2.5 s later, then the user's Retry / Cancel), loads the new one and
+/// measures the memory it may use
 /// (<see cref="IGpuLease.Memory"/>). An online model and a processor model get their lease at once. Several leases of the SAME model may be
 /// held together (a page's AI edit while the queue writes with the same local model; an image loop that leases each image again). A flow
 /// must never hold leases of two different local models at once: that would wait for itself, so it throws
