@@ -8,6 +8,10 @@
     <ProjectReference Include="..\TMConcept.Core\TMConcept.Core.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <!-- The Linux Ollama release is a .tar.zst; .NET 10 has no zstd decoder (MIT, managed, no native library). -->
+    <PackageReference Include="ZstdSharp.Port" />
+  </ItemGroup>
+  <ItemGroup>
     <!-- Pinned npm packages and scripts of each engine (unpacked into the tools folder). -->
     <EmbeddedResource Include="Packages/hyperframes/*" LogicalName="TMConcept.Packages.hyperframes.%(Filename)%(Extension)" />
     <EmbeddedResource Include="Packages/remotion/*" LogicalName="TMConcept.Packages.remotion.%(Filename)%(Extension)" />
