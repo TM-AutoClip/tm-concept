@@ -99,7 +99,9 @@ public sealed class ImageAccelerationTests
         Option("qwen-image-q8").IsError.ShouldBeTrue();
         Option("qwen-image-q8").Label.ShouldContain(text["models.tier.too_big"]);
         Option("z-image-turbo-full").IsError.ShouldBeTrue("24 GB is above this card");
-        Option("flux2-klein-9b").IsError.ShouldBeTrue("non-commercial");
+        // 0.1.18: a non-commercial license is orange, never red (red only means "this card cannot run it").
+        Option("flux2-klein-9b").IsError.ShouldBeFalse("red is only for a model this card cannot run");
+        Option("flux2-klein-9b").IsCaution.ShouldBeTrue("non-commercial");
         Option("flux2-klein-9b").Label.ShouldContain(text["models.license.badge.noncommercial"]);
         Option("sd35-medium").IsWarning.ShouldBeTrue("a license with conditions");
         Option("sd35-medium").Label.ShouldContain(text["models.license.badge.limited"]);
@@ -143,6 +145,9 @@ public sealed class ImageAccelerationTests
         confirm.Answers.Enqueue(false);
         (await picker.PrepareAsync([PipelineSteps.Images], "install.purpose.video", CancellationToken.None)).ShouldBeFalse();
         confirm.Asked.ShouldBe([text.Format("models.license.title", "FLUX.2 klein 9B")]);
+        confirm.Dangers.ShouldBe([false], "0.1.18: a license question is not a danger question (red is only for a model this card cannot run)");
+        images.NoteIsCaution.ShouldBeTrue("non-commercial: orange");
+        images.NoteIsError.ShouldBeFalse();
         confirm.Messages[0].ShouldContain(text["license.flux-non-commercial.terms"]);
         confirm.Messages[0].ShouldContain("https://huggingface.co/black-forest-labs/FLUX.2-klein-9B");
         picker.Status.ShouldBe(text.Format("picker.not_started.license", images.Title));

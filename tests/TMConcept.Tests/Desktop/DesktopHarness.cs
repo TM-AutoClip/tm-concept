@@ -26,7 +26,7 @@ internal sealed class DesktopHarness : IDisposable
 
             // The graphics card coordinator reads a fixed 16 GB card with 14 GB free and never waits (nothing native, any test machine).
             s.AddSingleton<TMConcept.Core.Hardware.IVramProbe>(new Core.FakeVramProbe(new TMConcept.Core.Hardware.VramReading(16L << 30, 14L << 30, true, "test")));
-            s.AddSingleton(new TMConcept.Core.Models.GpuCoordinatorOptions(TimeSpan.FromMilliseconds(1), TimeSpan.FromSeconds(2)));
+            s.AddSingleton(Core.TestWaiters.FastOptions);
 
             // Ollama and LM Studio are not looked for on the test machine's own ports (tests that look for them point at a fake server).
             s.AddSingleton(TMConcept.Providers.Endpoints.EndpointTransport.Network with { DetectAddresses = [] });

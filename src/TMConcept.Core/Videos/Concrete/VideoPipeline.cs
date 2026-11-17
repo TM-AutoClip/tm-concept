@@ -193,7 +193,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                 // A chosen voice that fails stops the video (16 Nov 2026; 0.1.15 went on silent). An online voice's provider error goes
                 // through as it is: the run's guard names it with the provider's own text.
                 logger.LogError(LogEvents.OnScreen, ex, "Narration failed; the video is stopped");
-                throw new VideoException(ex.Message, ex) { Code = "speech" };
+                throw new VideoException(ex.Message, ex) { Code = ex is MemoryShortfallException ? "memory" : "speech" };
             }
             finally
             {
@@ -481,7 +481,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
             // could not start and the user paid for a video he did not want). The engine's own message (sd-cli's exit code and output) is
             // the reason the user sees. A provider's error goes through as it is and is named with the provider's text.
             logger.LogError(LogEvents.OnScreen, ex, "Scene images failed; the video is stopped");
-            throw new VideoException(ex.Message, ex) { Code = "images" };
+            throw new VideoException(ex.Message, ex) { Code = ex is MemoryShortfallException ? "memory" : "images" };
         }
 
         return names;

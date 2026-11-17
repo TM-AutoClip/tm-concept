@@ -23,6 +23,16 @@ public interface ILocalModel : IModel
     /// <summary>The smallest graphics card class it runs in (<see cref="VramTiers"/>; none = no card needed).</summary>
     VramTier Tier { get; }
 
+    /// <summary>
+    /// Where its weights go with the memory of <paramref name="memory"/> (0.1.18: every local model's own memory behaviour, overridable per
+    /// card class and measured memory: <see cref="LocalModelBase.PlanMemory"/> has the defaults, an image model family its own table). Never
+    /// another model: only the placement (card, main memory, disk) changes. <see cref="MemoryPlacement.Refused"/> only when even the slowest
+    /// placement cannot run; <see cref="IMemoryWaiter"/> then waits for memory and asks the user.
+    /// </summary>
+    /// <param name="memory">What is free now.</param>
+    /// <param name="need">The quality asked for (null = the first of <see cref="Needs"/>).</param>
+    MemoryPlan PlanMemory(MemorySnapshot memory, ModelMemoryNeed? need);
+
     /// <summary>Whether it is loaded now (or may be: a server that loads on the first request counts as loaded after its lease was granted).</summary>
     bool IsLoaded { get; }
 

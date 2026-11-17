@@ -745,6 +745,41 @@ public sealed class VideoPageTests
     }
 
     [AvaloniaFact]
+    public async Task WithNightModeOffAFailedVideoStopsTheWholeQueue()
+    {
+        var engine = new FakeEngine();
+        var images = new FakeImages { Unready = new ImageEngineProblem(ImageEngineProblems.VisualCppRuntime, "vcruntime140_1.dll") };
+        var chat = new FakeChat();
+        using var h = Harness(chat, engine, s =>
+        {
+            s.RemoveAll<IImageEngine>();
+            s.AddSingleton<IImageEngine>(images);
+        });
+        var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
+        var (page, concept) = await OpenAsync(h);
+        var second = new Concept
+        {
+            ProfileId = concept.ProfileId, Title = "Hagia Sophia", Summary = "s", Content = concept.Content, Language = "en", Status = ConceptStatus.Approved,
+        };
+        await h.Get<IConceptStore>().AddAsync([second], CancellationToken.None);
+        await h.Get<IApiKeyStore>().SaveAsync(new ApiKey { Provider = "fal", Label = "k", Secret = "fake-test-key-video-4567" }, CancellationToken.None);
+        await page.ActivateAsync();
+        var imageRow = page.Picker.Row(PipelineSteps.Images)!;
+        imageRow.Selected = imageRow.Options.First(o => o.Model?.Id == "fal-ai/flux-2/flash");
+        foreach (var card in page.Approved.ToList())
+        {
+            await page.EnqueueAsync(card);
+        }
+
+        page.NightMode.ShouldBeFalse("night mode is off at every start");
+        await page.ProduceAllAsync();
+
+        page.Queue.Count.ShouldBe(2);
+        page.Queue.Count(r => r.Failed).ShouldBe(1, "the queue stopped at the first failure; the second video was not started");
+        page.Status.ShouldBe(text["video.queue.stopped.error"]);
+    }
+
+    [AvaloniaFact]
     public async Task AnImageEngineThatCannotRunHereStopsTheVideoBeforeThePaidPromptCall()
     {
         var engine = new FakeEngine();

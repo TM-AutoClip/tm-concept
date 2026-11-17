@@ -75,6 +75,7 @@ public static class DesktopServices
         services.AddSingleton<Core.Media.IMediaTools, Engines.Media.FfmpegMedia>();
         services.AddSingleton<Core.Videos.VideoAssembler>();
         services.AddSingleton<Core.Videos.VideoPipeline>();
+        services.AddSingleton<Core.Videos.IVideoQueueRunner, Core.Videos.VideoQueueRunner>();
         services.AddSingleton<Core.Videos.SceneNarrator>();
         services.AddSingleton<Core.Videos.VideoRemaker>();
         services.AddSingleton<Core.Videos.VideoCostEstimator>();
@@ -130,7 +131,11 @@ public static class DesktopServices
         // 0.1.17 (one pipeline, local and online models mixed): every model is an IModel; a local one on the graphics card is used only inside
         // a lease of the one coordinator, which unloads the previous model and measures the free memory first.
         services.AddSingleton<Core.Hardware.IVramProbe, Engines.Hardware.VramProbe>();
-        services.AddSingleton(GpuCoordinatorOptions.Default);
+        // 0.1.18: every handover checks the memory first (3 s after an unload, again 2.5 s later, then the user's Retry / Cancel question).
+        services.AddSingleton(MemoryWaitOptions.Default);
+        services.AddSingleton<IMemoryShortfallHandler, Dialogs.MemoryShortfallDialog>();
+        services.AddSingleton<IMemoryNotices, Memory.MemoryNoticeLog>();
+        services.AddSingleton<IMemoryWaiter, MemoryWaiter>();
         services.AddSingleton<IModelDirectory, ModelDirectory>();
         services.AddSingleton<IGpuCoordinator, GpuCoordinator>();
         services.AddSingleton<ILocalModelSource, Engines.Images.SdCppModelSource>();

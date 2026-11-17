@@ -12,6 +12,16 @@ public sealed class PythonLocalModel(CatalogModel catalog, PythonSpeechEngine en
     /// <inheritdoc />
     public override ModelDevice Device => engine.Device;
 
+    /// <summary>
+    /// PyTorch keeps every weight of the voice on the card (it cannot leave some in main memory): with less than three quarters of its class
+    /// free (the class figure has headroom) it would end out of memory, so the memory check asks first.
+    /// </summary>
+    protected override long MinimumCardBytes(ModelMemoryNeed need)
+    {
+        ArgumentNullException.ThrowIfNull(need);
+        return need.VideoMemoryBytes / 4 * 3;
+    }
+
     /// <inheritdoc />
     protected override Task OnUnloadAsync(CancellationToken cancellationToken) => engine.UnloadAsync(cancellationToken);
 }

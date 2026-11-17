@@ -40,6 +40,10 @@ veritabanını şifreli tutar.
   süresi ve ücretiyle, kod modelinin jetonları ve o ana kadar harcanan görünür. Üretilen videolar sağda: önizleme oynatıcısı,
   **Oynatıcıda aç**, **Klasörü aç** ve **Konsepti düzelt, yeniden üret**. Model tek bir kod dosyası yazar; hiçbir şey çalıştırılmadan
   önce güvenlik denetimi yapılır; denetim ya da render hatasında tek onarım istenir. Videolar en çok 3 dakikadır.
+  **Bir video hata verirse sıranın tamamı durur** (hata sayfada, bildirimde ve etkinlik panelinde kırmızı görünür; sorunu düzeltince sırayı
+  yeniden başlatırsın). **Gece modu** (**Sırayla üret**'in yanındaki kutu; her açılışta kapalıdır, sıra çalışırken de işaretlenebilir)
+  bilgisayarın başında olmadığın zamanlar için: hata veren video bildirilir ve sıradaki videoya geçilir, videolar arasında 10 saniye
+  beklenir, bellek yetmezse soru sorulmaz, o video hata sayılır; üst üste 3 videoda hata olursa sıra tamamen durur (boşuna ücret harcanmasın).
 - **Sürümler.** Her sahnenin seslendirme metnini düzenle (yeni cümleler; duraklama, hız ve geçiş yer tutucuları) ve bir ses seç: ses bilgisayarında yeniden
   üretilir, aynı video kodu yeniden render edilir — yapay zekâ masrafı yok (online ses ücretli). Ya da başka bir motor için yeni kod yazdır
   (tahmin önce gösterilir ve onaylatılır); görseller, ses klipleri ve metinler yeniden kullanılır. Her yeni sürüm ayrı bir klasör (v2, v3…);
@@ -145,13 +149,16 @@ adım ne işe yaradığını yazar:
   - **32 GB**: Qwen-Image (Q8)
 
   Bir model yalnız sen seçip onaylayınca indirilir. Lisanslar: çoğu Apache-2.0 (her kullanım serbest); **FLUX.2 klein 9B ticari kullanıma
-  kapalı** (kırmızı etiket: para kazandığın videolarda kullanılamaz); FLUX.3 Image Klein (FLUX Kommunity Lisansı: Black Forest Labs'in
+  kapalı** (turuncu etiket: para kazandığın videolarda kullanılamaz; kırmızı yalnız "bu kart çalıştıramaz" demektir); FLUX.3 Image Klein (FLUX Kommunity Lisansı: Black Forest Labs'in
   duyurusuna göre yıllık geliri 5 milyon doların altındakiler için ticari kullanım ücretsiz), Stable Diffusion 3.5 Medium (Stability AI
   Topluluk Lisansı: 1 milyon doların altı) ve SDXL Lightning (OpenRAIL++ kullanım kısıtları) koşullu (sarı etiket). Bunların her biri ilk
   indirmeden önce bir kez lisansını kabul etmeni ister. Program her görselden önce kartın **boş** belleğini ölçer: VAE hep parça parça
-  çalışır, belleğin yaklaşık sekizde biri (en az 1 GB) Windows ve öteki programlar için boş bırakılır, ağırlıkları karta sığmayan model
-  onları ana bellekte tutar (daha yavaş), belleği yetmeyen görsel bir kademe aşağıda bir kez daha denenir. Ne kartta ne ana bellekte yer
-  yoksa görsel adımı rakamlarla durur; programları kapatmanı ya da daha küçük bir model seçmeni söyler. NVIDIA, AMD ve Intel kartlar
+  çalışır, belleğin yaklaşık sekizde biri (en az 1 GB) Windows ve öteki programlar için boş bırakılır. Seçtiğin model hiçbir zaman başka
+  bir modelle değiştirilmez; yalnız ağırlıklarının nerede durduğu değişir: sığıyorsa kartta, sığmıyorsa ana bellekte (stable-diffusion.cpp
+  kendisi yerleştirir, belleğe eşlenmiş olarak), ana bellek de yetmiyorsa diskten okunur. Kart dışındaki her yol daha yavaştır ve etkinlik
+  panelinde sarı bir satırla söylenir (işlemci sürümüne geçiş de öyle); istersen iptal edip başka bir model seçersin. Belleği yetmeyen
+  görsel her seferinde bir kademe aşağıda yeniden denenir. Her model ailesinin kart sınıfına göre kendi bellek rakamları vardır (örneğin
+  Z-Image Turbo 6 GB'lık kartta daha az çalışma belleği ister). NVIDIA, AMD ve Intel kartlar
   çalışır: sürümü *Ayarlar → Genel → Görsel hızlandırma* seçer (Otomatik: sürücüsü kurulu NVIDIA kartta NVIDIA CUDA, AMD ve Intel kartlarda
   Vulkan, kart yoksa ya da yalnız sanal bir kart varsa işlemci; Linux x64'te Vulkan ya da işlemci). Windows'ta her sürüm Microsoft Visual
   C++ 2015–2022 çalışma zamanını (x64) ister; onu bulamayan video hiçbir şey ödenmeden durur ve indirme adresini söyler. Linux ARM64 için
@@ -207,7 +214,11 @@ kullanılamıyor* diye görünür; geri gelene ya da başka bir model seçene ka
 **Ekran kartında aynı anda tek yerel model.** Bu bilgisayardaki bir yerel sunucunun modelleri (Ollama, LM Studio, llama-server,
 Lemonade…) ve yerel görsel modelleri ekran kartını paylaşır: bir yerel model başlamadan önce ondan önce kullanılan boşaltılır (sunucusuna
 sorulabiliyorsa) ve program kartın belleği yeniden boşalana kadar bekler; online modeller ve sherpa-onnx sesleri (işlemcide çalışırlar) hiç
-beklemez; NVIDIA kartta konuşan bir Python sesi kartı görsel modelleri gibi alır. Boş bellek her seferinde ölçülür: Windows'ta Görev Yöneticisi'nin gösterdiğiyle Windows'un programa izin verdiğinden (ikincisi tek başına hiçbir görseli reddettirmez, yalnızca sd-cli'ye yükü ana belleğe aktarttırabilir) küçük
+beklemez; NVIDIA kartta konuşan bir Python sesi kartı görsel modelleri gibi alır. Bir model boşaltıldıktan sonra (bir videonun sonunda
+kart boşaltıldığında da) program 3 saniye bekleyip boş belleği ölçer; yetmezse 2,5 saniye bekleyip yeniden ölçer; yine yetmezse bir
+pencere kartın toplam ve boş belleğini, modelin ihtiyacını ve boş ana belleği gösterir: ekran kartını ya da belleği kullanan programları
+(oyun, tarayıcı) kapatıp **Yeniden dene**'ye basarsın (5 saniye bekleyip yeniden ölçer, istediğin kadar), ya da **İptal**'e (video sırası
+durur, program açık kalır). Her adım etkinlik panelinde bir satırdır. Gece modunda soru sorulmaz: o video hata sayılır. Boş bellek her seferinde ölçülür: Windows'ta Görev Yöneticisi'nin gösterdiğiyle Windows'un programa izin verdiğinden (ikincisi tek başına hiçbir görseli reddettirmez, yalnızca sd-cli'ye yükü ana belleğe aktarttırabilir) küçük
 olanı, Linux'ta AMD sürücüsünün dosyaları ya da `nvidia-smi`. Ekran belleği sınıfları 4, 6, 8, 12, 16, 24 ve 32 GB'tır: bir kart
 bildirdiği belleğe yüzde 8 payla en yakın sınıfta sayılır (15,8 GB bildiren "16 GB" kart 16 GB'lık, 11 GB'lık kart 8 GB'lık karttır), kendi sınıfını ve
 altındakileri kullanabilir; daha yüksek sınıftaki model kırmızı görünür. Bu bilgisayardaki Ollama ya da LM Studio'nun önceden (önceki bir

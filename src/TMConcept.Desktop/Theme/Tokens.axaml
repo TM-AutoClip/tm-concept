@@ -26,6 +26,8 @@
   <SolidColorBrush x:Key="tm-success" Color="#FF4FC3A1" />
   <SolidColorBrush x:Key="tm-warning" Color="#FFF4D35E" />
   <SolidColorBrush x:Key="tm-danger" Color="#FFFF7F57" />
+  <!-- 0.1.18: a caution that is not "cannot run" (a non-commercial license): orange, between the yellow warning and the red danger. -->
+  <SolidColorBrush x:Key="tm-caution" Color="#FFFFA94D" />
   <SolidColorBrush x:Key="tm-info" Color="#FF7FB2F0" />
   <SolidColorBrush x:Key="tm-focus" Color="#FFE3B341" />
   <SolidColorBrush x:Key="tm-scrim" Color="#80070C16" />

@@ -97,6 +97,10 @@ public sealed partial class StepModelRowViewModel(PipelineStep step, string titl
     [ObservableProperty]
     public partial bool NoteIsWarning { get; set; }
 
+    /// <summary>Whether the note is a caution (orange: a non-commercial license; the model runs, its use is limited).</summary>
+    [ObservableProperty]
+    public partial bool NoteIsCaution { get; set; }
+
     /// <summary>Whether the note is an error (red: a local image model that needs more graphics memory than this card has).</summary>
     [ObservableProperty]
     public partial bool NoteIsError { get; set; }

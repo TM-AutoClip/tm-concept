@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.Extensions.Logging;
+using TMConcept.Core.Activity;
 using TMConcept.Core.Hardware;
 using TMConcept.Core.Images;
 using TMConcept.Core.Models;
@@ -16,18 +17,23 @@ namespace TMConcept.Engines.Images;
 /// (<see cref="LocalImageModel"/>: its files by role, steps, guidance scale, sampler, scheduler, flow shift, its family's extra options, the
 /// negative prompt when it is guided), always flash attention in the diffusion model (<c>--flash-attn auto,diffusion=on</c>: without it
 /// Vulkan on Intel gives noise, sd.cpp issue #1449), and the memory options of <see cref="ImageMemoryPlanner"/> from the card's FREE memory
-/// measured just before the run. Every run happens inside the graphics card lease of the model (<see cref="IGpuCoordinator"/>: the
-/// previous local model, an LLM that wrote the prompts, is unloaded first); a run that ends out of memory is tried once more one memory
-/// level lower; a model that cannot fit is refused with the figures. The picture is at most 1024 pixels on its long side (a multiple of
+/// measured just before the run (the model's own figures: <see cref="SdCppModelBase.PlanImage"/>; card → main memory → disk, never another
+/// model). Every run happens inside the graphics card lease of the model (<see cref="IGpuCoordinator"/>: the previous local model, an LLM that
+/// wrote the prompts, is unloaded first and the memory is checked); before every picture the memory is read again, and when even the disk
+/// level cannot run, <see cref="IMemoryWaiter"/> reads it once more and then asks the user (Retry / Cancel; night mode: the video fails). A
+/// level off the card is shown as a yellow line (<see cref="IMemoryNotices"/>) and logged as a warning; a run that ends out of memory is tried
+/// again one memory level lower, level by level (only the options change). The picture is at most 1024 pixels on its long side (a multiple of
 /// 64; smaller for a model made for about one megapixel) and scaled by the engine. Free: the cost is 0. A picture of a single colour is a
 /// failure (blank pictures from some quantized weights on Vulkan, sd.cpp issue #1031). Checked before anything runs
 /// (<see cref="Problem"/>, asked while a video prepares, before its paid image prompt call): on Windows the Visual C++ runtime every build
 /// imports, the driver library of the chosen GPU build, a card of a lower memory class than the model's, and a build older than the
 /// model's family needs. With the Automatic setting a GPU build that fails (an exit code or a blank picture) is followed by one run of the
-/// processor build when that build is installed, and the session's next images go to the processor build directly.
+/// processor build when that build is installed, and the session's next images go to the processor build directly: the same model, much
+/// slower, so it is shown as a yellow line and logged as a warning (0.1.17 did it silently).
 /// </summary>
 public sealed class SdCppImageEngine(ToolInstaller tools, LocalImageStore store, ImageBackendSelector backends, IComputeRuntimeProbe probe,
-    IProcessRunner runner, IGpuCoordinator gpu, IVramProbe vram, ISystemMemory memory, ILogger<SdCppImageEngine> logger) : IImageEngine
+    IProcessRunner runner, IGpuCoordinator gpu, IVramProbe vram, ISystemMemory memory, IMemoryWaiter waiter, ILogger<SdCppImageEngine> logger,
+    IMemoryNotices? notices = null) : IImageEngine
 {
     /// <summary>The long side of a generated picture.</summary>
     public const int LongSide = 1024;
@@ -117,8 +123,9 @@ public sealed class SdCppImageEngine(ToolInstaller tools, LocalImageStore store,
             var failure = await RunPlannedAsync(model, request, choice, cancellationToken).ConfigureAwait(false);
             if (failure is not null && fallback)
             {
-                logger.LogWarning("{Model}: the {Backend} build failed; the processor build makes this picture and the next ones of this session", model.Id,
-                    choice.Backend);
+                logger.LogWarning(LogEvents.OnScreen, "{Model}: the {Backend} build failed; the processor build makes this picture and the next ones of this "
+                    + "session (the same model, much slower)", model.Id, choice.Backend);
+                notices?.Report(new MemoryNotice(MemoryNoticeKind.ProcessorFallback, model.Name, request.Model.Model.Provider + "/" + model.Id));
                 _failedBackend = choice.Backend;
                 failure = await RunPlannedAsync(model, request, choice with { Backend = ImageBackend.Cpu, Device = null }, cancellationToken).ConfigureAwait(false);
             }
@@ -253,32 +260,59 @@ public sealed class SdCppImageEngine(ToolInstaller tools, LocalImageStore store,
     }
 
     /// <summary>
-    /// One picture with <paramref name="choice"/>'s build: the memory plan from the card's free memory now, one run, and on an out-of-memory
-    /// end one more run a level lower. Null when it made a picture, otherwise the error text; a model that cannot fit throws its reason.
+    /// One picture with <paramref name="choice"/>'s build: the memory plan from the card's free memory now (with the wait and the user's
+    /// question of <see cref="IMemoryWaiter"/> when even the disk level cannot run), one run, and on an out-of-memory end one more run per
+    /// lower level. Null when it made a picture, otherwise the error text; a shortfall throws <see cref="MemoryShortfallException"/> (night
+    /// mode) or <see cref="MemoryShortfallCanceledException"/> (the user's Cancel).
     /// </summary>
     private async Task<string?> RunPlannedAsync(LocalImageModel model, ImageRequest request, ImageBackendChoice choice, CancellationToken cancellationToken)
     {
-        var onCard = choice.Backend != ImageBackend.Cpu;
-        var reading = onCard ? await vram.MeasureAsync(choice.Device, cancellationToken).ConfigureAwait(false) : VramReading.None;
-        var free = onCard ? memory.AvailableBytes() : null;
-        var plan = ImageMemoryPlanner.Plan(model, choice.Backend, reading, free);
-        logger.LogInformation("{Model}: memory plan {Level} ({Free:0.0} of {Total:0.0} GiB graphics memory free, {Source}; {Ram} GiB main memory free)", model.Id,
-            plan.Level, reading.FreeBytes / (double)ImageMemoryPlanner.Gibibyte, reading.TotalBytes / (double)ImageMemoryPlanner.Gibibyte, reading.Source,
-            free is { } bytes ? (bytes / (double)ImageMemoryPlanner.Gibibyte).ToString("0.0", CultureInfo.InvariantCulture) : "?");
-        if (plan.Level == ImageMemoryLevel.Refused)
+        var local = SdCppModelSource.For(request.Model.Model, model, backends);
+        var plan = local.PlanImage(ImageBackend.Cpu, new MemorySnapshot(VramReading.None, null));
+        if (choice.Backend != ImageBackend.Cpu)
         {
-            logger.LogError("{Model}: not started: {Reason}", model.Id, plan.Reason);
-            throw new InvalidOperationException(plan.Reason);
+            // Read before every picture: another program may have taken memory since the lease. Too little even for the disk level: read once
+            // more, then the user decides (the model never changes).
+            await waiter.WaitAsync(local, null, async token =>
+            {
+                var reading = await vram.MeasureAsync(choice.Device, token).ConfigureAwait(false);
+                var free = memory.AvailableBytes();
+                plan = local.PlanImage(choice.Backend, new MemorySnapshot(reading, free));
+                logger.LogInformation("{Model}: memory plan {Level} ({Free:0.0} of {Total:0.0} GiB graphics memory free, {Source}; {Ram} GiB main memory free)",
+                    model.Id, plan.Level, reading.FreeBytes / (double)ImageMemoryPlanner.Gibibyte, reading.TotalBytes / (double)ImageMemoryPlanner.Gibibyte,
+                    reading.Source, free is { } bytes ? (bytes / (double)ImageMemoryPlanner.Gibibyte).ToString("0.0", CultureInfo.InvariantCulture) : "?");
+                return plan.Level != ImageMemoryLevel.Refused
+                    ? null
+                    : new MemoryShortfall(model.Name, reading.TotalBytes, Math.Max(reading.FreeBytes, reading.SystemFreeBytes ?? 0), reading.Source,
+                        plan.NeededVideoBytes, free, plan.NeededMainBytes);
+            }, cancellationToken).ConfigureAwait(false);
         }
 
+        Placed(local, plan);
         var (failure, outOfMemory) = await RunAsync(model, request, choice, plan, cancellationToken).ConfigureAwait(false);
-        if (failure is not null && outOfMemory && ImageMemoryPlanner.StepDown(plan) is { } lower)
+        while (failure is not null && outOfMemory && ImageMemoryPlanner.StepDown(plan) is { } lower)
         {
-            logger.LogWarning("{Model}: sd-cli ran out of memory at {Level}; one more run at {Lower}", model.Id, plan.Level, lower.Level);
-            (failure, _) = await RunAsync(model, request, choice, lower, cancellationToken).ConfigureAwait(false);
+            // Only the options change, never the model.
+            logger.LogWarning(LogEvents.OnScreen, "{Model}: sd-cli ran out of memory at {Level}; one more run at {Lower}", model.Id, plan.Level, lower.Level);
+            plan = lower;
+            Placed(local, plan);
+            (failure, outOfMemory) = await RunAsync(model, request, choice, plan, cancellationToken).ConfigureAwait(false);
         }
 
         return failure;
+    }
+
+    /// <summary>A level off the card (main memory or disk): a warning in the log and a yellow line on screen (the panel shows it once per model and level).</summary>
+    private void Placed(SdCppModelBase local, ImageMemoryPlan plan)
+    {
+        if (plan.Placement is not (MemoryPlacement.MainMemory or MemoryPlacement.Disk))
+        {
+            return;
+        }
+
+        logger.LogWarning(LogEvents.OnScreen, "{Model} does not fit on the graphics card; it uses {Level} ({Flags}) and makes pictures slower", local.Id, plan.Level,
+            string.Join(' ', plan.Flags));
+        notices?.Report(new MemoryNotice(MemoryNoticeKind.Placed, local.Name, local.Key) { Placement = plan.Placement });
     }
 
     /// <summary>One sd-cli run; the error text (null when it made a picture) and whether its output says the memory ran out.</summary>

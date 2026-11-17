@@ -537,12 +537,12 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
     /// A model's entry: a local model with a graphics card class shows its class, green when this card's class sees it (its own class and
     /// every lower one), red with "this card cannot run it" above, yellow when the processor build runs it or the card's memory is unknown
     /// (the same for a Python voice with a class: yellow "runs on the processor" without a usable NVIDIA card);
-    /// a license with conditions adds a yellow badge, a non-commercial one a red badge.
+    /// a license with conditions adds a yellow badge, a non-commercial one an orange badge (0.1.18: red only means "cannot run on this card").
     /// </summary>
     private StepOption Option(CatalogModel model)
     {
         var label = Label(model);
-        bool ok = false, warning = false, error = false;
+        bool ok = false, warning = false, caution = false, error = false;
         if (model.Provider == ModelProviders.Local && model.MinVideoMemoryGb > 0 && model.Capabilities.HasFlag(ModelCapability.Image))
         {
             if (TooBig(model) is not null)
@@ -588,7 +588,7 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
         {
             case LicenseUse.NonCommercial:
                 label += " · " + text["models.license.badge.noncommercial"];
-                error = true;
+                caution = true;
                 break;
             case LicenseUse.Limited:
                 label += " · " + text["models.license.badge.limited"];
@@ -596,7 +596,10 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
                 break;
         }
 
-        return new StepOption(StepOptionKind.Model, model, label) { IsOk = ok && !warning && !error, IsWarning = warning && !error, IsError = error };
+        return new StepOption(StepOptionKind.Model, model, label)
+        {
+            IsOk = ok && !warning && !caution && !error, IsWarning = warning && !caution && !error, IsCaution = caution && !error, IsError = error,
+        };
     }
 
     /// <summary>
@@ -711,6 +714,7 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
     private async Task NoteAsync(StepModelRowViewModel row)
     {
         row.NoteIsWarning = false;
+        row.NoteIsCaution = false;
         row.NoteIsError = false;
         row.NoteIsOk = false;
         var selected = row.Selected;
@@ -762,6 +766,7 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
         {
             parts.Add(text.Format(model.LicenseUse == LicenseUse.NonCommercial ? "models.license.note.noncommercial" : "models.license.note.limited",
                 LicenseName(model.License)));
+            row.NoteIsCaution |= model.LicenseUse == LicenseUse.NonCommercial;
             row.NoteIsWarning = true;
         }
 
@@ -797,9 +802,10 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
         }
 
         row.Note = string.Join(" ", parts);
-        // One colour for the whole note: red wins over yellow, yellow over green.
-        row.NoteIsWarning &= !row.NoteIsError;
-        row.NoteIsOk &= !row.NoteIsError && !row.NoteIsWarning;
+        // One colour for the whole note: red wins over orange, orange over yellow, yellow over green.
+        row.NoteIsCaution &= !row.NoteIsError;
+        row.NoteIsWarning &= !row.NoteIsError && !row.NoteIsCaution;
+        row.NoteIsOk &= !row.NoteIsError && !row.NoteIsCaution && !row.NoteIsWarning;
     }
 
     /// <summary>
@@ -913,8 +919,9 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
             // Asked once per model, before its first download (0.1.17: non-commercial and conditional licenses are offered with a clear warning).
             var message = text.Format(model.LicenseUse == LicenseUse.NonCommercial ? "models.license.message.noncommercial" : "models.license.message.limited",
                 model.Name, LicenseName(model.License), text["license." + model.License + ".terms"], model.LicenseUrl);
-            var license = await confirm.AskAsync(text.Format("models.license.title", model.Name), message, text["engines.license.accept"],
-                danger: model.LicenseUse == LicenseUse.NonCommercial).ConfigureAwait(true);
+            // Not a danger question (0.1.18): the license limits the use, the model runs; red is only for "cannot run on this card".
+            var license = await confirm.AskAsync(text.Format("models.license.title", model.Name), message, text["engines.license.accept"], danger: false)
+                .ConfigureAwait(true);
             if (!license.Confirmed)
             {
                 logger.LogInformation("The license of {Model} ({License}) was declined", key, model.License);

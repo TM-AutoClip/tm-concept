@@ -22,6 +22,42 @@ public abstract class LocalModelBase(CatalogModel catalog) : ModelBase(catalog),
     public virtual IReadOnlyList<ModelMemoryNeed> Needs =>
         [ModelMemoryNeed.FromGigabytes(ModelQualities.Standard, Device == ModelDevice.Gpu ? Catalog.MinVideoMemoryGb : 0, Catalog.MemoryGb)];
 
+    /// <summary>
+    /// The least graphics card memory it must find free to run at all, with its weights wherever they fit (0 = it never refuses: a server
+    /// such as Ollama moves what does not fit to main memory or the processor by itself). A model that cannot leave weights off the card
+    /// (a PyTorch voice) overrides it.
+    /// </summary>
+    protected virtual long MinimumCardBytes(ModelMemoryNeed need) => 0;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The default: the processor when it does not run on the card; on the card when its graphics memory need fits in the free memory (the
+    /// larger of this app's budget and what is free across all processes) or the memory is not measured; otherwise main memory (slower,
+    /// the server places what does not fit), refused only below <see cref="MinimumCardBytes"/>.
+    /// </remarks>
+    public virtual MemoryPlan PlanMemory(MemorySnapshot memory, ModelMemoryNeed? need)
+    {
+        ArgumentNullException.ThrowIfNull(memory);
+        var wanted = need ?? Needs.FirstOrDefault() ?? new ModelMemoryNeed(ModelQualities.Standard, 0, 0);
+        if (Device != ModelDevice.Gpu)
+        {
+            return new MemoryPlan(MemoryPlacement.Processor, 0, wanted.MemoryBytes, [], string.Empty);
+        }
+
+        var card = memory.Card;
+        var free = Math.Max(card.FreeBytes, card.SystemFreeBytes ?? 0);
+        if (!card.Measured || card.TotalBytes <= 0 || wanted.VideoMemoryBytes <= free)
+        {
+            return new MemoryPlan(MemoryPlacement.Card, wanted.VideoMemoryBytes, wanted.MemoryBytes, [], string.Empty);
+        }
+
+        var minimum = MinimumCardBytes(wanted);
+        return free < minimum
+            ? new MemoryPlan(MemoryPlacement.Refused, minimum, wanted.MemoryBytes, [],
+                string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{Name} needs {minimum / (1024.0 * 1024 * 1024):0.0} GiB of free graphics memory; {free / (1024.0 * 1024 * 1024):0.0} GiB are free."))
+            : new MemoryPlan(MemoryPlacement.MainMemory, minimum, wanted.MemoryBytes + (wanted.VideoMemoryBytes - free), [], string.Empty);
+    }
+
     /// <inheritdoc />
     public VramTier Tier => Device == ModelDevice.Gpu ? Needs.Select(n => n.Tier).DefaultIfEmpty(VramTier.None).Min() : VramTier.None;
 

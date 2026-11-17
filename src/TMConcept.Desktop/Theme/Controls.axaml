@@ -40,6 +40,10 @@
     <Setter Property="Foreground" Value="{DynamicResource tm-warning}" />
     <Setter Property="TextWrapping" Value="Wrap" />
   </Style>
+  <Style Selector="TextBlock.caution">
+    <Setter Property="Foreground" Value="{DynamicResource tm-caution}" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+  </Style>
   <Style Selector="Border.card">
     <Setter Property="Background" Value="{DynamicResource tm-surface}" />
     <Setter Property="BorderBrush" Value="{DynamicResource tm-border}" />
