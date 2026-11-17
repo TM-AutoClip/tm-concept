@@ -20,7 +20,7 @@ namespace TMConcept.Storage.Database
                 "TMConcept.Core.Concepts.TopicSuggestion",
                 typeof(TopicSuggestion),
                 baseEntityType,
-                propertyCount: 4,
+                propertyCount: 5,
                 foreignKeyCount: 1,
                 unnamedIndexCount: 1,
                 keyCount: 1);
@@ -41,6 +41,13 @@ namespace TMConcept.Storage.Database
                 fieldInfo: typeof(TopicSuggestion).GetField("<CreatedAtUtc>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
                 valueConverter: new UtcTicksConverter());
             createdAtUtc.SetSentinelFromProviderValue(0L);
+
+            var outcome = runtimeEntityType.AddProperty(
+                "Outcome",
+                typeof(TopicOutcome),
+                propertyInfo: typeof(TopicSuggestion).GetProperty("Outcome", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(TopicSuggestion).GetField("<Outcome>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly));
+            outcome.SetSentinelFromProviderValue(0);
 
             var profileId = runtimeEntityType.AddProperty(
                 "ProfileId",

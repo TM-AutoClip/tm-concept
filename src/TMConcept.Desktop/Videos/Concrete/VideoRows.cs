@@ -10,8 +10,10 @@ namespace TMConcept.Desktop.Videos;
 /// The rows of the made videos of a profile, for every page that lists them (the Produced page with all versions, the Concept → video page
 /// with the newest version of each video): one <see cref="VideoRowViewModel"/> per version, newest first. A row that a page already
 /// shows is used again (its thumbnail made again in the background stays), and a version whose folder is outside the library is left out.
+/// Every version of one video gets the same <see cref="VideoRatingViewModel"/> (its 👍 / 👎, read again from the database at each listing).
 /// </summary>
-public sealed class VideoRows(IVideoStore videos, IAppPaths paths, Localizer text, ILogger<VideoRows> logger)
+public sealed class VideoRows(IVideoStore videos, IVideoRater rater, IAppPaths paths, Localizer text, ILogger<VideoRows> logger,
+    ILogger<VideoRatingViewModel> ratingLogger)
 {
     /// <summary>Every version of <paramref name="profileId"/>'s videos, newest first; rows in <paramref name="kept"/> are used again.</summary>
     public async Task<IReadOnlyList<VideoRowViewModel>> ListAsync(Guid profileId, IEnumerable<VideoRowViewModel> kept, CancellationToken cancellationToken)
@@ -37,8 +39,49 @@ public sealed class VideoRows(IVideoStore videos, IAppPaths paths, Localizer tex
             }
         }
 
+        await RateAsync(profileId, result, cancellationToken).ConfigureAwait(true);
         return result;
     }
+
+    /// <summary>
+    /// Gives the rows their ratings: one view model per video (its concept, else its folder without the version), the one a kept row already
+    /// had used again, its vote read from the database.
+    /// </summary>
+    private async Task RateAsync(Guid profileId, List<VideoRowViewModel> rows, CancellationToken cancellationToken)
+    {
+        if (rows.Count == 0)
+        {
+            return;
+        }
+
+        var stored = await rater.ListAsync(profileId, cancellationToken).ConfigureAwait(true);
+        var shared = new Dictionary<string, VideoRatingViewModel>(StringComparer.Ordinal);
+        foreach (var row in rows.Where(r => r.Rating is not null))
+        {
+            shared.TryAdd(KeyOf(row.Video), row.Rating!);
+        }
+
+        foreach (var row in rows)
+        {
+            var key = KeyOf(row.Video);
+            var vote = VideoRater.Find(stored, row.Video)?.Vote;
+            if (!shared.TryGetValue(key, out var rating))
+            {
+                rating = new VideoRatingViewModel(rater, row.Video, vote, text, ratingLogger);
+                shared[key] = rating;
+            }
+            else if (!rating.Busy)
+            {
+                rating.Vote = vote;
+            }
+
+            row.Rating = rating;
+        }
+    }
+
+    /// <summary>The versions of one video share this key: its concept, else its folder without the version folder.</summary>
+    private static string KeyOf(VideoRecord video) =>
+        video.ConceptId is { } conceptId ? "concept:" + conceptId.ToString("N") : "folder:" + VideoRater.GroupOf(video.Folder);
 
     /// <summary>The newest version of each video (<paramref name="rows"/> newest first), at most <paramref name="max"/>.</summary>
     public static IReadOnlyList<VideoRowViewModel> Latest(IEnumerable<VideoRowViewModel> rows, int max = int.MaxValue) =>

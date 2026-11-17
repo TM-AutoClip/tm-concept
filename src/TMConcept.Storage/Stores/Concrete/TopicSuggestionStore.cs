@@ -28,4 +28,19 @@ public sealed class TopicSuggestionStore(ConceptDatabase database) : ITopicSugge
         db.TopicSuggestions.AddRange(suggestions);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
+
+    /// <inheritdoc />
+    public async Task MarkPickedAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        if (ids.Count == 0)
+        {
+            return;
+        }
+
+        var list = ids.ToList();
+        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await db.TopicSuggestions.Where(t => list.Contains(t.Id))
+            .ExecuteUpdateAsync(u => u.SetProperty(t => t.Outcome, TopicOutcome.Picked), cancellationToken).ConfigureAwait(false);
+    }
 }

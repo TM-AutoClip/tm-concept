@@ -29,7 +29,8 @@ needed) and narrates it with a **free local voice**. It runs on Windows and Linu
   where it should differ from the general setting. Four ready templates fill the fields
   (history: Byzantine, Ottoman; technology: ancient, modern).
 - **Generate concepts.** Two separate sections. **Generate from suggested topics**: suggest 5–100 topics, tick the ones you like and
-  press **Generate selected**: exactly one concept per ticked topic. **Generate from an idea**: write an idea (or leave it empty) and
+  press **Generate selected**: exactly one concept per ticked topic. A topic you did not tick is not a bad one: it may be suggested again
+  later; only a topic that got a concept never comes back. **Generate from an idea**: write an idea (or leave it empty) and
   choose 1–100 concepts. Every press adds to the list. Each button shows a small estimated price; the exact price from the provider's
   usage follows. Duplicates are prevented in four layers: the history of every concept in the prompt (cached), a free local similarity
   check, an optional semantic check with an embedding model, and a compressed history when the list grows. Every row has **Approve**
@@ -43,6 +44,10 @@ needed) and narrates it with a **free local voice**. It runs on Windows and Linu
 - **Produced videos.** Thumbnail, a built-in player (play/pause, seek bar, time, volume, full screen; nothing starts by itself), the whole
   narration scene by scene and the whole concept text, details (engine, models, cost per step, voice notes), open in the system player,
   open the folder, produce again, delete a version and, if you want, move its files to the recycle bin.
+- **Rate your videos.** **👍 I liked it** / **👎 I didn't like it** under the preview (Produced videos and Concept to video); pressing the
+  same button again clears it. One vote counts for all versions of a video. The next topic and concept suggestions stay away from a
+  disliked video's topic and close ones, and take a liked one as an example (similar spirit, different topics). Making a video is not a
+  like; an unrated video only counts as done. The vote stays when the concept or the video is deleted.
 - **This month's spending** stays at the top left; while paid work runs it shows what is being spent now.
 - **Versions.** Edit the narration of each scene (more sentences, placeholders for pauses, speed and transitions) and choose a voice: the voice is made again on
   your computer and the same video code is rendered again — no AI cost (an online voice is paid). Or have new code written for another

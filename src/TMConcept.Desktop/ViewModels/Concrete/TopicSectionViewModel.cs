@@ -19,7 +19,8 @@ namespace TMConcept.Desktop.ViewModels;
 /// Section A of the concept page, "Generate from suggested topics" (0.1.13, the developer: "only from the suggested topics … I ticked 8
 /// of 20, it must not make 20"). "Suggest topics" brings 5–100 topics within the channel's scope with the cheap model of the topics step
 /// (the fine-tuning of the page bar goes along, the idea of section B never does); pressing it again keeps the ticked topics on top,
-/// drops the unticked ones and adds the new ones below. "Generate selected (n)" writes exactly one concept per ticked topic, in the
+/// drops the unticked ones and adds the new ones below (an unticked topic is not a bad one: it may be suggested again later; a topic that got
+/// a concept is marked picked and never comes again, 17 Nov 2026). "Generate selected (n)" writes exactly one concept per ticked topic, in the
 /// list's order: no count box, no extra request (<see cref="TopicBrief"/>). The topics that got a concept leave the list batch by batch,
 /// so after a cut or canceled run the ones still ticked are exactly the ones still to make: pressing again makes only them. More than
 /// 100 ticked turns the button off with the reason. The list lives on the page only (cleared on a profile switch or a restart).
@@ -257,16 +258,21 @@ public sealed partial class TopicSectionViewModel(AppSession session, TopicSugge
         // The topics that got a concept leave the list (a text listed twice is matched once per concept). The list is locked while the run
         // goes on; a ticked one is taken first, an unticked one of the same text only when no ticked one is left.
         ArgumentNullException.ThrowIfNull(batch);
+        var picked = new List<Guid>();
         foreach (var made in batch.TopicsMade)
         {
             if ((Topics.FirstOrDefault(t => t.Checked && t.Text == made) ?? Topics.FirstOrDefault(t => t.Text == made)) is { } topic)
             {
                 topic.PropertyChanged -= OnTicked;
                 Topics.Remove(topic);
+                picked.Add(topic.Id);
             }
         }
 
         TopicsChanged();
+
+        // A topic that got a concept is never suggested again; a failed mark is logged and shown (the concept itself is saved).
+        _ = SafeAsync(() => suggester.MarkPickedAsync(picked, CancellationToken.None));
     }
 
     /// <inheritdoc />
@@ -291,7 +297,10 @@ public sealed partial class TopicSectionViewModel(AppSession session, TopicSugge
 
     partial void OnTopicCountChanged(decimal? value) => _ = SafeAsync(SuggestEstimateAsync);
 
-    /// <summary>The ticked topics stay on top in their order, the unticked ones go, the new ones come below, unticked.</summary>
+    /// <summary>
+    /// The ticked topics stay on top in their order, the unticked ones go, the new ones come below, unticked (one equal to a ticked topic,
+    /// folded, is not listed twice: an unpicked topic may come again).
+    /// </summary>
     private void Merge(IReadOnlyList<TopicSuggestion> suggested)
     {
         foreach (var topic in Topics.Where(t => !t.Checked).ToList())
@@ -300,7 +309,8 @@ public sealed partial class TopicSectionViewModel(AppSession session, TopicSugge
             Topics.Remove(topic);
         }
 
-        foreach (var topic in suggested)
+        var listed = Topics.Select(t => Core.Text.TurkishFold.Fold(t.Text)).ToHashSet(StringComparer.Ordinal);
+        foreach (var topic in suggested.Where(t => listed.Add(Core.Text.TurkishFold.Fold(t.Text))))
         {
             var item = new TopicItemViewModel(topic.Id, topic.Text);
             item.PropertyChanged += OnTicked;

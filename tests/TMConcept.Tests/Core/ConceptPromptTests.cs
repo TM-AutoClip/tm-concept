@@ -146,7 +146,8 @@ public sealed class ConceptPromptTests
         english.User.ShouldContain("COVERED — 1 concepts");
         english.User.ShouldContain("- [video] Hagia Sophia");
         english.User.ShouldContain("DISLIKED TOPICS:\n- Iconoclasm");
-        english.User.ShouldContain("ALREADY SUGGESTED (newest first):\n- Greek fire\n- The Varangian Guard");
+        english.User.ShouldContain("RECENTLY SHOWN (newest first; not chosen this time, not bad: may be suggested again if they still fit, but most should be new):\n- Greek fire\n- The Varangian Guard");
+        english.User.ShouldNotContain("ALREADY SUGGESTED", Case.Sensitive, "an unpicked topic is not blocked (0.1.18)");
         english.User.ShouldNotContain("SELECTED", Case.Sensitive, "the tick list lives on the page only (0.1.13)");
         english.User.ShouldContain("FOCUS: Tone: calm");
         english.User.ShouldEndWith("Suggest 37 topics now.");

@@ -15,17 +15,19 @@ namespace TMConcept.Core.Concepts;
 /// <summary>
 /// "Suggest topics" on the concept page: ONE call (no batching, also for 100 topics) to the cheap chat model of the profile's topics step
 /// with the prompt of <see cref="ConceptPromptBuilder.BuildTopics"/> (Prompts/&lt;lang&gt;/topics.txt: the channel content and format, the
-/// chosen fine-tuning, the profile's covered concepts and topic dislikes from <see cref="IPromptMemorySource"/>, the newest
-/// <see cref="PromptMemoryLimits.SuggestionsSent"/> topics it suggested before: do not suggest them again); the answer is the asked number
+/// chosen fine-tuning, the profile's covered concepts, topic dislikes and rated videos from <see cref="IPromptMemorySource"/>, the newest
+/// <see cref="PromptMemoryLimits.ShownSent"/> topics it suggested before that were not picked: "recently shown, not chosen this time; may come
+/// again if they still fit, but most should be new"); the answer is the asked number
 /// (<see cref="TopicLimits"/>, 5-100) of short topics in the interface language (the user reads and ticks them on the page; each ticked
-/// topic later becomes exactly one concept). The kept suggestions are only the profile's memory of what was already suggested: the tick
+/// topic later becomes exactly one concept). The kept suggestions are the profile's memory of what was suggested and which were picked: the tick
 /// list itself lives on the page (0.1.13 removed the 0.1.12 stored "selected" list). The extra request is not sent (0.1.12): the old prompt told the model to
 /// follow it even outside the channel's scope, and topics drifted away from the channel. The call is a run of its own (<see cref="RunKind.Topics"/>), so the month's spending counts it, also
 /// when it fails after being billed. It is meant to be cheap and quick: effort low (none for a model without effort levels; the user's
 /// effort choice is not used), streamed, cancelable, with room for thinking (0.1.7 gave it 1 500 tokens and Haiku 5.5 at effort high was
 /// cut before writing a topic, 8 Nov 2026). A cut-off answer still gives the complete topics before the cut. A model may still repeat
-/// itself: a topic equal (folded, see <see cref="TurkishFold"/>) to an earlier suggestion or a concept title is dropped here and counted;
-/// the kept ones are saved as the profile's suggestions (10 Nov 2026, the developer: "could it ask the same ones again every time?").
+/// itself: a topic equal (folded, see <see cref="TurkishFold"/>) to a picked suggestion or a concept title is dropped here and counted; one
+/// that was only shown before is not (17 Nov 2026, the developer: picking 5 of 20 does not make the other 15 bad); the kept ones are saved as
+/// the profile's suggestions.
 /// </summary>
 public sealed class TopicSuggester(IConceptStore concepts, ITopicSuggestionStore suggestions, IPromptMemorySource memory, IRunStore runs, IChatClientFactory chats, ICostCalculator costs, TimeProvider clock,
     ISettingsStore settings, ILogger<TopicSuggester> logger)
@@ -386,8 +388,15 @@ public sealed class TopicSuggester(IConceptStore concepts, ITopicSuggestionStore
         }
     }
 
+    /// <summary>Marks the suggestions <paramref name="ids"/> as picked: a concept was made from each, so they never come again.</summary>
+    public Task MarkPickedAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        return ids.Count == 0 ? Task.CompletedTask : suggestions.MarkPickedAsync(ids, cancellationToken);
+    }
+
     /// <summary>
-    /// Keeps the new topics as the profile's suggestions (so the next press does not bring them again) and gives them back with their ids.
+    /// Keeps the new topics as the profile's suggestions (shown, not picked) and gives them back with their ids.
     /// The topics of one press are a tick apart, so they keep the answer's order.
     /// </summary>
     private async Task<IReadOnlyList<TopicSuggestion>> KeepSuggestionsAsync(Guid profileId, IReadOnlyList<string> topics, DateTimeOffset at)
@@ -408,8 +417,8 @@ public sealed class TopicSuggester(IConceptStore concepts, ITopicSuggestionStore
     }
 
     /// <summary>
-    /// The prompt, and the folded texts a new topic must not equal (every concept title of the profile and every earlier suggestion; the
-    /// prompt sends only the newest suggestions and the condensed history).
+    /// The prompt, and the folded texts a new topic must not equal: every concept title of the profile and every picked suggestion. A
+    /// suggestion that was only shown is not blocked; the newest of them go to the prompt as "recently shown".
     /// </summary>
     private async Task<(string System, string User, HashSet<string> Earlier)> PromptAsync(Profile profile, string focus, int count,
         string language, CancellationToken cancellationToken)
@@ -417,11 +426,17 @@ public sealed class TopicSuggester(IConceptStore concepts, ITopicSuggestionStore
         ArgumentNullException.ThrowIfNull(profile);
         var all = await concepts.ListAsync(profile.Id, AllStatuses, false, cancellationToken).ConfigureAwait(false);
         var suggested = await suggestions.ListAsync(profile.Id, int.MaxValue, cancellationToken).ConfigureAwait(false);
-        var earlier = all.Select(c => TurkishFold.Fold(c.Title)).Concat(suggested.Select(s => TurkishFold.Fold(s.Text))).Where(t => t.Length > 0)
+        var earlier = all.Select(c => TurkishFold.Fold(c.Title))
+            .Concat(suggested.Where(s => s.Outcome == TopicOutcome.Picked).Select(s => TurkishFold.Fold(s.Text)))
+            .Where(t => t.Length > 0)
             .ToHashSet(StringComparer.Ordinal);
+        var shown = suggested.Where(s => s.Outcome == TopicOutcome.Shown && !earlier.Contains(TurkishFold.Fold(s.Text)))
+            .DistinctBy(s => TurkishFold.Fold(s.Text), StringComparer.Ordinal)
+            .Take(PromptMemoryLimits.ShownSent)
+            .Select(s => s.Text)
+            .ToList();
         var past = await memory.ReadAsync(profile, cancellationToken).ConfigureAwait(false);
-        var prompt = ConceptPromptBuilder.BuildTopics(new TopicPromptInput(profile, language, focus ?? string.Empty, past,
-            suggested.Take(PromptMemoryLimits.SuggestionsSent).Select(s => s.Text).ToList(), count));
+        var prompt = ConceptPromptBuilder.BuildTopics(new TopicPromptInput(profile, language, focus ?? string.Empty, past, shown, count));
         return (prompt.System, prompt.User, earlier);
     }
 }

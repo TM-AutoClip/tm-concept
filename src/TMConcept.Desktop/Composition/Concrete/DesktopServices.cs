@@ -187,6 +187,8 @@ public static class DesktopServices
         services.AddSingleton<IRunStore, RunStore>();
         services.AddSingleton<IQueueStore, QueueStore>();
         services.AddSingleton<IVideoStore, VideoStore>();
+        services.AddSingleton<IVideoRatingStore, VideoRatingStore>();
+        services.AddSingleton<IVideoRater, VideoRater>();
         services.AddSingleton<IApiKeyStore, ApiKeyStore>();
         services.AddSingleton<IStepModelStore, StepModelStore>();
         services.AddSingleton<Core.Pronunciation.IPronunciationStore, PronunciationStore>();

@@ -1,0 +1,18 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:TMConcept.Desktop.ViewModels"
+             x:Class="TMConcept.Desktop.Views.VideoRatingView"
+             x:DataType="vm:VideoRatingViewModel">
+  <!-- 👍 / 👎 of a made video (the Produced page and Concept → video): the chosen one in the accent; pressing it again clears the rating.
+       The note says what the vote is for; a failed save shows in red under it. -->
+  <StackPanel Spacing="4">
+    <StackPanel Orientation="Horizontal">
+      <ToggleButton Name="LikeButton" Classes="segment" Content="{DynamicResource video.rating.like}" ToolTip.Tip="{DynamicResource video.rating.like.tip}"
+                    IsChecked="{Binding IsLiked, Mode=OneWay}" Command="{Binding LikeCommand}" />
+      <ToggleButton Name="DislikeButton" Classes="segment" Content="{DynamicResource video.rating.dislike}" ToolTip.Tip="{DynamicResource video.rating.dislike.tip}"
+                    IsChecked="{Binding IsDisliked, Mode=OneWay}" Command="{Binding DislikeCommand}" />
+    </StackPanel>
+    <TextBlock Text="{DynamicResource video.rating.note}" Classes="small muted" TextWrapping="Wrap" />
+    <TextBlock Text="{Binding Error}" Classes="error" TextWrapping="Wrap" IsVisible="{Binding HasError}" />
+  </StackPanel>
+</UserControl>
