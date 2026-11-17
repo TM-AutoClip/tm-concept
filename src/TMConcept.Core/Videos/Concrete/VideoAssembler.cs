@@ -10,6 +10,7 @@ using TMConcept.Core.Pipeline;
 using TMConcept.Core.Render;
 using TMConcept.Core.Runs;
 using TMConcept.Core.Speech;
+using TMConcept.Core.Styles;
 using TMConcept.Core.Subtitles;
 
 namespace TMConcept.Core.Videos;
@@ -36,25 +37,34 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
     /// E + F: the video code from <paramref name="codeModel"/> for <paramref name="input"/> (paid; every call is spent in
     /// <paramref name="steps"/>, also a cut-off one; the call's phase and tokens are reported while it streams), written into
     /// <c>&lt;work&gt;/project</c> after the safety check (a rejected code gets one repair), then the render (a failed render gets one repair with
-    /// its error text, unless the code was repaired already). Without <paramref name="subtitles"/> the prompt and the engine get the input
-    /// without captions (<see cref="RenderInputBuilder.ForEngine"/>), so the code cannot draw the narration.
+    /// its error text, unless the code was repaired already). Without subtitles (<see cref="VideoStyleRules.SubtitlesOn"/>) the prompt and the
+    /// engine get the input without captions (<see cref="RenderInputBuilder.ForEngine"/>), so the code cannot draw the narration. With a
+    /// template (<see cref="VideoOptions.Style"/>) the input gets its tokens (<see cref="RenderStyleBuilder"/>), the prompt its block, the project
+    /// its font, and the code the template check after the safety check (<see cref="VideoStyleCheck"/>: a finding takes the same single repair;
+    /// colours outside the palette are replaced without one).
     /// </summary>
-    public async Task<RenderOutcome> CodeAndRenderAsync(IVideoEngine engine, ResolvedModel codeModel, bool subtitles, RenderInput input, string work,
+    public async Task<RenderOutcome> CodeAndRenderAsync(IVideoEngine engine, ResolvedModel codeModel, VideoOptions options, RenderInput input, string work,
         Guid id, VideoStepProgress steps, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(codeModel);
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(steps);
+        var subtitles = VideoStyleRules.SubtitlesOn(options);
+        var style = options.Style;
+        RenderStyleBuilder.Apply(input, style);
         var chat = chats.Create(codeModel.Model, codeModel.Key.Secret);
-        var system = VideoCodePrompt.System(engine, subtitles);
+        var system = VideoCodePrompt.System(engine, subtitles, style, input.Language);
         var repaired = false;
         steps.Report(VideoSteps.Code, 0.1);
         var engineInput = RenderInputBuilder.ForEngine(input, subtitles);
+        PlaceFonts(Path.Combine(work, "project"), style, input.Language);
         var code = await CodeAsync(chat, codeModel, system, VideoCodePrompt.User(engineInput), steps, id, cancellationToken).ConfigureAwait(false);
         var request = new EngineRenderRequest(Path.Combine(work, "project"), code, engineInput, Path.Combine(work, "silent.mp4"), Workers());
         try
         {
-            engine.WriteProject(request);
+            request = Write(engine, request, style);
         }
         catch (EngineException ex) when (ex.Code == "check")
         {
@@ -66,15 +76,15 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
             repaired = true;
             try
             {
-                engine.WriteProject(request);
+                request = Write(engine, request, style);
             }
             catch (EngineException again) when (again.Code == "check")
             {
                 await File.WriteAllTextAsync(Path.Combine(work, Rejected + "2.txt"), code, cancellationToken).ConfigureAwait(false);
-                throw new VideoException("The video code did not pass the safety check twice and was not run: " + string.Join(" · ", again.Findings.Take(4)))
-                {
-                    Code = "code",
-                };
+                var what = again.Message.StartsWith(TemplateRejection, StringComparison.Ordinal)
+                    ? "The video code did not follow the template twice and was not run: "
+                    : "The video code did not pass the safety check twice and was not run: ";
+                throw new VideoException(what + string.Join(" · ", again.Findings.Take(4))) { Code = "code" };
             }
         }
 
@@ -94,7 +104,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
             repaired = true;
             try
             {
-                engine.WriteProject(request);
+                request = Write(engine, request, style);
                 await engine.RenderAsync(request, engineProgress, cancellationToken).ConfigureAwait(false);
             }
             catch (EngineException again)
@@ -114,14 +124,19 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
     /// <summary>
     /// F without a model: the kept <paramref name="code"/> is written with the new <paramref name="input"/> into <c>&lt;work&gt;/project</c>
     /// (whatever is already there, the scene images, stays) and rendered once. A failure is not repaired: a repair would be a paid call.
-    /// Without <paramref name="subtitles"/> the engine gets the input without captions, as at the first make.
+    /// Without subtitles the engine gets the input without captions, as at the first make; the video's template snapshot (when it has one) gives
+    /// the input its tokens and the project its font again. The kept code already passed the template check when it was made.
     /// </summary>
-    public async Task<RenderOutcome> RenderKeptAsync(IVideoEngine engine, string code, bool subtitles, RenderInput input, string work,
+    public async Task<RenderOutcome> RenderKeptAsync(IVideoEngine engine, string code, VideoOptions options, RenderInput input, string work,
         VideoStepProgress steps, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(engine);
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(steps);
-        var request = new EngineRenderRequest(Path.Combine(work, "project"), code, RenderInputBuilder.ForEngine(input, subtitles),
+        RenderStyleBuilder.Apply(input, options.Style);
+        PlaceFonts(Path.Combine(work, "project"), options.Style, input.Language);
+        var request = new EngineRenderRequest(Path.Combine(work, "project"), code, RenderInputBuilder.ForEngine(input, VideoStyleRules.SubtitlesOn(options)),
             Path.Combine(work, "silent.mp4"), Workers());
         try
         {
@@ -153,13 +168,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         var cueSources = input.Scenes.Select(s => new SubtitleSource((long)Math.Round(s.StartSeconds * 1000),
             clips.ElementAtOrDefault(s.Number - 1)?.DurationMs ?? (long)Math.Round(s.DurationSeconds * 1000), s.Caption)).ToList();
         var cues = SubtitleBuilder.Build(SubtitleSources(input, clips), SubtitleBuilder.LineLength(input.Width, input.Height));
-        string? ass = null;
-        if (save.Options.Subtitles && cues.Count > 0)
-        {
-            ass = "subtitles.ass";
-            await File.WriteAllTextAsync(Path.Combine(save.Work, ass), SubtitleBuilder.Ass(cues, input.Width, input.Height, input.Theme), cancellationToken)
-                .ConfigureAwait(false);
-        }
+        var overlay = await OverlayAsync(save, cues, cancellationToken).ConfigureAwait(false);
 
         var audio = clips.Select((c, i) => (Clip: c, Start: (long)Math.Round(input.Scenes[i].StartSeconds * 1000))).Where(x => x.Clip is not null)
             .Select(x => (x.Clip!.File, x.Start)).ToList();
@@ -167,7 +176,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         steps.Report(VideoSteps.Mux, 0.1);
         try
         {
-            await media.MuxAsync(save.Work, save.Render.Request.Output, audio, ass, Fades(input), muxed, cancellationToken).ConfigureAwait(false);
+            await media.MuxAsync(save.Work, save.Render.Request.Output, audio, overlay, Fades(input), muxed, cancellationToken).ConfigureAwait(false);
         }
         catch (InvalidOperationException ex)
         {
@@ -431,12 +440,138 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         }
 
         // tmp/ holds the engine's frame cache and Node's temporary files; node_modules is never in a project (packages resolve from
-        // the engine folder) but is skipped all the same.
-        foreach (var folder in Directory.EnumerateDirectories(from).Where(d => Path.GetFileName(d) is not ("tmp" or "node_modules")))
+        // the engine folder) but is skipped all the same. The template's fonts are the app's own files, placed again at every render.
+        foreach (var folder in Directory.EnumerateDirectories(from).Where(d => Path.GetFileName(d) is not ("tmp" or "node_modules" or VideoFontFiles.Folder)))
         {
             CopyProject(folder, Path.Combine(to, Path.GetFileName(folder)));
         }
     }
+
+    /// <summary>The name of the channel photo copied into a work folder (its extension follows).</summary>
+    public const string PhotoFile = "channel-photo";
+
+    /// <summary>The start of the message of a code that breaks the template (told apart from a safety finding in the final error).</summary>
+    private const string TemplateRejection = "The video code does not follow the template: ";
+
+    /// <summary>
+    /// The template's font in the project: in <c>fonts/</c> (HyperFrames) and <c>public/fonts/</c> (Remotion's staticFile, Revideo's Vite
+    /// server). Nothing without a template.
+    /// </summary>
+    private static void PlaceFonts(string project, VideoStyle? style, string language)
+    {
+        if (style is null)
+        {
+            return;
+        }
+
+        var font = VideoStyleRules.Font(style, language);
+        VideoFontFiles.CopyTo(font, Path.Combine(project, VideoFontFiles.Folder));
+        VideoFontFiles.CopyTo(font, Path.Combine(project, "public", VideoFontFiles.Folder));
+    }
+
+    /// <summary>
+    /// Writes the project after the safety check (the engine's) and, with a template, the template check: a finding is an
+    /// <see cref="EngineException"/> "check" (the caller's single repair); colours outside the palette are replaced in the code that is written.
+    /// </summary>
+    private EngineRenderRequest Write(IVideoEngine engine, EngineRenderRequest request, VideoStyle? style)
+    {
+        if (style is not null && EngineCodeCheck.Check(engine.Kind, request.Code).Count == 0)
+        {
+            var result = VideoStyleCheck.Check(request.Code, style, request.Input.Language);
+            if (result.Findings.Count > 0)
+            {
+                throw new EngineException(TemplateRejection + string.Join(" · ", result.Findings.Take(6))) { Code = "check", Findings = result.Findings };
+            }
+
+            if (result.Fixes.Count > 0)
+            {
+                logger.LogInformation("{Count} colour(s) outside the template's palette were replaced: {Fixes}", result.Fixes.Count,
+                    string.Join(" · ", result.Fixes.Take(8)));
+                request = request with { Code = result.Code };
+            }
+        }
+
+        engine.WriteProject(request);
+        return request;
+    }
+
+    /// <summary>
+    /// What the mux draws over the video. A video without a template: the subtitles in the old look when they are on (exactly as before). With
+    /// one: <see cref="StyleOverlay"/> (subtitles, progress bar, closing card) with the template's font next to it, and the channel photo on
+    /// the card. A closing whose language has no sentences is skipped with a warning.
+    /// </summary>
+    private async Task<MuxOverlay> OverlayAsync(VersionSave save, IReadOnlyList<Subtitles.SubtitleCue> cues, CancellationToken cancellationToken)
+    {
+        var input = save.Input;
+        var style = save.Options.Style;
+        if (style is null)
+        {
+            if (!save.Options.Subtitles || cues.Count == 0)
+            {
+                return MuxOverlay.None;
+            }
+
+            await File.WriteAllTextAsync(Path.Combine(save.Work, AssFile), SubtitleBuilder.Ass(cues, input.Width, input.Height, input.Theme), cancellationToken)
+                .ConfigureAwait(false);
+            return new MuxOverlay(AssFile);
+        }
+
+        if (VideoStyleRules.ClosingMissing(style, input.Language))
+        {
+            logger.LogWarning("The template's closing has no sentences in the video's language ({Language}); the video ends without it", input.Language);
+        }
+
+        var closing = VideoStyleRules.Closing(style, input.Language);
+        var photo = closing is { Screen: true } ? PlacePhoto(save.Profile, save.Work) : null;
+        var drawn = StyleOverlay.Build(input.Width, input.Height, input.DurationSeconds, cues, style, input.Language, closing, save.Profile.Name, photo is not null);
+        if (drawn.Ass is null)
+        {
+            return MuxOverlay.None;
+        }
+
+        await File.WriteAllTextAsync(Path.Combine(save.Work, AssFile), drawn.Ass, cancellationToken).ConfigureAwait(false);
+        VideoFontFiles.CopyTo(VideoStyleRules.Font(style, input.Language), Path.Combine(save.Work, VideoFontFiles.Folder));
+        var card = drawn.Card;
+        return new MuxOverlay(AssFile, VideoFontFiles.Folder, photo is not null && card is not null
+            ? new MuxPhoto(photo, card.PhotoX, card.PhotoY, card.PhotoSize, card.StartSeconds, card.EndSeconds, StyleLayout.EndCardFadeSeconds, input.Fps)
+            : null);
+    }
+
+    /// <summary>
+    /// The profile's channel photo copied into the work folder (its name there), or <c>null</c> when the profile has none. A photo whose file
+    /// is gone (or lies outside the library) is logged and the card is drawn without it.
+    /// </summary>
+    private string? PlacePhoto(Profiles.Profile profile, string work)
+    {
+        if (string.IsNullOrWhiteSpace(profile.ChannelPhoto))
+        {
+            return null;
+        }
+
+        string source;
+        try
+        {
+            source = LibraryPaths.Resolve(paths.LibraryDirectory, profile.ChannelPhoto);
+        }
+        catch (InvalidOperationException ex)
+        {
+            logger.LogWarning(ex, "The channel photo's path is outside the library folder; the closing card is drawn without it");
+            return null;
+        }
+
+        if (!File.Exists(source))
+        {
+            logger.LogWarning("The channel photo file is missing; the closing card is drawn without it");
+            return null;
+        }
+
+        var name = PhotoFile + Path.GetExtension(source).ToLowerInvariant();
+        File.Copy(source, Path.Combine(work, name), overwrite: true);
+        return name;
+    }
+
+    /// <summary>The overlay file's name in the work folder.</summary>
+    private const string AssFile = "subtitles.ass";
 
     private async Task<string> CodeAsync(IChatClient chat, ResolvedModel codeModel, string system, string user, VideoStepProgress steps, Guid id,
         CancellationToken cancellationToken)

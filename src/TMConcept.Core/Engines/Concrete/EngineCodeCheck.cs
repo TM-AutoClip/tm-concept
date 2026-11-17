@@ -53,11 +53,14 @@ public static partial class EngineCodeCheck
         (new(@"innerHTML|outerHTML|insertAdjacentHTML|document\s*\.\s*write|createContextualFragment|DOMParser|srcdoc", RegexOptions.IgnoreCase), "HTML injection (use textContent)"),
     ];
 
-    /// <summary>Allowed imports of an engine (exact name, or a prefix ending with '/').</summary>
+    /// <summary>
+    /// Allowed imports of an engine (exact name, or a prefix ending with '/'): its packages, the skeleton's <c>./input</c> type and the app's
+    /// template helpers <c>./tm</c> (0.1.19; an app file the model cannot change).
+    /// </summary>
     public static IReadOnlyList<string> AllowedImports(EngineKind engine) => engine switch
     {
-        EngineKind.Remotion => ["remotion", "react", "./input"],
-        EngineKind.Revideo => ["@revideo/2d", "@revideo/core", "./input"],
+        EngineKind.Remotion => ["remotion", "react", "./input", "./tm"],
+        EngineKind.Revideo => ["@revideo/2d", "@revideo/core", "./input", "./tm"],
         _ => [],
     };
 

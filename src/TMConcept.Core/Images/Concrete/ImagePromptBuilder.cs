@@ -20,11 +20,20 @@ public static class ImagePromptBuilder
         in order, each at most 400 characters.
         """;
 
-    /// <summary>The user text.</summary>
-    public static string User(string channel, IReadOnlyList<string> visuals)
+    /// <summary>
+    /// The user text. With a template, its drawing style is the one illustration style of every image (<paramref name="style"/>), so the
+    /// images match what the video code draws in scenes without one.
+    /// </summary>
+    public static string User(string channel, IReadOnlyList<string> visuals, Styles.DrawStyle? style = null)
     {
         ArgumentNullException.ThrowIfNull(visuals);
-        var text = new StringBuilder("Channel: «").Append(Clean(channel)).Append("»\nScenes:\n");
+        var text = new StringBuilder("Channel: «").Append(Clean(channel)).Append("»\n");
+        if (style is { } drawn)
+        {
+            text.Append("Illustration style of every image: ").Append(Videos.VideoStylePrompt.ImageStyle(drawn)).Append(".\n");
+        }
+
+        text.Append("Scenes:\n");
         for (var i = 0; i < visuals.Count; i++)
         {
             text.Append((i + 1).ToString(CultureInfo.InvariantCulture)).Append(". «").Append(Clean(visuals[i])).Append("»\n");

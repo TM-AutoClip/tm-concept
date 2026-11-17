@@ -305,6 +305,22 @@ Sonra modelleri onları kullanan sayfalarda seç (yukarıya bak). Ücretli hiçb
    bilgisayarda saklanır ve henüz başlamamış her sıradaki videoya uygulanır.
 4. **Üretilen Videolar:** program içinde izle (Linux'ta ses PulseAudio ya da PipeWire ile), klasörü aç. Her video, konseptin klasöründe bir sürüm klasörüdür (`v1/`): `video.mp4`, `subtitles.srt`, `narration.txt` (her zaman yazılır) ve `thumbnail.jpg`; ayrıca sonraki bir yeniden render için `source/` (render edildiği hâliyle motor projesi: modelin kodu, `input.json`, sahne görselleri) ve `audio/` (her sahnenin seslendirme klibi).
 
+### Şablon videoda nasıl görünür
+
+Bir şablonla (Ayarlar → Şablonlar) üretilen video, modelin iyi niyetine kalmadan ona uyar:
+
+- **Modelin değil, programın çizdikleri:** altyazı (şablonun yazı tipi ve renkleriyle), üst kenardaki ince ilerleme çubuğu (yalnız
+  şablonda açıksa) ve kapanış kartı video birleştirilirken programca eklenir. Video kodundan bunları çizmesi istenmez; kendisi ilerleme
+  çubuğu, sayaç ya da sahne numarası çizen, altyazısız bir videoda anlatımı okuyan ya da başka bir yazı tipi adı yazan kod tek onarımına
+  geri gönderilir. Onarılan kod şablonu yine bozarsa video üretilmez ve hata sırada görünür (gece modu bunu hata sayar).
+- **Renkler ve yazı tipi:** kod şablonun paletini ve yazı tipini alır (programla gelen, Türkçenin bütün harflerini çizen altı SIL OFL yazı
+  tipi). Paletin dışındaki bir renk, ücretli bir onarım olmadan bu bilgisayarda paletin en yakın rengiyle değiştirilir.
+- **Kapanış:** seçtiğin cümle videonun dilindedir ve platformun söylediği gibidir (YouTube: abone ol; Instagram ve TikTok: takip et).
+  *Seste*: cümle, seslendirilmeden önce son sahnenin anlatımının sonuna eklenir; böylece altyazıda ve `narration.txt`'de de olur.
+  *Ekranda*: son saniyelerde profilin kanal fotoğrafı (profilde varsa, yuvarlak), kanal adı, cümle ve bir düğmeyle bir kapanış kartı çıkar.
+- **Çizim tarzı:** görseli olmayan sahneler şablonun tarzında çizilir, üretilen görseller de aynı tarzda istenir.
+- Saklanan koddan yapılan yeni bir sürüm, videonun üretildiği şablonu korur.
+
 ## Güncelleme
 
 **Programın içinden:** TM Concept açılışta (günde en çok bir kez) projenin GitHub'daki sürüm listesine bakar (hesap gerekmez, bizim bir

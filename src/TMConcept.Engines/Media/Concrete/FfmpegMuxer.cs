@@ -9,7 +9,8 @@ namespace TMConcept.Engines.Media;
 
 /// <summary>
 /// Joins the silent video with the scene narrations (each placed at its scene start), burns the ASS file in (libass) when on-screen subtitles
-/// are chosen, and fades through black at the start of every scene with a soft transition: the picture (subtitles too) goes dark over
+/// are chosen or the template draws something (progress bar, closing card; with the template's fonts), lays the round channel photo over the
+/// closing card, and fades through black at the start of every scene with a soft transition: the picture (subtitles too) goes dark over
 /// <see cref="Core.Scenes.SceneTransitions.FadeHalfMs"/> before the scene's start and comes back over the same time after it, whatever the
 /// video code drew; the timing does not change. Without narration, subtitles and fades the video is only copied. The app's own ffmpeg;
 /// processor only.
@@ -17,14 +18,14 @@ namespace TMConcept.Engines.Media;
 public sealed class FfmpegMuxer(ToolInstaller tools, IProcessRunner runner, ILogger<FfmpegMuxer> logger)
 {
     /// <summary>
-    /// Builds and runs ffmpeg. <paramref name="assFile"/> is a file name inside <paramref name="folder"/> (or null); <paramref name="fadesMs"/>
-    /// are the starts of the scenes that begin with a fade.
+    /// Builds and runs ffmpeg. The files of <paramref name="overlay"/> are inside <paramref name="folder"/>; <paramref name="fadesMs"/> are the
+    /// starts of the scenes that begin with a fade.
     /// </summary>
-    public async Task MuxAsync(string folder, string silentVideo, IReadOnlyList<(string Wav, long StartMs)> clips, string? assFile,
+    public async Task MuxAsync(string folder, string silentVideo, IReadOnlyList<(string Wav, long StartMs)> clips, Core.Media.MuxOverlay overlay,
         IReadOnlyList<long> fadesMs, string output, CancellationToken cancellationToken)
     {
         var ffmpeg = tools.Require(ToolKind.Ffmpeg);
-        var arguments = Arguments(silentVideo, clips, assFile, fadesMs, output);
+        var arguments = Arguments(silentVideo, clips, overlay, fadesMs, output);
         var result = await runner.RunAsync(new ProcessStart(ffmpeg, arguments, folder), null, cancellationToken).ConfigureAwait(false);
         if (result.ExitCode != 0 || !File.Exists(output))
         {
@@ -33,11 +34,20 @@ public sealed class FfmpegMuxer(ToolInstaller tools, IProcessRunner runner, ILog
         }
     }
 
-    /// <summary>The ffmpeg arguments (pure; tests read them).</summary>
+    /// <summary>The ffmpeg arguments with only an ASS file (or none) over the video (pure; tests read them).</summary>
     public static IReadOnlyList<string> Arguments(string silentVideo, IReadOnlyList<(string Wav, long StartMs)> clips, string? assFile,
+        IReadOnlyList<long> fadesMs, string output) => Arguments(silentVideo, clips, new Core.Media.MuxOverlay(assFile), fadesMs, output);
+
+    /// <summary>
+    /// The ffmpeg arguments (pure; tests read them). The ASS file is burned in first (libass, with <see cref="Core.Media.MuxOverlay.FontsFolder"/>
+    /// as its font folder), then the photo is cut to a circle and laid over it from its start (it is an input of its own, looped only for its
+    /// own seconds and shifted to its start, so the circle is computed only for those frames), then the fades darken everything.
+    /// </summary>
+    public static IReadOnlyList<string> Arguments(string silentVideo, IReadOnlyList<(string Wav, long StartMs)> clips, Core.Media.MuxOverlay overlay,
         IReadOnlyList<long> fadesMs, string output)
     {
         ArgumentNullException.ThrowIfNull(clips);
+        ArgumentNullException.ThrowIfNull(overlay);
         var c = CultureInfo.InvariantCulture;
         var arguments = new List<string> { "-hide_banner", "-loglevel", "error", "-y", "-i", silentVideo };
         foreach (var clip in clips)
@@ -45,17 +55,49 @@ public sealed class FfmpegMuxer(ToolInstaller tools, IProcessRunner runner, ILog
             arguments.AddRange(["-i", clip.Wav]);
         }
 
-        var filter = new StringBuilder();
-        var video = new List<string>();
-        if (assFile is not null)
+        var photo = overlay.Photo;
+        if (photo is not null)
         {
-            video.Add("ass=" + assFile);
+            var seconds = Math.Max(0.1, photo.EndSeconds - photo.StartSeconds);
+            arguments.AddRange(["-loop", "1", "-framerate", photo.Fps.ToString(c), "-t", seconds.ToString("0.###", c), "-i", photo.File]);
         }
 
-        video.AddRange(Fades(fadesMs));
-        if (video.Count > 0)
+        var filter = new StringBuilder();
+        var burn = overlay.AssFile is null
+            ? null
+            : "ass=" + overlay.AssFile + (overlay.FontsFolder is null ? string.Empty : ":fontsdir=" + overlay.FontsFolder);
+        var fades = Fades(fadesMs);
+        var drawn = burn is not null || photo is not null || fades.Count > 0;
+        if (photo is null)
         {
-            filter.Append("[0:v]").Append(string.Join(',', video)).Append("[v]");
+            var video = new List<string>();
+            if (burn is not null)
+            {
+                video.Add(burn);
+            }
+
+            video.AddRange(fades);
+            if (video.Count > 0)
+            {
+                filter.Append("[0:v]").Append(string.Join(',', video)).Append("[v]");
+            }
+        }
+        else
+        {
+            var index = clips.Count + 1;
+            var size = photo.Size.ToString(c);
+            var start = photo.StartSeconds.ToString("0.###", c);
+            filter.Append(c, $"[{index}:v]scale={size}:{size}:force_original_aspect_ratio=increase,crop={size}:{size},format=rgba,")
+                .Append("geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='if(lte(hypot(X-W/2,Y-H/2),W/2),255,0)',")
+                .Append(c, $"fade=t=in:st=0:d={photo.FadeSeconds.ToString("0.###", c)}:alpha=1,setpts=PTS+{start}/TB[photo];");
+            filter.Append(burn is null ? "[0:v]" : "[0:v]" + burn + "[base];[base]");
+            filter.Append(c, $"[photo]overlay=x={photo.X}:y={photo.Y}:eof_action=pass:enable='gte(t,{start})'");
+            if (fades.Count > 0)
+            {
+                filter.Append(',').Append(string.Join(',', fades));
+            }
+
+            filter.Append("[v]");
         }
 
         if (clips.Count > 0)
@@ -85,13 +127,13 @@ public sealed class FfmpegMuxer(ToolInstaller tools, IProcessRunner runner, ILog
             arguments.AddRange(["-filter_complex", filter.ToString()]);
         }
 
-        arguments.AddRange(["-map", video.Count == 0 ? "0:v" : "[v]"]);
+        arguments.AddRange(["-map", drawn ? "[v]" : "0:v"]);
         if (clips.Count > 0)
         {
             arguments.AddRange(["-map", "[a]", "-c:a", "aac", "-b:a", "192k"]);
         }
 
-        arguments.AddRange(video.Count == 0 ? ["-c:v", "copy"] : ["-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p"]);
+        arguments.AddRange(drawn ? ["-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p"] : ["-c:v", "copy"]);
         arguments.AddRange(["-movflags", "+faststart", output]);
         return arguments;
     }

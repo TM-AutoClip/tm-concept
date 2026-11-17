@@ -23,9 +23,13 @@ public sealed class VideoCostEstimator(ICostCalculator costs)
     /// <summary>Output tokens of the image prompt answer per scene.</summary>
     public const long PromptTokensPerScene = 120;
 
-    /// <summary>The estimate of the given concepts; <paramref name="engine"/> null = the code prompt without the engine's own rules.</summary>
+    /// <summary>
+    /// The estimate of the given concepts; <paramref name="engine"/> null = the code prompt without the engine's own rules. With a template
+    /// (<paramref name="style"/>) its prompt block is counted, its subtitles choice replaces <paramref name="subtitles"/>, a spoken closing adds
+    /// its sentence to the narration and its drawing style goes into the image prompt.
+    /// </summary>
     public CostEstimate Estimate(IReadOnlyList<Concept> concepts, Profile profile, IVideoEngine? engine, CatalogModel? code, CatalogModel? image,
-        CatalogModel? speech, bool subtitles)
+        CatalogModel? speech, bool subtitles, Styles.VideoStyle? style = null)
     {
         ArgumentNullException.ThrowIfNull(concepts);
         ArgumentNullException.ThrowIfNull(profile);
@@ -39,15 +43,18 @@ public sealed class VideoCostEstimator(ICostCalculator costs)
                 continue;
             }
 
+            var closing = Styles.VideoStyleRules.Closing(style, profile.ContentLanguage);
+            var spoken = closing is { Voice: true } ? Styles.ClosingNarration.Append(scenes, closing.Sentence) : scenes;
+
             if (code is not null)
             {
-                var input = RenderInputBuilder.Build(concept.Title, profile.ContentLanguage, scenes.Select(s => new RenderSceneSource(s.Visual, s.Narration,
+                var input = RenderInputBuilder.Build(concept.Title, profile.ContentLanguage, spoken.Select(s => new RenderSceneSource(s.Visual, s.Narration,
                     string.Empty, VideoRemaker.SilentMs(s.Script, profile.ContentLanguage), s.Transition)).ToList(), width, height, 30);
-                total = total.Plus(Code(input, profile.ContentLanguage, engine, code, subtitles));
+                total = total.Plus(Code(input, profile.ContentLanguage, engine, code, subtitles, style));
                 if (image is not null)
                 {
                     var visuals = scenes.Select(s => s.Visual.Length > 0 ? s.Visual : s.Narration).ToList();
-                    var prompt = costs.Tokens(ImagePromptBuilder.System + ImagePromptBuilder.User(profile.Name, visuals), profile.ContentLanguage);
+                    var prompt = costs.Tokens(ImagePromptBuilder.System + ImagePromptBuilder.User(profile.Name, visuals, style?.DrawStyle), profile.ContentLanguage);
                     total = total.Plus(costs.EstimateChat(code, prompt, 0, PromptTokensPerScene * scenes.Count / 2, PromptTokensPerScene * scenes.Count));
                 }
             }
@@ -60,8 +67,8 @@ public sealed class VideoCostEstimator(ICostCalculator costs)
 
             if (speech is { Provider: not ModelProviders.Local })
             {
-                var spoken = Speech(speech, scenes.Sum(s => (long)s.Narration.Length));
-                total = total.Plus(new CostEstimate(spoken, spoken, 0, 0, 0));
+                var voice = Speech(speech, spoken.Sum(s => (long)s.Narration.Length));
+                total = total.Plus(new CostEstimate(voice, voice, 0, 0, 0));
             }
         }
 
@@ -70,13 +77,15 @@ public sealed class VideoCostEstimator(ICostCalculator costs)
 
     /// <summary>
     /// The video code call for <paramref name="input"/> (its real prompt): from <see cref="CodeOutputMin"/> output tokens to the call's whole
-    /// budget, plus one repair at the high end. Also the estimate of a new version with another engine (same input, new code).
+    /// budget, plus one repair at the high end. Also the estimate of a new version with another engine (same input, new code). With a template
+    /// (<paramref name="style"/>) the prompt is the one the video gets: its block counted, its subtitles choice used.
     /// </summary>
-    public CostEstimate Code(RenderInput input, string language, IVideoEngine? engine, CatalogModel code, bool subtitles)
+    public CostEstimate Code(RenderInput input, string language, IVideoEngine? engine, CatalogModel code, bool subtitles, Styles.VideoStyle? style = null)
     {
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(code);
-        var system = engine is null ? 0 : costs.Tokens(VideoCodePrompt.System(engine, subtitles), ContentLanguages.English);
+        subtitles = style?.Subtitles ?? subtitles;
+        var system = engine is null ? 0 : costs.Tokens(VideoCodePrompt.System(engine, subtitles, style, language), ContentLanguages.English);
         var user = costs.Tokens(VideoCodePrompt.User(Render.RenderInputBuilder.ForEngine(input, subtitles)), language);
 
         // The high end is the call's whole budget: 14 000 tokens used to be counted, but real answers with thinking were cut at 32 000.
