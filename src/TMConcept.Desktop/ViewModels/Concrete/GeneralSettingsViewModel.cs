@@ -30,7 +30,7 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
     ComponentPlanner components, IToolPlatform platform, Engines.Engines.SampleRender sample, IConfirmDialog confirm, ShellLauncher shell,
     IActivityLog activity, PreferencesImageAcceleration acceleration, Engines.Images.ImageBackendSelector backends, ComponentInstallFlow installs,
     ILogger<GeneralSettingsViewModel> logger, ComponentReinstaller reinstaller, Updates.AppUpdater updater, IAppUpdateDialog updateDialog,
-    DiskSpace.IDiskCleaner cleaner)
+    DiskSpace.IDiskCleaner cleaner, WhatsNewCheck whatsNew)
     : SettingsSectionBase
 {
     /// <summary>Look for a newer version of the app at start (stored at once, per computer).</summary>
@@ -81,6 +81,10 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
             CheckingUpdates = false;
         }
     }
+
+    /// <summary>Opens "What's new": the notes of every version up to the running one, newest first, from the notes built into the app.</summary>
+    [RelayCommand]
+    public Task WhatsNewAsync() => whatsNew.ShowAllAsync(updater.Current);
 
     partial void OnCheckForUpdatesChanged(bool value)
     {

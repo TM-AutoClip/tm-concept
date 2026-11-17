@@ -32,6 +32,11 @@ public sealed class UiPreferences
     public string LastVersion { get; set; } = string.Empty;
 
     /// <summary>
+    /// The newest version whose notes the "What's new" window showed (since 0.1.23): they are shown once. Empty = none shown yet.
+    /// </summary>
+    public string WhatsNewSeenVersion { get; set; } = string.Empty;
+
+    /// <summary>
     /// The template chosen on the Concept to video page (Settings → Templates; since 0.1.19). Empty on a new install: nothing is produced
     /// until a template is chosen. It replaced the "Subtitles in the picture" checkbox of 0.1.17–0.1.18 (subtitles are part of a template
     /// now); the old "Subtitles" value of the file is no longer read.

@@ -215,6 +215,9 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
             session.PendingMessage = null;
         }
 
+        // The version that ran before, read before the version check records the running one: the "What's new" window shows what changed since.
+        var previous = services.GetRequiredService<Paths.UiPreferencesFile>().Read().LastVersion;
+
         // Another app version ran before: what to do with the installed components (update / reinstall / later). Only here, after the
         // first run or the unlock, in the main window; a failure is logged and shown, it never keeps the app from starting.
         try
@@ -225,6 +228,9 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
         {
             logger.LogError(ex, "The components could not be checked after the version change");
         }
+
+        // What changed since the version that ran before (once, from the notes built into the app); never holds the start up.
+        _ = ShowWhatsNewAsync(previous);
 
         // A newer version of the app (at most once a day, when it is not turned off): offered in a window, installed only on confirmation.
         _ = OfferUpdateAsync();
@@ -254,6 +260,19 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
             logger.LogError(LogEvents.OnScreen, ex, "Daily backup failed");
             activity.Add(ActivityLevel.Error, text.Format("backup.failed", ex.Message));
             notifier.Notify(new AppNotification(NotificationKind.Failed, "TM Concept", text.Format("backup.failed", ex.Message)));
+        }
+    }
+
+    /// <summary>Shows the notes of the versions since <paramref name="previous"/> once; a failure is only logged (the start is never held up).</summary>
+    private async Task ShowWhatsNewAsync(string previous)
+    {
+        try
+        {
+            await services.GetRequiredService<WhatsNewCheck>().RunAsync(previous, AppIdentity.ShortVersion).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            logger.LogWarning(ex, "The notes of the new version could not be shown");
         }
     }
 

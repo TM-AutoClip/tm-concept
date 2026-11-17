@@ -75,6 +75,9 @@
   <ItemGroup>
     <!-- Language files are embedded (WithCulture=false: the .en/.tr suffix is not a satellite culture). -->
     <EmbeddedResource Include="Lang\*.json" LogicalName="TMConcept.Lang.%(Filename)%(Extension)" WithCulture="false" />
+    <!-- The release notes of every version (0.1.23): the "What's new" window reads them offline after the app version changed. -->
+    <EmbeddedResource Include="..\..\docs\release-notes\v*.md" LogicalName="TMConcept.ReleaseNotes.%(Filename)%(Extension)" WithCulture="false"
+                      Link="ReleaseNotes\%(Filename)%(Extension)" />
     <AvaloniaResource Include="Assets\Fonts\*.ttf" />
     <!-- The video fonts of the templates (OFL) live in Core (embedded for the renderer); their regular weights are linked here too, so the
          template editor shows each name in its own font (avares://TMConcept/Assets/VideoFonts/<file>). -->

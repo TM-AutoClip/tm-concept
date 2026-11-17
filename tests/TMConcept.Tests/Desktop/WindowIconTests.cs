@@ -14,7 +14,7 @@ public sealed class WindowIconTests
     public static TheoryData<string> Windows() =>
     [
         nameof(MainWindow), nameof(FirstRunWindow), nameof(UnlockWindow), nameof(ConfirmWindow), nameof(ApiKeyWindow), nameof(InstallWindow),
-        nameof(ReportProblemWindow), nameof(PlayerWindow), nameof(UpdateWindow),
+        nameof(ReportProblemWindow), nameof(PlayerWindow), nameof(UpdateWindow), nameof(WhatsNewWindow),
     ];
 
     private static Window Create(string name) => name switch
@@ -28,6 +28,7 @@ public sealed class WindowIconTests
         nameof(ReportProblemWindow) => new ReportProblemWindow(),
         nameof(PlayerWindow) => new PlayerWindow(),
         nameof(UpdateWindow) => new UpdateWindow(),
+        nameof(WhatsNewWindow) => new WhatsNewWindow(),
         _ => throw new ArgumentOutOfRangeException(nameof(name), name, null),
     };
 
@@ -53,5 +54,6 @@ public sealed class WindowIconTests
     [InlineData(nameof(InstallWindow))]
     [InlineData(nameof(ReportProblemWindow))]
     [InlineData(nameof(UpdateWindow))]
+    [InlineData(nameof(WhatsNewWindow))]
     public void OwnedDialogsStayOffTheTaskbar(string name) => Create(name).ShowInTaskbar.ShouldBeFalse();
 }

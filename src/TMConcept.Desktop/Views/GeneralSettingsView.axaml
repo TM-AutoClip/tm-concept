@@ -16,6 +16,7 @@
       <StackPanel Orientation="Horizontal" Spacing="10">
         <Button Name="CheckUpdatesButton" Content="{DynamicResource appupdate.check_now}" Command="{Binding CheckUpdatesCommand}"
                 IsEnabled="{Binding !CheckingUpdates}" />
+        <Button Name="WhatsNewButton" Content="{DynamicResource whatsnew.open}" Command="{Binding WhatsNewCommand}" />
         <TextBlock Text="{Binding RunningVersion}" Classes="muted" VerticalAlignment="Center" />
       </StackPanel>
       <TextBlock Name="UpdateStatusLine" Text="{Binding UpdateStatus}" Classes="muted" TextWrapping="Wrap" />

@@ -1,0 +1,33 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="using:TMConcept.Desktop.Dialogs"
+        x:Class="TMConcept.Desktop.Views.WhatsNewWindow"
+        x:DataType="d:WhatsNewViewModel"
+        Title="{Binding Title}"
+        Width="640" Height="540" MinWidth="420" MinHeight="320"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+  <!-- After the app version changed (once), or from Settings → General: the notes of every new version, newest first, in the app's language.
+       Read from the notes built into the app: no network. -->
+  <Grid Margin="24" RowDefinitions="Auto,*,Auto" RowSpacing="12">
+    <StackPanel Spacing="4">
+      <TextBlock Name="WhatsNewTitle" Text="{Binding Title}" Classes="h2" TextWrapping="Wrap" />
+      <TextBlock Name="WhatsNewSubtitle" Text="{Binding Subtitle}" Classes="muted" TextWrapping="Wrap" />
+    </StackPanel>
+    <Border Grid.Row="1" BorderBrush="{DynamicResource tm-border}" BorderThickness="1" CornerRadius="4">
+      <ScrollViewer Padding="12,8">
+        <ItemsControl Name="WhatsNewNotes" ItemsSource="{Binding Versions}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="d:ReleaseNoteRow">
+              <StackPanel Spacing="6" Margin="0,0,0,16">
+                <TextBlock Text="{Binding Header}" FontWeight="SemiBold" FontSize="15" />
+                <SelectableTextBlock Text="{Binding Notes}" TextWrapping="Wrap" />
+              </StackPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+    </Border>
+    <Button Name="WhatsNewClose" Grid.Row="2" Classes="accent" HorizontalAlignment="Right" Content="{DynamicResource common.close}"
+            Command="{Binding CloseCommand}" IsDefault="True" IsCancel="True" />
+  </Grid>
+</Window>

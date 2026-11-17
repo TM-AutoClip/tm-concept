@@ -330,6 +330,7 @@ public static class DesktopServices
         services.AddSingleton<Updates.IAppRestarter, Updates.AppRestarter>();
         services.AddSingleton<Updates.AppUpdater>();
         services.AddSingleton<Dialogs.IAppUpdateDialog, Dialogs.AppUpdateDialog>();
+        services.AddSingleton<Dialogs.IWhatsNewDialog, Dialogs.WhatsNewDialog>();
         services.AddSingleton<Components.ComponentReinstaller>();
 
         // The storage manager (Settings → Storage): components and leftovers as rows, who uses them, and a removal through the recycle bin.
@@ -341,6 +342,7 @@ public static class DesktopServices
         services.AddSingleton<DiskSpace.PermanentDiscard>();
         services.AddSingleton<DiskSpace.IDiskCleaner, DiskSpace.DiskCleaner>();
         services.AddSingleton<VersionCheck>();
+        services.AddSingleton<WhatsNewCheck>();
 
         services.AddSingleton<Reports.SystemReport>();
         services.AddSingleton<Reports.ReportNames>();
