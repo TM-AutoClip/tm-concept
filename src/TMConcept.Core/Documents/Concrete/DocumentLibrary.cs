@@ -6,7 +6,8 @@ using TMConcept.Core.Paths;
 namespace TMConcept.Core.Documents;
 
 /// <summary>
-/// "Belgelerim" of a profile: adding a file (PDF, Word, text, Markdown), a web page or a Wikipedia article, listing and deleting them, and
+/// "Belgelerim" of a profile: adding a file (PDF, Word, text, Markdown), a web page or a Wikipedia article (or what research fetched,
+/// <see cref="AddFetchedAsync"/>), listing and deleting them, and
 /// the meaning search's vectors. Adding: the app keeps its OWN copy, unencrypted, in <c>&lt;data&gt;/documents/&lt;profile&gt;/&lt;sha256&gt;.&lt;ext&gt;</c>
 /// (the same content is refused a second time in a profile); its text is read with managed code only, cut into passages
 /// (<see cref="DocumentChunker"/>) and saved in the encrypted database; when the meaning model is installed the passages' vectors are made
@@ -93,19 +94,31 @@ public sealed class DocumentLibrary(IAppPaths paths, IDocumentStore store, IEnum
         var fetcher = _fetchers.FirstOrDefault(f => f.Kind == kind) ?? throw new ArgumentException($"Nothing fetches {kind}.", nameof(kind));
         progress?.Report(new DocumentProgress(address.Trim(), DocumentStage.Reading));
         var fetched = await fetcher.FetchAsync(address.Trim(), language ?? string.Empty, cancellationToken).ConfigureAwait(false);
+        return await AddFetchedAsync(profileId, fetched with { Kind = kind }, reuse: false, progress, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Adds what was already fetched (a research page, 0.1.22; a web page or article of <see cref="AddWebAsync"/>). With
+    /// <paramref name="reuse"/> the profile's document of the same content is given back instead of being refused
+    /// (<see cref="DocumentAddResult.Existed"/>), so research finds again what it saved before.
+    /// </summary>
+    public async Task<DocumentAddResult> AddFetchedAsync(Guid profileId, FetchedDocument fetched, bool reuse, IProgress<DocumentProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(fetched);
         var extractor = _extractors.FirstOrDefault(e => e.Extensions.Contains(fetched.Extension, StringComparer.Ordinal))
-            ?? throw new DocumentRejectedException("not_text", "The address holds nothing that can be read.", address);
+            ?? throw new DocumentRejectedException("not_text", "The address holds nothing that can be read.", fetched.Url);
         var document = new SourceDocument
         {
-            Kind = kind,
-            Title = fetched.Title.Length > 0 ? fetched.Title : fetched.Url,
+            Kind = fetched.Kind,
+            Title = DocumentTitle(fetched.Title.Length > 0 ? fetched.Title : fetched.Url),
             Url = fetched.Url,
             Language = fetched.Language,
             Bytes = fetched.Content.Length,
         };
         var sha = Convert.ToHexStringLower(SHA256.HashData(fetched.Content));
         return await AddAsync(profileId, sha, fetched.Extension, (target, token) => File.WriteAllBytesAsync(target, fetched.Content, token), extractor, document,
-            progress, cancellationToken).ConfigureAwait(false);
+            progress, cancellationToken, reuse).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -192,8 +205,10 @@ public sealed class DocumentLibrary(IAppPaths paths, IDocumentStore store, IEnum
         }
     }
 
+    private static string DocumentTitle(string title) => title.Length <= DocumentLimits.TitleMax ? title : title[..DocumentLimits.TitleMax].TrimEnd();
+
     private async Task<DocumentAddResult> AddAsync(Guid profileId, string sha, string extension, Func<string, CancellationToken, Task> write,
-        IDocumentExtractor extractor, SourceDocument document, IProgress<DocumentProgress>? progress, CancellationToken cancellationToken)
+        IDocumentExtractor extractor, SourceDocument document, IProgress<DocumentProgress>? progress, CancellationToken cancellationToken, bool reuse = false)
     {
         var name = document.OriginalName.Length > 0 ? document.OriginalName : document.Title;
         await EnterAsync(cancellationToken).ConfigureAwait(false);
@@ -201,6 +216,12 @@ public sealed class DocumentLibrary(IAppPaths paths, IDocumentStore store, IEnum
         {
             if (await store.FindByContentAsync(profileId, sha, cancellationToken).ConfigureAwait(false) is { } existing)
             {
+                if (reuse)
+                {
+                    progress?.Report(new DocumentProgress(name, DocumentStage.Done));
+                    return new DocumentAddResult(existing, string.Empty) { Existed = true };
+                }
+
                 throw new DocumentRejectedException("duplicate", "The profile has this document already.", existing.Title);
             }
 

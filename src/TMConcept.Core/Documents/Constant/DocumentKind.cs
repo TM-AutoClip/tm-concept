@@ -20,4 +20,10 @@ public enum DocumentKind
 
     /// <summary>A Wikipedia article in any language (its plain text from Wikipedia's API).</summary>
     Wikipedia = 5,
+
+    /// <summary>The facts of a Wikidata item (its statements with their labels, fetched by "Araştırmadan", 0.1.22).</summary>
+    Wikidata = 6,
+
+    /// <summary>The text a tool of the user's own MCP server gave (fetched by "Araştırmadan", 0.1.22).</summary>
+    Mcp = 7,
 }

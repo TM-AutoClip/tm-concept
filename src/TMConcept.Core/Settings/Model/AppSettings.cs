@@ -32,4 +32,7 @@ public sealed class AppSettings
     /// lowered to the model's own limit). Only what the model writes is paid for.
     /// </summary>
     public int TopicMaxOutputTokens { get; set; } = 16_000;
+
+    /// <summary>"Araştırmadan" on the concept page (0.1.22): its backends, limits and the user's MCP servers.</summary>
+    public ResearchSettings Research { get; set; } = new();
 }

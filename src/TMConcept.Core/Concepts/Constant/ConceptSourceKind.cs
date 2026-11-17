@@ -1,7 +1,7 @@
 namespace TMConcept.Core.Concepts;
 
 /// <summary>
-/// The three sources of the concept page (0.1.21). Each one adds to the same concept list, in whatever order the user uses them; none
+/// The four sources of the concept page (0.1.21: three; 0.1.22 added "Araştırmadan"). Each one adds to the same concept list, in whatever order the user uses them; none
 /// depends on another.
 /// </summary>
 public enum ConceptSourceKind
@@ -14,4 +14,7 @@ public enum ConceptSourceKind
 
     /// <summary>"Belgelerden": the profile's documents, with an optional subject; N concepts, or one per ticked topic found in them.</summary>
     Documents = 2,
+
+    /// <summary>"Araştırmadan" (0.1.22): the app's own research (Wikipedia, Wikidata, the user's addresses, optional keyed or MCP backends), saved as documents.</summary>
+    Research = 3,
 }
