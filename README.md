@@ -389,7 +389,8 @@ Then choose the models on the pages that use them (see above). Nothing paid is c
 
 1. **Concepts:** choose the models (and, if you like, the fine-tuning of tone, audience and structure). Either **Suggest topics**, tick
    the ones you like and press **Generate selected**, or write an idea and press **Generate**, or add your sources under **My documents**
-   and press **Write from documents**.
+   and press **Write from documents**, or type a subject under **From research**, press **Search**, look at the pages it found and press
+   the button under them.
 2. Click a concept to read it in the detail panel; approve the good ones (A), delete the rest (D). **Edit** (or **Edit with AI**)
    changes the text; placeholders such as `[pause 1 s]` or `[soft transition]` go in at the cursor and the program applies them in the
    video.

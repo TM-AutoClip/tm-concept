@@ -384,7 +384,7 @@ Sonra modelleri onları kullanan sayfalarda seç (yukarıya bak). Ücretli hiçb
 
 1. **Konseptler:** modelleri seç (istersen ton, izleyici ve anlatım biçimi ince ayarını da). Ya **Konu öner**'e basıp beğendiklerini
    işaretle ve **Seçilenleri üret**'e bas, ya da bir fikir yazıp **Üret**'e bas, ya da kaynaklarını **Belgelerim**'e ekleyip **Belgelerden
-   yaz**'a bas.
+   yaz**'a bas, ya da **Araştırmadan**'a bir konu yazıp **Ara**'ya bas, bulduğu sayfalara bak ve altındaki düğmeye bas.
 2. Bir konsepte tıkla, detay panelinde oku; iyileri onayla (A), kalanı sil (D). **Düzenle** (ya da **Yapay zekâyla düzenle**) metni
    değiştirir; `[duraklama 1 sn]`, `[yumuşak geçiş]` gibi yer tutucular imlecin olduğu yere eklenir, program videoda kendisi uygular.
 3. **Konseptten video:** onaylı konseptlerde **Sıraya ekle**'ye bas, üstteki modellere bak, **Sırayla üret**'e bas.
