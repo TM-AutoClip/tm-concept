@@ -125,6 +125,71 @@ public sealed class ModelNotesTests
     }
 
     [Fact]
+    public void TheTurkishVoiceTipNamesChatterboxForOwnVoicesAndAProcessorVoiceForCommercialUseHere()
+    {
+        using var h = new DesktopHarness();
+        var text = Turkish();
+        var speech = h.Get<SpeechService>();
+        var voices = h.Get<IModelCatalog>().All.Where(m => m.Provider == ModelProviders.Local && m.Capabilities.HasFlag(ModelCapability.Speech)).ToList();
+        var entries = voices.Select(m => (m, ModelFactLookup.For(m, speech.EngineOf(m), 6L << 30, false))).ToList();
+        var chatterbox = voices.Single(m => m.Id == SpeechEngines.Chatterbox);
+        var cep = voices.Single(m => m.Id == SpeechEngines.AhenkCep);
+
+        var tip = new ModelNotes(text).ListTip(entries, ContentLanguages.Turkish).Split('\n');
+
+        tip.Single(l => l.StartsWith(text.Format("notes.tip.own_voice", string.Empty), StringComparison.Ordinal)).ShouldContain(chatterbox.Name,
+            Case.Sensitive, "Chatterbox speaks only with the user's own samples");
+        tip.Single(l => l.StartsWith(text.Format("notes.tip.all.language", "Türkçe", string.Empty), StringComparison.Ordinal)).ShouldContain(cep.Name,
+            Case.Sensitive, "Ahenk Cep is Turkish, CC BY and needs no card: it runs on this computer");
+        new ModelNotes(text).Lines(chatterbox, entries.Single(e => e.m == chatterbox).Item2).ShouldContain(text["notes.voice.own"]);
+        new ModelNotes(text).Lines(cep, entries.Single(e => e.m == cep).Item2).ShouldContain(text["notes.license.credit"], "CC BY asks for credit");
+        new ModelNotes(text).Lines(cep, entries.Single(e => e.m == cep).Item2)
+            .ShouldContain(text.Format("notes.license.commercial", text["license.cc-by-4.0"]));
+    }
+
+    [Fact]
+    public void AServerModelIsNotCalledFreeAndAnOnlineOneNamesItsProvider()
+    {
+        var text = new Localizer();
+        var notes = new ModelNotes(text);
+        var server = new CatalogModel { Provider = TMConcept.Core.Endpoints.EndpointCodes.For(Guid.NewGuid()), Id = "m", Name = "M · box", Capabilities = ModelCapability.Chat };
+        var local = new CatalogModel { Provider = ModelProviders.Local, Id = "l", Name = "L", Capabilities = ModelCapability.Speech };
+        var online = new CatalogModel { Provider = "zai", Id = "glm", Name = "GLM", Capabilities = ModelCapability.Chat, InputUsd = 1m, OutputUsd = 2m };
+
+        notes.Lines(server, ModelFacts.None)[0].ShouldBe(text["notes.where.endpoint"]);
+        notes.ListTip([(server, ModelFacts.None), (local, ModelFacts.None)], ContentLanguages.English).Split('\n')
+            .ShouldContain(text.Format("notes.tip.free", local.Name), "only local models are free; a server has no recorded price");
+        notes.Lines(online, ModelFactLookup.For(online, null, null, false, providerName: "Z.ai"))[0].ShouldBe(text.Format("notes.where.online", "Z.ai"));
+    }
+
+    [Fact]
+    public void TheLongContextPriceIsNamedNextToTheShortOne()
+    {
+        var text = new Localizer();
+        var model = new CatalogModel
+        {
+            Provider = "anthropic", Id = "h", Name = "H", Capabilities = ModelCapability.Chat, InputUsd = 0.10m, OutputUsd = 0.50m,
+            LongContextTokens = 100_000, LongInputUsd = 0.50m, LongOutputUsd = 2.50m, ContextTokens = 1_000_000,
+        };
+
+        new ModelNotes(text).Lines(model, ModelFacts.None).ShouldContain(text.Format("notes.price.long", 100_000.ToString("N0", text.Culture), text.Usd(0.50m), text.Usd(2.50m)));
+    }
+
+    [Fact]
+    public void ProcessorChosenUnderImageAccelerationIsNotCalledNoCard()
+    {
+        var text = new Localizer();
+        var model = new CatalogModel { Provider = ModelProviders.Local, Id = "img", Name = "Img", Capabilities = ModelCapability.Image, MinVideoMemoryGb = 6 };
+
+        var chosen = new ModelNotes(text).Lines(model, ModelFactLookup.For(model, null, null, noCard: false, processorChosen: true));
+        var none = new ModelNotes(text).Lines(model, ModelFactLookup.For(model, null, null, noCard: true));
+
+        chosen.ShouldContain(text["notes.card.processor_chosen"]);
+        chosen.ShouldNotContain(text["notes.card.processor"]);
+        none.ShouldContain(text["notes.card.processor"]);
+    }
+
+    [Fact]
     public void AnAppOllamaModelSaysItsContextImagesAndThinking()
     {
         var text = new Localizer();

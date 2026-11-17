@@ -331,11 +331,12 @@ a profile renders with them), and
 when the bin cannot take it); nothing is removed while a video, a generation, a narration, an install or an engine's sample render runs. Your database, profiles,
 concepts, videos, backups and logs are never removed there.
 
-**What the catalog says about a model.** Every model in a picker has its own **?** with facts the app already knows, nothing judged:
-where it runs and whether it is free, its price, the languages of a voice (Turkish or not), its licence (commercial use allowed, only
-under conditions, or not at all), its graphics card class and whether this card runs it, the download size, the context and longest
+**What the catalog says about a model.** Every model in a picker has its own **?** with facts the app already knows, nothing judged
+(in the open list it is a tooltip; the **?** right after the picker opens the chosen model's notes): where it runs and whether it is free
+(local models; a server you added has no recorded price), its price (and the long-context price above its limit), the languages of a voice (Turkish or not), its licence (commercial use allowed, only
+under conditions, or not at all), its graphics card class and whether this card runs it, the size of its model files (a first install may also download its runtime), the context and longest
 answer, whether it reads images or thinks, and whether a voice speaks with your own samples. The **?** next to a picker names the entries
-that share useful facts, for example "Turkish, commercial use and this card: …". A fact the catalog does not have is left out.
+that share useful facts, for example "Turkish, commercial use and runs on this computer: …" (a voice that needs no card counts). A fact the catalog does not have is left out.
 
 Prices update by themselves, at most once a day: the app reads `pricing/prices.json` of this repository and OpenRouter's public model
 list (no key is sent), checks them and keeps the last good copy; offline, the built-in table is used. The estimate boxes show the date

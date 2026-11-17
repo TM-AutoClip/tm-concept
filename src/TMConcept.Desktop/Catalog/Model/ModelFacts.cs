@@ -12,10 +12,16 @@ public sealed record ModelFacts
     /// <summary>The content languages it speaks (a voice: from its engine); null = not known (text and image models).</summary>
     public IReadOnlyList<string>? Languages { get; init; }
 
-    /// <summary>Whether it also speaks with the user's own voice samples (a Python voice says so); null = not known.</summary>
+    /// <summary>
+    /// Whether it speaks with the user's own voice samples (a Python voice says so; Pocket TTS and Chatterbox speak only with them); null = not
+    /// known.
+    /// </summary>
     public bool? CopiesVoice { get; init; }
 
-    /// <summary>The size of its download in bytes (its pinned files); null = not known.</summary>
+    /// <summary>
+    /// The size of its model files in bytes (its pinned files; not the runtime a first install may also download, which the code has no pinned
+    /// size for); null = not known.
+    /// </summary>
     public long? DownloadBytes { get; init; }
 
     /// <summary>
@@ -26,6 +32,12 @@ public sealed record ModelFacts
 
     /// <summary>It would run on the processor: there is no card it can use (only said when this was looked at).</summary>
     public bool NoCard { get; init; }
+
+    /// <summary>It would run on the processor because Processor is chosen under Image acceleration (a card may be there).</summary>
+    public bool ProcessorChosen { get; init; }
+
+    /// <summary>The display name of its online provider ("Z.ai"); null = use the provider code.</summary>
+    public string? ProviderName { get; init; }
 
     /// <summary>The longest context it was trained with (tokens; the app's own Ollama models); 0 = not known.</summary>
     public long TrainedContextTokens { get; init; }

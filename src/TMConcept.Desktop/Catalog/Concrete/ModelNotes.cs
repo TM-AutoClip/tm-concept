@@ -10,8 +10,8 @@ namespace TMConcept.Desktop.Catalog;
 /// <summary>
 /// The notes behind the "?" of a model in a picker or a list (0.1.23, the developer): built ONLY from what the code knows — the catalog entry
 /// (where it runs, price, context, licence, graphics card class, main memory, retirement date) and the <see cref="ModelFacts"/> of its engine
-/// (languages, own voice samples, download size, this card). Nothing is judged ("best", "good quality"): an unknown fact is left out. The
-/// list tip names the entries that share useful facts ("Turkish, commercial use and this card: …").
+/// (languages, own voice samples, size of the model files, this card). Nothing is judged ("best", "good quality"): an unknown fact is left
+/// out. The list tip names the entries that share useful facts ("Turkish, commercial use and runs on this computer: …").
 /// </summary>
 public sealed class ModelNotes(Localizer text)
 {
@@ -25,10 +25,17 @@ public sealed class ModelNotes(Localizer text)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(facts);
-        var lines = new List<string> { Where(model) };
+        var lines = new List<string> { Where(model, facts) };
         if (Price(model) is { Length: > 0 } price)
         {
             lines.Add(price);
+        }
+
+        if (model.LongContextTokens > 0 && model.LongInputUsd > 0)
+        {
+            // Above this many tokens of input the call is billed at the long-context price (the same rule as the cost calculator).
+            lines.Add(text.Format("notes.price.long", Tokens(model.LongContextTokens), text.Usd(model.LongInputUsd),
+                text.Usd(model.LongOutputUsd > 0 ? model.LongOutputUsd : model.OutputUsd)));
         }
 
         if (facts.Languages is { Count: > 0 } languages)
@@ -44,12 +51,7 @@ public sealed class ModelNotes(Localizer text)
 
         if (model.License.Length > 0)
         {
-            lines.Add(text.Format(model.LicenseUse switch
-            {
-                LicenseUse.NonCommercial => "notes.license.noncommercial",
-                LicenseUse.Limited => "notes.license.limited",
-                _ => "notes.license.commercial",
-            }, LicenseName(model.License)));
+            lines.AddRange(License(model.License, model.LicenseUse));
         }
 
         if (model.MinVideoMemoryGb > 0)
@@ -60,6 +62,10 @@ public sealed class ModelNotes(Localizer text)
                 lines.Add(fits
                     ? text.Format("notes.card.fits", Gigabytes(facts.CardBytes!.Value))
                     : text.Format("notes.card.too_big", Gigabytes(facts.CardBytes!.Value)));
+            }
+            else if (facts.ProcessorChosen)
+            {
+                lines.Add(text["notes.card.processor_chosen"]);
             }
             else if (facts.NoCard)
             {
@@ -139,20 +145,16 @@ public sealed class ModelNotes(Localizer text)
         lines.Add(text[model.CanThink ? "notes.thinks" : "notes.thinks.no"]);
         if (model.License.Length > 0)
         {
-            lines.Add(text.Format(model.LicenseUse switch
-            {
-                LicenseUse.NonCommercial => "notes.license.noncommercial",
-                LicenseUse.Limited => "notes.license.limited",
-                _ => "notes.license.commercial",
-            }, LicenseName(model.License)));
+            lines.AddRange(License(model.License, model.LicenseUse));
         }
 
         return string.Join('\n', lines);
     }
 
     /// <summary>
-    /// The tip over a list: which entries share useful facts — free without a key, speak <paramref name="language"/>, speak with your own
-    /// voice samples, allow commercial use, run on this card, and those that do all of these at once. Empty when no line has a name.
+    /// The tip over a list: which entries share useful facts — free without a key (local models; a server the user added has no recorded
+    /// price, so it is not called free), speak <paramref name="language"/>, speak with your own voice samples, allow commercial use, run on
+    /// this computer (<see cref="RunsHere"/>), and those that do all of these at once. Empty when no line has a name.
     /// </summary>
     public string ListTip(IReadOnlyList<(CatalogModel Model, ModelFacts Facts)> entries, string language)
     {
@@ -161,13 +163,13 @@ public sealed class ModelNotes(Localizer text)
         var languageName = OutputLanguages.NameIn(language, text.Language);
         var speaks = entries.Where(e => e.Facts.Languages?.Contains(language, StringComparer.Ordinal) == true).ToList();
         var commercial = entries.Where(e => e.Model.License.Length > 0 && e.Model.LicenseUse == LicenseUse.Commercial).ToList();
-        var fits = entries.Where(e => e.Model.MinVideoMemoryGb > 0 && Fits(e.Model, e.Facts) == true).ToList();
+        var here = entries.Where(e => RunsHere(e.Model, e.Facts)).ToList();
         Add(lines, "notes.tip.free", entries.Where(e => IsFree(e.Model)));
         Add(lines, "notes.tip.speaks", speaks, languageName);
         Add(lines, "notes.tip.own_voice", entries.Where(e => e.Facts.CopiesVoice == true));
         Add(lines, "notes.tip.commercial", commercial);
-        Add(lines, "notes.tip.fits", fits);
-        var all = commercial.Intersect(fits).ToList();
+        Add(lines, "notes.tip.fits", here);
+        var all = commercial.Intersect(here).ToList();
         if (speaks.Count > 0)
         {
             Add(lines, "notes.tip.all.language", all.Intersect(speaks), languageName);
@@ -193,8 +195,18 @@ public sealed class ModelNotes(Localizer text)
         return facts.CardBytes is > 0 and var bytes ? VramTiers.Sees(VramTiers.ForCard(bytes), VramTiers.ForModel(model.MinVideoMemoryGb)) : null;
     }
 
-    private static bool IsFree(CatalogModel model) =>
-        model.Provider is ModelProviders.Local or ModelProviders.AppOllama || EndpointCodes.IsEndpoint(model.Provider);
+    /// <summary>
+    /// Whether a model runs on this computer: a local one (or one of the app's own Ollama) that needs no graphics card class (the processor,
+    /// any computer), or whose class this card's class sees. A card class with an unknown card is not counted.
+    /// </summary>
+    public static bool RunsHere(CatalogModel model, ModelFacts facts)
+    {
+        ArgumentNullException.ThrowIfNull(model);
+        ArgumentNullException.ThrowIfNull(facts);
+        return model.Provider is ModelProviders.Local or ModelProviders.AppOllama && Fits(model, facts) == true;
+    }
+
+    private static bool IsFree(CatalogModel model) => model.Provider is ModelProviders.Local or ModelProviders.AppOllama;
 
     private void Add(List<string> lines, string key, IEnumerable<(CatalogModel Model, ModelFacts Facts)> entries, string? language = null)
     {
@@ -208,11 +220,29 @@ public sealed class ModelNotes(Localizer text)
         lines.Add(language is null ? text.Format(key, shown) : text.Format(key, language, shown));
     }
 
-    private string Where(CatalogModel model) =>
+    private string Where(CatalogModel model, ModelFacts facts) =>
         model.Provider == ModelProviders.Local ? text["notes.where.local"]
         : model.Provider == ModelProviders.AppOllama ? text["notes.where.app_ollama"]
         : EndpointCodes.IsEndpoint(model.Provider) ? text["notes.where.endpoint"]
-        : text.Format("notes.where.online", model.Provider);
+        : text.Format("notes.where.online", facts.ProviderName is { Length: > 0 } name ? name : model.Provider);
+
+    /// <summary>
+    /// The licence lines: its name and whether commercial use is allowed; a Creative Commons Attribution licence (CC BY) also asks for credit
+    /// to its makers.
+    /// </summary>
+    private IEnumerable<string> License(string code, LicenseUse use)
+    {
+        yield return text.Format(use switch
+        {
+            LicenseUse.NonCommercial => "notes.license.noncommercial",
+            LicenseUse.Limited => "notes.license.limited",
+            _ => "notes.license.commercial",
+        }, LicenseName(code));
+        if (use == LicenseUse.Commercial && code.StartsWith("cc-by-", StringComparison.Ordinal))
+        {
+            yield return text["notes.license.credit"];
+        }
+    }
 
     private string Price(CatalogModel model)
     {

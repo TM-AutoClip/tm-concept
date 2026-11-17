@@ -6,6 +6,7 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Shouldly;
 using TMConcept.Desktop.Localization;
 using TMConcept.Desktop.Views;
@@ -107,6 +108,77 @@ public sealed partial class HelpTipTests
         {
             window.Close();
         }
+    }
+
+    [AvaloniaFact]
+    public void AClickOnAHelpMarkInAnOpenDropDownNeitherPicksTheEntryNorClosesTheList()
+    {
+        var box = new ComboBox
+        {
+            ItemsSource = new[] { "first", "second" },
+            SelectedIndex = 0,
+            ItemTemplate = new Avalonia.Controls.Templates.FuncDataTemplate<string>((item, _) =>
+                new DockPanel { Children = { new HelpTip { Text = Text, [DockPanel.DockProperty] = Dock.Right }, new TextBlock { Text = item } } }),
+        };
+        var window = new Window { Content = new StackPanel { Children = { box } }, Width = 400, Height = 300 };
+        new LanguageResources(new Localizer()).Attach(window.Resources.MergedDictionaries);
+        window.Show();
+        try
+        {
+            box.IsDropDownOpen = true;
+            Dispatcher.UIThread.RunJobs();
+            var tip = box.ContainerFromIndex(1)!.GetVisualDescendants().OfType<HelpTip>().Single();
+            var root = TopLevel.GetTopLevel(tip)!;
+            var at = tip.TranslatePoint(new Point(tip.Bounds.Width / 2, tip.Bounds.Height / 2), root)!.Value;
+
+            root.MouseDown(at, MouseButton.Left);
+            root.MouseUp(at, MouseButton.Left);
+            Dispatcher.UIThread.RunJobs();
+
+            box.SelectedIndex.ShouldBe(0, "the \"?\" of an entry never picks it");
+            box.IsDropDownOpen.ShouldBeTrue("nor closes the list");
+            tip.IsPanelOpen.ShouldBeTrue();
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    [AvaloniaFact]
+    public void ARightClickOpensNothingAndAHoverOnlyMarkOnlyShowsItsTip()
+    {
+        var (window, tip) = Show(new Localizer());
+        try
+        {
+            var at = tip.TranslatePoint(new Point(tip.Bounds.Width / 2, tip.Bounds.Height / 2), window)!.Value;
+            window.MouseDown(at, MouseButton.Right);
+            window.MouseUp(at, MouseButton.Right);
+            Dispatcher.UIThread.RunJobs();
+            tip.IsPanelOpen.ShouldBeFalse("only the left button opens the panel");
+
+            tip.HoverOnly = true;
+            tip.Focusable.ShouldBeFalse();
+            tip.IsTabStop.ShouldBeFalse();
+            ToolTip.GetTip(tip).ShouldBe("Writes the concepts.");
+            window.MouseDown(at, MouseButton.Left);
+            window.MouseUp(at, MouseButton.Left);
+            Dispatcher.UIThread.RunJobs();
+            tip.IsPanelOpen.ShouldBeFalse("a click on a hover-only mark is a click on what it is in");
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    [Fact]
+    public void TheModelEntriesOfThePickerOnlyShowATipAndTheChosenModelHasAMarkOfItsOwn()
+    {
+        var view = File.ReadAllText(Path.Combine(RepositoryFiles.Root, "src", "TMConcept.Desktop", "Views", "StepPickerView.axaml"));
+        Regex.Match(view, @"<views:HelpTip Name=""ModelNotesTip""[^>]*>").Value.ShouldContain("HoverOnly=\"True\"", Case.Sensitive,
+            "a panel inside the open list would close with it, and a click there must pick the entry");
+        Regex.Match(view, @"<views:HelpTip Name=""SelectedNotesTip""[^>]*>").Value.ShouldContain("Selected.Notes", Case.Sensitive);
     }
 
     [AvaloniaTheory]

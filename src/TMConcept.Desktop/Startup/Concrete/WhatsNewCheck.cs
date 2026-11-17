@@ -21,13 +21,15 @@ public sealed class WhatsNewCheck(UiPreferencesFile preferences, IWhatsNewDialog
 
     /// <summary>
     /// At start: shows the notes of the versions after <paramref name="previous"/> up to <paramref name="current"/> once, and remembers
-    /// <paramref name="current"/> (also when there is nothing to show, so a later start never shows older notes).
+    /// <paramref name="current"/> when it is newer than the version remembered (also when there is nothing to show, so a later start never
+    /// shows older notes; never lowered by going back to an older version, so going forward again does not show the same notes twice).
     /// </summary>
     public async Task RunAsync(string? previous, string current)
     {
         ArgumentNullException.ThrowIfNull(current);
         var versions = Pending(previous, current);
-        if (!string.Equals(preferences.Read().WhatsNewSeenVersion, current, StringComparison.Ordinal))
+        var seen = preferences.Read().WhatsNewSeenVersion;
+        if (AppVersion.TryParse(current, out var running) && (!AppVersion.TryParse(seen, out var remembered) || running > remembered))
         {
             Remember(current);
         }

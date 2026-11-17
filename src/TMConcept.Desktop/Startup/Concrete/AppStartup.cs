@@ -270,9 +270,11 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
         {
             await services.GetRequiredService<WhatsNewCheck>().RunAsync(previous, AppIdentity.ShortVersion).ConfigureAwait(true);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        catch (Exception ex)
         {
-            logger.LogWarning(ex, "The notes of the new version could not be shown");
+            // Fire and forget: every failure is logged here. The version is already remembered, so the start does not try again; Settings →
+            // General → "What's new" still shows the notes.
+            logger.LogError(ex, "The notes of the new version could not be shown (Settings → General → What's new shows them)");
         }
     }
 

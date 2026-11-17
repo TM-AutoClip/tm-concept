@@ -13,7 +13,9 @@ namespace TMConcept.Desktop.Views;
 /// explanation (two to four short sentences: what it does and how to use it). Hovering, or the keyboard focus (Tab), shows a short tooltip:
 /// <see cref="Summary"/>, or the first sentence of the text when no summary is given. A click, Enter or Space opens the whole text in a
 /// small panel next to the sign (a flyout; a click elsewhere or Escape closes it). Screen readers read the name "Help" and the whole text.
-/// A "?" inside a folding title or a list entry never folds the area or selects the entry.
+/// A "?" inside a folding title or a list entry never folds the area or selects the entry: it takes the left button's press and release
+/// (a list such as a drop-down picks its entry on the release). Only the left button opens the panel. A <see cref="HoverOnly"/> sign (an
+/// entry of a drop-down list, whose popup would close under a panel) only shows its tooltip: a click on it is a click on the entry.
 /// </summary>
 public sealed partial class HelpTip : UserControl
 {
@@ -28,6 +30,9 @@ public sealed partial class HelpTip : UserControl
 
     /// <summary>The short tooltip (null = the first sentence of <see cref="Text"/>).</summary>
     public static readonly StyledProperty<string?> SummaryProperty = AvaloniaProperty.Register<HelpTip, string?>(nameof(Summary));
+
+    /// <summary>Only the tooltip: no panel, not a keyboard stop, a click passes to what it is in (an entry of a drop-down list).</summary>
+    public static readonly StyledProperty<bool> HoverOnlyProperty = AvaloniaProperty.Register<HelpTip, bool>(nameof(HoverOnly));
 
     private Flyout? _panel;
     private SelectableTextBlock? _panelText;
@@ -51,6 +56,13 @@ public sealed partial class HelpTip : UserControl
     {
         get => GetValue(SummaryProperty);
         set => SetValue(SummaryProperty, value);
+    }
+
+    /// <summary>Only the tooltip: no panel, not a keyboard stop, a click passes to what it is in.</summary>
+    public bool HoverOnly
+    {
+        get => GetValue(HoverOnlyProperty);
+        set => SetValue(HoverOnlyProperty, value);
     }
 
     /// <summary>What the tooltip shows.</summary>
@@ -81,7 +93,7 @@ public sealed partial class HelpTip : UserControl
     /// <summary>Opens the panel with the whole text (nothing when there is no text).</summary>
     public void OpenPanel()
     {
-        if (string.IsNullOrWhiteSpace(Text))
+        if (string.IsNullOrWhiteSpace(Text) || HoverOnly)
         {
             return;
         }
@@ -118,6 +130,11 @@ public sealed partial class HelpTip : UserControl
                 _panelText.Text = Text;
             }
         }
+        else if (change.Property == HoverOnlyProperty)
+        {
+            Focusable = !HoverOnly;
+            IsTabStop = !HoverOnly;
+        }
     }
 
     /// <inheritdoc />
@@ -125,6 +142,17 @@ public sealed partial class HelpTip : UserControl
     {
         // A "?" in a folding title (an expander's header) or in a list entry opens its panel and neither folds the area nor picks the entry.
         base.OnPointerPressed(e);
+        if (HoverOnly)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+
         if (IsPanelOpen)
         {
             ClosePanel();
@@ -133,14 +161,28 @@ public sealed partial class HelpTip : UserControl
         {
             OpenPanel();
         }
+    }
 
-        e.Handled = true;
+    /// <inheritdoc />
+    protected override void OnPointerReleased(PointerReleasedEventArgs e)
+    {
+        // A list (a drop-down above all) picks its entry and closes on the release: the release of a click on the "?" is the sign's too.
+        base.OnPointerReleased(e);
+        if (!HoverOnly)
+        {
+            e.Handled = true;
+        }
     }
 
     /// <inheritdoc />
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
+        if (HoverOnly)
+        {
+            return;
+        }
+
         if (e.Key is Key.Enter or Key.Space)
         {
             OpenPanel();
@@ -157,7 +199,7 @@ public sealed partial class HelpTip : UserControl
     protected override void OnGotFocus(FocusChangedEventArgs e)
     {
         base.OnGotFocus(e);
-        if (!string.IsNullOrEmpty(Tip) && !IsPanelOpen)
+        if (!HoverOnly && !string.IsNullOrEmpty(Tip) && !IsPanelOpen)
         {
             ToolTip.SetIsOpen(this, true);
         }

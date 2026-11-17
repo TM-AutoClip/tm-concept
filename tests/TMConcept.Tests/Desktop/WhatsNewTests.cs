@@ -35,6 +35,46 @@ public sealed class WhatsNewTests
     public void NothingIsShownForTheSameVersionANewInstallOrNotesAlreadySeen(string? previous, string? seen, string current) =>
         WhatsNewRange.Versions(previous, seen, current, Available).ShouldBeEmpty();
 
+    [Theory]
+    [InlineData("")]
+    [InlineData(null)]
+    [InlineData("not a version")]
+    public void WithoutLastVersionTheVersionRememberedAtTheLastStartIsTheStart(string? previous) =>
+        Shown(WhatsNewRange.Versions(previous, "0.1.22", "0.1.23", Available)).ShouldBe(["0.1.23"], "components never dealt with: LastVersion stays empty");
+
+    [AvaloniaFact]
+    public async Task GoingBackToAnOlderVersionAndForwardAgainShowsTheNotesOnce()
+    {
+        var dialog = new FakeWhatsNewDialog();
+        using var h = new DesktopHarness(s => s.AddSingleton<IWhatsNewDialog>(dialog));
+        var check = h.Get<WhatsNewCheck>();
+        var newer = BundledReleaseNotes.All[0].Version.ToString();
+        var older = BundledReleaseNotes.All[1].Version.ToString();
+
+        await check.RunAsync(older, newer);
+        await check.RunAsync(newer, older);
+        h.Get<UiPreferencesFile>().Read().WhatsNewSeenVersion.ShouldBe(newer, "an older version never lowers what was remembered");
+        await check.RunAsync(older, newer);
+
+        dialog.Shown.Count.ShouldBe(1);
+        Shown(dialog.Shown[0]).ShouldBe([newer]);
+    }
+
+    [AvaloniaFact]
+    public async Task AFreshInstallThatNeverRecordedLastVersionStillShowsTheNextUpdate()
+    {
+        var dialog = new FakeWhatsNewDialog();
+        using var h = new DesktopHarness(s => s.AddSingleton<IWhatsNewDialog>(dialog));
+        var check = h.Get<WhatsNewCheck>();
+
+        var newer = BundledReleaseNotes.All[0].Version.ToString();
+
+        await check.RunAsync(string.Empty, BundledReleaseNotes.All[1].Version.ToString());
+        await check.RunAsync(string.Empty, newer);
+
+        Shown(dialog.Shown.Single()).ShouldBe([newer]);
+    }
+
     [Fact]
     public void NotesSeenAlreadyMoveTheStartForward() =>
         Shown(WhatsNewRange.Versions("0.1.17", "0.1.21", "0.1.23", Available)).ShouldBe(["0.1.23", "0.1.22"]);

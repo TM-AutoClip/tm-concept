@@ -325,10 +325,11 @@ kutusuna gider (kutu alamazsa kalıcı silme ancak ayrı bir onayla); video, ür
 Veritabanın, profillerin, konseptlerin, videoların, yedeklerin ve günlüklerin orada asla silinmez.
 
 **Katalog bir model hakkında ne diyor.** Seçicideki her modelin kendi **?** işareti var; programın zaten bildiği bilgileri gösterir,
-hiçbir yorum katmaz: nerede çalıştığı ve ücretsiz olup olmadığı, fiyatı, bir sesin dilleri (Türkçe var mı), lisansı (ticari kullanım serbest,
-yalnız koşullarıyla ya da hiç), ekran kartı sınıfı ve bu kartta çalışıp çalışmadığı, indirme boyutu, bağlamı ve en uzun cevabı, görsel
+hiçbir yorum katmaz (açık listede ipucu olarak çıkar; seçicinin hemen sağındaki **?** seçili modelin notlarını açar): nerede çalıştığı ve
+ücretsiz olup olmadığı (yerel modeller; eklediğin sunucunun ücret kaydı yok), fiyatı (sınırının üstündeki uzun bağlam fiyatı da), bir sesin dilleri (Türkçe var mı), lisansı (ticari kullanım serbest,
+yalnız koşullarıyla ya da hiç), ekran kartı sınıfı ve bu kartta çalışıp çalışmadığı, model dosyalarının boyutu (ilk kurulum çalışma ortamını da indirebilir), bağlamı ve en uzun cevabı, görsel
 okuyup okumadığı ya da düşünüp düşünmediği, bir sesin kendi ses örneklerinle konuşup konuşmadığı. Seçicinin yanındaki **?** işe yarar
-bilgileri paylaşanları sayar, ör. "Türkçe, ticari kullanım ve bu kart: …". Katalogda olmayan bir bilgi yazılmaz, tahmin edilmez.
+bilgileri paylaşanları sayar, ör. "Türkçe, ticari kullanım ve bu bilgisayarda çalışır: …" (kart istemeyen ses de sayılır). Katalogda olmayan bir bilgi yazılmaz, tahmin edilmez.
 
 Fiyatlar kendiliğinden, günde en çok bir kez güncellenir: program bu deponun `pricing/prices.json` dosyasını ve OpenRouter'ın herkese açık
 model listesini okur (anahtar gönderilmez), denetler ve son iyi kopyayı saklar; internet yoksa yerleşik tablo kullanılır. Tahmin

@@ -616,11 +616,13 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
     {
         var voice = model.Capabilities.HasFlag(ModelCapability.Speech) ? speech.EngineOf(model) : null;
         long? card = null;
-        var noCard = false;
+        bool noCard = false, processorChosen = false;
         if (model.Provider == ModelProviders.Local && model.Capabilities.HasFlag(ModelCapability.Image) && _imageChoice is { } images)
         {
-            noCard = images.Backend == ImageBackend.Cpu;
-            card = noCard ? null : images.Device?.VideoMemoryBytes;
+            // The processor build: chosen by the user under Image acceleration (a card may be there), or no card it can use.
+            processorChosen = images.Backend == ImageBackend.Cpu && images.Setting == ImageAcceleration.Cpu;
+            noCard = images.Backend == ImageBackend.Cpu && !processorChosen;
+            card = images.Backend == ImageBackend.Cpu ? null : images.Device?.VideoMemoryBytes;
         }
         else if (model.Provider == ModelProviders.Local && model.Capabilities.HasFlag(ModelCapability.Speech) && model.MinVideoMemoryGb > 0
             && _speechCards is { } cards)
@@ -630,7 +632,10 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
             card = cuda?.VideoMemoryBytes;
         }
 
-        return Catalog.ModelFactLookup.For(model, voice, card, noCard);
+        var provider = model.Provider is ModelProviders.Local or ModelProviders.AppOllama || EndpointCodes.IsEndpoint(model.Provider)
+            ? null
+            : ProviderName(model.Provider);
+        return Catalog.ModelFactLookup.For(model, voice, card, noCard, processorChosen, provider);
     }
 
     /// <summary>
