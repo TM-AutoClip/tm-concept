@@ -32,7 +32,7 @@ public static class E5Model
 
     /// <summary>The tokenizer.</summary>
     public static readonly ToolArchive Tokenizer = new(ToolKind.EmbeddingWeights, "1", "any", new Uri(Repository + "onnx/tokenizer.json"),
-        "0b44a9d7b51c3c62626640cda0e2c2f70fdacdc25bbbd68038369d14ebdf4c39", string.Empty, TokenizerFile, 17_082_730);
+        "0b44a9d7b51c3c62626640cda0e2c2f70fdacdc25bbbd68038369d14ebdf4c39", string.Empty, TokenizerFile, 17_082_730); // SHA-256 of the public file
 
     /// <summary>Both files.</summary>
     public static readonly IReadOnlyList<ToolArchive> Files = [Model, Tokenizer];
