@@ -20,6 +20,8 @@
             </Border>
           </Grid>
           <TextBlock Name="MetaLine" Text="{Binding MetaLine}" Classes="tiny" />
+          <TextBlock Name="SourcesLine" Text="{Binding SourcesLine}" Classes="tiny" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"
+                     ToolTip.Tip="{Binding SourcesLine}" IsVisible="{Binding SourcesLine, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
           <TextBlock Name="ReadOnlyLine" Text="{Binding ReadOnlyNote}" Classes="small warning" TextWrapping="Wrap"
                      IsVisible="{Binding ReadOnlyNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
           <TextBlock Name="NoticeLine" Text="{Binding Notice}" Classes="small warning" TextWrapping="Wrap"

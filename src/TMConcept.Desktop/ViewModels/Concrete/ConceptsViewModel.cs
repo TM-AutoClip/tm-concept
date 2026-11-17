@@ -12,10 +12,11 @@ namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
 /// Concepts (0.1.13 layout, the developer's request of 11 Nov 2026). On top, one bar shared by the whole page: the models and the
-/// fine-tuning as folded one-line summaries, and the word check (<see cref="ConceptSettingsViewModel"/>). Below it two separate sections
-/// side by side, each with its own button, estimate, status and Cancel: A "Generate from suggested topics" (<see cref="TopicSectionViewModel"/>)
-/// and B "Generate from an idea" (<see cref="IdeaSectionViewModel"/>); one paid call runs at a time (<see cref="ConceptRunner"/>). Whatever
-/// either one writes is ADDED to one list, switched between "New" and "Approved" (approved ones can be searched); every row has Approve
+/// fine-tuning as folded one-line summaries, and the word check (<see cref="ConceptSettingsViewModel"/>). Below it three separate sections
+/// side by side (0.1.21: three independent sources of concepts, used in any order), each with its own button, estimate, status and Cancel:
+/// A "Generate from suggested topics" (<see cref="TopicSectionViewModel"/>), B "Generate from an idea" (<see cref="IdeaSectionViewModel"/>)
+/// and C "From documents" (<see cref="DocumentSectionViewModel"/>, with "Belgelerim" as a panel over the page); one paid call runs at a time
+/// (<see cref="ConceptRunner"/>). Whatever any of them writes is ADDED to one list, switched between "New" and "Approved" (approved ones can be searched); every row has Approve
 /// (or Unapprove) and Delete, and the keys A, D (or Delete) and ↑↓ work on the list. A click opens the concept in the detail panel next to
 /// the list (<see cref="ConceptDetailViewModel"/>), never under its row; leaving a concept with unsaved edits asks first (also for another
 /// tab or profile; a row's Approve, Unapprove or Delete on that concept too). After a row's action on the open concept the panel moves to
@@ -35,10 +36,10 @@ public sealed partial class ConceptsViewModel : PageViewModelBase
     private bool _loadedOnce;
     private bool _choosing;
 
-    /// <summary>Creates the page with its bar, its two sections, its runner and its detail panel.</summary>
+    /// <summary>Creates the page with its bar, its three sections, its runner and its detail panel.</summary>
     public ConceptsViewModel(AppSession session, IConceptStore concepts, ConceptActions actions, ConceptEvents events, Localizer text,
-        ConceptSettingsViewModel settings, ConceptRunner runner, TopicSectionViewModel topics, IdeaSectionViewModel ideas, ConceptDetailViewModel detail,
-        ILogger<ConceptsViewModel> logger)
+        ConceptSettingsViewModel settings, ConceptRunner runner, TopicSectionViewModel topics, IdeaSectionViewModel ideas, DocumentSectionViewModel documents,
+        ConceptDetailViewModel detail, ILogger<ConceptsViewModel> logger)
     {
         _session = session;
         _concepts = concepts;
@@ -50,10 +51,27 @@ public sealed partial class ConceptsViewModel : PageViewModelBase
         Runner = runner;
         Topics = topics;
         Ideas = ideas;
+        Documents = documents;
         Detail = detail;
         Runner.Attach(Settings);
         Topics.Attach(Runner);
         Ideas.Attach(Runner);
+        Documents.Attach(Runner);
+        Documents.AttachLibrary();
+        Documents.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(DocumentSectionViewModel.Finding))
+            {
+                UpdateWorking();
+            }
+        };
+        Documents.Library.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(DocumentLibraryViewModel.Busy))
+            {
+                UpdateWorking();
+            }
+        };
         Detail.Attach(Settings.Picker, this);
         Runner.BatchSaved += (_, batch) => AddNew(batch.Accepted);
         Runner.Finished += (_, _) => _ = SafeAsync(ReloadAsync);
@@ -92,6 +110,9 @@ public sealed partial class ConceptsViewModel : PageViewModelBase
 
     /// <summary>Section B: from an idea.</summary>
     public IdeaSectionViewModel Ideas { get; }
+
+    /// <summary>Section C: from the profile's documents.</summary>
+    public DocumentSectionViewModel Documents { get; }
 
     /// <summary>The detail panel.</summary>
     public ConceptDetailViewModel Detail { get; }
@@ -197,6 +218,11 @@ public sealed partial class ConceptsViewModel : PageViewModelBase
             };
         }
 
+        if (!_loadedOnce)
+        {
+            await Documents.Library.ProfileChangedAsync().ConfigureAwait(true);
+        }
+
         await Settings.LoadAsync(_session.Profile, newProfile: !_loadedOnce).ConfigureAwait(true);
         _loadedOnce = true;
         await ReloadAsync().ConfigureAwait(true);
@@ -209,6 +235,8 @@ public sealed partial class ConceptsViewModel : PageViewModelBase
         Status = string.Empty;
         Topics.Clear();
         Ideas.Clear();
+        Documents.Clear();
+        await Documents.Library.ProfileChangedAsync().ConfigureAwait(true);
         await Detail.LoadAsync(null).ConfigureAwait(true);
         await Settings.LoadAsync(_session.Profile, newProfile: true).ConfigureAwait(true);
         _loadedOnce = true;
@@ -220,6 +248,7 @@ public sealed partial class ConceptsViewModel : PageViewModelBase
     {
         Topics.CancelAll();
         Ideas.Cancel();
+        Documents.CancelAll();
         Detail.CancelWork();
     }
 
@@ -405,6 +434,7 @@ public sealed partial class ConceptsViewModel : PageViewModelBase
 
         Topics.Refresh();
         Ideas.Refresh();
+        Documents.Refresh();
     }
 
     private void Filter()
@@ -420,7 +450,7 @@ public sealed partial class ConceptsViewModel : PageViewModelBase
         OnPropertyChanged(nameof(EmptyText));
     }
 
-    private void UpdateWorking() => Working = Runner.Busy || Topics.Suggesting || Detail.AiRunning;
+    private void UpdateWorking() => Working = Runner.Busy || Topics.Suggesting || Documents.Finding || Documents.Library.Busy || Detail.AiRunning;
 
     private async Task SafeAsync(Func<Task> work)
     {

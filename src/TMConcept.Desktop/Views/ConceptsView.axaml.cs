@@ -60,6 +60,15 @@ public sealed partial class ConceptsView : UserControl
         }
     }
 
+    private void OnDocumentsBackdropPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (DataContext is ConceptsViewModel page)
+        {
+            page.Documents.Library.Close();
+            e.Handled = true;
+        }
+    }
+
     private void OnListKeyDown(object? sender, KeyEventArgs e)
     {
         if (DataContext is not ConceptsViewModel page || sender is not ListBox { SelectedItem: ConceptCardViewModel card })

@@ -176,6 +176,7 @@ public static class DesktopServices
             s.GetRequiredService<TimeProvider>(), s.GetRequiredService<ILogger<Components.InstallRecordFile>>()));
         services.AddSingleton<Core.Components.ComponentPlanner>();
         services.AddSingleton<Components.ComponentInstallFlow>();
+        AddDocuments(services);
         AddDesktop(services);
         overrides?.Invoke(services);
         services.AddSingleton(s =>
@@ -189,6 +190,34 @@ public static class DesktopServices
             return locator;
         });
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = true });
+    }
+
+    /// <summary>
+    /// "Belgelerim" and the three sources of the concept page (0.1.21): the readers of each file kind, the web page and Wikipedia fetchers,
+    /// the meaning model (a component, downloaded after a confirmation) and the keyword search, the library, the documents source and "Find
+    /// topics". The concept generator picks the source that takes the page's brief; the page only fills the brief from the user's choices.
+    /// </summary>
+    private static void AddDocuments(IServiceCollection services)
+    {
+        services.AddSingleton<IConceptSource, TopicConceptSource>();
+        services.AddSingleton<IConceptSource, IdeaConceptSource>();
+        services.AddSingleton<IConceptSource, Core.Documents.DocumentConceptSource>();
+        services.AddSingleton(TMConcept.Documents.Web.DocumentTransport.Network);
+        services.AddSingleton<Core.Documents.IDocumentExtractor, TMConcept.Documents.Extractors.PdfExtractor>();
+        services.AddSingleton<Core.Documents.IDocumentExtractor, TMConcept.Documents.Extractors.DocxExtractor>();
+        services.AddSingleton<Core.Documents.IDocumentExtractor, TMConcept.Documents.Extractors.PlainTextExtractor>();
+        services.AddSingleton<Core.Documents.IDocumentExtractor, TMConcept.Documents.Extractors.MarkdownExtractor>();
+        services.AddSingleton<Core.Documents.IDocumentFetcher, TMConcept.Documents.Web.WebPageFetcher>();
+        services.AddSingleton<Core.Documents.IDocumentFetcher, TMConcept.Documents.Web.WikipediaFetcher>();
+        services.AddSingleton<TMConcept.Documents.Embeddings.E5Embedder>();
+        services.AddSingleton<Core.Documents.IDocumentEmbedder>(s => s.GetRequiredService<TMConcept.Documents.Embeddings.E5Embedder>());
+        services.AddSingleton<Core.Components.IComponentSource, TMConcept.Documents.Embeddings.E5ComponentSource>();
+        services.AddSingleton<Core.Documents.IPassageRanker, Core.Documents.Bm25Ranker>();
+        services.AddSingleton<Core.Documents.IPassageRanker, Core.Documents.CosineRanker>();
+        services.AddSingleton<Core.Documents.PassageRetriever>();
+        services.AddSingleton<Core.Documents.DocumentGrounder>();
+        services.AddSingleton<Core.Documents.DocumentLibrary>();
+        services.AddSingleton<Core.Documents.DocumentTopicFinder>();
     }
 
     private static void AddStorage(IServiceCollection services)
@@ -219,6 +248,7 @@ public static class DesktopServices
         services.AddSingleton<IConceptWishStore, ConceptWishStore>();
         services.AddSingleton<Core.Concepts.IPromptMemorySource, Core.Concepts.PromptMemorySource>();
         services.AddSingleton<IEmbeddingStore, EmbeddingStore>();
+        services.AddSingleton<Core.Documents.IDocumentStore, DocumentStore>();
 
         // Local servers (package B): kept as settings rows, no table of their own.
         services.AddSingleton<Core.Endpoints.IEndpointStore, EndpointStore>();
@@ -259,6 +289,8 @@ public static class DesktopServices
         services.AddTransient<ConceptSettingsViewModel>();
         services.AddTransient<TopicSectionViewModel>();
         services.AddTransient<IdeaSectionViewModel>();
+        services.AddTransient<DocumentSectionViewModel>();
+        services.AddTransient<DocumentLibraryViewModel>();
         services.AddTransient<ConceptDetailViewModel>();
         services.AddSingleton<Dialogs.IApiKeyDialog, Dialogs.ApiKeyDialog>();
 
@@ -282,6 +314,7 @@ public static class DesktopServices
         services.AddSingleton<Core.DiskSpace.IComponentUsage, Core.DiskSpace.ComponentUsage>();
         services.AddSingleton<Core.DiskSpace.IDiskItemSource, Core.DiskSpace.ComponentDiskSource>();
         services.AddSingleton<Core.DiskSpace.IDiskItemSource, DiskSpace.LeftoverDiskSource>();
+        services.AddSingleton<Core.DiskSpace.IDiskItemSource, DiskSpace.DocumentDiskSource>();
         services.AddSingleton<DiskSpace.RecycleBinDiscard>();
         services.AddSingleton<DiskSpace.PermanentDiscard>();
         services.AddSingleton<DiskSpace.IDiskCleaner, DiskSpace.DiskCleaner>();

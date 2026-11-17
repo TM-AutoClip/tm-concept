@@ -1,0 +1,63 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:TMConcept.Desktop.ViewModels"
+             x:Class="TMConcept.Desktop.Views.DocumentLibraryView"
+             x:DataType="vm:DocumentLibraryViewModel">
+  <!-- "Belgelerim" of the open profile: add files, a web page or a Wikipedia article; the list with a tick box (used by "Belgelerden"),
+       each document's line and a Delete; the meaning model's line with its Install button. -->
+  <DockPanel>
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="0,0,0,6">
+      <TextBlock Text="{DynamicResource documents.library.title}" Classes="h2" VerticalAlignment="Center" />
+      <Button Name="CloseLibraryButton" Grid.Column="1" Classes="small" Content="{DynamicResource common.close}" Command="{Binding CloseCommand}" />
+    </Grid>
+    <TextBlock DockPanel.Dock="Top" Text="{DynamicResource documents.library.explain}" Classes="small" TextWrapping="Wrap" Margin="0,0,0,6" />
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="8" Margin="0,0,0,6">
+      <Button Name="AddFilesButton" Classes="accent" Content="{DynamicResource documents.add_files}" Command="{Binding PickFilesCommand}" IsEnabled="{Binding Idle}" />
+      <TextBox Name="AddressBox" Grid.Column="1" Text="{Binding Address}" PlaceholderText="{DynamicResource documents.address.hint}" MinHeight="0" IsEnabled="{Binding Idle}" />
+      <Button Name="AddWebButton" Grid.Column="2" Content="{DynamicResource documents.add_web}" Command="{Binding AddWebCommand}" IsEnabled="{Binding Idle}" />
+      <TextBox Name="WikipediaLanguageBox" Grid.Column="3" Text="{Binding WikipediaLanguage}" Width="56" MinHeight="0" MaxLength="12"
+               ToolTip.Tip="{DynamicResource documents.wikipedia.language}" IsEnabled="{Binding Idle}" />
+      <Button Name="AddWikipediaButton" Grid.Column="4" Content="{DynamicResource documents.add_wikipedia}" Command="{Binding AddWikipediaCommand}"
+              IsEnabled="{Binding Idle}" ToolTip.Tip="{DynamicResource documents.add_wikipedia.tip}" />
+    </Grid>
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Margin="0,0,0,6" IsVisible="{Binding Busy}">
+      <ProgressBar IsIndeterminate="True" Width="48" MinWidth="48" VerticalAlignment="Center" />
+      <TextBlock Name="LibraryProgressLine" Grid.Column="1" Text="{Binding Progress}" Classes="small" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+      <Button Grid.Column="2" Classes="small" Content="{DynamicResource common.cancel}" Command="{Binding CancelCommand}" />
+    </Grid>
+    <TextBlock Name="LibraryStatusLine" DockPanel.Dock="Top" Text="{Binding Status}" Classes="small" Classes.error="{Binding StatusIsError}" TextWrapping="Wrap"
+               MaxLines="4" TextTrimming="CharacterEllipsis" Margin="0,0,0,6" ToolTip.Tip="{Binding Status}"
+               IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+    <Grid DockPanel.Dock="Bottom" ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="0,6,0,0">
+      <TextBlock Text="{Binding SearchLine}" Classes="small" TextWrapping="Wrap" VerticalAlignment="Center" />
+      <Button Name="InstallEmbedderButton" Grid.Column="1" Classes="small" Content="{DynamicResource documents.install_meaning}"
+              Command="{Binding InstallEmbedderCommand}" IsVisible="{Binding !EmbedderReady}" IsEnabled="{Binding Idle}"
+              ToolTip.Tip="{DynamicResource documents.install_meaning.tip}" />
+    </Grid>
+    <Border Classes="inset">
+      <Panel>
+        <TextBlock Text="{DynamicResource documents.empty}" Classes="small" TextWrapping="Wrap" HorizontalAlignment="Center" VerticalAlignment="Center"
+                   TextAlignment="Center" Margin="8" IsVisible="{Binding IsEmpty}" />
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto" IsVisible="{Binding !IsEmpty}">
+          <ItemsControl Name="DocumentList" ItemsSource="{Binding Documents}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:DocumentRowViewModel">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Margin="0,2">
+                  <CheckBox IsChecked="{Binding Checked}" IsEnabled="{Binding Ready}" VerticalAlignment="Center" MinWidth="0"
+                            ToolTip.Tip="{DynamicResource documents.use.tip}" />
+                  <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
+                    <TextBlock Text="{Binding Info}" Classes="tiny" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding Problem}" Classes="small warning" TextWrapping="Wrap" IsVisible="{Binding HasProblem}" />
+                  </StackPanel>
+                  <Button Grid.Column="2" Classes="small danger" Content="{DynamicResource documents.delete}" VerticalAlignment="Center"
+                          Command="{Binding $parent[ItemsControl].((vm:DocumentLibraryViewModel)DataContext).DeleteCommand}" CommandParameter="{Binding}" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+      </Panel>
+    </Border>
+  </DockPanel>
+</UserControl>

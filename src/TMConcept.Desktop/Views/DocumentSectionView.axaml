@@ -1,0 +1,65 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:TMConcept.Desktop.ViewModels"
+             xmlns:views="using:TMConcept.Desktop.Views"
+             x:Class="TMConcept.Desktop.Views.DocumentSectionView"
+             x:DataType="vm:DocumentSectionViewModel">
+  <!-- Section C: concepts from the profile's documents. The title row opens "Belgelerim" (the panel over the page). An optional subject,
+       how many, "Find topics"; the found topics are the only scroll of the section. The button writes N concepts, or one per ticked topic. -->
+  <Border Classes="card" Padding="12,10">
+    <DockPanel>
+      <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="0,0,0,6">
+        <DockPanel VerticalAlignment="Center">
+          <views:HelpTip DockPanel.Dock="Right" Text="{DynamicResource documents.tip}" />
+          <TextBlock Name="DocumentTitle" Text="{DynamicResource documents.title}" Classes="h2" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                     ToolTip.Tip="{DynamicResource documents.title}" />
+        </DockPanel>
+        <Button Name="LibraryButton" Grid.Column="1" Classes="small" Content="{Binding Library.Header}" Command="{Binding Library.ToggleCommand}"
+                ToolTip.Tip="{DynamicResource documents.library.tip}" />
+      </Grid>
+      <TextBox Name="SubjectBox" DockPanel.Dock="Top" Text="{Binding Subject}" MaxLength="{Binding SubjectMax}" PlaceholderText="{DynamicResource documents.subject.hint}"
+               MinHeight="0" />
+      <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,Auto,Auto,*" ColumnSpacing="8" Margin="0,6,0,0">
+        <TextBlock Text="{DynamicResource documents.count}" Classes="small" VerticalAlignment="Center" />
+        <NumericUpDown Name="DocumentCountBox" Grid.Column="1" Value="{Binding Count}" Minimum="1" Maximum="30" Increment="1" FormatString="0" Width="100"
+                       IsEnabled="{Binding !Running}" />
+        <Button Name="FindTopicsButton" Grid.Column="2" Classes="small" Content="{DynamicResource documents.find}" Command="{Binding FindTopicsCommand}"
+                IsEnabled="{Binding CanFind}" ToolTip.Tip="{DynamicResource documents.find.tip}" />
+        <TextBlock Name="FindEstimateLine" Grid.Column="3" Text="{Binding FindEstimate}" Classes="tiny" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                   ToolTip.Tip="{Binding FindEstimate}" />
+      </Grid>
+      <views:ConceptSectionFooter Name="DocumentFooter" DockPanel.Dock="Bottom" Margin="0,6,0,0" />
+      <TextBlock Name="SearchLine" DockPanel.Dock="Bottom" Text="{Binding Library.SearchLine}" Classes="tiny" TextWrapping="Wrap" Margin="0,4,0,0" />
+      <DockPanel Margin="0,6,0,0">
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Margin="0,0,0,4" IsVisible="{Binding Finding}">
+          <ProgressBar IsIndeterminate="True" Width="48" MinWidth="48" VerticalAlignment="Center" />
+          <TextBlock Grid.Column="1" Text="{Binding FindCall.Text}" Classes="small" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+          <Button Grid.Column="2" Classes="small" Content="{DynamicResource common.cancel}" Command="{Binding CancelFindCommand}" />
+        </Grid>
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*" ColumnSpacing="8" Margin="0,0,0,4">
+          <Button Name="ClearTopicsButton" Classes="link small" Content="{DynamicResource documents.topics.clear}" Command="{Binding ClearTopicsCommand}"
+                  IsVisible="{Binding HasTopics}" IsEnabled="{Binding !Running}" />
+          <TextBlock Name="FindStatusLine" Grid.Column="1" Text="{Binding FindStatus}" Classes="small" Classes.error="{Binding FindFailed}" TextTrimming="CharacterEllipsis"
+                     TextAlignment="Right" VerticalAlignment="Center" ToolTip.Tip="{Binding FindStatus}" />
+        </Grid>
+        <Border Classes="inset" MinHeight="40">
+          <Panel>
+            <TextBlock Text="{DynamicResource documents.topics.empty}" Classes="small" TextWrapping="Wrap" VerticalAlignment="Center" HorizontalAlignment="Center"
+                       TextAlignment="Center" Margin="8" IsVisible="{Binding !HasTopics}" />
+            <ScrollViewer Name="DocumentTopicScroll" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto" IsVisible="{Binding HasTopics}">
+              <ItemsControl Name="DocumentTopicList" ItemsSource="{Binding Topics}" IsEnabled="{Binding !Running}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:DocumentTopicItemViewModel">
+                    <CheckBox Classes="topic" IsChecked="{Binding Checked}" ToolTip.Tip="{Binding Documents}">
+                      <TextBlock Text="{Binding Text}" TextWrapping="Wrap" />
+                    </CheckBox>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+          </Panel>
+        </Border>
+      </DockPanel>
+    </DockPanel>
+  </Border>
+</UserControl>

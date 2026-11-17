@@ -55,7 +55,7 @@ public sealed partial class ConceptDetailViewModel(AppSession session, IConceptS
 
     /// <summary>The concept shown (null = none).</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Title), nameof(Lines), nameof(Summary))]
+    [NotifyPropertyChangedFor(nameof(Title), nameof(Lines), nameof(Summary), nameof(SourcesLine))]
     public partial ConceptCardViewModel? Card { get; private set; }
 
     /// <summary>What the panel shows.</summary>
@@ -80,6 +80,9 @@ public sealed partial class ConceptDetailViewModel(AppSession session, IConceptS
 
     /// <summary>The summary.</summary>
     public string Summary => Card?.Summary ?? string.Empty;
+
+    /// <summary>"Sources: Byzantine trade; The Nika riots" for a concept made from documents (empty otherwise).</summary>
+    public string SourcesLine => Card?.Concept.Sources is { Length: > 0 } sources ? text.Format("detail.sources", sources) : string.Empty;
 
     /// <summary>The full text, line by line (scene lines set apart).</summary>
     public IReadOnlyList<ContentLine> Lines => Card?.Lines ?? (IReadOnlyList<ContentLine>)[];
@@ -695,6 +698,7 @@ public sealed partial class ConceptDetailViewModel(AppSession session, IConceptS
     {
         OnPropertyChanged(nameof(Title));
         OnPropertyChanged(nameof(Summary));
+        OnPropertyChanged(nameof(SourcesLine));
         OnPropertyChanged(nameof(Lines));
         OnPropertyChanged(nameof(StatusText));
         OnPropertyChanged(nameof(CanEdit));

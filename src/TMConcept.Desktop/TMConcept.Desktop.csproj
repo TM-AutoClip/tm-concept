@@ -70,6 +70,7 @@
     <ProjectReference Include="..\TMConcept.Engines\TMConcept.Engines.csproj" />
     <ProjectReference Include="..\TMConcept.Speech\TMConcept.Speech.csproj" />
     <ProjectReference Include="..\TMConcept.Storage\TMConcept.Storage.csproj" />
+    <ProjectReference Include="..\TMConcept.Documents\TMConcept.Documents.csproj" />
   </ItemGroup>
   <ItemGroup>
     <!-- Language files are embedded (WithCulture=false: the .en/.tr suffix is not a satellite culture). -->
