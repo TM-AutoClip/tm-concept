@@ -1,0 +1,67 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:TMConcept.Desktop.ViewModels"
+             xmlns:views="using:TMConcept.Desktop.Views"
+             x:Class="TMConcept.Desktop.Views.LocalAiSettingsView"
+             x:DataType="vm:LocalAiSettingsViewModel">
+  <!-- The app's own Ollama copy and its recommended models; every download only after a confirmation (the install window shows progress and Cancel). -->
+  <ScrollViewer>
+    <StackPanel Spacing="12" Margin="0,12" MaxWidth="820" HorizontalAlignment="Left">
+      <StackPanel Orientation="Horizontal">
+        <TextBlock Text="{DynamicResource localai.explain}" Classes="muted" TextWrapping="Wrap" VerticalAlignment="Center" MaxWidth="760" />
+        <views:HelpTip Text="{DynamicResource localai.explain.more}" />
+      </StackPanel>
+      <TextBlock Name="LocalAiCardLine" Text="{Binding CardLine}" TextWrapping="Wrap" />
+      <Border Classes="card" Padding="12,10">
+        <StackPanel Spacing="6">
+          <TextBlock Name="LocalAiRuntimeLine" Text="{Binding RuntimeLine}" FontWeight="SemiBold" TextWrapping="Wrap" />
+          <TextBlock Name="LocalAiServerLine" Text="{Binding ServerLine}" Classes="small muted" TextWrapping="Wrap" />
+          <TextBlock Text="{DynamicResource localai.runtime.note}" Classes="small muted" TextWrapping="Wrap" />
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Name="InstallOllamaButton" Classes="accent" Content="{DynamicResource localai.runtime.install}" Command="{Binding InstallRuntimeCommand}"
+                    IsVisible="{Binding CanInstallRuntime}" />
+            <Button Name="StopOllamaButton" Content="{DynamicResource localai.server.stop}" Command="{Binding StopServerCommand}"
+                    IsVisible="{Binding ServerRunning}" IsEnabled="{Binding Idle}" />
+            <Button Content="{DynamicResource storage.refresh}" Command="{Binding RefreshCommand}" IsEnabled="{Binding Idle}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+      <ProgressBar IsIndeterminate="True" IsVisible="{Binding Busy}" />
+      <SelectableTextBlock Name="LocalAiStatus" Text="{Binding Status}" TextWrapping="Wrap" />
+      <TextBlock Text="{DynamicResource localai.models}" Classes="h2" />
+      <TextBlock Text="{DynamicResource localai.models.note}" Classes="small muted" TextWrapping="Wrap" />
+      <ItemsControl Name="LocalAiGroups" ItemsSource="{Binding Groups}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:AppModelGroup">
+            <StackPanel Spacing="4" Margin="0,6,0,6">
+              <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Classes.ok="{Binding IsYourCard}" />
+              <ItemsControl ItemsSource="{Binding Rows}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:AppModelRowViewModel">
+                    <Grid ColumnDefinitions="*,80,Auto" ColumnSpacing="10" Margin="0,3">
+                      <StackPanel Spacing="2" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                          <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                          <TextBlock Text="{Binding Tag}" Classes="small muted" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <TextBlock Text="{Binding FitText}" Classes="small" Classes.ok="{Binding Fits}" Classes.error="{Binding DoesNotFit}" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding License}" Classes="small muted" Classes.caution="{Binding LicenseWarning}" TextWrapping="Wrap" />
+                      </StackPanel>
+                      <TextBlock Grid.Column="1" Text="{Binding Size}" Classes="small" VerticalAlignment="Center" HorizontalAlignment="Right" />
+                      <Panel Grid.Column="2" VerticalAlignment="Center">
+                        <TextBlock Text="{DynamicResource localai.installed}" Classes="small ok" IsVisible="{Binding Installed}" VerticalAlignment="Center" />
+                        <Button Content="{DynamicResource localai.download}" IsVisible="{Binding CanDownload}"
+                                IsEnabled="{Binding $parent[UserControl].((vm:LocalAiSettingsViewModel)DataContext).Idle}"
+                                Command="{Binding $parent[UserControl].((vm:LocalAiSettingsViewModel)DataContext).DownloadCommand}" CommandParameter="{Binding}" />
+                      </Panel>
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

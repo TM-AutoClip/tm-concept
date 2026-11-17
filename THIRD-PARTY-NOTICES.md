@@ -30,6 +30,7 @@ The release files are self-contained: they carry the .NET runtime and these libr
 | Konscious.Security.Cryptography.Argon2 | MIT |
 | NAudio (NAudio.Core, NAudio.WinMM; Windows sound output of the player) | MIT |
 | System.Security.Cryptography.ProtectedData | MIT |
+| ZstdSharp.Port (reads the Linux Ollama package, `.tar.zst`) | MIT |
 
 Exact versions are in `Directory.Packages.props`. Since 0.1.3 the speech libraries (sherpa-onnx, ONNX Runtime) are no longer bundled; they
 are downloaded like the other tools (below).
@@ -63,6 +64,8 @@ models) or the first video needs them and you confirm the list of downloads. TM 
 | Stable Diffusion 3.5 Medium (GGUF Q4_0 / Q8_0 with CLIP-L, CLIP-G and T5-XXL GGUF by second-state) | **Stability AI Community License** | Free, also commercially, for individuals and organizations under 1 million USD annual revenue; above that an enterprise license from Stability AI. Asked before the first download. huggingface.co (stabilityai/stable-diffusion-3.5-medium) |
 | SDXL Lightning 4-step (GGUF q4_0 / q8_0 by mzwing) | **OpenRAIL++** (ByteDance) | Commercial use allowed with the license's use restrictions. Asked before the first download. With the SDXL fp16-fix VAE (madebyollin, MIT). huggingface.co |
 | Qwen-Image (GGUF Q4_0 / Q6_K / Q8_0 by QuantStack) | Apache-2.0 | Qwen. With its VAE (Comfy-Org, Apache-2.0) and Qwen2.5-VL-7B-Instruct (Qwen, Apache-2.0; GGUF by mradermacher). huggingface.co |
+| Ollama 0.40.16 ("Ollama (TM Concept)", the app's own copy) | MIT (plus the licenses of its bundled parts: llama.cpp / ggml MIT; the CUDA builds carry NVIDIA CUDA runtime libraries under the NVIDIA CUDA EULA, as published in the release) | github.com/ollama/ollama releases, the official package checked against the release's SHA-256 digest; after unpacking only the graphics backend this computer needs is kept. Runs only as the app's own server (127.0.0.1, its own port and models folder); an Ollama you installed is never used or changed. |
+| Qwen 3.5 (2B, 4B, 9B, 27B, 35B A3B), Gemma 4 (E2B, E4B, 12B, 26B A4B, 31B) and gpt-oss 20B, as Ollama library tags | Apache-2.0 (Qwen; Google; OpenAI) | registry.ollama.ai, pulled by the app's own Ollama server only when you download one in Settings → Local AI; Ollama checks each layer's SHA-256. |
 | uv 0.13.6 | MIT or Apache-2.0 (Astral) | github.com/astral-sh/uv releases. Installs the Python voices' Python and packages into the tools folder (no launcher on the PATH, no registry entry, the user's uv/pip settings ignored). |
 | CPython 3.11.18 (python-build-standalone, installed by uv) | PSF License 2.0 (plus the licences of its bundled parts: OpenSSL Apache-2.0, SQLite public domain, zlib, libffi MIT, Tcl/Tk BSD-style …) | github.com/astral-sh/python-build-standalone. Runs only the app's Python voice worker. |
 | PyTorch 2.8.0 and torchaudio 2.8.0 (CUDA 12.8 build for NVIDIA cards, processor build otherwise) | BSD-3-Clause; the CUDA build pulls NVIDIA's CUDA libraries (NVIDIA software licence) | download.pytorch.org. The packages of each Python voice environment are pinned to exact versions by lock files in `src/TMConcept.Speech/Python/Files/Locks` (each package keeps its own licence: MIT, BSD, Apache-2.0, MPL-2.0, PSF, LGPL and others). |

@@ -156,6 +156,22 @@ public static class DesktopServices
         services.AddSingleton<Core.Components.IComponentSource, Speech.Components.VoiceComponentSource>();
         services.AddSingleton<Core.Components.IComponentSource, Speech.Components.EmbeddingComponentSource>();
         services.AddSingleton<Core.Components.IComponentSource, Speech.Components.PythonComponentSource>();
+        // 0.1.20: the app's own Ollama copy ("Ollama (TM Concept)"), installed and run by the app on a port of its own, with its own models
+        // folder; never the user's Ollama. The program and every model are components (downloaded only after a confirmation); the server
+        // starts on the first use and ends with the app; its models take the graphics card like every local model.
+        services.AddSingleton(new Core.AppOllama.AppOllamaLayout(Path.Combine(paths.ToolsDirectory, "ollama-models"),
+            Path.Combine(paths.ToolsDirectory, "ollama-home")));
+        services.AddSingleton<Core.AppOllama.AppModelStore>();
+        services.AddSingleton<Core.AppOllama.AppModelRegistry>();
+        services.AddSingleton<Engines.AppOllama.AppOllamaComponent>();
+        services.AddSingleton<Core.AppOllama.IAppOllamaRuntime>(s => s.GetRequiredService<Engines.AppOllama.AppOllamaComponent>());
+        services.AddSingleton<Core.Components.IComponentSource, Engines.AppOllama.AppOllamaComponentSource>();
+        services.AddSingleton<Core.Components.IComponentSource, Core.AppOllama.AppModelComponentSource>();
+        services.AddSingleton<Core.AppOllama.IAppOllamaLauncher, Engines.AppOllama.AppOllamaLauncher>();
+        services.AddSingleton<Core.AppOllama.AppOllamaServer>();
+        services.AddSingleton<Core.AppOllama.IAppOllamaServer>(s => s.GetRequiredService<Core.AppOllama.AppOllamaServer>());
+        services.AddSingleton<ILocalModelSource, Core.AppOllama.AppOllamaModelSource>();
+        services.AddSingleton<IResidentModelSweep, Core.AppOllama.AppOllamaResidentSweep>();
         services.AddSingleton<Core.Components.IInstallRecord>(s => new Components.InstallRecordFile(paths, Logging.AppIdentity.ShortVersion,
             s.GetRequiredService<TimeProvider>(), s.GetRequiredService<ILogger<Components.InstallRecordFile>>()));
         services.AddSingleton<Core.Components.ComponentPlanner>();
@@ -300,6 +316,7 @@ public static class DesktopServices
         AddSection<GeneralSettingsViewModel, GeneralSettingsView>(services);
         AddSection<KeysSettingsViewModel, KeysSettingsView>(services);
         AddSection<StorageSettingsViewModel, StorageSettingsView>(services);
+        AddSection<LocalAiSettingsViewModel, LocalAiSettingsView>(services);
         AddSection<VideoStylesSettingsViewModel, VideoStylesSettingsView>(services);
         AddSection<VoiceSettingsViewModel, VoiceSettingsView>(services);
         AddSection<BackupSettingsViewModel, BackupSettingsView>(services);

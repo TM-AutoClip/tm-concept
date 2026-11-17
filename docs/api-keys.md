@@ -136,6 +136,14 @@ What changes compared with a plain OpenAI-compatible server:
   smaller quantization or a smaller context also helps.
 - Weak local models that answer with broken JSON get the same request up to two more times before the step stops with a clear error.
 
+### No server of your own: the app's own Ollama
+
+Settings → **Local AI** installs *Ollama (TM Concept)*, a copy of Ollama that belongs to the app, and downloads recommended text models
+for it (picked per graphics card class, each shown with its size and whether it fits your card). It is separate from everything on this
+page: it never shows under **Found on this computer**, listens only on 127.0.0.1 on its own port (11534 or the next free one, never 11434),
+keeps its models in the app's data folder and starts only when one of its models is used. Its models appear in the text steps by
+themselves; there is nothing to add here. Remove them in Settings → **Storage**.
+
 ## After adding a key
 
 Settings → **Models**: choose a model for every step you use (concepts, video code, image prompt, image, online narration, semantic

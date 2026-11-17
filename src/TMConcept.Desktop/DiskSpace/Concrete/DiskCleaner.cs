@@ -13,12 +13,13 @@ namespace TMConcept.Desktop.DiskSpace;
 /// <see cref="IDiskCleaner"/>. A removal is refused while work runs (a video, a generation, an install, an engine's sample render:
 /// <see cref="AppSession.WorkRunning"/>, <see cref="ComponentPlanner.Busy"/>, <see cref="Engines.Engines.SampleRender.Busy"/>) or while a worker
 /// is speaking; otherwise the idle speech and Python workers are ended (they hold the
-/// voice files open) and the graphics card is freed, then every row goes to the recycle bin. Rows the bin could not take are listed in one
+/// voice files open), the graphics card is freed and the app's own Ollama server is ended, then every row goes to the recycle bin. Rows the bin could not take are listed in one
 /// question; only a "Delete permanently" there deletes them for good, otherwise they stay. Failures are logged as errors with the reason.
 /// </summary>
 public sealed class DiskCleaner(IEnumerable<IDiskItemSource> sources, IComponentUsage usage, ComponentPlanner planner, AppSession session,
     Speech.Speech.SpeechWorkerClient speech, Speech.Python.PythonWorkerClient python, IGpuCoordinator gpu, RecycleBinDiscard bin, PermanentDiscard permanent,
-    IConfirmDialog confirm, AppPaths paths, Localizer text, Engines.Engines.SampleRender sample, ILogger<DiskCleaner> logger) : IDiskCleaner
+    IConfirmDialog confirm, AppPaths paths, Localizer text, Engines.Engines.SampleRender sample, Core.AppOllama.IAppOllamaServer appOllama,
+    ILogger<DiskCleaner> logger) : IDiskCleaner
 {
     /// <inheritdoc />
     public async Task<DiskReport> ReportAsync(CancellationToken cancellationToken)
@@ -60,6 +61,10 @@ public sealed class DiskCleaner(IEnumerable<IDiskItemSource> sources, IComponent
         }
 
         await gpu.FreeAsync(cancellationToken).ConfigureAwait(false);
+
+        // The app's own Ollama server keeps its program (and on Windows a loaded model's files) open: it is ended first and starts again
+        // on the next use.
+        await appOllama.StopAsync(cancellationToken).ConfigureAwait(false);
         logger.LogInformation("Storage: removing {Count} item(s) ({Keys})", chosen.Count, string.Join(", ", chosen.Select(i => i.Key)));
         var removed = new List<IDiskItem>();
         var noBin = new List<(IDiskItem Item, string Reason)>();

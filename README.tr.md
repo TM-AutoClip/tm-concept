@@ -258,6 +258,8 @@ iki kez daha gönderilir; her deneme ödenir ve maliyete sayılır, üç okunama
 | stable-diffusion.cpp (Windows master-1106, Linux master-1043), Görsel hızlandırma'nın seçtiği derleme (Windows: CUDA 12 derlemesi + CUDA kitaplıkları, Vulkan ya da işlemci derlemesi; Linux x64: Vulkan ya da işlemci derlemesi) | github.com (leejet) | CUDA 975 MB, Vulkan 30–38 MB, işlemci 18–27 MB |
 | Yerel görsel modeli ağırlıkları (difüzyon modeli, metin kodlayıcı(lar), VAE), yalnız seçtiğin model | huggingface.co | 2,9 GB (SDXL Lightning) ile 30 GB (Qwen-Image Q8) arası; ör. FLUX.2 klein 4B 5,3 GB, Z-Image Turbo 9,4 GB |
 | uv 0.13.6 + Python 3.11.18 (Python sesleri için) | github.com (astral-sh) | 45 MB |
+| Ollama (TM Concept) 0.40.16, programın kendi Ollama kopyası (Ayarlar → Yerel yapay zekâ; açıldıktan sonra yalnız kartının ihtiyaç duyduğu grafik parçası kalır) | github.com (ollama) | Windows'ta 1,6 GB indirme (diskte yaklaşık 0,2–1,3 GB kalır), Linux'ta 1,5–1,6 GB |
+| Onun metin modelleri (Qwen 3.5, Gemma 4, gpt-oss; yalnız indirdiklerin) | registry.ollama.ai | 1,9 GB (Qwen 3.5 2B) ile 22 GB (Qwen 3.5 35B A3B) arası |
 | PyTorch 2.8'li Python ses paketleri (her ses ailesi için bir takım: XTTS-v2, F5-TTS, VoxCPM2/Trendyol/Ahenk için VoxCPM2, MMS) | download.pytorch.org, pypi.org | NVIDIA (CUDA 12.8): her biri yaklaşık 3,7 GB (Linux 4,1 GB); işlemci: her biri 0,7–1 GB |
 | XTTS-v2 / F5-TTS Türkçe / VoxCPM2 / Trendyol-TTS / Ahenk (+ VoxCPM2) / MMS-TTS Türkçe modelleri | huggingface.co | 1,9 GB / 1,4 GB / 5 GB / 5 GB / 145 MB / 145 MB |
 
@@ -299,6 +301,20 @@ Bu bilgisayarda çalışan Ollama ve LM Studio kendiliğinden bulunur (**Bu bilg
 listeler, her birini senin ayarladığın bağlamla yükler ve bir görsel ya da ses modeli ekran kartını isteyince karttan indirir; Ollama'da
 deneme, bir modelin ne kadarının kartta, ne kadarının ana bellekte olduğunu gösterir.
 Rehber: [docs/api-keys.tr.md](docs/api-keys.tr.md#özel-sunucu-openai-uyumlu), [Ollama ve LM Studio](docs/api-keys.tr.md#ollama-ve-lm-studio).
+
+**Yerel yapay zekâ (programın kendi Ollama'sı).** Anahtarın da kendi sunucun da yok mu? Ayarlar → **Yerel yapay zekâ**, *Ollama (TM
+Concept)*'i, yani Ollama'nın resmî sürümünün (0.40.16) programa ait kopyasını kurar ve ona metin modelleri indirir. Sen listeyi
+onaylamadan hiçbir şey inmez (kurulum penceresi ilerlemeyi gösterir ve iptal edebilirsin; iptal edilen bir model indirmesi bir dahaki
+sefere kaldığı yerden sürer). Açıldıktan sonra yalnız kartının ihtiyaç duyduğu grafik parçası kalır: NVIDIA için CUDA 12 ya da 13
+(sürücüye göre), AMD ve Intel için Vulkan, işlemci için hiçbiri. Önerilen modeller (Qwen 3.5, Gemma 4, gpt-oss; hepsi Apache-2.0) ekran
+kartı sınıfına göre (4, 6, 8, 12, 16, 24, 32 GB) boyutlarıyla listelenir: yeşil bağlamıyla birlikte kartına sığar, kırmızı sığmaz (bir
+kısmı ana bellekte çalışır, çok daha yavaş), turuncu ise ticari kullanımı kısıtlayan bir lisansı gösterir. Sunucu yalnız bir model
+kullanılınca başlar, yalnız 127.0.0.1'de kendine ait bir portta dinler (11534 ya da sıradaki boş port; asla 11434 değil), modellerini
+programın veri klasöründe (`tools/ollama-models`) tutar, aynı anda tek model yükler, başka bir yerel model kartı isteyince onu indirir
+(`keep_alive: 0`) ve TM Concept kapanınca kapanır. Kurulan modeller her metin adımında (konular, konseptler, video kodu, görsel
+istemleri…) diğer modeller gibi ücretsiz ve anahtarsız sunulur. Ayarlar → **Depolama** programı ve her modeli boyutuyla, hangi profilin
+kullandığıyla listeler ve kaldırır (geri dönüşüm kutusuna). Kendi çalıştırdığın Ollama ya da LM Studio'ya hiç dokunulmaz: kullanmak
+istersen özel sunucu olarak ekle.
 
 Sonra modelleri onları kullanan sayfalarda seç (yukarıya bak). Ücretli hiçbir şey senin yerine seçilmez.
 

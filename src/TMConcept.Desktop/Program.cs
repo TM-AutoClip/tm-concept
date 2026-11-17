@@ -94,6 +94,17 @@ internal static class Program
         {
             logger.LogWarning(ex, "The graphics card could not be freed at exit");
         }
+
+        try
+        {
+            // The app's own Ollama server (0.1.20) never outlives the app.
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            services.GetRequiredService<Core.AppOllama.IAppOllamaServer>().StopAsync(timeout.Token).GetAwaiter().GetResult();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            logger.LogWarning(ex, "The app's own Ollama server could not be stopped at exit");
+        }
     }
 
     /// <summary>

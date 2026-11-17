@@ -57,6 +57,11 @@ public static class ProviderServices
         services.AddSingleton<IEndpointModelControl, OllamaModelControl>();
         services.AddSingleton<IEndpointModelControl, LmStudioModelControl>();
 
+        // 0.1.20: the app's own Ollama copy: its API (only ever at the address of the app's own server) and the chat of its models.
+        services.AddSingleton<Providers.AppOllama.AppOllamaApi>();
+        services.AddSingleton<Core.AppOllama.IAppOllamaApi>(s => s.GetRequiredService<Providers.AppOllama.AppOllamaApi>());
+        services.AddSingleton<IChatTransport, Providers.AppOllama.AppOllamaChatTransport>();
+
         // What they still hold from before (an earlier run, LM Studio's untimed load) is freed before the first graphics card lease.
         services.AddSingleton<IResidentModelSweep, EndpointResidentSweep>();
     }

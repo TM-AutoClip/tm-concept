@@ -37,6 +37,9 @@ internal sealed class DesktopHarness : IDisposable
 
             // Ollama and LM Studio are not looked for on the test machine's own ports (tests that look for them point at a fake server).
             s.AddSingleton(TMConcept.Providers.Endpoints.EndpointTransport.Network with { DetectAddresses = [] });
+
+            // The app's own Ollama server is never started for real in a test (tests that start it look at the fake launcher).
+            s.AddSingleton<TMConcept.Core.AppOllama.IAppOllamaLauncher>(new Core.FakeAppOllamaLauncher());
             overrides?.Invoke(s);
         });
     }

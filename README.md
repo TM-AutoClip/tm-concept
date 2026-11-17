@@ -265,6 +265,8 @@ every attempt is paid and counted in the cost, and after three unreadable answer
 | stable-diffusion.cpp (Windows master-1106, Linux master-1043), the build of Image acceleration (Windows: CUDA 12 build + CUDA runtime, Vulkan or processor build; Linux x64: Vulkan or processor build) | github.com (leejet) | CUDA 975 MB, Vulkan 30–38 MB, processor 18–27 MB |
 | Local image model weights (diffusion model, text encoder(s), VAE), only the model you choose | huggingface.co | 2.9 GB (SDXL Lightning) to 30 GB (Qwen-Image Q8); e.g. FLUX.2 klein 4B 5.3 GB, Z-Image Turbo 9.4 GB |
 | uv 0.13.6 + Python 3.11.18 (for the Python voices) | github.com (astral-sh) | 45 MB |
+| Ollama (TM Concept) 0.40.16, the app's own Ollama copy (Settings → Local AI; only the graphics part your card needs is kept after unpacking) | github.com (ollama) | Windows 1.6 GB download (about 0.2–1.3 GB kept), Linux 1.5–1.6 GB |
+| Its text models (Qwen 3.5, Gemma 4, gpt-oss; only the ones you download) | registry.ollama.ai | 1.9 GB (Qwen 3.5 2B) to 22 GB (Qwen 3.5 35B A3B) |
 | Python voice packages with PyTorch 2.8 (one set per voice family: XTTS-v2, F5-TTS, VoxCPM2 for VoxCPM2/Trendyol/Ahenk, MMS) | download.pytorch.org, pypi.org | NVIDIA (CUDA 12.8): about 3.7 GB each (Linux 4.1 GB); processor: 0.7–1 GB each |
 | XTTS-v2 / F5-TTS Turkish / VoxCPM2 / Trendyol-TTS / Ahenk (+ VoxCPM2) / MMS-TTS Turkish models | huggingface.co | 1.9 GB / 1.4 GB / 5 GB / 5 GB / 145 MB / 145 MB |
 
@@ -306,6 +308,19 @@ Ollama and LM Studio running on this computer are found by themselves (**Found o
 installed models, loads each one with the context you set, and unloads it when an image or voice model needs the graphics card; for Ollama
 the test shows how much of a model sits on the card and how much in main memory.
 Guide: [docs/api-keys.md](docs/api-keys.md#custom-server-openai-compatible), [Ollama and LM Studio](docs/api-keys.md#ollama-and-lm-studio).
+
+**Local AI (the app's own Ollama).** No key and no server of your own? Settings → **Local AI** installs *Ollama (TM Concept)*, the
+app's own copy of the official Ollama release (0.40.16), and downloads text models for it. Nothing is downloaded before you confirm the
+list (the install window shows the progress and can cancel; a cancelled model download goes on from where it stopped next time). After
+unpacking only the graphics part your card needs is kept: NVIDIA CUDA 12 or 13 (by the driver), Vulkan for AMD and Intel, nothing for the
+processor. The recommended models (Qwen 3.5, Gemma 4, gpt-oss; all Apache-2.0) are listed per graphics card class (4, 6, 8, 12, 16, 24,
+32 GB) with their size: green fits your card with its context, red does not (part runs in main memory, much slower), orange would mark a
+license that limits commercial use. The server starts only when a model is used, listens only on 127.0.0.1 on a port of its own (11534,
+or the next free one; never 11434), keeps its models in the app's data folder (`tools/ollama-models`), loads one model at a time, unloads
+it (`keep_alive: 0`) when another local model needs the card, and ends when TM Concept closes. Installed models are offered in every text
+step (topics, concepts, video code, image prompts…) like any other model, free and without a key. Settings → **Storage** lists the program
+and each model with its size and which profile uses it, and removes them (to the recycle bin). An Ollama or LM Studio you run yourself is
+never touched: add it as a custom server if you want to use it.
 
 Then choose the models on the pages that use them (see above). Nothing paid is chosen for you.
 

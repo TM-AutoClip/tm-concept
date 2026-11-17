@@ -138,6 +138,14 @@ Düz bir OpenAI uyumlu sunucuya göre değişenler:
   daha küçük bir niceleme ya da daha küçük bir bağlam da işe yarar.
 - Bozuk JSON yazan zayıf yerel modellere aynı istek en fazla iki kez daha gönderilir; yine olmazsa adım açık bir hatayla durur.
 
+### Kendi sunucun yoksa: programın kendi Ollama'sı
+
+Ayarlar → **Yerel yapay zekâ**, *Ollama (TM Concept)*'i, yani programa ait bir Ollama kopyasını kurar ve ona önerilen metin modellerini
+indirir (ekran kartı sınıfına göre seçilir; her biri boyutuyla ve kartına sığıp sığmadığıyla gösterilir). Bu sayfadaki her şeyden
+ayrıdır: **Bu bilgisayarda bulunanlar** altında hiç çıkmaz, yalnız 127.0.0.1'de kendine ait bir portta dinler (11534 ya da sıradaki boş
+port, asla 11434 değil), modellerini programın veri klasöründe tutar ve yalnız modellerinden biri kullanılınca başlar. Modelleri metin
+adımlarında kendiliğinden çıkar; burada eklemen gereken bir şey yok. Kaldırmak için Ayarlar → **Depolama**'yı kullan.
+
 ## Anahtarı ekledikten sonra
 
 Ayarlar → **Modeller**: kullandığın her adım için bir model seç (konsept, video kodu, görsel istemi, görsel, online seslendirme, anlamsal

@@ -466,7 +466,7 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
         }
 
         foreach (var model in catalog.With(step.Capability).Where(m => Usable(step, m))
-            .OrderBy(m => m.Provider == ModelProviders.Local ? 0 : EndpointCodes.IsEndpoint(m.Provider) ? 1 : 2).ThenBy(m => m.Provider, StringComparer.Ordinal).ThenBy(m => m.Name, StringComparer.Ordinal))
+            .OrderBy(m => m.Provider == ModelProviders.Local ? 0 : m.Provider == ModelProviders.AppOllama ? 1 : EndpointCodes.IsEndpoint(m.Provider) ? 2 : 3).ThenBy(m => m.Provider, StringComparer.Ordinal).ThenBy(m => m.Name, StringComparer.Ordinal))
         {
             row.Options.Add(Option(model));
         }
@@ -511,6 +511,7 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
         stale = false;
         var known = catalog.All.FirstOrDefault(m => m.Provider == choice!.Provider && m.Id == choice.Model);
         var reason = text[EndpointCodes.IsEndpoint(choice!.Provider) ? "models.unavailable.server"
+            : choice.Provider == ModelProviders.AppOllama ? "models.unavailable.app_ollama"
             : known is not null ? "models.unavailable.language" : "models.unavailable.catalog"];
         var unavailable = new StepOption(StepOptionKind.Unavailable, null, text.Format("models.unavailable.label", known?.Name ?? choice.Model), Clone(choice));
         row.Options.Insert(1, unavailable);
@@ -623,6 +624,12 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
     {
         if (model.Provider == ModelProviders.Local)
         {
+            return model.Name + " · " + text["models.local_free"] + (model.MinVideoMemoryGb > 0 ? " · " + text.Format("models.tier", model.MinVideoMemoryGb) : string.Empty);
+        }
+
+        if (model.Provider == ModelProviders.AppOllama)
+        {
+            // The app's own Ollama copy: the catalog name already says "model · Ollama (TM Concept)"; free, no key, its card class.
             return model.Name + " · " + text["models.local_free"] + (model.MinVideoMemoryGb > 0 ? " · " + text.Format("models.tier", model.MinVideoMemoryGb) : string.Empty);
         }
 
