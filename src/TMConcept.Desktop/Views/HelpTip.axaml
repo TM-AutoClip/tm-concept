@@ -1,9 +1,10 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="TMConcept.Desktop.Views.HelpTip"
-             Focusable="True" IsTabStop="True" VerticalAlignment="Center" Margin="6,0,0,0" Cursor="Help"
+             Focusable="True" IsTabStop="True" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="6,0,0,0" Cursor="Help"
              AutomationProperties.Name="{DynamicResource help.name}">
-  <!-- A small round "?" next to a title: its explanation shows on hover and on keyboard focus (no line that is always open). -->
+  <!-- A small round "?" to the right of a title or an option: its first sentence shows on hover and on keyboard focus, a click (or Enter /
+       Space) opens the whole explanation in a small panel next to it. Nothing is always open. -->
   <Border Name="Circle" Classes="help">
     <TextBlock Text="?" />
   </Border>

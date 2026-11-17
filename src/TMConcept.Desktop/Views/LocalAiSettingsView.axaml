@@ -28,7 +28,10 @@
       </Border>
       <ProgressBar IsIndeterminate="True" IsVisible="{Binding Busy}" />
       <SelectableTextBlock Name="LocalAiStatus" Text="{Binding Status}" TextWrapping="Wrap" />
-      <TextBlock Text="{DynamicResource localai.models}" Classes="h2" />
+      <StackPanel Orientation="Horizontal">
+        <TextBlock Text="{DynamicResource localai.models}" Classes="h2" VerticalAlignment="Center" />
+        <views:HelpTip Text="{DynamicResource help.localai.models}" />
+      </StackPanel>
       <TextBlock Text="{DynamicResource localai.models.note}" Classes="small muted" TextWrapping="Wrap" />
       <ItemsControl Name="LocalAiGroups" ItemsSource="{Binding Groups}">
         <ItemsControl.ItemTemplate>

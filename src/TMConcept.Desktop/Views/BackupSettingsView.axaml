@@ -20,7 +20,10 @@
 
       <Border Classes="card">
         <StackPanel Spacing="6">
-          <TextBlock Text="{DynamicResource backup.now.title}" FontWeight="SemiBold" />
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Text="{DynamicResource backup.now.title}" FontWeight="SemiBold" VerticalAlignment="Center" />
+            <views:HelpTip Text="{DynamicResource help.backup.now}" />
+          </StackPanel>
           <CheckBox IsChecked="{Binding NowProfiles}" Content="{DynamicResource backup.contents.profiles}" />
           <CheckBox IsChecked="{Binding NowConcepts}" Content="{DynamicResource backup.contents.concepts}" />
           <CheckBox IsChecked="{Binding NowSettings}" Content="{DynamicResource backup.contents.settings}" />
@@ -35,7 +38,10 @@
 
       <Border Classes="card">
         <StackPanel Spacing="6">
-          <TextBlock Text="{DynamicResource backup.auto.title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+          <DockPanel>
+            <views:HelpTip DockPanel.Dock="Right" VerticalAlignment="Top" Text="{DynamicResource help.backup.auto}" />
+            <TextBlock Text="{DynamicResource backup.auto.title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+          </DockPanel>
           <CheckBox IsChecked="{Binding AutoProfiles}" Content="{DynamicResource backup.contents.profiles}" />
           <CheckBox IsChecked="{Binding AutoConcepts}" Content="{DynamicResource backup.contents.concepts}" />
           <CheckBox IsChecked="{Binding AutoSettings}" Content="{DynamicResource backup.contents.settings}" />

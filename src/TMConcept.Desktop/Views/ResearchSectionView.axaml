@@ -26,16 +26,21 @@
       <Expander Name="ResearchOptions" DockPanel.Dock="Top" Header="{DynamicResource research.options}" Margin="0,6,0,0" Padding="0,4,0,0"
                 HorizontalAlignment="Stretch">
         <StackPanel Spacing="6">
-          <TextBox Name="ResearchLanguagesBox" Text="{Binding Languages}" PlaceholderText="{DynamicResource research.languages.hint}" MinHeight="0"
-                   ToolTip.Tip="{DynamicResource research.languages.tip}" />
-          <TextBox Name="ResearchUrlsBox" Text="{Binding Urls}" AcceptsReturn="True" TextWrapping="NoWrap" MaxHeight="80"
-                   PlaceholderText="{DynamicResource research.urls.hint}" />
+          <DockPanel>
+            <views:HelpTip Name="LanguagesHelp" DockPanel.Dock="Right" Text="{DynamicResource research.languages.tip}" />
+            <TextBox Name="ResearchLanguagesBox" Text="{Binding Languages}" PlaceholderText="{DynamicResource research.languages.hint}" MinHeight="0" />
+          </DockPanel>
+          <DockPanel>
+            <views:HelpTip Name="UrlsHelp" DockPanel.Dock="Right" VerticalAlignment="Top" Margin="6,6,0,0" Text="{DynamicResource help.research.urls}" />
+            <TextBox Name="ResearchUrlsBox" Text="{Binding Urls}" AcceptsReturn="True" TextWrapping="NoWrap" MaxHeight="80"
+                     PlaceholderText="{DynamicResource research.urls.hint}" />
+          </DockPanel>
           <WrapPanel>
             <TextBlock Text="{DynamicResource research.pages}" Classes="small" VerticalAlignment="Center" Margin="0,0,8,0" />
-            <NumericUpDown Name="ResearchPagesBox" Value="{Binding Pages}" Minimum="1" Maximum="{Binding PagesMax}" Increment="1" FormatString="0" Width="100"
-                           Margin="0,0,12,0" />
-            <CheckBox Name="ResearchKeepBox" IsChecked="{Binding KeepInLibrary}" Content="{DynamicResource research.keep}"
-                      ToolTip.Tip="{DynamicResource research.keep.tip}" MinHeight="0" />
+            <NumericUpDown Name="ResearchPagesBox" Value="{Binding Pages}" Minimum="1" Maximum="{Binding PagesMax}" Increment="1" FormatString="0" Width="100" />
+            <views:HelpTip Name="PagesHelp" Text="{DynamicResource help.research.pages}" Margin="6,0,12,0" />
+            <CheckBox Name="ResearchKeepBox" IsChecked="{Binding KeepInLibrary}" Content="{DynamicResource research.keep}" MinHeight="0" />
+            <views:HelpTip Name="KeepHelp" Text="{DynamicResource research.keep.tip}" />
           </WrapPanel>
         </StackPanel>
       </Expander>

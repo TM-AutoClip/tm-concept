@@ -14,9 +14,15 @@
       </StackPanel>
       <TextBlock Text="{DynamicResource research.settings.explain}" Classes="muted" TextWrapping="Wrap" />
       <CheckBox Name="WikipediaBox" IsChecked="{Binding Wikipedia}" Content="{DynamicResource research.backend.wikipedia}" />
-      <CheckBox Name="WikidataBox" IsChecked="{Binding Wikidata}" Content="{DynamicResource research.backend.wikidata}" />
+      <StackPanel Orientation="Horizontal">
+        <CheckBox Name="WikidataBox" IsChecked="{Binding Wikidata}" Content="{DynamicResource research.backend.wikidata}" />
+        <views:HelpTip Name="SourcesHelp" Text="{DynamicResource help.research.sources}" />
+      </StackPanel>
 
-      <TextBlock Text="{DynamicResource research.tavily.title}" Classes="h2" Margin="0,8,0,0" />
+      <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+        <TextBlock Text="{DynamicResource research.tavily.title}" Classes="h2" VerticalAlignment="Center" />
+        <views:HelpTip Text="{DynamicResource help.research.tavily}" />
+      </StackPanel>
       <TextBlock Text="{DynamicResource research.tavily.explain}" Classes="muted" TextWrapping="Wrap" />
       <CheckBox Name="TavilyBox" IsChecked="{Binding Tavily}" Content="{DynamicResource research.backend.tavily}" />
       <TextBlock Text="{DynamicResource research.tavily.has_key}" Classes="small ok" IsVisible="{Binding HasTavilyKey}" />
@@ -28,7 +34,13 @@
       </Grid>
       <TextBlock Text="{Binding Status}" Classes="muted" TextWrapping="Wrap" IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
 
-      <Expander Name="McpExpander" Header="{DynamicResource research.mcp.title}" HorizontalAlignment="Stretch" Margin="0,8,0,0">
+      <Expander Name="McpExpander" HorizontalAlignment="Stretch" Margin="0,8,0,0">
+        <Expander.Header>
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Text="{DynamicResource research.mcp.title}" VerticalAlignment="Center" />
+            <views:HelpTip Name="McpHelp" Text="{DynamicResource help.research.mcp}" />
+          </StackPanel>
+        </Expander.Header>
         <StackPanel Spacing="8">
           <TextBlock Text="{DynamicResource research.mcp.explain}" Classes="small warning" TextWrapping="Wrap" />
           <CheckBox Name="McpEnabledBox" IsChecked="{Binding McpEnabled}" Content="{DynamicResource research.mcp.enabled}" />

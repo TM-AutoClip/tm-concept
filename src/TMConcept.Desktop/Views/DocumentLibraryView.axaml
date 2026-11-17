@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="using:TMConcept.Desktop.Views"
              xmlns:vm="using:TMConcept.Desktop.ViewModels"
              x:Class="TMConcept.Desktop.Views.DocumentLibraryView"
              x:DataType="vm:DocumentLibraryViewModel">
@@ -7,7 +8,10 @@
        each document's line and a Delete; the meaning model's line with its Install button. -->
   <DockPanel>
     <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="0,0,0,6">
-      <TextBlock Text="{DynamicResource documents.library.title}" Classes="h2" VerticalAlignment="Center" />
+      <StackPanel Orientation="Horizontal">
+        <TextBlock Text="{DynamicResource documents.library.title}" Classes="h2" VerticalAlignment="Center" />
+        <views:HelpTip Name="LibraryHelp" Text="{DynamicResource help.documents.library}" />
+      </StackPanel>
       <Button Name="CloseLibraryButton" Grid.Column="1" Classes="small" Content="{DynamicResource common.close}" Command="{Binding CloseCommand}" />
     </Grid>
     <TextBlock DockPanel.Dock="Top" Text="{DynamicResource documents.library.explain}" Classes="small" TextWrapping="Wrap" Margin="0,0,0,6" />

@@ -77,7 +77,10 @@
           </StackPanel>
         </Panel>
 
-        <TextBlock Text="{DynamicResource keys.saved}" Classes="h2" Margin="0,12,0,0" />
+        <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+          <TextBlock Text="{DynamicResource keys.saved}" Classes="h2" VerticalAlignment="Center" />
+          <views:HelpTip Text="{DynamicResource help.keys.saved}" />
+        </StackPanel>
         <ItemsControl ItemsSource="{Binding Keys}">
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:ApiKeyRowViewModel">
@@ -100,7 +103,10 @@
         </ItemsControl>
 
         <StackPanel IsVisible="{Binding Endpoint.HasDetected}" Spacing="4" Margin="0,12,0,0">
-          <TextBlock Text="{DynamicResource keys.endpoint.detected}" Classes="h2" />
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Text="{DynamicResource keys.endpoint.detected}" Classes="h2" VerticalAlignment="Center" />
+            <views:HelpTip Text="{DynamicResource help.keys.detected}" />
+          </StackPanel>
           <ItemsControl ItemsSource="{Binding Endpoint.Detected}">
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:DetectedServerViewModel">
@@ -116,7 +122,10 @@
           </ItemsControl>
         </StackPanel>
 
-        <TextBlock Text="{DynamicResource keys.endpoint.saved}" Classes="h2" Margin="0,12,0,0" />
+        <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+          <TextBlock Text="{DynamicResource keys.endpoint.saved}" Classes="h2" VerticalAlignment="Center" />
+          <views:HelpTip Text="{DynamicResource help.keys.servers}" />
+        </StackPanel>
         <ItemsControl ItemsSource="{Binding Endpoint.Saved}">
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:EndpointRowViewModel">

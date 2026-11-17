@@ -6,12 +6,12 @@
              x:DataType="vm:GeneralSettingsViewModel">
   <ScrollViewer>
     <StackPanel Spacing="14" Margin="0,12" MaxWidth="760" HorizontalAlignment="Left">
-      <TextBlock Text="{DynamicResource settings.language}" Classes="h2" />
+      <StackPanel Orientation="Horizontal"><TextBlock Text="{DynamicResource settings.language}" Classes="h2" VerticalAlignment="Center" /><views:HelpTip Text="{DynamicResource help.settings.language}" /></StackPanel>
       <StackPanel Orientation="Horizontal" Spacing="10">
         <Button Content="Türkçe" Command="{Binding TurkishCommand}" />
         <Button Content="English" Command="{Binding EnglishCommand}" />
       </StackPanel>
-      <TextBlock Text="{DynamicResource appupdate.settings}" Classes="h2" Margin="0,10,0,0" />
+      <StackPanel Orientation="Horizontal" Margin="0,10,0,0"><TextBlock Text="{DynamicResource appupdate.settings}" Classes="h2" VerticalAlignment="Center" /><views:HelpTip Text="{DynamicResource help.settings.updates}" /></StackPanel>
       <CheckBox Name="CheckForUpdatesBox" IsChecked="{Binding CheckForUpdates}" Content="{DynamicResource appupdate.settings.start}" />
       <StackPanel Orientation="Horizontal" Spacing="10">
         <Button Name="CheckUpdatesButton" Content="{DynamicResource appupdate.check_now}" Command="{Binding CheckUpdatesCommand}"
@@ -20,7 +20,7 @@
       </StackPanel>
       <TextBlock Name="UpdateStatusLine" Text="{Binding UpdateStatus}" Classes="muted" TextWrapping="Wrap" />
       <TextBlock Text="{DynamicResource appupdate.settings.note}" Classes="small muted" TextWrapping="Wrap" />
-      <TextBlock Text="{DynamicResource settings.drawing}" Classes="h2" Margin="0,10,0,0" />
+      <StackPanel Orientation="Horizontal" Margin="0,10,0,0"><TextBlock Text="{DynamicResource settings.drawing}" Classes="h2" VerticalAlignment="Center" /><views:HelpTip Text="{DynamicResource help.settings.drawing}" /></StackPanel>
       <CheckBox IsChecked="{Binding UseGraphicsCard}" Content="{DynamicResource settings.drawing.gpu}" />
       <TextBlock Text="{DynamicResource settings.drawing.note}" Classes="muted" TextWrapping="Wrap" />
       <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
@@ -35,13 +35,13 @@
         </ComboBox.ItemTemplate>
       </ComboBox>
       <TextBlock Text="{Binding AccelerationNote}" Classes="muted" TextWrapping="Wrap" />
-      <TextBlock Text="{DynamicResource settings.notifications}" Classes="h2" Margin="0,10,0,0" />
+      <StackPanel Orientation="Horizontal" Margin="0,10,0,0"><TextBlock Text="{DynamicResource settings.notifications}" Classes="h2" VerticalAlignment="Center" /><views:HelpTip Text="{DynamicResource help.settings.notifications}" /></StackPanel>
       <CheckBox IsChecked="{Binding NotificationsEnabled}" Content="{DynamicResource settings.notifications.enabled}" />
       <StackPanel Orientation="Horizontal" Spacing="10">
         <TextBlock Text="{DynamicResource settings.notifications.seconds}" VerticalAlignment="Center" />
         <NumericUpDown Value="{Binding NotificationSeconds}" Minimum="3" Maximum="3600" Increment="10" Width="140" FormatString="0" />
       </StackPanel>
-      <TextBlock Text="{DynamicResource settings.topics}" Classes="h2" Margin="0,10,0,0" />
+      <StackPanel Orientation="Horizontal" Margin="0,10,0,0"><TextBlock Text="{DynamicResource settings.topics}" Classes="h2" VerticalAlignment="Center" /><views:HelpTip Text="{DynamicResource help.settings.topics}" /></StackPanel>
       <StackPanel Orientation="Horizontal" Spacing="10">
         <TextBlock Text="{DynamicResource settings.topics.max_tokens}" VerticalAlignment="Center" />
         <NumericUpDown Name="TopicMaxTokensBox" Value="{Binding TopicMaxOutputTokens}" Minimum="2000" Maximum="128000"

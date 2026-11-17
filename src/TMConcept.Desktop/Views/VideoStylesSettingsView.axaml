@@ -36,10 +36,14 @@
                   <StackPanel Spacing="8">
                     <TextBlock Text="{DynamicResource styles.name}" FontWeight="SemiBold" />
                     <TextBox Name="StyleName" Text="{Binding Name}" MaxLength="60" />
-                    <CheckBox Name="StyleSubtitles" IsChecked="{Binding Subtitles}" Content="{DynamicResource styles.subtitles}"
-                              ToolTip.Tip="{DynamicResource styles.subtitles.tip}" />
-                    <CheckBox Name="StyleProgress" IsChecked="{Binding ProgressBar}" Content="{DynamicResource styles.progress}"
-                              ToolTip.Tip="{DynamicResource styles.progress.tip}" />
+                    <StackPanel Orientation="Horizontal">
+                      <CheckBox Name="StyleSubtitles" IsChecked="{Binding Subtitles}" Content="{DynamicResource styles.subtitles}" />
+                      <views:HelpTip Text="{DynamicResource styles.subtitles.tip}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                      <CheckBox Name="StyleProgress" IsChecked="{Binding ProgressBar}" Content="{DynamicResource styles.progress}" />
+                      <views:HelpTip Text="{DynamicResource styles.progress.tip}" />
+                    </StackPanel>
                   </StackPanel>
                   <!-- Live preview: colours, font, title style and place, progress bar and subtitles. -->
                   <StackPanel Grid.Column="1" Spacing="4">

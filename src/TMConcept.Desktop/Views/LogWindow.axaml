@@ -1,5 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="using:TMConcept.Desktop.Views"
         xmlns:vm="using:TMConcept.Desktop.ViewModels"
         xmlns:log="using:TMConcept.Desktop.Logging"
         x:Class="TMConcept.Desktop.Views.LogWindow"
@@ -19,7 +20,11 @@
         </ComboBox.ItemTemplate>
       </ComboBox>
       <TextBox Name="SearchBox" Text="{Binding Search}" PlaceholderText="{DynamicResource logs.search}" MinWidth="220" />
-      <CheckBox Name="SessionBox" IsChecked="{Binding SessionOnly}" Content="{DynamicResource logs.session}" VerticalAlignment="Center" />
+      <views:HelpTip Name="FiltersHelp" Text="{DynamicResource help.logs.filters}" Margin="0" />
+      <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+        <CheckBox Name="SessionBox" IsChecked="{Binding SessionOnly}" Content="{DynamicResource logs.session}" VerticalAlignment="Center" />
+        <views:HelpTip Name="SessionHelp" Text="{DynamicResource help.logs.session}" />
+      </StackPanel>
       <Button Name="RefreshButton" Content="{DynamicResource logs.refresh}" Command="{Binding RefreshCommand}" />
       <Button Name="CopyButton" Content="{DynamicResource logs.copy}" Click="OnCopy" />
       <Button Name="FolderButton" Content="{DynamicResource logs.folder}" Command="{Binding OpenFolderCommand}" />

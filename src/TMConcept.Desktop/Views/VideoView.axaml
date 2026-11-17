@@ -21,13 +21,14 @@
         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
           <TextBlock Text="{DynamicResource video.style}" VerticalAlignment="Center" />
           <ComboBox Name="StylePicker" ItemsSource="{Binding Styles}" SelectedItem="{Binding SelectedStyle}" MinWidth="180" MaxWidth="260" MinHeight="0"
-                    PlaceholderText="{DynamicResource video.style.placeholder}" ToolTip.Tip="{DynamicResource video.style.tip}">
+                    PlaceholderText="{DynamicResource video.style.placeholder}">
             <ComboBox.ItemTemplate>
               <DataTemplate x:DataType="styles:VideoStyle">
                 <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
               </DataTemplate>
             </ComboBox.ItemTemplate>
           </ComboBox>
+          <views:HelpTip Name="StyleHelp" Text="{DynamicResource video.style.tip}" Margin="0" />
           <TextBlock Name="NoStylesHint" Text="{DynamicResource video.style.empty}" Classes="small warning" VerticalAlignment="Center"
                      IsVisible="{Binding NoStyles}" />
         </StackPanel>
@@ -39,7 +40,10 @@
       <Grid RowDefinitions="2*,Auto,3*" MinWidth="300">
         <Border Classes="card" Padding="10,8">
           <DockPanel>
-            <TextBlock DockPanel.Dock="Top" Text="{Binding ApprovedHeader}" Classes="h2" Margin="2,0,0,6" />
+            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="2,0,0,6">
+              <TextBlock Text="{Binding ApprovedHeader}" Classes="h2" VerticalAlignment="Center" />
+              <views:HelpTip Name="ApprovedHelp" Text="{DynamicResource help.video.approved}" />
+            </StackPanel>
             <Panel>
               <ListBox x:Name="ApprovedList" Classes="rows" ItemsSource="{Binding Approved}" SelectedItem="{Binding SelectedApproved}" Background="Transparent">
                 <ListBox.ItemTemplate>
@@ -69,7 +73,10 @@
           <DockPanel>
             <StackPanel DockPanel.Dock="Top" Spacing="2" Margin="0,0,0,6">
               <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
-                <TextBlock Text="{Binding QueueHeader}" Classes="h2" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                <DockPanel HorizontalAlignment="Left">
+                  <views:HelpTip Name="QueueHelp" DockPanel.Dock="Right" Text="{DynamicResource help.video.queue}" />
+                  <TextBlock Text="{Binding QueueHeader}" Classes="h2" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                </DockPanel>
                 <!-- Night mode: not kept, may be changed while the queue runs (read at every decision). -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                   <CheckBox Name="NightModeBox" IsChecked="{Binding NightMode}" Content="{DynamicResource video.night}" />
@@ -124,7 +131,10 @@
              card is wide (the made videos under the queue on a narrow window), the list over the preview when it is narrow. -->
         <Border Classes="card" Padding="10,8">
           <DockPanel>
-            <TextBlock DockPanel.Dock="Top" Text="{Binding ProducedHeader}" Classes="h2" Margin="2,0,0,6" />
+            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="2,0,0,6">
+              <TextBlock Text="{Binding ProducedHeader}" Classes="h2" VerticalAlignment="Center" />
+              <views:HelpTip Name="ProducedHelp" Text="{DynamicResource help.video.produced}" />
+            </StackPanel>
             <controls:AdaptiveSplitPanel Name="ProducedSplit" Breakpoint="900" WideBelowHeight="380" Ratio="0.4" StackedRatio="0.4" FitFirst="True" Spacing="10">
               <Panel>
                 <ListBox x:Name="ProducedList" Classes="rows" ItemsSource="{Binding Produced}" SelectedItem="{Binding SelectedProduced}" Background="Transparent">

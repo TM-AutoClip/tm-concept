@@ -1,5 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="using:TMConcept.Desktop.Views"
         xmlns:d="using:TMConcept.Desktop.Dialogs"
         x:Class="TMConcept.Desktop.Views.AppUpdateWindow"
         x:DataType="d:AppUpdateViewModel"
@@ -10,7 +11,10 @@
        "Download and install" (then the app restarts). -->
   <Grid Margin="24" RowDefinitions="Auto,*,Auto,Auto,Auto" RowSpacing="12">
     <StackPanel Spacing="4">
-      <TextBlock Name="UpdateTitle" Text="{Binding Title}" Classes="h2" TextWrapping="Wrap" />
+      <DockPanel>
+        <views:HelpTip Name="UpdateHelp" DockPanel.Dock="Right" VerticalAlignment="Top" Text="{DynamicResource help.appupdate}" />
+        <TextBlock Name="UpdateTitle" Text="{Binding Title}" Classes="h2" TextWrapping="Wrap" />
+      </DockPanel>
       <TextBlock Name="UpdateSubtitle" Text="{Binding Subtitle}" Classes="muted" TextWrapping="Wrap" />
     </StackPanel>
     <Border Grid.Row="1" BorderBrush="{DynamicResource tm-border}" BorderThickness="1" CornerRadius="4">
