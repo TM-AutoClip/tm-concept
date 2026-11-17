@@ -22,6 +22,7 @@
     <ProjectReference Include="..\..\src\TMConcept.Engines\TMConcept.Engines.csproj" />
     <ProjectReference Include="..\..\src\TMConcept.Speech\TMConcept.Speech.csproj" />
     <ProjectReference Include="..\..\src\TMConcept.Storage\TMConcept.Storage.csproj" />
+    <ProjectReference Include="..\..\src\TMConcept.Documents\TMConcept.Documents.csproj" />
     <ProjectReference Include="..\..\src\TMConcept.Desktop\TMConcept.Desktop.csproj" />
   </ItemGroup>
 </Project>

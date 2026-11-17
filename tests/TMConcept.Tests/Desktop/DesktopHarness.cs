@@ -30,6 +30,7 @@ internal sealed class DesktopHarness : IDisposable
             // Never GitHub, never a real download: the update check and the downloads fail at once unless a test gives its own server.
             s.AddSingleton(new TMConcept.Desktop.Updates.UpdateTransport(() => new NoNetworkHandler()));
             s.AddSingleton(new TMConcept.Engines.Tools.DownloadTransport(() => new NoNetworkHandler()));
+            s.AddSingleton(new TMConcept.Documents.Web.DocumentTransport(() => new NoNetworkHandler()));
 
             // The graphics card coordinator reads a fixed 16 GB card with 14 GB free and never waits (nothing native, any test machine).
             s.AddSingleton<TMConcept.Core.Hardware.IVramProbe>(new Core.FakeVramProbe(new TMConcept.Core.Hardware.VramReading(16L << 30, 14L << 30, true, "test")));

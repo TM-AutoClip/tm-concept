@@ -35,7 +35,7 @@ needed) and narrates it with a **free local voice**. It runs on Windows and Linu
   to subscribe for more videos!"; *subscribe* for YouTube, *follow* for Instagram and TikTok) in the narration, on screen, both or off,
   always in the video's language. The form shows a live preview. Each video takes a copy of its template when it starts, so editing or
   deleting a template never changes a made video.
-- **Generate concepts.** Two separate sections. **Generate from suggested topics**: suggest 5–100 topics, tick the ones you like and
+- **Generate concepts.** Three separate sections, used in any order; each one adds to the same list. **Generate from suggested topics**: suggest 5–100 topics, tick the ones you like and
   press **Generate selected**: exactly one concept per ticked topic. A topic you did not tick is not a bad one: it may be suggested again
   later; only a topic that got a concept never comes back (topics suggested before 0.1.18 stay blocked: that version did not record which
   ones got a concept). **Generate from an idea**: write an idea (or leave it empty) and
@@ -44,6 +44,20 @@ needed) and narrates it with a **free local voice**. It runs on Windows and Linu
   check, an optional semantic check with an embedding model, and a compressed history when the list grows. Every row has **Approve**
   (key A) and **Delete** (key D); a click opens the concept in the detail panel beside the list. Deleted concepts stay in **Trash**
   forever (they still count against duplicates) until you delete them permanently.
+- **From documents** (the third section, 0.1.21). **My documents** holds the profile's own sources: PDF, Word (.docx), text and Markdown
+  files, a web page (its readable text, fetched once; no script runs) or a Wikipedia article in any language (by its address, or by its
+  title and a language code). The app keeps its own copy of each one in its data folder (not encrypted); the text, cut into passages, is in
+  the encrypted database. Documents belong to the profile they were added in. Write an optional subject and choose how many: **Write from
+  documents** writes that many concepts at once, or **Find topics** looks for that many topics in the documents first and the button then
+  writes one concept per ticked topic. Each call gets only the passages that fit the model's context (a small local model with an 8k
+  context gets about 3–4 thousand tokens of passages and a lower answer limit; a paid model at most 12 thousand tokens per call, so a
+  big context does not cost much). The prompt tells the model to use only the documents' facts and to name the documents it used (the
+  detail panel shows them as *Sources*); the concepts are written in the video's language even when the documents are in another one.
+  Passages are picked by their words (BM25) and, when you install the optional meaning search (multilingual-e5-small, about 135 MB,
+  downloaded only after you confirm it, run on this computer's processor), also by meaning. Scanned PDFs without a text layer are kept but
+  cannot be used (no text recognition). Settings → **Storage** lists every document; **Clean up unused** never takes one, **Full delete**
+  and a document's **Delete** move its copy to the recycle bin and delete its passages. Backups carry the documents with the profiles (the
+  records, the passages and the copies).
 - **Concept to video.** Approved concepts on the left (a click opens one under the list, where it can be edited by hand or with AI),
   **Add to queue**, then **Produce in order**. The models (code with its engine, images, voice) are one folded line on top, next to the
   **template** (empty on a new install: nothing is produced until a code model and a template are chosen). While a video
@@ -262,6 +276,7 @@ every attempt is paid and counted in the cost, and after three unreadable answer
 | Chatterbox Multilingual V3 ONNX (Masterx export, 4-bit language model; needs sherpa-onnx) | huggingface.co | 1.56 GB |
 | Ahenk Cep int8 ONNX (Turkish; needs sherpa-onnx) | huggingface.co | 13 MB |
 | Multilingual MiniLM (paraphrase-multilingual-MiniLM-L12-v2, int8 ONNX + tokenizer; needs sherpa-onnx) | huggingface.co | 127 MB |
+| Multilingual E5 small (intfloat/multilingual-e5-small, int8 ONNX + tokenizer; the documents' meaning search, optional; runs in the app with its bundled ONNX Runtime) | huggingface.co | 135 MB |
 | stable-diffusion.cpp (Windows master-1106, Linux master-1043), the build of Image acceleration (Windows: CUDA 12 build + CUDA runtime, Vulkan or processor build; Linux x64: Vulkan or processor build) | github.com (leejet) | CUDA 975 MB, Vulkan 30–38 MB, processor 18–27 MB |
 | Local image model weights (diffusion model, text encoder(s), VAE), only the model you choose | huggingface.co | 2.9 GB (SDXL Lightning) to 30 GB (Qwen-Image Q8); e.g. FLUX.2 klein 4B 5.3 GB, Z-Image Turbo 9.4 GB |
 | uv 0.13.6 + Python 3.11.18 (for the Python voices) | github.com (astral-sh) | 45 MB |
@@ -331,7 +346,8 @@ Then choose the models on the pages that use them (see above). Nothing paid is c
 ## Make your first video
 
 1. **Concepts:** choose the models (and, if you like, the fine-tuning of tone, audience and structure). Either **Suggest topics**, tick
-   the ones you like and press **Generate selected**, or write an idea and press **Generate**.
+   the ones you like and press **Generate selected**, or write an idea and press **Generate**, or add your sources under **My documents**
+   and press **Write from documents**.
 2. Click a concept to read it in the detail panel; approve the good ones (A), delete the rest (D). **Edit** (or **Edit with AI**)
    changes the text; placeholders such as `[pause 1 s]` or `[soft transition]` go in at the cursor and the program applies them in the
    video.
@@ -410,6 +426,7 @@ broken, no data for a minute).
 | Problem report zips (last 5) | `…\TM Concept\reports\` | `~/.local/share/tm-concept/reports/` | no |
 | Tools (Node, ffmpeg, engines, voices, image models) | `…\TM Concept\tools\` | `~/.local/share/tm-concept/tools/` | no |
 | Videos and sample images | `Documents\TM Concept\` | `~/Documents/TM Concept/` (XDG documents folder) | no |
+| Copies of your documents ("My documents"; their passages are in the database) | `…\TM Concept\documents\` | `~/.local/share/tm-concept/documents/` | no |
 
 Portable mode: start the program with `--data-dir <folder>`; then everything, videos included, stays under that folder.
 
@@ -417,7 +434,8 @@ Portable mode: start the program with `--data-dir <folder>`; then everything, vi
 
 - **Supertonic 3** (default voice): OpenRAIL-M. Say that the voice is AI-generated when you publish; no impersonation. The video details
   remind you.
-- **Kokoro 82M**: Apache-2.0. **Multilingual MiniLM** (sentence-transformers): Apache-2.0.
+- **Kokoro 82M**: Apache-2.0. **Multilingual MiniLM** (sentence-transformers): Apache-2.0. **Multilingual E5 small**: MIT.
+- **Your documents** keep their own licences. Wikipedia text is CC BY-SA: a video that retells an article should credit it.
 - **Python voices**: **XTTS-v2** (Coqui Public Model License), **F5-TTS Turkish** and **MMS-TTS Turkish** (CC BY-NC 4.0) are
   **non-commercial only**; the step asks you to accept the licence first. **VoxCPM2** Apache-2.0, **Trendyol-TTS** MIT, **Ahenk** CC BY 4.0
   (credit "Ahenk (github.com/ozguradmin/ahenk-turkish-tts), CC BY 4.0"). PyTorch and the voices' packages have their own (open) licences.
@@ -459,6 +477,9 @@ Today's lines are followed live while the page is open.
 - Videos up to 3 minutes; no long horizontal videos yet.
 - The program is not code-signed (SmartScreen warning on Windows).
 - Revideo is experimental. On Linux ARM64 an external Chromium is needed for HyperFrames and Revideo.
+- Documents: no text recognition for scanned PDFs; web pages are read without running their scripts, so a page that builds its text with
+  JavaScript gives little or nothing; at most 50 MB per file and 5 MB per page. The meaning model's int8 file was made for processors with
+  AVX-512 VNNI; on others (and on ARM64) it runs, but its speed was not measured.
 - Real provider requests were not part of the automated tests (they use fake HTTP); the first real use happens on your machine.
 
 ## Build from source

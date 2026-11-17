@@ -125,13 +125,14 @@ public sealed class RatingStorageTests
             old.Profiles.Add(new OldProfileRow
             {
                 Id = profile.Id.ToString("D").ToUpperInvariant(), Name = profile.Name, ContentLanguage = profile.ContentLanguage, TargetSeconds = 75,
-                ConceptText = string.Empty, CreatedAtUtc = at.UtcTicks, UpdatedAtUtc = at.UtcTicks,
+                ConceptText = string.Empty, ConceptCounter = 1, CreatedAtUtc = at.UtcTicks, UpdatedAtUtc = at.UtcTicks,
             });
+            await old.SaveChangesAsync(None);
+            concept.ProfileId = profile.Id;
+            old.Concepts.Add(OldConceptRow.Of(concept, 1));
             await old.SaveChangesAsync(None);
         }
 
-        concept.ProfileId = profile.Id;
-        await new ConceptStore(h.Database).AddAsync([concept], None);
         await new VideoStore(h.Database).AddAsync(new VideoRecord
         {
             ProfileId = profile.Id, ConceptId = concept.Id, Title = "Hagia Sophia", Folder = "Old channel/Hagia Sophia/v1",
@@ -150,7 +151,7 @@ public sealed class RatingStorageTests
         await h.Vault.OpenAsync(None);
 
         (await h.QueryAsync(async db => (await db.Database.GetAppliedMigrationsAsync(None)).Select(SchemaUpgrader.Name).ToList()))
-            .ShouldBe(["Version0117", "Version0118", "Version0119"]);
+            .ShouldBe(["Version0117", "Version0118", "Version0119", "Version0120"]);
         var suggestion = (await new TopicSuggestionStore(h.Database).ListAsync(profile.Id, 10, None)).ShouldHaveSingleItem();
         suggestion.Id.ShouldBe(suggestionId);
         suggestion.Text.ShouldBe("Greek fire");

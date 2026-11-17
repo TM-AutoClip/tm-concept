@@ -155,7 +155,7 @@ public sealed class StyleStorageTests
         var steps = await h.QueryAsync(async db =>
         {
             var all = db.Database.GetMigrations().ToList();
-            all.Select(SchemaUpgrader.Name).ShouldBe(["Version0117", "Version0118", "Version0119"]);
+            all.Select(SchemaUpgrader.Name).ShouldBe(["Version0117", "Version0118", "Version0119", "Version0120"]);
             var migrator = db.GetService<IMigrator>();
             await migrator.MigrateAsync("0", None);
             await migrator.MigrateAsync(all[1], None);
@@ -166,16 +166,16 @@ public sealed class StyleStorageTests
             old.Profiles.Add(new OldProfileRow
             {
                 Id = profileId.ToString("D").ToUpperInvariant(), Name = "Old channel", ContentLanguage = ContentLanguages.Turkish, Format = 1,
-                TargetSeconds = 90, ConceptText = "Ottoman history.", TemplateId = "history.ottoman", ConceptCounter = 7, CreatedAtUtc = at.UtcTicks,
+                TargetSeconds = 90, ConceptText = "Ottoman history.", TemplateId = "history.ottoman", ConceptCounter = 8, CreatedAtUtc = at.UtcTicks,
                 UpdatedAtUtc = at.UtcTicks,
             });
             await old.SaveChangesAsync(None);
+            old.Concepts.Add(OldConceptRow.Of(new TMConcept.Core.Concepts.Concept
+            {
+                ProfileId = profileId, Title = "Mohács", Summary = "s", Content = "c", Language = ContentLanguages.Turkish,
+            }, 8));
+            await old.SaveChangesAsync(None);
         }
-
-        await new ConceptStore(h.Database).AddAsync([new TMConcept.Core.Concepts.Concept
-        {
-            ProfileId = profileId, Title = "Mohács", Summary = "s", Content = "c", Language = ContentLanguages.Turkish,
-        }], None);
 
         h.Vault.Lock();
         await h.Vault.OpenAsync(None);
@@ -184,7 +184,7 @@ public sealed class StyleStorageTests
         var profile = (await new ProfileStore(h.Database).GetAsync(profileId, None)).ShouldNotBeNull();
         (profile.Name, profile.ContentLanguage, profile.Format, profile.TargetSeconds, profile.TemplateId, profile.ChannelPhoto)
             .ShouldBe(("Old channel", ContentLanguages.Turkish, VideoFormat.Horizontal, 90, "history.ottoman", (string?)null));
-        profile.ConceptCounter.ShouldBe(8, "the concept added before the upgrade counted");
+        profile.ConceptCounter.ShouldBe(8, "the counter of 0.1.18 (with the concept added before the upgrade) is kept");
         profile.CreatedAtUtc.ShouldBe(at);
         (await new ConceptStore(h.Database).HistoryAsync(profileId, None)).ShouldHaveSingleItem().Title.ShouldBe("Mohács");
         (await new VideoStyleStore(h.Database).ListAsync(None)).ShouldBeEmpty("no template is made by the upgrade");

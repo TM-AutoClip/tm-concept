@@ -35,7 +35,7 @@ veritabanını şifreli tutar.
   için abone olmayı unutma!"; YouTube'da *abone ol*, Instagram ve TikTok'ta *takip et*) seste, ekranda, ikisinde ya da kapalı; her zaman
   videonun dilinde. Form canlı önizleme gösterir. Her video başlarken şablonunun bir kopyasını alır; şablonu düzenlemek ya da silmek
   yapılmış videoyu değiştirmez.
-- **Konsept üret.** İki ayrı bölüm. **Konu önererek üret**: 5–100 konu önert, beğendiklerini işaretle, **Seçilenleri üret**'e bas: her
+- **Konsept üret.** Üç ayrı bölüm, istediğin sırayla kullanılır; hepsi aynı listeye ekler. **Konu önererek üret**: 5–100 konu önert, beğendiklerini işaretle, **Seçilenleri üret**'e bas: her
   işaretli konudan tam bir konsept. İşaretlemediğin konu kötü sayılmaz: sonra yeniden önerilebilir; yalnız konsepti yapılan konu bir daha
   gelmez (0.1.18'den önce önerilen konular engelli kalır: o sürüm hangisinden konsept yapıldığını kaydetmiyordu). **Fikirden üret**: bir fikir yaz (ya da boş bırak), 1–100 konsept seç. Her basış listeye ekler. Her
   düğmenin yanında küçük bir tahmini ücret görünür; sonra sağlayıcının bildirdiği kullanımdan kesin ücret gelir. Tekrar dört katmanda
@@ -43,6 +43,19 @@ veritabanını şifreli tutar.
   denetim ve liste büyüyünce sıkıştırılmış geçmiş. Her satırda **Onayla** (A tuşu) ve **Sil** (D tuşu) var; tıklanan konsept listenin
   yanındaki detay panelinde açılır. Silinenler **Silinenler** sayfasında süresiz durur (tekrar denetiminde sayılmaya devam eder); oradan
   kalıcı silinebilir.
+- **Belgelerden** (üçüncü bölüm, 0.1.21). **Belgelerim** profilin kendi kaynaklarını tutar: PDF, Word (.docx), metin ve Markdown dosyaları,
+  bir web sayfası (okunabilir metni, bir kez çekilir; hiçbir betik çalışmaz) ya da herhangi bir dilde bir Vikipedi makalesi (adresiyle ya da
+  başlığı ve dil koduyla). Uygulama her birinin kendi kopyasını veri klasöründe tutar (şifresiz); parçalara bölünmüş metni şifreli
+  veritabanındadır. Belgeler eklendikleri profile aittir. İstersen bir konu yaz ve kaç tane istediğini seç: **Belgelerden yaz** o kadar
+  konsepti bir seferde yazar, ya da **Konu bul** önce belgelerde o kadar konu arar, düğme sonra işaretli her konuya bir konsept yazar.
+  Her çağrıya yalnız modelin bağlamına sığan parçalar gider (8k bağlamlı küçük bir yerel model yaklaşık 3–4 bin token parça ve daha düşük
+  bir yanıt sınırı alır; ücretli bir model çağrı başına en çok 12 bin token, büyük bağlam pahalıya patlamasın diye). İstem modele yalnız
+  belgelerdeki bilgileri kullanmasını ve kullandığı belgeleri söylemesini ister (detay panelinde *Kaynaklar* olarak görünür); belgeler
+  başka dilde olsa da konseptler videonun dilinde yazılır. Parçalar kelimelerine (BM25) ve isteğe bağlı anlam aramasını kurarsan
+  (multilingual-e5-small, yaklaşık 135 MB, yalnız onaylarsan indirilir, bu bilgisayarın işlemcisinde çalışır) anlamlarına göre seçilir.
+  Metin katmanı olmayan taranmış PDF'ler saklanır ama kullanılamaz (yazı tanıma yok). Ayarlar → **Depolama** her belgeyi listeler;
+  **Kullanılmayanları temizle** hiçbirini almaz, **Kapsamlı silme** ve bir belgenin **Sil**'i kopyasını geri dönüşüm kutusuna taşır ve
+  parçalarını siler. Yedekler belgeleri profillerle birlikte taşır (kayıtlar, parçalar ve kopyalar).
 - **Konseptten video.** Solda onaylı konseptler (tıklanan, listenin altında açılır; orada elle ya da yapay zekâyla düzenlenir), **Sıraya
   ekle**, sonra **Sırayla üret**. Modeller (motoruyla kod, görseller, ses) üstte tek bir katlanmış satırdır, yanında **şablon** seçici
   (yeni kurulumda boştur: kod modeli ve şablon seçilmeden video üretilmez). Video üretilirken her aşama
@@ -255,6 +268,7 @@ iki kez daha gönderilir; her deneme ödenir ve maliyete sayılır, üç okunama
 | Chatterbox Multilingual V3 ONNX (Masterx dönüşümü, 4 bit dil modeli; sherpa-onnx gerekir) | huggingface.co | 1,56 GB |
 | Ahenk Cep int8 ONNX (Türkçe; sherpa-onnx gerekir) | huggingface.co | 13 MB |
 | Multilingual MiniLM (paraphrase-multilingual-MiniLM-L12-v2, int8 ONNX + tokenizer; sherpa-onnx gerekir) | huggingface.co | 127 MB |
+| Multilingual E5 small (intfloat/multilingual-e5-small, int8 ONNX + tokenizer; belgelerin anlam araması, isteğe bağlı; uygulamanın içindeki ONNX Runtime ile çalışır) | huggingface.co | 135 MB |
 | stable-diffusion.cpp (Windows master-1106, Linux master-1043), Görsel hızlandırma'nın seçtiği derleme (Windows: CUDA 12 derlemesi + CUDA kitaplıkları, Vulkan ya da işlemci derlemesi; Linux x64: Vulkan ya da işlemci derlemesi) | github.com (leejet) | CUDA 975 MB, Vulkan 30–38 MB, işlemci 18–27 MB |
 | Yerel görsel modeli ağırlıkları (difüzyon modeli, metin kodlayıcı(lar), VAE), yalnız seçtiğin model | huggingface.co | 2,9 GB (SDXL Lightning) ile 30 GB (Qwen-Image Q8) arası; ör. FLUX.2 klein 4B 5,3 GB, Z-Image Turbo 9,4 GB |
 | uv 0.13.6 + Python 3.11.18 (Python sesleri için) | github.com (astral-sh) | 45 MB |
@@ -326,7 +340,8 @@ Sonra modelleri onları kullanan sayfalarda seç (yukarıya bak). Ücretli hiçb
 ## İlk videonu üret
 
 1. **Konseptler:** modelleri seç (istersen ton, izleyici ve anlatım biçimi ince ayarını da). Ya **Konu öner**'e basıp beğendiklerini
-   işaretle ve **Seçilenleri üret**'e bas, ya da bir fikir yazıp **Üret**'e bas.
+   işaretle ve **Seçilenleri üret**'e bas, ya da bir fikir yazıp **Üret**'e bas, ya da kaynaklarını **Belgelerim**'e ekleyip **Belgelerden
+   yaz**'a bas.
 2. Bir konsepte tıkla, detay panelinde oku; iyileri onayla (A), kalanı sil (D). **Düzenle** (ya da **Yapay zekâyla düzenle**) metni
    değiştirir; `[duraklama 1 sn]`, `[yumuşak geçiş]` gibi yer tutucular imlecin olduğu yere eklenir, program videoda kendisi uygular.
 3. **Konseptten video:** onaylı konseptlerde **Sıraya ekle**'ye bas, üstteki modellere bak, **Sırayla üret**'e bas.
@@ -404,6 +419,7 @@ sunucu adı bulunamadı, bağlantı koptu, bir dakika boyunca veri gelmedi).
 | Hata bildirimi zip'leri (son 5) | `…\TM Concept\reports\` | `~/.local/share/tm-concept/reports/` | hayır |
 | Araçlar (Node, ffmpeg, motorlar, sesler, görsel modelleri) | `…\TM Concept\tools\` | `~/.local/share/tm-concept/tools/` | hayır |
 | Videolar ve örnek görseller | `Belgeler\TM Concept\` | `~/Documents/TM Concept/` (XDG belgeler klasörü) | hayır |
+| Belgelerinin kopyaları ("Belgelerim"; parçaları veritabanında) | `…\TM Concept\documents\` | `~/.local/share/tm-concept/documents/` | hayır |
 
 Taşınabilir kip: programı `--data-dir <klasör>` ile başlat; videolar dahil her şey o klasörün altında kalır.
 
@@ -411,7 +427,8 @@ Taşınabilir kip: programı `--data-dir <klasör>` ile başlat; videolar dahil 
 
 - **Supertonic 3** (varsayılan ses): OpenRAIL-M. Yayınlarken sesin yapay zekâ ile üretildiğini belirt; kimseyi taklit etme. Video
   ayrıntısı bunu hatırlatır.
-- **Kokoro 82M**: Apache-2.0. **Multilingual MiniLM** (sentence-transformers): Apache-2.0.
+- **Kokoro 82M**: Apache-2.0. **Multilingual MiniLM** (sentence-transformers): Apache-2.0. **Multilingual E5 small**: MIT.
+- **Belgelerin** kendi lisanslarını korur. Vikipedi metni CC BY-SA'dır: bir makaleyi anlatan videoda kaynağı belirt.
 - **Python sesleri**: **XTTS-v2** (Coqui Public Model License), **F5-TTS Türkçe** ve **MMS-TTS Türkçe** (CC BY-NC 4.0) **yalnız ticari
   olmayan** işler içindir; adım önce lisansı kabul etmeni ister. **VoxCPM2** Apache-2.0, **Trendyol-TTS** MIT, **Ahenk** CC BY 4.0 (atıf:
   "Ahenk (github.com/ozguradmin/ahenk-turkish-tts), CC BY 4.0"). PyTorch'un ve seslerin paketlerinin kendi (açık) lisansları vardır.
@@ -453,6 +470,9 @@ seviye süzgeci (tümü, uyarılar ve hatalar, yalnız hatalar), arama, *Yalnız
 - Videolar en çok 3 dakika; uzun yatay video henüz yok.
 - Program kod imzalı değil (Windows'ta SmartScreen uyarısı).
 - Revideo deneysel. Linux ARM64'te HyperFrames ve Revideo için harici Chromium gerekir.
+- Belgeler: taranmış PDF'lerde yazı tanıma yok; web sayfaları betikleri çalıştırılmadan okunur, metnini JavaScript ile kuran bir sayfadan
+  az şey ya da hiçbir şey gelmez; dosya başına en çok 50 MB, sayfa başına 5 MB. Anlam modelinin int8 dosyası AVX-512 VNNI'li işlemciler
+  için hazırlanmış; başkalarında (ve ARM64'te) çalışır ama hızı ölçülmedi.
 - Otomatik testlerde gerçek sağlayıcı isteği yoktur (sahte HTTP); ilk gerçek kullanım senin bilgisayarında olur.
 
 ## Kaynaktan derleme

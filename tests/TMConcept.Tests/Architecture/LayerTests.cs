@@ -4,7 +4,7 @@ using Shouldly;
 namespace TMConcept.Tests.Architecture;
 
 /// <summary>
-/// Layer boundaries: Core references no project of ours; Providers, Engines, Speech and Storage reference Core only; only the Desktop
+/// Layer boundaries: Core references no project of ours; Providers, Engines, Speech, Storage and Documents reference Core only; only the Desktop
 /// composition root references them all. A new reference across the boundary fails here.
 /// </summary>
 public sealed class LayerTests
@@ -16,7 +16,8 @@ public sealed class LayerTests
         { "TMConcept.Engines", ["TMConcept.Core"] },
         { "TMConcept.Speech", ["TMConcept.Core"] },
         { "TMConcept.Storage", ["TMConcept.Core"] },
-        { "TMConcept.Desktop", ["TMConcept.Core", "TMConcept.Providers", "TMConcept.Engines", "TMConcept.Speech", "TMConcept.Storage"] },
+        { "TMConcept.Documents", ["TMConcept.Core"] },
+        { "TMConcept.Desktop", ["TMConcept.Core", "TMConcept.Providers", "TMConcept.Engines", "TMConcept.Speech", "TMConcept.Storage", "TMConcept.Documents"] },
     };
 
     [Theory]

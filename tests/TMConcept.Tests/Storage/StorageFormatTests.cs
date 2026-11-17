@@ -63,15 +63,15 @@ public sealed class StorageFormatTests
             sql.ShouldNotBeNull().ShouldContain("CONSTRAINT \"FK_concepts_profiles_ProfileId\" FOREIGN KEY (\"ProfileId\") REFERENCES \"profiles\" (\"Id\") ON DELETE CASCADE");
         }
 
-        (await h.QueryAsync(db => db.SchemaObjects.CountAsync(o => o.Type == "index" && o.Name.StartsWith("IX_")))).ShouldBe(16, "11, the language index of the pronunciations, the profile index of the topic suggestions (by time), the profile index of the AI-edit wishes and the concept and profile (by time) indexes of the video ratings");
-        (await h.QueryAsync(db => db.SchemaObjects.CountAsync(o => o.Type == ConceptSchema.TableType && !o.Name.StartsWith("__EFMigrations")))).ShouldBe(17);
-        (await h.QueryAsync(db => db.Database.GetAppliedMigrationsAsync())).Select(SchemaUpgrader.Name).ShouldBe(["Version0117", "Version0118", "Version0119"],
+        (await h.QueryAsync(db => db.SchemaObjects.CountAsync(o => o.Type == "index" && o.Name.StartsWith("IX_")))).ShouldBe(20, "11, the language index of the pronunciations, the profile index of the topic suggestions (by time), the profile index of the AI-edit wishes, the concept and profile (by time) indexes of the video ratings and the four of the documents (profile and content, passages by document and by profile, vectors by profile and model)");
+        (await h.QueryAsync(db => db.SchemaObjects.CountAsync(o => o.Type == ConceptSchema.TableType && !o.Name.StartsWith("__EFMigrations")))).ShouldBe(20);
+        (await h.QueryAsync(db => db.Database.GetAppliedMigrationsAsync())).Select(SchemaUpgrader.Name).ShouldBe(["Version0117", "Version0118", "Version0119", "Version0120"],
             "the file records the schema steps it went through");
 
         // Opening again leaves a current schema alone.
         var again = await h.QueryAsync(db => ConceptDatabase.EnsureSchemaAsync(db, CancellationToken.None));
         again.Applied.ShouldBeEmpty();
-        (await h.QueryAsync(db => db.SchemaObjects.CountAsync(o => o.Type == ConceptSchema.TableType && !o.Name.StartsWith("__EFMigrations")))).ShouldBe(17);
+        (await h.QueryAsync(db => db.SchemaObjects.CountAsync(o => o.Type == ConceptSchema.TableType && !o.Name.StartsWith("__EFMigrations")))).ShouldBe(20);
         (await h.QueryAsync(db => db.Settings.CountAsync())).ShouldBe(0, "no settings row is written for a new file");
     }
 }
