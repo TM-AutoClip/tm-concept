@@ -10,14 +10,15 @@ using TMConcept.Desktop.Startup;
 namespace TMConcept.Desktop.DiskSpace;
 
 /// <summary>
-/// <see cref="IDiskCleaner"/>. A removal is refused while work runs (a video, a generation, an install: <see cref="AppSession.WorkRunning"/>,
-/// <see cref="ComponentPlanner.Busy"/>) or while a worker is speaking; otherwise the idle speech and Python workers are ended (they hold the
+/// <see cref="IDiskCleaner"/>. A removal is refused while work runs (a video, a generation, an install, an engine's sample render:
+/// <see cref="AppSession.WorkRunning"/>, <see cref="ComponentPlanner.Busy"/>, <see cref="Engines.Engines.SampleRender.Busy"/>) or while a worker
+/// is speaking; otherwise the idle speech and Python workers are ended (they hold the
 /// voice files open) and the graphics card is freed, then every row goes to the recycle bin. Rows the bin could not take are listed in one
 /// question; only a "Delete permanently" there deletes them for good, otherwise they stay. Failures are logged as errors with the reason.
 /// </summary>
 public sealed class DiskCleaner(IEnumerable<IDiskItemSource> sources, IComponentUsage usage, ComponentPlanner planner, AppSession session,
     Speech.Speech.SpeechWorkerClient speech, Speech.Python.PythonWorkerClient python, IGpuCoordinator gpu, RecycleBinDiscard bin, PermanentDiscard permanent,
-    IConfirmDialog confirm, AppPaths paths, Localizer text, ILogger<DiskCleaner> logger) : IDiskCleaner
+    IConfirmDialog confirm, AppPaths paths, Localizer text, Engines.Engines.SampleRender sample, ILogger<DiskCleaner> logger) : IDiskCleaner
 {
     /// <inheritdoc />
     public async Task<DiskReport> ReportAsync(CancellationToken cancellationToken)
@@ -45,7 +46,7 @@ public sealed class DiskCleaner(IEnumerable<IDiskItemSource> sources, IComponent
     {
         ArgumentNullException.ThrowIfNull(items);
         var chosen = items.Where(i => i.Removable).ToList();
-        if (session.WorkRunning || planner.Busy)
+        if (session.WorkRunning || planner.Busy || sample.Busy)
         {
             logger.LogInformation("Storage: nothing was removed, work is running");
             return DiskRemoval.Refused;

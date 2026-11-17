@@ -36,4 +36,12 @@ public interface IGpuCoordinator
     /// nothing when it is in use.
     /// </summary>
     Task FreeAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Asks every local model whose earlier unload failed (it may still hold graphics memory: a server that "still holds" the model, one no
+    /// control can unload) to unload once more, except <paramref name="keep"/> (the model about to use the card). A memory check calls it
+    /// before every reading after its first, so the user's Retry also asks our own stuck model again (a lease being checked blocks every
+    /// other change of model, so nothing else would). Returns the names of the models that still could not be unloaded (empty = none).
+    /// </summary>
+    Task<IReadOnlyList<string>> RetryStuckAsync(IModel keep, CancellationToken cancellationToken);
 }

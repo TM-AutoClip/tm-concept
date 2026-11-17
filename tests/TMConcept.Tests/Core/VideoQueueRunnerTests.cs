@@ -1,5 +1,7 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
+using TMConcept.Core.Activity;
 using TMConcept.Core.Videos;
 
 namespace TMConcept.Tests.Core;
@@ -53,6 +55,39 @@ public sealed class VideoQueueRunnerTests
         }
 
         return await run;
+    }
+
+    [Fact]
+    public async Task TheRunnersWarningsAndErrorsAreForTheLogOnly()
+    {
+        // The page shows each failed video and the stop in the user's language; the runner's English lines must not reach the panel too.
+        var clock = new CountingTimeProvider();
+        var logger = new EventLogger();
+        var night = new Script(QueueItemOutcome.Failed, QueueItemOutcome.Failed, QueueItemOutcome.Failed);
+        var run = new VideoQueueRunner(clock, logger).RunAsync(night.NextAsync, (i, t) => night.ProduceAsync(i, t, clock), () => true,
+            TestContext.Current.CancellationToken);
+        (await DriveAsync(run, clock)).End.ShouldBe(QueueRunEnd.FailuresInRow);
+        var day = new Script(QueueItemOutcome.Failed);
+        (await new VideoQueueRunner(clock, logger).RunAsync(day.NextAsync, (i, t) => day.ProduceAsync(i, t, clock), () => false,
+            TestContext.Current.CancellationToken)).End.ShouldBe(QueueRunEnd.Failed);
+
+        var loud = logger.Entries.Where(e => e.Level >= LogLevel.Warning).ToList();
+        loud.Count.ShouldBe(4, "two in-row warnings, the night stop, the day stop");
+        loud.ShouldAllBe(e => e.Event == LogEvents.OnScreen);
+    }
+
+    /// <summary>Keeps the level and event of every entry.</summary>
+    private sealed class EventLogger : ILogger<VideoQueueRunner>
+    {
+        public List<(LogLevel Level, EventId Event)> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+            Entries.Add((logLevel, eventId));
     }
 
     [Fact]

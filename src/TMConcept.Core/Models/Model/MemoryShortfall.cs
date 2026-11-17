@@ -12,4 +12,11 @@ namespace TMConcept.Core.Models;
 /// <param name="FreeMainBytes">Free main memory now (null = unknown).</param>
 /// <param name="NeededMainBytes">Main memory it needs at that level (0 = none or unknown).</param>
 public sealed record MemoryShortfall(string ModelName, long CardTotalBytes, long CardFreeBytes, string Source, long NeededVideoBytes, long? FreeMainBytes,
-    long NeededMainBytes);
+    long NeededMainBytes)
+{
+    /// <summary>
+    /// TM Concept's own local models whose unload failed and that may still hold the card's memory (their names; empty = none): the question
+    /// says so, since closing games and browsers would not help then.
+    /// </summary>
+    public IReadOnlyList<string> HeldBy { get; init; } = [];
+}

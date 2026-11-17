@@ -29,11 +29,19 @@ public abstract class LocalModelBase(CatalogModel catalog) : ModelBase(catalog),
     /// </summary>
     protected virtual long MinimumCardBytes(ModelMemoryNeed need) => 0;
 
+    /// <summary>
+    /// Whether what does not fit on the card really goes to main memory (true: a server such as Ollama or LM Studio places the rest itself).
+    /// False for a model that keeps every weight on the card (a PyTorch voice): above <see cref="MinimumCardBytes"/> it runs on the card (its
+    /// class figure has headroom), below it is refused; it is never planned in main memory, which would be a false "slower, RAM is used".
+    /// </summary>
+    protected virtual bool OffloadsToMainMemory => true;
+
     /// <inheritdoc />
     /// <remarks>
     /// The default: the processor when it does not run on the card; on the card when its graphics memory need fits in the free memory (the
     /// larger of this app's budget and what is free across all processes) or the memory is not measured; otherwise main memory (slower,
-    /// the server places what does not fit), refused only below <see cref="MinimumCardBytes"/>.
+    /// the server places what does not fit), refused only below <see cref="MinimumCardBytes"/>. A model that does not offload
+    /// (<see cref="OffloadsToMainMemory"/>) runs on the card from its minimum up.
     /// </remarks>
     public virtual MemoryPlan PlanMemory(MemorySnapshot memory, ModelMemoryNeed? need)
     {
@@ -52,10 +60,15 @@ public abstract class LocalModelBase(CatalogModel catalog) : ModelBase(catalog),
         }
 
         var minimum = MinimumCardBytes(wanted);
-        return free < minimum
-            ? new MemoryPlan(MemoryPlacement.Refused, minimum, wanted.MemoryBytes, [],
-                string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{Name} needs {minimum / (1024.0 * 1024 * 1024):0.0} GiB of free graphics memory; {free / (1024.0 * 1024 * 1024):0.0} GiB are free."))
-            : new MemoryPlan(MemoryPlacement.MainMemory, minimum, wanted.MemoryBytes + (wanted.VideoMemoryBytes - free), [], string.Empty);
+        if (free < minimum)
+        {
+            return new MemoryPlan(MemoryPlacement.Refused, minimum, wanted.MemoryBytes, [],
+                string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{Name} needs {minimum / (1024.0 * 1024 * 1024):0.0} GiB of free graphics memory; {free / (1024.0 * 1024 * 1024):0.0} GiB are free."));
+        }
+
+        return OffloadsToMainMemory
+            ? new MemoryPlan(MemoryPlacement.MainMemory, minimum, wanted.MemoryBytes + (wanted.VideoMemoryBytes - free), [], string.Empty)
+            : new MemoryPlan(MemoryPlacement.Card, minimum, wanted.MemoryBytes, [], string.Empty);
     }
 
     /// <inheritdoc />

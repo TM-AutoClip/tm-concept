@@ -22,6 +22,9 @@ public sealed class PythonLocalModel(CatalogModel catalog, PythonSpeechEngine en
         return need.VideoMemoryBytes / 4 * 3;
     }
 
+    /// <summary>PyTorch loads every weight on the card: from the minimum up it runs there, below it is refused; never "main memory".</summary>
+    protected override bool OffloadsToMainMemory => false;
+
     /// <inheritdoc />
     protected override Task OnUnloadAsync(CancellationToken cancellationToken) => engine.UnloadAsync(cancellationToken);
 }

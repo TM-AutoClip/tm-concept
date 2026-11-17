@@ -9,7 +9,8 @@ namespace TMConcept.Core.DiskSpace;
 /// <see cref="IComponentUsage"/>: every profile's saved step choices → the catalog model's <see cref="CatalogModel.Requires"/>, plus the
 /// engine of the video code step (kept in its options, also before a code model is picked), plus the app's own needs
 /// (<see cref="FixedNeeds"/>), closed over <see cref="IComponent.DependsOn"/> (an image model brings stable-diffusion.cpp, a Python voice its
-/// environment, Python and uv). A step that is off needs nothing.
+/// environment, Python and uv) and <see cref="IComponentUses.Uses"/> (HyperFrames and Revideo bring the shared browser). A step that is off
+/// needs nothing.
 /// </summary>
 public sealed class ComponentUsage(IProfileStore profiles, IStepModelStore steps, IModelCatalog catalog, ComponentPlanner planner) : IComponentUsage
 {
@@ -54,7 +55,8 @@ public sealed class ComponentUsage(IProfileStore profiles, IStepModelStore steps
                     Add(closed, next, use);
                 }
 
-                foreach (var dependency in planner.Find(next)?.DependsOn ?? [])
+                var component = planner.Find(next);
+                foreach (var dependency in (component?.DependsOn ?? []).Concat((component as IComponentUses)?.Uses ?? []))
                 {
                     pending.Push(dependency);
                 }

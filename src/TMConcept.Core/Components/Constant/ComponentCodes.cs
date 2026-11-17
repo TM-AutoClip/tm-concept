@@ -6,6 +6,9 @@ public static class ComponentCodes
     /// <summary>Node.js.</summary>
     public const string Node = "node";
 
+    /// <summary>The shared Chrome Headless Shell of HyperFrames and Revideo (installed with the engine).</summary>
+    public const string Browser = "browser";
+
     /// <summary>ffmpeg + ffprobe.</summary>
     public const string Ffmpeg = "ffmpeg";
 

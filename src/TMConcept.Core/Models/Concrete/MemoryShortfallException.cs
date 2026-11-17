@@ -41,6 +41,7 @@ public sealed class MemoryShortfallException : InvalidOperationException
         return $"Not enough memory for {shortfall.ModelName}: {Gib(shortfall.CardFreeBytes)} of the card's {Gib(shortfall.CardTotalBytes)} GiB are free "
             + $"({shortfall.Source}), it needs {Gib(shortfall.NeededVideoBytes)} GiB; main memory: "
             + $"{(shortfall.FreeMainBytes is { } free ? Gib(free) : "?")} GiB free"
-            + (shortfall.NeededMainBytes > 0 ? $", it needs {Gib(shortfall.NeededMainBytes)} GiB" : string.Empty) + ".";
+            + (shortfall.NeededMainBytes > 0 ? $", it needs {Gib(shortfall.NeededMainBytes)} GiB" : string.Empty) + "."
+            + (shortfall.HeldBy.Count > 0 ? $" Not unloaded yet (may still hold the card): {string.Join(", ", shortfall.HeldBy)}." : string.Empty);
     }
 }

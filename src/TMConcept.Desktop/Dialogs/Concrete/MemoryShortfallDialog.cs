@@ -9,7 +9,8 @@ namespace TMConcept.Desktop.Dialogs;
 
 /// <summary>
 /// <see cref="IMemoryShortfallHandler"/> as a normal (not danger) question window over the active window, on the interface thread: the card's
-/// total and free memory with its source, what the model needs, the free main memory, what to do ("close games, browsers… and press Retry;
+/// total and free memory with its source, what the model needs, the free main memory, TM Concept's own models that could not be unloaded
+/// (they may hold the card: Try again asks them again), what to do ("close games, browsers… and press Retry;
 /// otherwise Cancel") and the hint to choose another model. Retry / Cancel. A notification is shown too, so a window in the background is
 /// noticed. The window closes when the queue is canceled (the token) and the call throws <see cref="OperationCanceledException"/>; no
 /// window to show it over counts as Cancel.
@@ -33,8 +34,11 @@ public sealed class MemoryShortfallDialog(WindowHost host, Localizer text, INoti
         ArgumentNullException.ThrowIfNull(shortfall);
         var main = shortfall.FreeMainBytes is { } free ? text.Format("memory.gb", Gb(free)) : text["memory.unknown"];
         var mainNeed = shortfall.NeededMainBytes > 0 ? text.Format("memory.shortfall.main_need", Gb(shortfall.NeededMainBytes)) : string.Empty;
-        return text.Format("memory.shortfall.message", shortfall.ModelName, Gb(shortfall.CardTotalBytes), Gb(shortfall.CardFreeBytes), shortfall.Source,
-            Gb(shortfall.NeededVideoBytes), mainNeed, main);
+        var message = text.Format("memory.shortfall.message", shortfall.ModelName, Gb(shortfall.CardTotalBytes), Gb(shortfall.CardFreeBytes),
+            shortfall.Source, Gb(shortfall.NeededVideoBytes), mainNeed, main);
+
+        // Our own local server still holds a model it could not unload: closing other programs would not help, Try again asks it again.
+        return shortfall.HeldBy.Count > 0 ? message + "\n\n" + text.Format("memory.shortfall.held", string.Join(", ", shortfall.HeldBy)) : message;
     }
 
     private string Title(MemoryShortfall shortfall) => text.Format("memory.shortfall.title", shortfall.ModelName);

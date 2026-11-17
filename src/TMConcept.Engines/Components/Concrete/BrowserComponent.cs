@@ -6,12 +6,13 @@ namespace TMConcept.Engines.Components;
 
 /// <summary>
 /// The shared Chrome Headless Shell of HyperFrames and Revideo (<c>&lt;tools&gt;/chrome</c>). It is installed with an engine; it is a
-/// component of its own only so the installed components list shows its size and can remove it.
+/// component of its own only so the installed components list shows its size and can remove it; the engines that render with it name it in
+/// <see cref="IComponentUses.Uses"/>, so it counts as used while a profile chooses one of them.
 /// </summary>
 public sealed class BrowserComponent(ChromeLocator chrome) : IComponent
 {
     /// <summary>Code.</summary>
-    public const string BrowserCode = "browser";
+    public const string BrowserCode = ComponentCodes.Browser;
 
     /// <inheritdoc />
     public string Code => BrowserCode;

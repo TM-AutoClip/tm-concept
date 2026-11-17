@@ -168,6 +168,60 @@ public sealed class GpuCoordinatorTests
         lease.Memory.FreeBytes.ShouldBe(12 * GiB);
     }
 
+    [Fact]
+    public async Task EveryReadingAfterTheFirstAsksOurStuckModelAgainAndTheQuestionNamesIt()
+    {
+        // The prompt model's server could not unload it at the handover (it still holds the card); the voice finds too little until the
+        // server finally lets go. Only the coordinator could ask it again: the check holds the card, so no change of model happens meanwhile.
+        var llm = new FakeLocalModel("qwen", videoGb: 1);
+        var probe = new FuncProbe(() => new VramReading(16 * GiB, llm.FailUnload ? 2 * GiB : 12 * GiB, true, "PDH"));
+        var handler = new ScriptedShortfallHandler(MemoryShortfallChoice.Retry);
+        var gpu = new GpuCoordinator(new ModelDirectory([]), probe, TestWaiters.Fast(handler), TimeProvider.System, NullLogger<GpuCoordinator>.Instance);
+        await (await gpu.AcquireAsync(llm, null, CancellationToken.None)).DisposeAsync();
+        llm.FailUnload = true;
+        var voice = new StrictModel("voxcpm2", 8);
+        handler.OnAsk = () => llm.FailUnload = false;
+
+        await using var lease = await gpu.AcquireAsync(voice, null, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+        // Unload at the handover (failed), again before the second reading (failed: the question names it), again after Retry (gone).
+        llm.Unloads.ShouldBe(3);
+        handler.Asked.ShouldHaveSingleItem().HeldBy.ShouldBe(["qwen"]);
+        MemoryShortfallException.Describe(handler.Asked[0]).ShouldContain("qwen");
+        voice.Loads.ShouldBe(1);
+        lease.Memory.FreeBytes.ShouldBe(12 * GiB);
+        (await gpu.RetryStuckAsync(voice, CancellationToken.None)).ShouldBeEmpty("nothing is stuck any more");
+        llm.Unloads.ShouldBe(3, "a model that was unloaded is not asked again");
+    }
+
+    [Fact]
+    public async Task APyTorchVoiceThatFitsAboveItsMinimumRunsOnTheCardWithoutASlowerNotice()
+    {
+        // 7 GiB free for a voice of the 8 GB class (minimum 6 GiB): PyTorch keeps every weight on the card, nothing goes to main memory.
+        var notices = new Engines.ImageBackendTests.RecordingNotices();
+        var gpu = new GpuCoordinator(new ModelDirectory([]), new FakeVramProbe(new VramReading(16 * GiB, 7 * GiB, true, "PDH")), TestWaiters.Fast(),
+            TimeProvider.System, NullLogger<GpuCoordinator>.Instance, notices: notices);
+        var voice = new StrictModel("voxcpm2", 8);
+
+        var plan = voice.PlanMemory(new MemorySnapshot(new VramReading(16 * GiB, 7 * GiB, true, "PDH"), 32 * GiB), null);
+        plan.Placement.ShouldBe(MemoryPlacement.Card);
+        plan.Slower.ShouldBeFalse();
+        plan.NeededVideoBytes.ShouldBe(8 * GiB / 4 * 3);
+        voice.PlanMemory(new MemorySnapshot(new VramReading(16 * GiB, 5 * GiB, true, "PDH"), 32 * GiB), null).Placement.ShouldBe(MemoryPlacement.Refused);
+        new FakeLocalModel("ollama-model", videoGb: 8).PlanMemory(new MemorySnapshot(new VramReading(16 * GiB, 7 * GiB, true, "PDH"), 32 * GiB), null)
+            .Placement.ShouldBe(MemoryPlacement.MainMemory, "a server that places weights itself still goes to main memory");
+
+        await using var lease = await gpu.AcquireAsync(voice, null, CancellationToken.None);
+        voice.Loads.ShouldBe(1);
+        notices.Placed.ShouldBeEmpty("nothing is placed off the card");
+    }
+
+    /// <summary>Graphics card memory from a function (read at each reading).</summary>
+    private sealed class FuncProbe(Func<VramReading> read) : IVramProbe
+    {
+        public Task<VramReading> MeasureAsync(GpuAdapter? adapter, CancellationToken cancellationToken) => Task.FromResult(read());
+    }
+
     /// <summary>A model that must find three quarters of its class free on the card (as a PyTorch voice).</summary>
     private sealed class StrictModel(string id, int videoGb)
         : LocalModelBase(new CatalogModel { Provider = ModelProviders.Local, Id = id, Name = id, Capabilities = ModelCapability.Speech, MinVideoMemoryGb = videoGb })
@@ -177,6 +231,8 @@ public sealed class GpuCoordinatorTests
         public override ModelDevice Device => ModelDevice.Gpu;
 
         protected override long MinimumCardBytes(ModelMemoryNeed need) => need.VideoMemoryBytes / 4 * 3;
+
+        protected override bool OffloadsToMainMemory => false;
 
         protected override Task OnLoadAsync(CancellationToken cancellationToken)
         {

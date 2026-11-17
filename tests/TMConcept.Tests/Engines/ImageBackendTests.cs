@@ -707,6 +707,18 @@ public sealed class ImageBackendTests
 
         public Task FreeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
+        /// <summary>The names <see cref="RetryStuckAsync"/> answers (models still stuck).</summary>
+        public List<string> Stuck { get; } = [];
+
+        /// <summary>How often a memory check asked the stuck models again.</summary>
+        public int StuckAsks { get; private set; }
+
+        public Task<IReadOnlyList<string>> RetryStuckAsync(IModel keep, CancellationToken cancellationToken)
+        {
+            StuckAsks++;
+            return Task.FromResult<IReadOnlyList<string>>(Stuck.ToList());
+        }
+
         private sealed class Lease(FakeCoordinator owner) : IGpuLease
         {
             public IModel Model => throw new NotSupportedException();

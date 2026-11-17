@@ -99,7 +99,7 @@ public sealed class RatingStorageTests
     }
 
     [Fact]
-    public async Task AFileOf0117WithDataIsUpgradedAndItsSuggestionsAreOnlyShown()
+    public async Task AFileOf0117WithDataIsUpgradedAndItsSuggestionsStayBlocked()
     {
         using var h = await StorageHarness.CreatedAsync();
         var profile = new Profile { Name = "Old channel" };
@@ -144,7 +144,12 @@ public sealed class RatingStorageTests
         suggestion.Id.ShouldBe(suggestionId);
         suggestion.Text.ShouldBe("Greek fire");
         suggestion.CreatedAtUtc.ShouldBe(at);
-        suggestion.Outcome.ShouldBe(TopicOutcome.Shown, "an old suggestion was only shown: it may come again");
+        suggestion.Outcome.ShouldBe(TopicOutcome.Picked,
+            "0.1.17 blocked every suggestion and never recorded which ones got a concept: they stay blocked (a topic with a concept never comes back)");
+        var fresh = new TopicSuggestion { ProfileId = profile.Id, Text = "Varangian Guard" };
+        await new TopicSuggestionStore(h.Database).AddAsync([fresh], None);
+        (await new TopicSuggestionStore(h.Database).ListAsync(profile.Id, 10, None)).Single(s => s.Id == fresh.Id).Outcome
+            .ShouldBe(TopicOutcome.Shown, "a suggestion made after the upgrade is only shown: it may come again");
         (await new ConceptStore(h.Database).GetAsync(concept.Id, None)).ShouldNotBeNull().Title.ShouldBe("Hagia Sophia");
         var video = (await new VideoStore(h.Database).ListAsync(profile.Id, None)).ShouldHaveSingleItem();
         (await new VideoRatingStore(h.Database).ListAsync(profile.Id, None)).ShouldBeEmpty("nothing is rated by the upgrade");

@@ -14,7 +14,9 @@ namespace TMConcept.Core.Models;
 /// skipped the wait there), a second reading 2.5 s later, then the user's question. The check runs OUTSIDE the coordinator's lock with the
 /// lease already counted, so an open question keeps other models waiting for the card (as any lease does) but never blocks a release or
 /// <see cref="FreeAsync"/>; a second lease of the same model waits for the running check. A placement off the card (main memory, disk) is
-/// reported (<see cref="IMemoryNotices"/>) and logged as a warning.</para>
+/// reported (<see cref="IMemoryNotices"/>) and logged as a warning. Every reading of a check after its first asks the stuck models again
+/// (<see cref="RetryStuckAsync(IModel, CancellationToken)"/>): while the check holds the card nothing else would, so the user's Retry would
+/// only measure our own server's memory again; the question names the models still stuck.</para>
 /// Waiting leases are not ordered. Each change is logged (model codes and memory figures only).
 /// </summary>
 public sealed class GpuCoordinator(IModelDirectory directory, IVramProbe probe, IMemoryWaiter waiter, TimeProvider clock, ILogger<GpuCoordinator> logger,
@@ -94,6 +96,22 @@ public sealed class GpuCoordinator(IModelDirectory directory, IVramProbe probe, 
             }
 
             await RetryStuckAsync(null, loaded, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<string>> RetryStuckAsync(IModel keep, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(keep);
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await RetryStuckAsync(keep, null, cancellationToken).ConfigureAwait(false);
+            return _stuck.Where(m => m.Key != keep.Key).Select(m => m.Name).ToList();
         }
         finally
         {
@@ -208,8 +226,12 @@ public sealed class GpuCoordinator(IModelDirectory directory, IVramProbe probe, 
         try
         {
             MemoryPlan? plan = null;
+            var readings = 0;
             await waiter.WaitAsync(model, unloadedAt, async token =>
             {
+                // The first reading follows the handover's own unload; every later one (the second reading, each Retry) asks our stuck
+                // models again first: they may be what holds the card.
+                IReadOnlyList<string> stuck = readings++ == 0 ? [] : await RetryStuckAsync(model, token).ConfigureAwait(false);
                 var reading = await probe.MeasureAsync(null, token).ConfigureAwait(false);
                 var free = memory?.AvailableBytes();
                 plan = model.PlanMemory(new MemorySnapshot(reading, free), need);
@@ -218,7 +240,7 @@ public sealed class GpuCoordinator(IModelDirectory directory, IVramProbe probe, 
                 return plan.Runs || !reading.Measured
                     ? null
                     : new MemoryShortfall(model.Name, reading.TotalBytes, Math.Max(reading.FreeBytes, reading.SystemFreeBytes ?? 0), reading.Source,
-                        plan.NeededVideoBytes, free, plan.NeededMainBytes);
+                        plan.NeededVideoBytes, free, plan.NeededMainBytes) { HeldBy = stuck };
             }, cancellationToken).ConfigureAwait(false);
 
             if (plan is { Slower: true })
@@ -352,7 +374,7 @@ public sealed class GpuCoordinator(IModelDirectory directory, IVramProbe probe, 
     /// Asks the models whose unload failed once more, except <paramref name="keep"/> (about to be used) and <paramref name="justAsked"/> (its
     /// unload was asked a moment ago: a server that waits out its unload time is not waited for twice). Called with the gate held.
     /// </summary>
-    private async Task RetryStuckAsync(ILocalModel? keep, ILocalModel? justAsked, CancellationToken cancellationToken)
+    private async Task RetryStuckAsync(IModel? keep, ILocalModel? justAsked, CancellationToken cancellationToken)
     {
         foreach (var stuck in _stuck.Where(m => (keep is null || m.Key != keep.Key) && !ReferenceEquals(m, justAsked)).ToList())
         {

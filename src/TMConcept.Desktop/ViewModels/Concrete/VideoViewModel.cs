@@ -693,6 +693,18 @@ public sealed partial class VideoViewModel : PageViewModelBase
         }
     }
 
+    /// <summary>
+    /// A video that fails before it starts (its profile is gone, its code model has no key or is not installed): the same red line (logged as
+    /// an error) and notification as a failure inside the pipeline, so the stop that follows with night mode off is never silent.
+    /// </summary>
+    private void FailedBeforeStart(QueueRowViewModel row, string error)
+    {
+        row.Error = error;
+        var line = _text.Format("video.failed", row.Title, error, _text.Usd(0));
+        _activity.Add(ActivityLevel.Error, line, _text.Format("video.failed", ActivityPlaceholders.Title, error, _text.Usd(0)));
+        _notifier.Notify(new AppNotification(NotificationKind.Failed, _text["video.failed.title"], line));
+    }
+
     private async Task<QueueItemOutcome> ProduceAsync(QueueRowViewModel row, CancellationToken cancellationToken)
     {
         var outcome = QueueItemOutcome.Failed;
@@ -712,9 +724,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
 
             if (await _profiles.GetAsync(row.Item.ProfileId, CancellationToken.None).ConfigureAwait(true) is not { } profile)
             {
-                row.Error = _text["video.error.concept"];
-                _activity.Add(ActivityLevel.Error, _text.Format("video.failed", row.Title, row.Error, _text.Usd(0)),
-                    _text.Format("video.failed", ActivityPlaceholders.Title, row.Error, _text.Usd(0)));
+                FailedBeforeStart(row, _text["video.error.concept"]);
                 return outcome;
             }
 
@@ -731,9 +741,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
             catch (ModelNotReadyException ex)
             {
                 _logger.LogWarning("Video not started: the {Step} step has no {Missing}", ex.Step, ex.Missing);
-                row.Error = ex.Missing == "key" ? _text.Format("concepts.no_key", choice?.Provider ?? string.Empty) : _text["video.no_model"];
-                _activity.Add(ActivityLevel.Error, _text.Format("video.failed", row.Title, row.Error, _text.Usd(0)),
-                    _text.Format("video.failed", ActivityPlaceholders.Title, row.Error, _text.Usd(0)));
+                FailedBeforeStart(row, ex.Missing == "key" ? _text.Format("concepts.no_key", choice?.Provider ?? string.Empty) : _text["video.no_model"]);
                 return outcome;
             }
 

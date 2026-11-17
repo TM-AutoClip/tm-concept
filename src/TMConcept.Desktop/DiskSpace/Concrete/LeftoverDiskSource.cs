@@ -14,8 +14,9 @@ namespace TMConcept.Desktop.DiskSpace;
 /// <item>folders inside <c>tools/</c> that no component owns (an older pinned version, a build for another graphics setting);</item>
 /// <item>old components folders next to <c>tools/</c> left by "Reinstall from scratch" (<c>tools.old-*</c>, <c>tools.failed-*</c>,
 /// <c>tools.aside-*</c>);</item>
-/// <item>the work caches: cached narration, voice sample files, run folders and scene images older than the work keep time (the clean-up
-/// takes those; the recent ones that a retry still uses go only with the full delete).</item>
+/// <item>the work caches: voice sample files, and cached narration, run folders and scene images older than the work keep time (the clean-up
+/// takes those; the recent ones that a retry still uses go only with the full delete: a retry of a failed video would otherwise pay the
+/// online voice and the online images again).</item>
 /// </list>
 /// The database, keys, settings, backups, logs and the videos in the library are never rows here.
 /// </summary>
@@ -58,7 +59,12 @@ public sealed class LeftoverDiskSource(AppPaths paths, PythonLayout python, Comp
         }
 
         var work = paths.WorkDirectory;
-        yield return Folder("work:speech-cache", "storage.item.speech_cache", DiskArea.Work, [Path.Combine(work, "speech-cache")], true);
+        // Narration is one file per spoken text (a cache hit costs nothing, a miss may pay an online voice again).
+        var speech = Path.Combine(work, "speech-cache");
+        var clips = Directory.Exists(speech) ? Directory.EnumerateFiles(speech).ToList() : [];
+        var oldClips = clips.Where(c => clock.GetUtcNow() - File.GetLastWriteTimeUtc(c) > Core.Videos.VideoPipeline.WorkKeep).ToList();
+        yield return Folder("work:speech-cache:old", "storage.item.speech_cache.old", DiskArea.Work, oldClips, true);
+        yield return Folder("work:speech-cache:recent", "storage.item.speech_cache.recent", DiskArea.Work, clips.Except(oldClips).ToList(), false);
         yield return Folder("work:voices", "storage.item.voice_files", DiskArea.Work, [Path.Combine(work, "voices")], true);
         foreach (var (kind, oldKey, recentKey) in new[]
         {

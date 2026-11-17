@@ -1,8 +1,12 @@
 using Microsoft.Extensions.Logging;
+using TMConcept.Core.Activity;
 
 namespace TMConcept.Core.Videos;
 
-/// <summary><see cref="IVideoQueueRunner"/> with a <see cref="TimeProvider"/> for the night mode's gap (tests move a fake clock).</summary>
+/// <summary>
+/// <see cref="IVideoQueueRunner"/> with a <see cref="TimeProvider"/> for the night mode's gap (tests move a fake clock). Its stop and failure
+/// lines are only for the log (<see cref="LogEvents.OnScreen"/>): the page already shows each failed video and the stop in the user's language.
+/// </summary>
 public sealed class VideoQueueRunner(TimeProvider clock, ILogger<VideoQueueRunner> logger) : IVideoQueueRunner
 {
     /// <summary>Failed videos in a row that stop the queue in night mode.</summary>
@@ -56,17 +60,17 @@ public sealed class VideoQueueRunner(TimeProvider clock, ILogger<VideoQueueRunne
                     inRow++;
                     if (!nightMode())
                     {
-                        logger.LogWarning("A video failed; the queue stops (night mode is off)");
+                        logger.LogWarning(LogEvents.OnScreen, "A video failed; the queue stops (night mode is off)");
                         return End(QueueRunEnd.Failed);
                     }
 
                     if (inRow >= FailuresInRow)
                     {
-                        logger.LogError("Night mode: {Count} videos in a row failed; the queue stops", inRow);
+                        logger.LogError(LogEvents.OnScreen, "Night mode: {Count} videos in a row failed; the queue stops", inRow);
                         return End(QueueRunEnd.FailuresInRow);
                     }
 
-                    logger.LogWarning("Night mode: a video failed ({Count} in a row); the queue goes on with the next one", inRow);
+                    logger.LogWarning(LogEvents.OnScreen, "Night mode: a video failed ({Count} in a row); the queue goes on with the next one", inRow);
                     break;
                 case QueueItemOutcome.Stopped:
                     return End(QueueRunEnd.Stopped);

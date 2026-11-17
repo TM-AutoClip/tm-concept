@@ -30,7 +30,7 @@ veritabanını şifreli tutar.
   antik, modern).
 - **Konsept üret.** İki ayrı bölüm. **Konu önererek üret**: 5–100 konu önert, beğendiklerini işaretle, **Seçilenleri üret**'e bas: her
   işaretli konudan tam bir konsept. İşaretlemediğin konu kötü sayılmaz: sonra yeniden önerilebilir; yalnız konsepti yapılan konu bir daha
-  gelmez. **Fikirden üret**: bir fikir yaz (ya da boş bırak), 1–100 konsept seç. Her basış listeye ekler. Her
+  gelmez (0.1.18'den önce önerilen konular engelli kalır: o sürüm hangisinden konsept yapıldığını kaydetmiyordu). **Fikirden üret**: bir fikir yaz (ya da boş bırak), 1–100 konsept seç. Her basış listeye ekler. Her
   düğmenin yanında küçük bir tahmini ücret görünür; sonra sağlayıcının bildirdiği kullanımdan kesin ücret gelir. Tekrar dört katmanda
   önlenir: istemde bütün konseptlerin geçmişi (önbellekli), ücretsiz yerel benzerlik denetimi, gömme modeliyle isteğe bağlı anlamsal
   denetim ve liste büyüyünce sıkıştırılmış geçmiş. Her satırda **Onayla** (A tuşu) ve **Sil** (D tuşu) var; tıklanan konsept listenin
@@ -222,7 +222,8 @@ sorulabiliyorsa) ve program kartın belleği yeniden boşalana kadar bekler; onl
 beklemez; NVIDIA kartta konuşan bir Python sesi kartı görsel modelleri gibi alır. Bir model boşaltıldıktan sonra (bir videonun sonunda
 kart boşaltıldığında da) program 3 saniye bekleyip boş belleği ölçer; yetmezse 2,5 saniye bekleyip yeniden ölçer; yine yetmezse bir
 pencere kartın toplam ve boş belleğini, modelin ihtiyacını ve boş ana belleği gösterir: ekran kartını ya da belleği kullanan programları
-(oyun, tarayıcı) kapatıp **Yeniden dene**'ye basarsın (5 saniye bekleyip yeniden ölçer, istediğin kadar), ya da **İptal**'e (video sırası
+(oyun, tarayıcı) kapatıp **Yeniden dene**'ye basarsın (5 saniye bekleyip yeniden ölçer, istediğin kadar; TM Concept'in kendi yerel
+sunucusunda bellekten çıkarılamayan bir model varsa pencerede adıyla yazar ve her yeni ölçümden önce onu bir kez daha çıkarmayı dener), ya da **İptal**'e (video sırası
 durur, program açık kalır). Her adım etkinlik panelinde bir satırdır. Gece modunda soru sorulmaz: o video hata sayılır. Boş bellek her seferinde ölçülür: Windows'ta Görev Yöneticisi'nin gösterdiğiyle Windows'un programa izin verdiğinden (ikincisi tek başına hiçbir görseli reddettirmez, yalnızca sd-cli'ye yükü ana belleğe aktarttırabilir) küçük
 olanı, Linux'ta AMD sürücüsünün dosyaları ya da `nvidia-smi`. Ekran belleği sınıfları 4, 6, 8, 12, 16, 24 ve 32 GB'tır: bir kart
 bildirdiği belleğe yüzde 8 payla en yakın sınıfta sayılır (15,8 GB bildiren "16 GB" kart 16 GB'lık, 11 GB'lık kart 8 GB'lık karttır), kendi sınıfını ve
@@ -262,9 +263,10 @@ videosunu modelsiz, ağsız render edebilir.
 programlar, modeller, iş önbellekleri, yedekler ve günlükler için toplamlar, ve her bileşenin boyutu, *kullanılıyor*, *kullanılmıyor* ya da
 *yarım* olduğu, hangi profilin hangi adımda kullandığı (bütün profillerin kayıtlı model seçimlerinden). 10 GB'lık bir sesten 5 GB'lık birine
 mi geçtin? Eskisi *kullanılmıyor* görünür. **Seçilenleri kaldır** işaretli satırları kaldırır, **Kullanılmayanları temizle** hiçbir profilin
-kullanmadığı bileşenleri ve kendiliğinden yeniden oluşan artıkları (yarım indirmeler, eski bileşen sürümleri ve klasörleri, önbellekteki
-seslendirmeler, 7 günden eski iş klasörleri) kaldırır, **Kapsamlı silme** bütün bileşenleri ve önbellekleri kaldırır. Her şey geri dönüşüm
-kutusuna gider (kutu alamazsa kalıcı silme ancak ayrı bir onayla); video, üretim, seslendirme ya da kurulum sürerken hiçbir şey kaldırılmaz.
+kullanmadığı bileşenleri ve kendiliğinden yeniden oluşan artıkları (yarım indirmeler, eski bileşen sürümleri ve klasörleri, 7 günden eski
+önbellekteki seslendirmeler ve iş klasörleri; yeni seslendirmeler ve sahne görselleri kalır, yeniden denemede yeniden ödemek yerine
+kullanılır; HyperFrames ve Revideo'nun tarayıcısı bir profil onlarla video yaptıkça kullanılıyor sayılır) kaldırır, **Kapsamlı silme** bütün bileşenleri ve önbellekleri kaldırır. Her şey geri dönüşüm
+kutusuna gider (kutu alamazsa kalıcı silme ancak ayrı bir onayla); video, üretim, seslendirme, kurulum ya da bir motorun örnek videosu sürerken hiçbir şey kaldırılmaz.
 Veritabanın, profillerin, konseptlerin, videoların, yedeklerin ve günlüklerin orada asla silinmez.
 
 Fiyatlar kendiliğinden, günde en çok bir kez güncellenir: program bu deponun `pricing/prices.json` dosyasını ve OpenRouter'ın herkese açık

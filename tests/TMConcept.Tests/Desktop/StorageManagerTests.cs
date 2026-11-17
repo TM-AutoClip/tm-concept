@@ -65,6 +65,40 @@ public sealed class StorageManagerTests
     }
 
     [AvaloniaFact]
+    public async Task TheSharedBrowserIsUsedWhileAProfileRendersWithHyperFramesOrRevideo()
+    {
+        // The browser is no dependency of an engine (the engine's install fetches it), but HyperFrames and Revideo render with it: clean-up
+        // must keep it (0.1.18 before this fix sent tools/chrome to the bin, and the next video stopped for a 150 MB download).
+        using var h = new DesktopHarness();
+        await FirstRunTests.CreateAsync(h);
+        var profile = new Profile { Name = "Byzantium", ContentLanguage = ContentLanguages.English, ConceptText = "x" };
+        await h.Get<IProfileStore>().SaveAsync(profile, None);
+        var chrome = h.Get<TMConcept.Engines.Engines.ChromeLocator>().Root;
+        Put(chrome, 900);
+        var steps = h.Get<IStepModelStore>();
+        var usage = h.Get<IComponentUsage>();
+        foreach (var (kind, used) in new[] { (EngineKind.HyperFrames, true), (EngineKind.Revideo, true), (EngineKind.Remotion, false) })
+        {
+            await steps.SaveAsync(new StepModelChoice
+            {
+                Step = PipelineSteps.VideoCode, ProfileId = profile.Id, Provider = "anthropic", Model = "claude-sonnet-5-5",
+                OptionsJson = StepModelResolver.OptionsJson(new StepOptions { Engine = kind }),
+            }, None);
+
+            var map = await usage.ComputeAsync(None);
+            map.IsUsed(ComponentCodes.Browser).ShouldBe(used, kind.ToString());
+            if (used)
+            {
+                map.For(ComponentCodes.Browser).ShouldBe([new DiskUse("Byzantium", PipelineSteps.VideoCode)]);
+                var report = await h.Get<IDiskCleaner>().ReportAsync(None);
+                var browser = report.Items.Single(i => i.Key == "component:" + ComponentCodes.Browser);
+                browser.UsedBy.ShouldNotBeEmpty();
+                DiskSelection.Unused(report.Items).ShouldNotContain(browser, "clean-up never takes what a chosen engine renders with");
+            }
+        }
+    }
+
+    [AvaloniaFact]
     public async Task TheReportListsStatesSizesLeftoversAndTotals()
     {
         var setup = await SetupAsync();
@@ -82,13 +116,14 @@ public sealed class StorageManagerTests
             "an older version nothing owns; the pinned version and the marker file next to it stay");
         report.Items.ShouldContain(i => i.Key == "tools:downloads");
         report.Items.ShouldContain(i => i.Key.StartsWith("tools:aside:tools.old-", StringComparison.Ordinal));
-        report.Items.ShouldContain(i => i.Key == "work:speech-cache");
+        report.Items.Single(i => i.Key == "work:speech-cache:old").Bytes.ShouldBe(120);
+        report.Items.Single(i => i.Key == "work:speech-cache:recent").Bytes.ShouldBe(300);
         report.Items.ShouldContain(i => i.Key == "work:videos:old");
         report.Items.ShouldContain(i => i.Key == "work:videos:recent");
 
         var totals = report.Totals.ToDictionary(t => t.Area, t => t.Bytes);
         totals[DiskArea.Models].ShouldBe(1000 + 5000 + 3000 + 700);
-        totals[DiskArea.Work].ShouldBe(300 + 400 + 500);
+        totals[DiskArea.Work].ShouldBe(300 + 120 + 400 + 500);
         totals[DiskArea.Backups].ShouldBe(0);
         totals[DiskArea.Tools].ShouldBeGreaterThan(0);
     }
@@ -107,7 +142,8 @@ public sealed class StorageManagerTests
         unused.ShouldContain("component:image.flux2-klein-4b");
         unused.ShouldContain("tools:downloads");
         unused.ShouldContain("tools:unowned");
-        unused.ShouldContain("work:speech-cache");
+        unused.ShouldContain("work:speech-cache:old");
+        unused.ShouldNotContain("work:speech-cache:recent", "a retry speaks from it instead of paying an online voice again");
         unused.ShouldContain("work:videos:old");
         unused.ShouldNotContain("work:videos:recent", "a retry still uses it");
         foreach (var used in report.Items.Where(i => i.State == DiskItemState.Used || i.UsedBy.Count > 0))
@@ -117,6 +153,7 @@ public sealed class StorageManagerTests
 
         DiskSelection.Full(report.Items).Select(i => i.Key).ShouldContain("component:voice.kokoro", "the full delete takes every component");
         DiskSelection.Full(report.Items).Select(i => i.Key).ShouldContain("work:videos:recent");
+        DiskSelection.Full(report.Items).Select(i => i.Key).ShouldContain("work:speech-cache:recent");
     }
 
     [AvaloniaFact]
@@ -182,6 +219,63 @@ public sealed class StorageManagerTests
         outcome.Busy.ShouldBeTrue();
         setup.Bin.Moved.ShouldBeEmpty();
         Directory.Exists(setup.Supertonic.Folder).ShouldBeTrue();
+    }
+
+    [AvaloniaFact]
+    public async Task NothingIsRemovedWhileAnEngineRendersItsSample()
+    {
+        // Settings → "Render sample" runs Node.js and the browser from the components folder; it is work like a video.
+        var setup = await SetupAsync();
+        using var h = setup.H;
+        var cleaner = h.Get<IDiskCleaner>();
+        var report = await cleaner.ReportAsync(None);
+        var sample = h.Get<TMConcept.Engines.Engines.SampleRender>();
+        var engine = new HeldEngine();
+        var rendering = sample.RenderAsync(engine, null, None);
+        await engine.Started.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+        sample.Busy.ShouldBeTrue();
+        (await cleaner.RemoveAsync(DiskSelection.Full(report.Items), None)).Busy.ShouldBeTrue();
+        setup.Bin.Moved.ShouldBeEmpty();
+
+        engine.Finish.SetResult();
+        await rendering;
+        sample.Busy.ShouldBeFalse();
+        (await cleaner.RemoveAsync([report.Items.Single(i => i.Key == "component:voice.supertonic")], None)).Busy.ShouldBeFalse();
+    }
+
+    /// <summary>An engine whose render waits until the test lets it finish.</summary>
+    private sealed class HeldEngine : IVideoEngine
+    {
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource Finish { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public EngineKind Kind => EngineKind.HyperFrames;
+
+        public string Name => "Held";
+
+        public bool Experimental => false;
+
+        public bool NeedsLicenseConsent => false;
+
+        public string CodeFile => "scene.js";
+
+        public string Contract => "contract";
+
+        public string SampleCode => "sample";
+
+        public EngineStatus Status() => new(true, []);
+
+        public Task InstallAsync(bool agreed, IProgress<TMConcept.Core.Tools.ToolProgress>? progress, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public void WriteProject(EngineRenderRequest request) => Directory.CreateDirectory(request.Folder);
+
+        public async Task RenderAsync(EngineRenderRequest request, IProgress<EngineEvent>? progress, CancellationToken cancellationToken)
+        {
+            Started.SetResult();
+            await Finish.Task.WaitAsync(cancellationToken);
+        }
     }
 
     [Fact]
@@ -278,6 +372,8 @@ public sealed class StorageManagerTests
         Put(Path.Combine(tools, "speech-py", "scripts"), 70);
         Put(Path.Combine(folder, "tools.old-20261101-120000"), 80);
         Put(Path.Combine(folder, "work", "speech-cache"), 300);
+        Put(Path.Combine(folder, "work", "speech-cache"), 120, "old-clip.wav");
+        File.SetLastWriteTimeUtc(Path.Combine(folder, "work", "speech-cache", "old-clip.wav"), DateTime.UtcNow.AddDays(-10));
         var old = Path.Combine(folder, "work", "videos", "old");
         Put(old, 400);
         Directory.SetLastWriteTimeUtc(old, DateTime.UtcNow.AddDays(-10));
@@ -319,7 +415,7 @@ public sealed class StorageManagerTests
 
     private sealed record Setup(DesktopHarness H, FakeBin Bin, FakeConfirm Confirm, FakeComponent Kokoro, FakeComponent Supertonic, FakeComponent Remotion);
 
-    /// <summary>A recycle bin that deletes what it is given (or fails, like a drive without a bin).</summary>
+    /// <summary>A recycle bin that deletes the folder or file it is given (or fails, like a drive without a bin).</summary>
     private sealed class FakeBin : IRecycleBin
     {
         public List<string> Moved { get; } = [];
@@ -334,7 +430,16 @@ public sealed class StorageManagerTests
             }
 
             Moved.Add(folder);
-            Directory.Delete(folder, recursive: true);
+            if (File.Exists(folder))
+            {
+                // A cached narration file older than the work keep time.
+                File.Delete(folder);
+            }
+            else
+            {
+                Directory.Delete(folder, recursive: true);
+            }
+
             return Task.CompletedTask;
         }
     }

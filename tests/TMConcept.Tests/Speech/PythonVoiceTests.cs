@@ -139,6 +139,12 @@ public sealed class PythonVoiceTests
             PythonWorkerTests.Engine(paths, null!, new FakeGpu(Nvidia12), PythonVoices.VoxCpm2));
         model.Tier.ShouldBe(VramTier.Gb8);
         model.Needs.Single().MemoryBytes.ShouldBe(12 * GiB);
+
+        // PyTorch keeps every weight on the card: 7 of the 8 GB class free runs on the card (no false "main memory, slower"), 5 is refused.
+        var card = new VramReading(16 * GiB, 7 * GiB, true, "PDH");
+        var plan = model.PlanMemory(new MemorySnapshot(card, 32 * GiB), null);
+        (plan.Placement, plan.Slower).ShouldBe((MemoryPlacement.Card, false));
+        model.PlanMemory(new MemorySnapshot(card with { FreeBytes = 5 * GiB }, 32 * GiB), null).Placement.ShouldBe(MemoryPlacement.Refused);
     }
 
     [Fact]

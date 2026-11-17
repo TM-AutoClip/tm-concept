@@ -383,6 +383,60 @@ public sealed class VideoPageTests
     }
 
     [AvaloniaFact]
+    public async Task AVideoWhoseCodeModelLostItsKeyStopsTheQueueWithARedLineAndANotification()
+    {
+        // Night mode off: the key is gone when the item starts (removed after the queue was prepared). The queue stops on it, and the
+        // video's own red line and notification say why (0.1.18 before this fix: a red line only, no notification).
+        var engine = new FakeEngine();
+        var chat = new FakeChat().Answer(_ => Code(engine.SampleCode));
+        var notes = new RecordingNotifier();
+        using var h = Harness(chat, engine, s =>
+        {
+            s.AddSingleton<TMConcept.Core.Notifications.INotifier>(notes);
+            s.AddSingleton<IVideoQueueRunner>(p => new KeyGoneRunner(p.GetRequiredService<IApiKeyStore>()));
+        });
+        var (page, _) = await PrepareAsync(h);
+        var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
+        var row = page.Queue.Single();
+
+        await page.ProduceAllAsync();
+
+        row.Error.ShouldBe(text.Format("concepts.no_key", "anthropic"));
+        chat.Requests.ShouldBeEmpty();
+        var failed = notes.Sent.ShouldHaveSingleItem();
+        failed.Kind.ShouldBe(TMConcept.Core.Notifications.NotificationKind.Failed);
+        failed.Title.ShouldBe(text["video.failed.title"]);
+        failed.Message.ShouldContain(row.Error);
+        h.Get<TMConcept.Core.Activity.IActivityFeed>().Recent().ShouldContain(l => l.IsError && l.Text.Contains(row.Error, StringComparison.Ordinal));
+        page.Status.ShouldBe(text["video.queue.stopped.error"]);
+    }
+
+    /// <summary>The real runner, after removing every API key (as if the user deleted the key while the queue was being prepared).</summary>
+    private sealed class KeyGoneRunner(IApiKeyStore keys) : IVideoQueueRunner
+    {
+        public async Task<QueueRunResult> RunAsync<T>(Func<CancellationToken, Task<T?>> next, Func<T, CancellationToken, Task<QueueItemOutcome>> produce,
+            Func<bool> nightMode, CancellationToken cancellationToken)
+            where T : class
+        {
+            foreach (var key in await keys.ListAsync(null, cancellationToken))
+            {
+                await keys.DeleteAsync(key.Id, cancellationToken);
+            }
+
+            return await new VideoQueueRunner(TimeProvider.System, Microsoft.Extensions.Logging.Abstractions.NullLogger<VideoQueueRunner>.Instance)
+                .RunAsync(next, produce, nightMode, cancellationToken);
+        }
+    }
+
+    /// <summary>Keeps every notification.</summary>
+    private sealed class RecordingNotifier : TMConcept.Core.Notifications.INotifier
+    {
+        public List<TMConcept.Core.Notifications.AppNotification> Sent { get; } = [];
+
+        public void Notify(TMConcept.Core.Notifications.AppNotification notification) => Sent.Add(notification);
+    }
+
+    [AvaloniaFact]
     public async Task AFailedVideoShowsWhatItSpent()
     {
         var engine = new FakeEngine { FailRenders = 2 };

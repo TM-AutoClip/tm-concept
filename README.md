@@ -30,7 +30,8 @@ needed) and narrates it with a **free local voice**. It runs on Windows and Linu
   (history: Byzantine, Ottoman; technology: ancient, modern).
 - **Generate concepts.** Two separate sections. **Generate from suggested topics**: suggest 5–100 topics, tick the ones you like and
   press **Generate selected**: exactly one concept per ticked topic. A topic you did not tick is not a bad one: it may be suggested again
-  later; only a topic that got a concept never comes back. **Generate from an idea**: write an idea (or leave it empty) and
+  later; only a topic that got a concept never comes back (topics suggested before 0.1.18 stay blocked: that version did not record which
+  ones got a concept). **Generate from an idea**: write an idea (or leave it empty) and
   choose 1–100 concepts. Every press adds to the list. Each button shows a small estimated price; the exact price from the provider's
   usage follows. Duplicates are prevented in four layers: the history of every concept in the prompt (cached), a free local similarity
   check, an optional semantic check with an embedding model, and a compressed history when the list grows. Every row has **Approve**
@@ -228,7 +229,8 @@ processor) never wait; a Python voice on an NVIDIA card takes the card like the 
 card was freed at the end of a video) the app waits 3 seconds and measures the free memory; if it is not enough it waits 2.5 seconds and
 measures again; if it is still not enough a window shows the card's total and free memory, what the model needs and the free main memory:
 close programs that use the card or memory (games, browsers) and press **Try again** (it waits 5 seconds and measures again, as often as you
-like), or **Cancel** (the video queue stops; the app stays open). Every step is a line in the activity panel. In night mode nobody is asked:
+like; a model of TM Concept's own local server that could not be unloaded is named in the window and asked to unload again before every
+new reading), or **Cancel** (the video queue stops; the app stays open). Every step is a line in the activity panel. In night mode nobody is asked:
 that video fails. The free memory is measured each time: on Windows the smaller of what Task Manager shows and what Windows lets (the latter alone never refuses a picture: it may only make sd-cli offload)
 the app use, on Linux the AMD driver's files or `nvidia-smi`. Graphics memory classes are 4, 6, 8, 12, 16, 24 and 32 GB: a card counts in
 the class it reports within 8 % (a "16 GB" card that reports 15.8 GB is a 16 GB card; an 11 GB card is an 8 GB card) and can use its own class and every
@@ -267,9 +269,11 @@ HTTPS from Google, which publishes no checksum for it. Settings → **General** 
 programs, models, work caches, backups and logs, and every component with its size, whether it is *used*, *unused* or *incomplete*, and
 which profile and step use it (from every profile's saved model choices). Switched from a 10 GB voice to a 5 GB one? The old one shows as
 *unused*. **Remove selected** removes the ticked rows, **Clean up unused** removes every component no profile uses plus leftovers that come
-back by themselves (unfinished downloads, old component versions and folders, cached narration, work folders older than 7 days), and
+back by themselves (unfinished downloads, old component versions and folders, cached narration and work folders older than 7 days; recent
+narration and scene images stay, a retry uses them instead of paying again; the browser of HyperFrames and Revideo counts as used while
+a profile renders with them), and
 **Full delete** removes every component and cache. Everything goes to the recycle bin (a permanent delete only after its own confirmation,
-when the bin cannot take it); nothing is removed while a video, a generation, a narration or an install runs. Your database, profiles,
+when the bin cannot take it); nothing is removed while a video, a generation, a narration, an install or an engine's sample render runs. Your database, profiles,
 concepts, videos, backups and logs are never removed there.
 
 Prices update by themselves, at most once a day: the app reads `pricing/prices.json` of this repository and OpenRouter's public model

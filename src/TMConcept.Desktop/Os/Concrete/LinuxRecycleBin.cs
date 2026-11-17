@@ -22,7 +22,7 @@ public sealed class LinuxRecycleBin(ICommandRunner runner, ILogger<LinuxRecycleB
                 return;
             }
 
-            if (!Directory.Exists(folder))
+            if (!Directory.Exists(folder) && !File.Exists(folder))
             {
                 throw new IOException("gio trash failed: " + ChildOutput.Summary(error));
             }
@@ -40,7 +40,7 @@ public sealed class LinuxRecycleBin(ICommandRunner runner, ILogger<LinuxRecycleB
         Directory.CreateDirectory(Path.Combine(trash, "info"));
         var name = Path.GetFileName(folder.TrimEnd(Path.DirectorySeparatorChar));
         var target = name;
-        for (var i = 2; Directory.Exists(Path.Combine(trash, "files", target)); i++)
+        for (var i = 2; Path.Exists(Path.Combine(trash, "files", target)); i++)
         {
             target = name + "." + i.ToString(CultureInfo.InvariantCulture);
         }
@@ -48,6 +48,14 @@ public sealed class LinuxRecycleBin(ICommandRunner runner, ILogger<LinuxRecycleB
         await File.WriteAllTextAsync(Path.Combine(trash, "info", target + ".trashinfo"),
             "[Trash Info]\nPath=" + Uri.EscapeDataString(folder).Replace("%2F", "/", StringComparison.Ordinal) + "\nDeletionDate="
             + DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture) + "\n", cancellationToken).ConfigureAwait(false);
-        Directory.Move(folder, Path.Combine(trash, "files", target));
+        if (File.Exists(folder))
+        {
+            // A single cached file (narration older than the work keep time).
+            File.Move(folder, Path.Combine(trash, "files", target));
+        }
+        else
+        {
+            Directory.Move(folder, Path.Combine(trash, "files", target));
+        }
     }
 }

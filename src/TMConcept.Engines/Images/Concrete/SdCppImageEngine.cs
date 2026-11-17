@@ -273,8 +273,12 @@ public sealed class SdCppImageEngine(ToolInstaller tools, LocalImageStore store,
         {
             // Read before every picture: another program may have taken memory since the lease. Too little even for the disk level: read once
             // more, then the user decides (the model never changes).
+            var readings = 0;
             await waiter.WaitAsync(local, null, async token =>
             {
+                // A reading after the first (the second one, each Retry) asks TM Concept's own stuck local models again first: a prompt
+                // model whose unload failed may be what holds the card, and nothing else asks it while this lease is held.
+                IReadOnlyList<string> stuck = readings++ == 0 ? [] : await gpu.RetryStuckAsync(local, token).ConfigureAwait(false);
                 var reading = await vram.MeasureAsync(choice.Device, token).ConfigureAwait(false);
                 var free = memory.AvailableBytes();
                 plan = local.PlanImage(choice.Backend, new MemorySnapshot(reading, free));
@@ -284,7 +288,7 @@ public sealed class SdCppImageEngine(ToolInstaller tools, LocalImageStore store,
                 return plan.Level != ImageMemoryLevel.Refused
                     ? null
                     : new MemoryShortfall(model.Name, reading.TotalBytes, Math.Max(reading.FreeBytes, reading.SystemFreeBytes ?? 0), reading.Source,
-                        plan.NeededVideoBytes, free, plan.NeededMainBytes);
+                        plan.NeededVideoBytes, free, plan.NeededMainBytes) { HeldBy = stuck };
             }, cancellationToken).ConfigureAwait(false);
         }
 

@@ -53,7 +53,7 @@ public sealed partial class WindowsRecycleBin : IRecycleBin
                 throw new IOException(string.Create(CultureInfo.InvariantCulture, $"The shell could not move the folder to the recycle bin (code 0x{result:X})."));
             }
 
-            if (Directory.Exists(folder))
+            if (Directory.Exists(folder) || File.Exists(folder))
             {
                 throw new IOException("The folder was only partly moved to the recycle bin.");
             }

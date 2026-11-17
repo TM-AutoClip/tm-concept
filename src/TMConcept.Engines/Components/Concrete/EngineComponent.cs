@@ -9,7 +9,7 @@ namespace TMConcept.Engines.Components;
 /// A video engine: its npm packages and its browser (Chrome Headless Shell), after Node.js and ffmpeg. Ready only when the whole engine can
 /// render, so a missing Node.js or ffmpeg pulls those in; the install itself fetches only the packages and the browser that are missing.
 /// </summary>
-public sealed class EngineComponent(IVideoEngine engine) : IComponent
+public sealed class EngineComponent(IVideoEngine engine) : IComponent, IComponentUses
 {
     /// <summary>The engine.</summary>
     public IVideoEngine Engine { get; } = engine;
@@ -25,6 +25,13 @@ public sealed class EngineComponent(IVideoEngine engine) : IComponent
 
     /// <inheritdoc />
     public IReadOnlyList<string> DependsOn { get; } = [ComponentCodes.Node, ComponentCodes.Ffmpeg];
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// HyperFrames and Revideo render with the shared browser (<c>tools/chrome</c>); Remotion only with its own copy inside its packages. The
+    /// engine's install fetches it, so it is not a <see cref="DependsOn"/>.
+    /// </remarks>
+    public IReadOnlyList<string> Uses => Engine.Kind == EngineKind.Remotion ? [] : [ComponentCodes.Browser];
 
     /// <inheritdoc />
     public bool Supported => true;

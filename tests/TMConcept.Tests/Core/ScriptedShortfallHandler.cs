@@ -19,10 +19,14 @@ internal sealed class ScriptedShortfallHandler(params MemoryShortfallChoice[] an
 
     public bool Hold { get; init; }
 
+    /// <summary>Runs when a question comes, before it is answered (the user closes something meanwhile).</summary>
+    public Action? OnAsk { get; set; }
+
     public async Task<MemoryShortfallChoice> AskAsync(MemoryShortfall shortfall, CancellationToken cancellationToken)
     {
         Asked.Add(shortfall);
         AskedAt.Add(Clock.GetUtcNow());
+        OnAsk?.Invoke();
         if (Hold)
         {
             await Task.Delay(Timeout.Infinite, cancellationToken);
