@@ -8,4 +8,7 @@ public interface ITopicSuggestionStore
 
     /// <summary>Keeps new suggestions.</summary>
     Task AddAsync(IReadOnlyList<TopicSuggestion> suggestions, CancellationToken cancellationToken);
+
+    /// <summary>Marks suggestions as picked (a concept was made from each); unknown ids are skipped.</summary>
+    Task MarkPickedAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken);
 }

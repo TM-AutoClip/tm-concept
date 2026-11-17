@@ -410,6 +410,7 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
             await db.Concepts.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
             await db.TopicSuggestions.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
             await db.ConceptWishes.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+            await db.VideoRatings.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
             await db.Runs.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
         }
 
@@ -668,6 +669,7 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
         await db.VoiceSamples.AsNoTracking().Take(1).ToListAsync(cancellationToken).ConfigureAwait(false);
         await db.TopicSuggestions.AsNoTracking().Take(1).ToListAsync(cancellationToken).ConfigureAwait(false);
         await db.ConceptWishes.AsNoTracking().Take(1).ToListAsync(cancellationToken).ConfigureAwait(false);
+        await db.VideoRatings.AsNoTracking().Take(1).ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static RestoreReport Report(BackupHeader header) => new(header.CreatedAtUtc, header.Contents, header.KeyCount,

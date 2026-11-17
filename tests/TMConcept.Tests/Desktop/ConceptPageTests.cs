@@ -385,7 +385,8 @@ public sealed class ConceptPageTests
         section.Topics.Select(t => t.Text).ShouldBe(["The fall of Trebizond", "The Nika riots", "Basil II", "The Varangian Guard"],
             "the ticked ones stay on top in their order, the unticked one is gone, the new ones come below");
         section.Topics.Select(t => t.Checked).ShouldBe([true, true, false, false]);
-        fake.Requests[1].User.ShouldContain("- Greek fire", Case.Sensitive, "a dropped suggestion is still remembered and not suggested again");
+        fake.Requests[1].User.ShouldContain("RECENTLY SHOWN", Case.Sensitive);
+        fake.Requests[1].User.ShouldContain("- Greek fire", Case.Sensitive, "a dropped suggestion is remembered as shown, not chosen this time (it may come again)");
     }
 
     [AvaloniaFact]
@@ -394,7 +395,7 @@ public sealed class ConceptPageTests
         var topics = Numbered(1, 20);
         var fake = new FakeChat().Answer(_ => TopicAnswer(topics)).Concepts(FakeChat.Distinct(8));
         using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
-        await PrepareAsync(h);
+        var profile = await PrepareAsync(h);
         var page = await PageAsync(h);
         TopicsModel(page);
         var section = page.Topics;
@@ -426,6 +427,22 @@ public sealed class ConceptPageTests
         section.Blocked.ShouldBe(h.Get<Localizer>()["concepts.topics.none"]);
         section.IsBlocked.ShouldBeTrue("the reason is shown again once the run is over");
         section.Status.ShouldBe(h.Get<Localizer>().Format("concepts.done", 8, h.Get<Localizer>().Usd(run.ActualUsd)));
+
+        // The 8 topics that got a concept are picked (never suggested again); the other 12 were only shown and may come again.
+        IReadOnlyList<TopicSuggestion> kept = [];
+        for (var i = 0; i < 150; i++)
+        {
+            kept = await h.Get<ITopicSuggestionStore>().ListAsync(profile.Id, 100, CancellationToken.None);
+            if (kept.Count(s => s.Outcome == TopicOutcome.Picked) == ticked.Length)
+            {
+                break;
+            }
+
+            await Task.Delay(20);
+        }
+
+        kept.Where(s => s.Outcome == TopicOutcome.Picked).Select(s => s.Text).ShouldBe(ticked.Select(t => topics[t]), ignoreOrder: true);
+        kept.Count(s => s.Outcome == TopicOutcome.Shown).ShouldBe(12);
     }
 
     [AvaloniaFact]
@@ -634,13 +651,13 @@ public sealed class ConceptPageTests
     }
 
     [AvaloniaFact]
-    public async Task SuggestTopicsKnowsEveryConceptAndEveryEarlierSuggestionAndDropsRepeats()
+    public async Task SuggestTopicsBlocksConceptsAndPickedTopicsButLetsUnpickedOnesComeAgain()
     {
         static ChatResponse Answer(string json) => new(json, new ChatUsage(600, 0, 0, 120), null, "end_turn", "r");
         var fake = new FakeChat()
             .Answer(_ => Answer("{\"topics\": [\"The fall of Trebizond\", \"Greek fire\"]}"))
             .Answer(_ => Answer("{\"topics\": [\"greek FIRE\", \"Hagia  Sophia\", \"The Varangian Guard\", \"Theodora's riot\"]}"))
-            .Answer(_ => Answer("{\"topics\": [\"The Varangian guard\", \"Greek Fire\"]}"));
+            .Answer(_ => Answer("{\"topics\": [\"The fall of trebizond\", \"Hagia Sophia\"]}"));
         using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
         var profile = await PrepareAsync(h);
         var store = h.Get<IConceptStore>();
@@ -659,25 +676,34 @@ public sealed class ConceptPageTests
         first.ShouldContain("- [video] Hagia Sophia", Case.Sensitive, "a concept made into a video is marked");
         first.ShouldContain("- Theodora's riot", Case.Sensitive, "a trashed concept is no new topic either");
         first.ShouldContain("- The Nika riot", Case.Sensitive);
-        first.ShouldNotContain("ALREADY SUGGESTED");
+        first.ShouldNotContain("RECENTLY SHOWN");
         var suggestions = h.Get<ITopicSuggestionStore>();
         (await suggestions.ListAsync(profile.Id, 100, CancellationToken.None)).Select(s => s.Text).ShouldBe(["The fall of Trebizond", "Greek fire"],
             ignoreOrder: true);
 
         await section.SuggestAsync();
         var second = fake.Requests[1].User;
-        second.ShouldContain("ALREADY SUGGESTED");
+        second.ShouldContain("RECENTLY SHOWN");
+        second.ShouldNotContain("ALREADY SUGGESTED");
         second.ShouldContain("- The fall of Trebizond", Case.Sensitive);
         second.ShouldContain("- Greek fire", Case.Sensitive);
-        section.Topics.Select(t => t.Text).ShouldBe(["The Varangian Guard"], "an earlier suggestion and two concept titles (folded) are left out");
+        section.Topics.Select(t => t.Text).ShouldBe(["greek FIRE", "The Varangian Guard"],
+            "an unpicked suggestion may come again (not chosen is not disliked); two concept titles (folded) are left out");
         var text = h.Get<Localizer>();
-        section.SuggestStatus.ShouldContain(text.Format("topics.repeats", 3));
-        (await suggestions.ListAsync(profile.Id, 100, CancellationToken.None)).Count.ShouldBe(3, "only the kept ones are saved");
+        section.SuggestStatus.ShouldContain(text.Format("topics.repeats", 2));
+        (await suggestions.ListAsync(profile.Id, 100, CancellationToken.None)).Count.ShouldBe(4, "only the kept ones are saved");
         var run = (await h.Get<IRunStore>().ListAsync(DateTimeOffset.UtcNow.AddHours(-1), CancellationToken.None))
             .Where(r => r.Kind == RunKind.Topics).OrderBy(r => r.StartedAtUtc).Last();
-        run.Accepted.ShouldBe(1);
+        run.Accepted.ShouldBe(2);
 
+        // A concept was made from "The fall of Trebizond": picked, so it is never suggested again and leaves the recently shown list.
+        var trebizond = (await suggestions.ListAsync(profile.Id, 100, CancellationToken.None)).Single(s => s.Text == "The fall of Trebizond");
+        await h.Get<TopicSuggester>().MarkPickedAsync([trebizond.Id], CancellationToken.None);
         await section.SuggestAsync();
+        var third = fake.Requests[2].User;
+        third.ShouldNotContain("- The fall of Trebizond", Case.Sensitive);
+        third.ShouldContain("- greek FIRE", Case.Sensitive);
+        third.ShouldContain("- The Varangian Guard", Case.Sensitive);
         section.Topics.ShouldBeEmpty();
         section.SuggestStatus.ShouldStartWith(text.Format("topics.all_repeats", string.Empty).TrimEnd(' ', '·'));
         var repeated = (await h.Get<IRunStore>().ListAsync(DateTimeOffset.UtcNow.AddHours(-1), CancellationToken.None))

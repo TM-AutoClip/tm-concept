@@ -45,9 +45,15 @@ public static class PromptMemoryLimits
     public const int WishMax = 200;
 
     /// <summary>
-    /// Earlier topic suggestions listed in the topic prompt (the newest; 0.1.9 sent 150, 0.1.11 sent 60). A press can now bring 100 topics,
-    /// so 60 did not even cover the last press; 200 short lines are about 6 000 input tokens on the cheap topics model. The local repeat
-    /// filter still checks every one.
+    /// Recently shown topic suggestions that were not picked, listed in the topic prompt as "recently shown, not chosen this time; you may
+    /// suggest them again if they still fit, but most should be new" (17 Nov 2026: an unpicked topic is not a bad one). Only the newest, so
+    /// the topics keep changing; a picked suggestion is never sent here (it is a concept: covered) and is dropped locally when it comes again.
     /// </summary>
-    public const int SuggestionsSent = 200;
+    public const int ShownSent = 60;
+
+    /// <summary>Newest rated videos of each kind (liked, disliked) sent along.</summary>
+    public const int RatingsEach = 10;
+
+    /// <summary>Longest summary of a rated video (characters).</summary>
+    public const int RatingSummaryMax = 160;
 }

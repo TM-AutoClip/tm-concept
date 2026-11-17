@@ -66,8 +66,8 @@ public static partial class ConceptPromptBuilder
 
     /// <summary>
     /// Builds the "Suggest topics" prompt (Prompts/&lt;interface lang&gt;/topics.txt; a language other than Turkish gets the English one): the
-    /// channel content, its format and target length (so a topic fits one video), the video language, the profile's covered concepts and
-    /// topic dislikes, the newest earlier suggestions and the focus. The extra request is not sent (0.1.12): the old
+    /// channel content, its format and target length (so a topic fits one video), the video language, the profile's covered concepts, topic
+    /// dislikes and rated videos, the newest suggestions that were shown but not picked (they may come again) and the focus. The extra request is not sent (0.1.12): the old
     /// prompt followed it even outside the channel's scope.
     /// </summary>
     public static ConceptPrompt BuildTopics(TopicPromptInput input)
@@ -84,7 +84,7 @@ public static partial class ConceptPromptBuilder
             ["seconds"] = input.Profile.TargetSeconds.ToString(CultureInfo.InvariantCulture),
         };
         Memory(values, input.Memory);
-        values["suggested"] = Lines(input.EarlierSuggestions);
+        values["shown"] = Lines(input.RecentlyShown);
         values["focus"] = string.IsNullOrWhiteSpace(input.Focus) ? null : PromptText.Data(input.Focus, ConceptLimits.ExtraPromptMax);
         values["count"] = input.Count.ToString(CultureInfo.InvariantCulture);
         return Make(template, values, TopicSchema());
@@ -113,7 +113,7 @@ public static partial class ConceptPromptBuilder
         };
     }
 
-    /// <summary>The profile's past: covered (with its count), topic and telling dislikes.</summary>
+    /// <summary>The profile's past: covered (with its count), topic and telling dislikes, disliked and liked videos.</summary>
     private static void Memory(Dictionary<string, string?> values, PromptMemory memory)
     {
         ArgumentNullException.ThrowIfNull(memory);
@@ -121,6 +121,8 @@ public static partial class ConceptPromptBuilder
         values["covered"] = memory.Covered;
         values["disliked_topics"] = memory.DislikedTopics;
         values["disliked_telling"] = memory.DislikedTelling;
+        values["disliked_videos"] = memory.DislikedVideos;
+        values["liked_videos"] = memory.LikedVideos;
     }
 
     private static ConceptPrompt Make(string template, Dictionary<string, string?> values, JsonObject schema)

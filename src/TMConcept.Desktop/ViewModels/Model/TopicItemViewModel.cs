@@ -4,7 +4,7 @@ namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
 /// One suggested topic on the concept page with its tick box. The tick list lives on the page only (cleared on a profile switch or a
-/// restart); <see cref="Id"/> is the kept suggestion's id, which only remembers that it was suggested.
+/// restart); <see cref="Id"/> is the kept suggestion's id, marked picked when a concept is made from it.
 /// </summary>
 public sealed partial class TopicItemViewModel(Guid id, string text) : ObservableObject
 {

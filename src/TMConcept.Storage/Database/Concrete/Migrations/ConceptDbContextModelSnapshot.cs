@@ -110,6 +110,9 @@ namespace TMConcept.Storage.Database
                     b.Property<long>("CreatedAtUtc")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("Outcome")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("ProfileId")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -495,6 +498,45 @@ namespace TMConcept.Storage.Database
                     b.ToTable("video_costs", (string)null);
                 });
 
+            modelBuilder.Entity("TMConcept.Core.Videos.VideoRating", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ConceptId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ProfileId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("RatedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Summary")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("VideoGroup")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Vote")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConceptId");
+
+                    b.HasIndex("ProfileId", "RatedAtUtc");
+
+                    b.ToTable("video_ratings", (string)null);
+                });
+
             modelBuilder.Entity("TMConcept.Core.Videos.VideoRecord", b =>
                 {
                     b.Property<string>("Id")
@@ -717,6 +759,20 @@ namespace TMConcept.Storage.Database
                     b.HasOne("TMConcept.Core.Videos.VideoRecord", null)
                         .WithMany()
                         .HasForeignKey("VideoId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TMConcept.Core.Videos.VideoRating", b =>
+                {
+                    b.HasOne("TMConcept.Core.Concepts.Concept", null)
+                        .WithMany()
+                        .HasForeignKey("ConceptId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("TMConcept.Core.Profiles.Profile", null)
+                        .WithMany()
+                        .HasForeignKey("ProfileId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

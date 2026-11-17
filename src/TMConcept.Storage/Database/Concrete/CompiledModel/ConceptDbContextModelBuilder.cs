@@ -11,7 +11,7 @@ namespace TMConcept.Storage.Database
     public partial class ConceptDbContextModel
     {
         private ConceptDbContextModel()
-            : base(skipDetectChanges: false, modelId: new Guid("6162507a-7022-46f4-bdff-7f5170b7d234"), entityTypeCount: 17)
+            : base(skipDetectChanges: false, modelId: new Guid("3ead2fc7-b059-4657-8bb4-0d228bcfae6c"), entityTypeCount: 18)
         {
         }
 
@@ -30,6 +30,7 @@ namespace TMConcept.Storage.Database
             var voiceSample = VoiceSampleEntityType.Create(this);
             var queueItem = QueueItemEntityType.Create(this);
             var videoCost = VideoCostEntityType.Create(this);
+            var videoRating = VideoRatingEntityType.Create(this);
             var videoRecord = VideoRecordEntityType.Create(this);
             var schemaObjectRow = SchemaObjectRowEntityType.Create(this);
             var secureDeleteRow = SecureDeleteRowEntityType.Create(this);
@@ -44,6 +45,8 @@ namespace TMConcept.Storage.Database
             QueueItemEntityType.CreateForeignKey1(queueItem, concept);
             QueueItemEntityType.CreateForeignKey2(queueItem, profile);
             VideoCostEntityType.CreateForeignKey1(videoCost, videoRecord);
+            VideoRatingEntityType.CreateForeignKey1(videoRating, concept);
+            VideoRatingEntityType.CreateForeignKey2(videoRating, profile);
             VideoRecordEntityType.CreateForeignKey1(videoRecord, concept);
             VideoRecordEntityType.CreateForeignKey2(videoRecord, profile);
 
@@ -60,6 +63,7 @@ namespace TMConcept.Storage.Database
             VoiceSampleEntityType.CreateAnnotations(voiceSample);
             QueueItemEntityType.CreateAnnotations(queueItem);
             VideoCostEntityType.CreateAnnotations(videoCost);
+            VideoRatingEntityType.CreateAnnotations(videoRating);
             VideoRecordEntityType.CreateAnnotations(videoRecord);
             SchemaObjectRowEntityType.CreateAnnotations(schemaObjectRow);
             SecureDeleteRowEntityType.CreateAnnotations(secureDeleteRow);

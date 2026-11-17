@@ -3,6 +3,7 @@ using System.Text;
 using TMConcept.Core.Duplicates;
 using TMConcept.Core.Profiles;
 using TMConcept.Core.Text;
+using TMConcept.Core.Videos;
 
 namespace TMConcept.Core.Concepts;
 
@@ -22,6 +23,10 @@ namespace TMConcept.Core.Concepts;
 /// <item>Telling dislikes (🗑 "I did not like the telling"): the newest titles with the opening sentence of their narration (the hook, which
 /// shows the telling; the summary when there is no content). Their topic was done, so they are covered too.</item>
 /// <item>Wishes: the kept AI-edit instructions, each on one line, cut to <see cref="PromptMemoryLimits.WishMax"/>.</item>
+/// <item>Rated videos (👍 / 👎 on a made video, 17 Nov 2026): the newest <see cref="PromptMemoryLimits.RatingsEach"/> of each kind with their
+/// title and summary copies (so they outlive the concept). A disliked video's concept leaves the covered block (it is listed as the strongest
+/// "stay away"); a liked one stays covered too (its topic is done; only its spirit is the example). An unrated video is only covered: producing
+/// a video is no like.</item>
 /// </list>
 /// The local duplicate check stays the hard guard against repeats; this only steers the model.
 /// </summary>
@@ -37,19 +42,24 @@ public static class PromptMemoryBuilder
 
     /// <summary>
     /// Builds the memory of <paramref name="concepts"/> (any order; the content is needed only for the telling dislikes) and
-    /// <paramref name="wishes"/> (newest first); the words of <paramref name="channelContent"/> name no theme.
+    /// <paramref name="wishes"/> (newest first) and <paramref name="ratings"/> (any order); the words of <paramref name="channelContent"/> name no
+    /// theme.
     /// </summary>
-    public static PromptMemory Build(IReadOnlyList<Concept> concepts, IReadOnlyList<string> wishes, string contentLanguage, string? channelContent = null)
+    public static PromptMemory Build(IReadOnlyList<Concept> concepts, IReadOnlyList<string> wishes, string contentLanguage, string? channelContent = null,
+        IReadOnlyList<VideoRating>? ratings = null)
     {
         ArgumentNullException.ThrowIfNull(concepts);
         ArgumentNullException.ThrowIfNull(wishes);
+        var rated = (ratings ?? []).OrderByDescending(r => r.RatedAtUtc).ToList();
+        var disliked = rated.Where(r => r.Vote == VideoVote.Dislike).Take(PromptMemoryLimits.RatingsEach).ToList();
+        var liked = rated.Where(r => r.Vote == VideoVote.Like).Take(PromptMemoryLimits.RatingsEach).ToList();
         var language = OutputLanguages.Of(contentLanguage);
         var newestFirst = concepts.OrderByDescending(c => c.Number).ToList();
         var trashed = newestFirst.Where(c => c.Status == ConceptStatus.Trashed)
             .OrderByDescending(c => c.DecidedAtUtc ?? c.CreatedAtUtc).ThenByDescending(c => c.Number).ToList();
         var topicDislikes = trashed.Where(c => c.TrashReason == TrashReason.Topic).Take(PromptMemoryLimits.DislikesEach).ToList();
         var tellingDislikes = trashed.Where(c => c.TrashReason == TrashReason.Telling).Take(PromptMemoryLimits.DislikesEach).ToList();
-        var listed = topicDislikes.Select(c => c.Id).ToHashSet();
+        var listed = topicDislikes.Select(c => c.Id).Concat(disliked.Where(r => r.ConceptId is not null).Select(r => r.ConceptId!.Value)).ToHashSet();
         var covered = newestFirst.Where(c => !listed.Contains(c.Id)).ToList();
 
         return new PromptMemory(
@@ -57,7 +67,17 @@ public static class PromptMemoryBuilder
             covered.Count,
             List(topicDislikes.Select(c => PromptText.Line(c.Title, ConceptLimits.TitleMax))),
             List(tellingDislikes.Select(c => PromptText.Line(c.Title, ConceptLimits.TitleMax) + ": " + PromptText.Line(Opening(c), PromptMemoryLimits.DislikeSummaryMax))),
-            List(wishes.Select(w => "«" + PromptText.Line(w, PromptMemoryLimits.WishMax) + "»").Where(w => w.Length > 2)));
+            List(wishes.Select(w => "«" + PromptText.Line(w, PromptMemoryLimits.WishMax) + "»").Where(w => w.Length > 2)),
+            List(disliked.Select(Rated)),
+            List(liked.Select(Rated)));
+    }
+
+    /// <summary>"Title: summary" of a rated video (the title alone when there is no summary).</summary>
+    private static string Rated(VideoRating rating)
+    {
+        var title = PromptText.Line(rating.Title, ConceptLimits.TitleMax);
+        var summary = PromptText.Line(rating.Summary, PromptMemoryLimits.RatingSummaryMax);
+        return summary.Length > 0 ? title + ": " + summary : title;
     }
 
     /// <summary>The covered block of <paramref name="newestFirst"/>: newest titles, then the condensed older ones, cut to the cap.</summary>

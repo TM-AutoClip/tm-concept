@@ -138,6 +138,9 @@
                            VerticalAlignment="Center" Margin="12" IsVisible="{Binding !HasProducedSelection}" />
                 <!-- The buttons are kept first; the picture takes what is left (16:9 by its width, never taller than the room). -->
                 <DockPanel IsVisible="{Binding HasProducedSelection}">
+                  <Panel DockPanel.Dock="Bottom" Margin="0,2,0,0" IsVisible="{Binding SelectedProduced.Rating, Converter={x:Static ObjectConverters.IsNotNull}}">
+                    <views:VideoRatingView Name="RatingView" DataContext="{Binding SelectedProduced.Rating}" />
+                  </Panel>
                   <WrapPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
                     <Button Name="PlaySystemButton" Classes="small" Content="{DynamicResource video.play_system}" Command="{Binding PlaySystemCommand}"
                             Margin="0,0,6,6" />

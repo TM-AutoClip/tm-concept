@@ -7,12 +7,17 @@ namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
 /// A produced video version: in the list as the newest version of its concept's folder, and in the versions bar of the details (its
-/// thumbnail can be made again while it is shown: <see cref="RefreshThumbnail"/>).
+/// thumbnail can be made again while it is shown: <see cref="RefreshThumbnail"/>). Its <see cref="Rating"/> is shared by every version of the
+/// video (set by <see cref="Videos.VideoRows"/>).
 /// </summary>
-public sealed class VideoRowViewModel(VideoRecord video, string folder, Localizer text) : ObservableObject
+public sealed partial class VideoRowViewModel(VideoRecord video, string folder, Localizer text) : ObservableObject
 {
     /// <summary>The record.</summary>
     public VideoRecord Video { get; } = video;
+
+    /// <summary>The video's like / dislike (one for all its versions); null until the rows are listed.</summary>
+    [ObservableProperty]
+    public partial VideoRatingViewModel? Rating { get; set; }
 
     /// <summary>The video folder.</summary>
     public string Folder { get; } = folder;

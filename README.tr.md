@@ -29,7 +29,8 @@ veritabanını şifreli tutar.
   konsepti, isteğe bağlı örnek görseller ve genel ayardan farklı olmasını istediğin her adım için kendi modelleri (ses, görseller, motor…). Dört hazır şablon alanları doldurur (tarih: Bizans, Osmanlı; teknoloji:
   antik, modern).
 - **Konsept üret.** İki ayrı bölüm. **Konu önererek üret**: 5–100 konu önert, beğendiklerini işaretle, **Seçilenleri üret**'e bas: her
-  işaretli konudan tam bir konsept. **Fikirden üret**: bir fikir yaz (ya da boş bırak), 1–100 konsept seç. Her basış listeye ekler. Her
+  işaretli konudan tam bir konsept. İşaretlemediğin konu kötü sayılmaz: sonra yeniden önerilebilir; yalnız konsepti yapılan konu bir daha
+  gelmez. **Fikirden üret**: bir fikir yaz (ya da boş bırak), 1–100 konsept seç. Her basış listeye ekler. Her
   düğmenin yanında küçük bir tahmini ücret görünür; sonra sağlayıcının bildirdiği kullanımdan kesin ücret gelir. Tekrar dört katmanda
   önlenir: istemde bütün konseptlerin geçmişi (önbellekli), ücretsiz yerel benzerlik denetimi, gömme modeliyle isteğe bağlı anlamsal
   denetim ve liste büyüyünce sıkıştırılmış geçmiş. Her satırda **Onayla** (A tuşu) ve **Sil** (D tuşu) var; tıklanan konsept listenin
@@ -51,6 +52,10 @@ veritabanını şifreli tutar.
 - **Üretilen videolar.** Küçük resim, program içi oynatıcı (oynat/duraklat, sarma çubuğu, süre, ses düzeyi, tam ekran; kendiliğinden
   başlamaz), ayrıntılar (motor, modeller, adım adım ücret, ses notları, konsept metni), sistem oynatıcısında aç, yeniden üret, klasörü aç, kaydı sil ve
   istersen dosyaları geri dönüşüm kutusuna taşı.
+- **Videolarını oyla.** Önizlemenin altında **👍 Beğendim** / **👎 Beğenmedim** (Üretilen videolar ve Konseptten video); aynı düğmeye
+  tekrar basınca oy kalkar. Bir oy videonun bütün sürümleri için geçer. Sonraki konu ve konsept önerileri beğenmediğin videonun konusundan
+  ve yakın konulardan uzak durur, beğendiğini örnek alır (benzer ruhta, farklı konular). Video yapmak beğenmek sayılmaz; oylanmamış video
+  yalnız işlenmiş sayılır. Konsept ya da video silinse de oy kalır.
 - **Bu ayın harcaması** sol üstte durur; ücretli bir iş sürerken o an harcananı da gösterir.
 - **Bildirimler** sağ altta (konseptler hazır, video hazır, hata). Varsayılan 1 dakika; Ayarlar'dan süresi değişir ya da kapatılır.
   Bildirim hatayı ve harcananı da söyler; yapılan her şey eksiksiz olarak günlük dosyasına yazılır.
