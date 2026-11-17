@@ -21,6 +21,12 @@ public sealed class BackupHeader
     /// <summary>The sample image files after the database, in order.</summary>
     public List<BackupImage> Images { get; set; } = [];
 
+    /// <summary>
+    /// The copies of the profiles' documents after the image files, in order (0.1.21; paths relative to the documents folder). A backup of an
+    /// earlier version has none.
+    /// </summary>
+    public List<BackupImage> Documents { get; set; } = [];
+
     /// <summary>API keys in the copy.</summary>
     public int KeyCount { get; set; }
 

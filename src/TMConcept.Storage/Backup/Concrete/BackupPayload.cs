@@ -14,7 +14,10 @@ internal sealed class BackupPayload(BackupHeader header, byte[] plain, int keyAt
     /// <summary>The encrypted database copy.</summary>
     public ReadOnlyMemory<byte> Database => plain.AsMemory(databaseAt, imagesAt - databaseAt);
 
-    /// <summary>The image files, one after the other (<see cref="BackupHeader.Images"/> gives the lengths).</summary>
+    /// <summary>
+    /// The image files and then the document copies, one after the other (<see cref="BackupHeader.Images"/> and
+    /// <see cref="BackupHeader.Documents"/> give the lengths).
+    /// </summary>
     public ReadOnlySpan<byte> Images => plain.AsSpan(imagesAt);
 
     /// <summary>Zeroes the plain bytes and the key.</summary>

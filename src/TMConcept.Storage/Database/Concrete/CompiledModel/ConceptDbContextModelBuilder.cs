@@ -11,7 +11,7 @@ namespace TMConcept.Storage.Database
     public partial class ConceptDbContextModel
     {
         private ConceptDbContextModel()
-            : base(skipDetectChanges: false, modelId: new Guid("7971e4c8-8f55-42ed-830e-3a8d61caa990"), entityTypeCount: 19)
+            : base(skipDetectChanges: false, modelId: new Guid("6d275656-db60-4777-be54-5465f07048bb"), entityTypeCount: 22)
         {
         }
 
@@ -20,6 +20,9 @@ namespace TMConcept.Storage.Database
             var concept = ConceptEntityType.Create(this);
             var conceptWish = ConceptWishEntityType.Create(this);
             var topicSuggestion = TopicSuggestionEntityType.Create(this);
+            var documentChunk = DocumentChunkEntityType.Create(this);
+            var documentChunkVector = DocumentChunkVectorEntityType.Create(this);
+            var sourceDocument = SourceDocumentEntityType.Create(this);
             var conceptEmbedding = ConceptEmbeddingEntityType.Create(this);
             var apiKey = ApiKeyEntityType.Create(this);
             var stepModelChoice = StepModelChoiceEntityType.Create(this);
@@ -40,6 +43,9 @@ namespace TMConcept.Storage.Database
             ConceptEntityType.CreateForeignKey1(concept, profile);
             ConceptWishEntityType.CreateForeignKey1(conceptWish, profile);
             TopicSuggestionEntityType.CreateForeignKey1(topicSuggestion, profile);
+            DocumentChunkEntityType.CreateForeignKey1(documentChunk, sourceDocument);
+            DocumentChunkVectorEntityType.CreateForeignKey1(documentChunkVector, documentChunk);
+            SourceDocumentEntityType.CreateForeignKey1(sourceDocument, profile);
             ConceptEmbeddingEntityType.CreateForeignKey1(conceptEmbedding, concept);
             StepModelChoiceEntityType.CreateForeignKey1(stepModelChoice, profile);
             ProfileImageEntityType.CreateForeignKey1(profileImage, profile);
@@ -54,6 +60,9 @@ namespace TMConcept.Storage.Database
             ConceptEntityType.CreateAnnotations(concept);
             ConceptWishEntityType.CreateAnnotations(conceptWish);
             TopicSuggestionEntityType.CreateAnnotations(topicSuggestion);
+            DocumentChunkEntityType.CreateAnnotations(documentChunk);
+            DocumentChunkVectorEntityType.CreateAnnotations(documentChunkVector);
+            SourceDocumentEntityType.CreateAnnotations(sourceDocument);
             ConceptEmbeddingEntityType.CreateAnnotations(conceptEmbedding);
             ApiKeyEntityType.CreateAnnotations(apiKey);
             StepModelChoiceEntityType.CreateAnnotations(stepModelChoice);

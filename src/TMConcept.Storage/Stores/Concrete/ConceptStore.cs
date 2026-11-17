@@ -33,6 +33,7 @@ public sealed class ConceptStore(ConceptDatabase database) : IConceptStore
                 SimilarToId = c.SimilarToId,
                 Similarity = c.Similarity,
                 DuplicateNote = c.DuplicateNote,
+                Sources = c.Sources,
                 CreatedAtUtc = c.CreatedAtUtc,
                 DecidedAtUtc = c.DecidedAtUtc,
                 TrashReason = c.TrashReason,

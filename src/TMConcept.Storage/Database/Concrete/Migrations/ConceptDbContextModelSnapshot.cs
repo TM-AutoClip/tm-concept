@@ -55,6 +55,10 @@ namespace TMConcept.Storage.Database
                     b.Property<double?>("Similarity")
                         .HasColumnType("REAL");
 
+                    b.Property<string>("Sources")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("Status")
                         .HasColumnType("INTEGER");
 
@@ -126,6 +130,139 @@ namespace TMConcept.Storage.Database
                     b.HasIndex("ProfileId", "CreatedAtUtc");
 
                     b.ToTable("topic_suggestions", (string)null);
+                });
+
+            modelBuilder.Entity("TMConcept.Core.Documents.DocumentChunk", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DocumentId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Heading")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Ordinal")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Page")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ProfileId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DocumentId");
+
+                    b.HasIndex("ProfileId", "DocumentId", "Ordinal");
+
+                    b.ToTable("document_chunks", (string)null);
+                });
+
+            modelBuilder.Entity("TMConcept.Core.Documents.DocumentChunkVector", b =>
+                {
+                    b.Property<string>("ChunkId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Model")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Dimensions")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ProfileId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<byte[]>("Vector")
+                        .IsRequired()
+                        .HasColumnType("BLOB");
+
+                    b.HasKey("ChunkId", "Model");
+
+                    b.HasIndex("ProfileId", "Model");
+
+                    b.ToTable("document_chunk_vectors", (string)null);
+                });
+
+            modelBuilder.Entity("TMConcept.Core.Documents.SourceDocument", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("AddedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("Bytes")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Characters")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ChunkerVersion")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Chunks")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Language")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OriginalName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Pages")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("PagesWithoutText")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ProfileId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Sha256")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("StatusDetail")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("StoredFile")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProfileId", "Sha256");
+
+                    b.ToTable("documents", (string)null);
                 });
 
             modelBuilder.Entity("TMConcept.Core.Duplicates.ConceptEmbedding", b =>
@@ -731,6 +868,33 @@ namespace TMConcept.Storage.Database
                 });
 
             modelBuilder.Entity("TMConcept.Core.Concepts.TopicSuggestion", b =>
+                {
+                    b.HasOne("TMConcept.Core.Profiles.Profile", null)
+                        .WithMany()
+                        .HasForeignKey("ProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TMConcept.Core.Documents.DocumentChunk", b =>
+                {
+                    b.HasOne("TMConcept.Core.Documents.SourceDocument", null)
+                        .WithMany()
+                        .HasForeignKey("DocumentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TMConcept.Core.Documents.DocumentChunkVector", b =>
+                {
+                    b.HasOne("TMConcept.Core.Documents.DocumentChunk", null)
+                        .WithMany()
+                        .HasForeignKey("ChunkId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TMConcept.Core.Documents.SourceDocument", b =>
                 {
                     b.HasOne("TMConcept.Core.Profiles.Profile", null)
                         .WithMany()

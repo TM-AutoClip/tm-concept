@@ -20,7 +20,7 @@ namespace TMConcept.Storage.Database
                 "TMConcept.Core.Concepts.Concept",
                 typeof(Concept),
                 baseEntityType,
-                propertyCount: 15,
+                propertyCount: 16,
                 foreignKeyCount: 1,
                 unnamedIndexCount: 2,
                 keyCount: 1);
@@ -105,6 +105,12 @@ namespace TMConcept.Storage.Database
                 propertyInfo: typeof(Concept).GetProperty("Similarity", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
                 fieldInfo: typeof(Concept).GetField("<Similarity>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
                 nullable: true);
+
+            var sources = runtimeEntityType.AddProperty(
+                "Sources",
+                typeof(string),
+                propertyInfo: typeof(Concept).GetProperty("Sources", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(Concept).GetField("<Sources>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly));
 
             var status = runtimeEntityType.AddProperty(
                 "Status",
