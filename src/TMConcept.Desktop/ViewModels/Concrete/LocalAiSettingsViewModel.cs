@@ -206,7 +206,10 @@ public sealed partial class LocalAiSettingsViewModel(ComponentInstallFlow instal
             _ => text["localai.fit.processor"],
         };
         var license = text.Has("license." + model.License) ? text["license." + model.License] : model.License;
-        return new AppModelRowViewModel(model, (model.Bytes / 1e9).ToString("0.0", text.Culture) + " GB", fitText, fit, license, store.IsInstalled(model.Tag));
+        return new AppModelRowViewModel(model, (model.Bytes / 1e9).ToString("0.0", text.Culture) + " GB", fitText, fit, license, store.IsInstalled(model.Tag))
+        {
+            Notes = new Catalog.ModelNotes(text).Text(model),
+        };
     }
 
     private string Gigabytes(long bytes) => (bytes / Gibibyte).ToString("0.#", text.Culture);

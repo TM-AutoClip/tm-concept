@@ -25,14 +25,19 @@
               </TextBlock>
               <StackPanel Spacing="6">
                 <WrapPanel>
-                  <ComboBox ItemsSource="{Binding Options}" SelectedItem="{Binding Selected}" MinWidth="220" MaxWidth="520" Margin="0,0,8,4">
+                  <!-- Every model entry has a "?" with its catalog facts (0.1.23); the "?" after the picker names the entries that share useful ones. -->
+                  <ComboBox Name="ModelBox" ItemsSource="{Binding Options}" SelectedItem="{Binding Selected}" MinWidth="220" MaxWidth="520" Margin="0,0,8,4">
                     <ComboBox.ItemTemplate>
                       <DataTemplate x:DataType="vm:StepOption">
-                        <TextBlock Text="{Binding Label}" Classes.ok="{Binding IsOk}" Classes.warning="{Binding IsWarning}" Classes.caution="{Binding IsCaution}"
-                                   Classes.error="{Binding IsError}" />
+                        <DockPanel>
+                          <views:HelpTip Name="ModelNotesTip" DockPanel.Dock="Right" Text="{Binding Notes}" Summary="{Binding Notes}" IsVisible="{Binding HasNotes}" />
+                          <TextBlock Text="{Binding Label}" Classes.ok="{Binding IsOk}" Classes.warning="{Binding IsWarning}" Classes.caution="{Binding IsCaution}"
+                                     Classes.error="{Binding IsError}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                        </DockPanel>
                       </DataTemplate>
                     </ComboBox.ItemTemplate>
                   </ComboBox>
+                  <views:HelpTip Name="ListTip" Text="{Binding ListTip}" Summary="{Binding ListTip}" IsVisible="{Binding HasListTip}" Margin="-2,0,8,4" />
                   <ComboBox ItemsSource="{Binding Efforts}" SelectedItem="{Binding Effort}" IsVisible="{Binding HasEfforts}" MinWidth="150" Margin="0,0,8,4"
                             ToolTip.Tip="{DynamicResource models.effort}">
                     <ComboBox.ItemTemplate>

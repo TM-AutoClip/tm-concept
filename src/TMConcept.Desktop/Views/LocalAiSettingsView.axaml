@@ -46,6 +46,7 @@
                         <StackPanel Orientation="Horizontal" Spacing="8">
                           <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
                           <TextBlock Text="{Binding Tag}" Classes="small muted" VerticalAlignment="Center" />
+                          <views:HelpTip Name="AppModelNotesTip" Text="{Binding Notes}" Summary="{Binding Notes}" Margin="0" />
                         </StackPanel>
                         <TextBlock Text="{Binding FitText}" Classes="small" Classes.ok="{Binding Fits}" Classes.error="{Binding DoesNotFit}" TextWrapping="Wrap" />
                         <TextBlock Text="{Binding License}" Classes="small muted" Classes.caution="{Binding LicenseWarning}" TextWrapping="Wrap" />

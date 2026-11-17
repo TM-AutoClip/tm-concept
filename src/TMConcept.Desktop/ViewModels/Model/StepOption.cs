@@ -25,4 +25,10 @@ public sealed record StepOption(StepOptionKind Kind, CatalogModel? Model, string
 
     /// <summary>Red: only a local model of a higher memory class than this card's (it cannot run here).</summary>
     public bool IsError { get; init; }
+
+    /// <summary>The model's notes behind its "?" (facts of the catalog only, <see cref="Catalog.ModelNotes"/>); empty for none / off.</summary>
+    public string Notes { get; init; } = string.Empty;
+
+    /// <summary>Whether the entry has notes.</summary>
+    public bool HasNotes => Notes.Length > 0;
 }

@@ -37,6 +37,9 @@ public sealed partial class AppModelRowViewModel(AppModelInfo model, string size
     /// <summary>A license that limits commercial use (orange).</summary>
     public bool LicenseWarning => Model.LicenseUse != Core.Models.LicenseUse.Commercial;
 
+    /// <summary>The notes behind its "?" (catalog facts only: context, images, thinking, licence; <see cref="Catalog.ModelNotes"/>).</summary>
+    public string Notes { get; init; } = string.Empty;
+
     /// <summary>Installed and complete.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanDownload))]

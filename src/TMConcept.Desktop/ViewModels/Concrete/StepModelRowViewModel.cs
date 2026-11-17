@@ -35,6 +35,15 @@ public sealed partial class StepModelRowViewModel(PipelineStep step, string titl
     /// <summary>The entries of the picker.</summary>
     public ObservableCollection<StepOption> Options { get; } = [];
 
+    /// <summary>
+    /// The "?" next to the picker: which entries share useful facts of the catalog (free, the profile's language, own voice samples,
+    /// commercial use, this card; <see cref="Catalog.ModelNotes.ListTip"/>). Empty = no "?".
+    /// </summary>
+    public string ListTip { get; set; } = string.Empty;
+
+    /// <summary>Whether the picker has a list tip.</summary>
+    public bool HasListTip => ListTip.Length > 0;
+
     /// <summary>Chosen entry.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasEfforts), nameof(ShowEngine), nameof(ShowVoice), nameof(ShowRecommended))]

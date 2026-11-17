@@ -41,6 +41,7 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
     private const string StaleChoice = "\u0000stale";
 
     private readonly IReadOnlyList<IVideoEngine> _engines = engines.OrderBy(e => e.Kind).ToList();
+    private readonly Catalog.ModelNotes _notes = new(text);
     private Guid? _profile;
     private string _language = ContentLanguages.English;
     private bool _languageFollowed;
@@ -471,6 +472,8 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
             row.Options.Add(Option(model));
         }
 
+        // The "?" over the list: which entries share useful catalog facts (the profile's language, own voices, commercial use, this card).
+        row.ListTip = _notes.ListTip(row.Options.Where(o => o.Model is not null).Select(o => (o.Model!, Facts(o.Model!))).ToList(), _language);
         foreach (var engine in _engines)
         {
             row.Engines.Add(new EngineOption(engine.Kind, engine.Name + " · " + text[engine.Experimental ? "engines.tag.experimental"
@@ -600,7 +603,34 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
         return new StepOption(StepOptionKind.Model, model, label)
         {
             IsOk = ok && !warning && !caution && !error, IsWarning = warning && !caution && !error, IsCaution = caution && !error, IsError = error,
+            Notes = _notes.Text(model, Facts(model)),
         };
+    }
+
+    /// <summary>
+    /// What the code knows about <paramref name="model"/> besides its catalog entry (<see cref="Catalog.ModelFactLookup"/>): a voice's languages
+    /// and own voices, the download size, and the card it would run on as this page load looked at it (the image build's card for an image
+    /// model, the NVIDIA card for a Python voice; nothing for other models).
+    /// </summary>
+    private Catalog.ModelFacts Facts(CatalogModel model)
+    {
+        var voice = model.Capabilities.HasFlag(ModelCapability.Speech) ? speech.EngineOf(model) : null;
+        long? card = null;
+        var noCard = false;
+        if (model.Provider == ModelProviders.Local && model.Capabilities.HasFlag(ModelCapability.Image) && _imageChoice is { } images)
+        {
+            noCard = images.Backend == ImageBackend.Cpu;
+            card = noCard ? null : images.Device?.VideoMemoryBytes;
+        }
+        else if (model.Provider == ModelProviders.Local && model.Capabilities.HasFlag(ModelCapability.Speech) && model.MinVideoMemoryGb > 0
+            && _speechCards is { } cards)
+        {
+            var cuda = SpeechDevices.CudaCard(cards);
+            noCard = cuda is null;
+            card = cuda?.VideoMemoryBytes;
+        }
+
+        return Catalog.ModelFactLookup.For(model, voice, card, noCard);
     }
 
     /// <summary>
