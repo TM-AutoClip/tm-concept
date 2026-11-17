@@ -1,7 +1,7 @@
 <Project>
   <!--
     Central package versions. Licenses: Avalonia MIT, CommunityToolkit.Mvvm MIT, Microsoft.Extensions.* MIT, EF Core (with Microsoft.Data.Sqlite) MIT,
-    SQLite3 Multiple Ciphers MIT, Konscious Argon2 MIT, System.Security.Cryptography.ProtectedData MIT, NAudio MIT, ZstdSharp.Port MIT, xUnit v3 Apache-2.0, Shouldly BSD-3-Clause, Microsoft.CodeAnalysis MIT.
+    SQLite3 Multiple Ciphers MIT, Konscious Argon2 MIT, System.Security.Cryptography.ProtectedData MIT, NAudio MIT, ZstdSharp.Port MIT, PdfPig Apache-2.0, Microsoft.ML.OnnxRuntime MIT, xUnit v3 Apache-2.0, Shouldly BSD-3-Clause, Microsoft.CodeAnalysis MIT.
   -->
   <PropertyGroup>
     <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
@@ -22,6 +22,8 @@
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.12" />
     <PackageVersion Include="NAudio.WinMM" Version="2.3.0" />
     <PackageVersion Include="ZstdSharp.Port" Version="0.8.8" />
+    <PackageVersion Include="PdfPig" Version="0.1.16" />
+    <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.31.1" />
     <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.10.0" />
     <PackageVersion Include="xunit.v3" Version="3.2.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />

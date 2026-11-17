@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    "Belgelerim" (0.1.21): reading PDF (PdfPig, Apache-2.0), Word (.docx: its XML read directly, no package), text and Markdown files;
+    fetching a web page's readable text or a Wikipedia article (the app's HTTP layer, size and time limits, no script ever runs); the
+    documents' meaning model (multilingual-e5-small, a component downloaded after a confirmation) run in this process on the processor with
+    ONNX Runtime (Microsoft.ML.OnnxRuntime, MIT; its native library is bundled into the single-file app). Depends on Core only.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="PdfPig" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\TMConcept.Core\TMConcept.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="TMConcept.Tests" />
+  </ItemGroup>
+</Project>
