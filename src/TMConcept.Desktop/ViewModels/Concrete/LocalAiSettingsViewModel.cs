@@ -6,8 +6,10 @@ using TMConcept.Core.Activity;
 using TMConcept.Core.AppOllama;
 using TMConcept.Core.Components;
 using TMConcept.Core.Hardware;
+using TMConcept.Core.Models;
 using TMConcept.Desktop.Components;
 using TMConcept.Desktop.Localization;
+using TMConcept.Desktop.Startup;
 
 namespace TMConcept.Desktop.ViewModels;
 
@@ -17,10 +19,13 @@ namespace TMConcept.Desktop.ViewModels;
 /// (fits this card) or red (does not fit / processor) mark and an orange license mark when a license limits commercial use. Install and
 /// Download go through <see cref="ComponentInstallFlow"/>: nothing is downloaded before the user confirmed the download list, the install
 /// window shows the progress and can cancel (a model's pull goes on from where it stopped the next time). Installed models appear in the
-/// model pickers of every text step; removing them is the storage manager's job. The user's own Ollama is never touched.
+/// model pickers of every text step; removing them is the storage manager's job. The user's own Ollama is never touched. "Stop the server"
+/// is refused while work could be using it (a video or a generation, an install or a pull, an app model in use on the graphics card); an idle
+/// model is unloaded through the graphics card coordinator first.
 /// </summary>
 public sealed partial class LocalAiSettingsViewModel(ComponentInstallFlow install, IAppOllamaRuntime runtime, IAppOllamaServer server, AppModelStore store,
-    AppModelRegistry registry, IGpuInfo gpu, Localizer text, IActivityLog activity, ILogger<LocalAiSettingsViewModel> logger) : SettingsSectionBase
+    AppModelRegistry registry, IGpuInfo gpu, Localizer text, IActivityLog activity, AppSession session, ComponentPlanner planner, IGpuCoordinator card,
+    ILogger<LocalAiSettingsViewModel> logger) : SettingsSectionBase
 {
     private const double Gibibyte = 1024.0 * 1024 * 1024;
 
@@ -89,6 +94,26 @@ public sealed partial class LocalAiSettingsViewModel(ComponentInstallFlow instal
     [RelayCommand]
     public async Task StopServerAsync()
     {
+        if (Busy || session.WorkRunning || planner.Busy)
+        {
+            logger.LogInformation("Local AI: the server was not stopped, work is running");
+            Status = text["localai.server.busy"];
+            return;
+        }
+
+        // An idle app model is unloaded first; one still on the card after that is in use (a step's call): the server stays.
+        if (card.Loaded is IAppOllamaModel)
+        {
+            await card.FreeAsync(CancellationToken.None).ConfigureAwait(true);
+        }
+
+        if (card.Loaded is IAppOllamaModel inUse)
+        {
+            logger.LogInformation("Local AI: the server was not stopped, {Model} is in use", inUse.Id);
+            Status = text["localai.server.busy"];
+            return;
+        }
+
         await server.StopAsync(CancellationToken.None).ConfigureAwait(true);
         Load();
     }

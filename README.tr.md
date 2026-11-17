@@ -306,14 +306,19 @@ Rehber: [docs/api-keys.tr.md](docs/api-keys.tr.md#özel-sunucu-openai-uyumlu), [
 Concept)*'i, yani Ollama'nın resmî sürümünün (0.40.16) programa ait kopyasını kurar ve ona metin modelleri indirir. Sen listeyi
 onaylamadan hiçbir şey inmez (kurulum penceresi ilerlemeyi gösterir ve iptal edebilirsin; iptal edilen bir model indirmesi bir dahaki
 sefere kaldığı yerden sürer). Açıldıktan sonra yalnız kartının ihtiyaç duyduğu grafik parçası kalır: NVIDIA için CUDA 12 ya da 13
-(sürücüye göre), AMD ve Intel için Vulkan, işlemci için hiçbiri. Önerilen modeller (Qwen 3.5, Gemma 4, gpt-oss; hepsi Apache-2.0) ekran
+(sürücüye göre), AMD ve Intel için Vulkan, işlemci için hiçbiri (sonradan yeni bir kart ya da sürücüyle başka bir grafik parçası
+gerekirse program kurulu değil görünür ve yeniden kurulması önerilir; açma başarısız olursa doğrulanmış indirme bir sonraki deneme için
+saklanır). Önerilen modeller (Qwen 3.5, Gemma 4, gpt-oss; hepsi Apache-2.0) ekran
 kartı sınıfına göre (4, 6, 8, 12, 16, 24, 32 GB) boyutlarıyla listelenir: yeşil bağlamıyla birlikte kartına sığar, kırmızı sığmaz (bir
 kısmı ana bellekte çalışır, çok daha yavaş), turuncu ise ticari kullanımı kısıtlayan bir lisansı gösterir. Sunucu yalnız bir model
 kullanılınca başlar, yalnız 127.0.0.1'de kendine ait bir portta dinler (11534 ya da sıradaki boş port; asla 11434 değil), modellerini
 programın veri klasöründe (`tools/ollama-models`) tutar, aynı anda tek model yükler, başka bir yerel model kartı isteyince onu indirir
 (`keep_alive: 0`) ve TM Concept kapanınca kapanır. Kurulan modeller her metin adımında (konular, konseptler, video kodu, görsel
 istemleri…) diğer modeller gibi ücretsiz ve anahtarsız sunulur. Ayarlar → **Depolama** programı ve her modeli boyutuyla, hangi profilin
-kullandığıyla listeler ve kaldırır (geri dönüşüm kutusuna). Kendi çalıştırdığın Ollama ya da LM Studio'ya hiç dokunulmaz: kullanmak
+kullandığıyla (eski bir sürümün önerdiği bir model de dahil), ayrıca hiçbir modelin kullanmadığı model dosyalarını (iptal edilen bir
+indirmenin gelen kısmı; programın sunucusu bunu kendi silmez) listeler ve kaldırır (geri dönüşüm kutusuna). **Sunucuyu durdur**, bir
+adım, video, kurulum ya da indirme sunucuyu kullanıyor olabilirken reddedilir. Modelin bağlamından büyük bir istem gönderilmeden hata
+verir ve daha büyük bir model seçmeni söyler. Kendi çalıştırdığın Ollama ya da LM Studio'ya hiç dokunulmaz: kullanmak
 istersen özel sunucu olarak ekle.
 
 Sonra modelleri onları kullanan sayfalarda seç (yukarıya bak). Ücretli hiçbir şey senin yerine seçilmez.

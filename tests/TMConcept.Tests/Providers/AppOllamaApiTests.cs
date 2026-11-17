@@ -6,6 +6,7 @@ using TMConcept.Core.AppOllama;
 using TMConcept.Core.Chat;
 using TMConcept.Core.Endpoints;
 using TMConcept.Core.Models;
+using TMConcept.Core.Providers;
 using TMConcept.Core.Tools;
 using TMConcept.Providers.AppOllama;
 using TMConcept.Providers.Catalog;
@@ -158,6 +159,13 @@ public sealed class AppOllamaApiTests : IDisposable
         sent["options"]!["num_ctx"]!.GetValue<long>().ShouldBe(model.ContextTokens);
         sent["format"]!["type"]!.GetValue<string>().ShouldBe("object", "the schema goes as Ollama's grammar");
         AppOllamaChatClient.Endpoint(running.Address!).Kind.ShouldBe(EndpointKind.Ollama);
+
+        // A prompt larger than the model's fixed context points at Settings -> Local AI, not at the user's own servers under API keys.
+        var large = await Should.ThrowAsync<ProviderException>(() => chat.SendAsync(new ChatRequest("system", new string('x', 200_000)), CancellationToken.None));
+        large.Code.ShouldBe("too_large");
+        large.Message.ShouldContain("Local AI");
+        large.Message.ShouldNotContain("API keys");
+        server.To("/api/chat").Count.ShouldBe(1, "a prompt that does not fit is never sent");
 
         // Removing the model from the folder takes it out of every picker after the next look at the disk.
         File.Delete(store.ManifestPath("qwen3:8b"));

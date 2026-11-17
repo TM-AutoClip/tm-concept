@@ -21,4 +21,10 @@ public interface IAppOllamaServer
 
     /// <summary>Ends the server and its model runners (nothing when it does not run).</summary>
     Task StopAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// When the server ended by itself (a crash), ends what it left (its model runners, which may still hold graphics memory) and forgets it;
+    /// nothing when it runs or was never started.
+    /// </summary>
+    Task EndLeftoversAsync(CancellationToken cancellationToken);
 }

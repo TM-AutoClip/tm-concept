@@ -7,7 +7,9 @@ namespace TMConcept.Core.AppOllama;
 /// up through variables, <c>OLLAMA_HOST</c> or <c>OLLAMA_MODELS</c> above all, must never steer the app's copy into the user's server or
 /// models), then: <c>OLLAMA_HOST</c> = 127.0.0.1 with the app's own port (never reachable from another computer), <c>OLLAMA_MODELS</c> = the
 /// app's own models folder, one model in memory and one request at a time (<c>OLLAMA_MAX_LOADED_MODELS=1</c>,
-/// <c>OLLAMA_NUM_PARALLEL=1</c>: the same rule as the app's graphics card coordinator), no cloud models (<c>OLLAMA_NO_CLOUD=1</c>), and a
+/// <c>OLLAMA_NUM_PARALLEL=1</c>: the same rule as the app's graphics card coordinator), no cloud models (<c>OLLAMA_NO_CLOUD=1</c>), no
+/// clean-up of its own at start (<c>OLLAMA_NOPRUNE=1</c>: Ollama would otherwise delete the received part of a cancelled pull at every start,
+/// and the pull would begin again from zero; the storage manager lists the files no model uses instead), and a
 /// home folder of its own (<c>HOME</c>, <c>USERPROFILE</c>) so its keys and settings never mix with the user's <c>~/.ollama</c>.
 /// </summary>
 public static class AppOllamaEnvironment
@@ -32,6 +34,7 @@ public static class AppOllamaEnvironment
             ["OLLAMA_NUM_PARALLEL"] = "1",
             ["OLLAMA_KEEP_ALIVE"] = AppOllamaDefaults.KeepAlive,
             ["OLLAMA_NO_CLOUD"] = "1",
+            ["OLLAMA_NOPRUNE"] = "1",
             ["HOME"] = layout.HomeDirectory,
             ["USERPROFILE"] = layout.HomeDirectory,
         };

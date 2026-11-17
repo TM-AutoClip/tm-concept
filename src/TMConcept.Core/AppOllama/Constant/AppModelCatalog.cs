@@ -88,18 +88,19 @@ public static class AppModelCatalog
     ];
 
     /// <summary>
-    /// The recommendations per card class, best first. A class also lists a model one step up when it is the developer's expectation
-    /// (Gemma 4 E4B on a 6 GB card): its colour then says whether it fits this card or runs partly in main memory.
+    /// The recommendations per card class, best of those that fit first. Every model fits a card of exactly its class with its context
+    /// (<see cref="AppModelAdvisor.Fit"/>), with one deliberate exception: Gemma 4 E4B on a 6 GB card (the developer's expectation), listed
+    /// last there and shown red (part runs in main memory). Gemma 4 26B A4B (QAT) needs about 17 GiB with its context, so it is a 24 GB model.
     /// </summary>
     public static readonly IReadOnlyDictionary<VramTier, IReadOnlyList<string>> Recommended = new Dictionary<VramTier, IReadOnlyList<string>>
     {
         [VramTier.None] = ["qwen3.5:2b-q4_K_M", "qwen3.5:4b-q4_K_M"],
         [VramTier.Gb4] = ["qwen3.5:4b-q4_K_M", "qwen3.5:2b-q4_K_M"],
-        [VramTier.Gb6] = ["gemma4:e4b-it-qat", "qwen3.5:4b-q8_0", "gemma4:e2b-it-qat"],
+        [VramTier.Gb6] = ["qwen3.5:4b-q8_0", "gemma4:e2b-it-qat", "gemma4:e4b-it-qat"],
         [VramTier.Gb8] = ["qwen3.5:9b-q4_K_M", "gemma4:e4b-it-qat", "gemma4:12b-it-qat"],
         [VramTier.Gb12] = ["gemma4:12b-it-q4_K_M", "qwen3.5:9b-q8_0", "qwen3.5:9b-q4_K_M"],
-        [VramTier.Gb16] = ["gemma4:12b-it-q8_0", "gpt-oss:20b", "gemma4:26b-a4b-it-qat"],
-        [VramTier.Gb24] = ["qwen3.5:27b-q4_K_M", "gemma4:31b-it-qat", "gemma4:26b-a4b-it-q4_K_M"],
+        [VramTier.Gb16] = ["gemma4:12b-it-q8_0", "gpt-oss:20b", "qwen3.5:9b-q8_0"],
+        [VramTier.Gb24] = ["qwen3.5:27b-q4_K_M", "gemma4:31b-it-qat", "gemma4:26b-a4b-it-q4_K_M", "gemma4:26b-a4b-it-qat"],
         [VramTier.Gb32] = ["gemma4:31b-it-q4_K_M", "qwen3.5:35b-a3b-q4_K_M", "qwen3.5:27b-q4_K_M"],
     };
 }

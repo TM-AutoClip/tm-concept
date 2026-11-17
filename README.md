@@ -313,13 +313,17 @@ Guide: [docs/api-keys.md](docs/api-keys.md#custom-server-openai-compatible), [Ol
 app's own copy of the official Ollama release (0.40.16), and downloads text models for it. Nothing is downloaded before you confirm the
 list (the install window shows the progress and can cancel; a cancelled model download goes on from where it stopped next time). After
 unpacking only the graphics part your card needs is kept: NVIDIA CUDA 12 or 13 (by the driver), Vulkan for AMD and Intel, nothing for the
-processor. The recommended models (Qwen 3.5, Gemma 4, gpt-oss; all Apache-2.0) are listed per graphics card class (4, 6, 8, 12, 16, 24,
+processor (a graphics part needed later, after a new card or driver, makes the program show as not installed so it is offered
+again; a failed unpack keeps the checked download for the next try). The recommended models (Qwen 3.5, Gemma 4, gpt-oss; all Apache-2.0) are listed per graphics card class (4, 6, 8, 12, 16, 24,
 32 GB) with their size: green fits your card with its context, red does not (part runs in main memory, much slower), orange would mark a
 license that limits commercial use. The server starts only when a model is used, listens only on 127.0.0.1 on a port of its own (11534,
 or the next free one; never 11434), keeps its models in the app's data folder (`tools/ollama-models`), loads one model at a time, unloads
 it (`keep_alive: 0`) when another local model needs the card, and ends when TM Concept closes. Installed models are offered in every text
 step (topics, concepts, video code, image prompts…) like any other model, free and without a key. Settings → **Storage** lists the program
-and each model with its size and which profile uses it, and removes them (to the recycle bin). An Ollama or LM Studio you run yourself is
+and each model with its size and which profile uses it (also a model an older version offered), plus the model files no model uses (the
+received part of a cancelled download, which the app's server never deletes by itself), and removes them (to the recycle bin). **Stop the
+server** (Settings → Local AI) is refused while a step, a video, an install or a download may be using the server. A prompt larger than a
+model's context fails before it is sent and points at a larger model. An Ollama or LM Studio you run yourself is
 never touched: add it as a custom server if you want to use it.
 
 Then choose the models on the pages that use them (see above). Nothing paid is chosen for you.

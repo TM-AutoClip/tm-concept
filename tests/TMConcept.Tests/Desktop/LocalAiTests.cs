@@ -165,6 +165,63 @@ public sealed class LocalAiTests
         h.Get<IModelCatalog>().Find(ModelProviders.AppOllama, "qwen3.5:4b-q4_K_M").ShouldBeNull();
     }
 
+    [AvaloniaFact]
+    public async Task StoppingTheServerIsRefusedWhileWorkRuns()
+    {
+        var launcher = new FakeAppOllamaLauncher();
+        using var h = Harness(new FakeConfirm { Answer = true }, launcher, new FakeAppOllamaApi());
+        await FirstRunTests.CreateAsync(h);
+        InstallProgram(h);
+        await h.Get<IAppOllamaServer>().StartAsync(None);
+        var section = h.Get<LocalAiSettingsViewModel>();
+        await section.ActivateAsync();
+        var session = h.Get<TMConcept.Desktop.Startup.AppSession>();
+
+        session.WorkRunning = true;
+        await section.StopServerCommand.ExecuteAsync(null);
+
+        launcher.Started.ShouldHaveSingleItem().Stops.ShouldBe(0, "a step or a video may be in a call to it");
+        h.Get<IAppOllamaServer>().Running.ShouldBeTrue();
+        section.Status.ShouldNotBeEmpty();
+
+        session.WorkRunning = false;
+        await section.StopServerCommand.ExecuteAsync(null);
+
+        launcher.Started[0].Stops.ShouldBe(1);
+        section.ServerRunning.ShouldBeFalse();
+    }
+
+    [AvaloniaFact]
+    public async Task TheStorageManagerListsAnOldAppModelAndFilesNoModelUses()
+    {
+        var bin = new FakeBin();
+        using var h = Harness(new FakeConfirm { Answer = true }, new FakeAppOllamaLauncher(), new FakeAppOllamaApi(), bin);
+        await FirstRunTests.CreateAsync(h);
+        InstallProgram(h);
+        var store = h.Get<AppModelStore>();
+        var old = AppModelFiles.Write(store, "qwen3:8b", "weights an older version offered");
+        var partial = Path.Combine(Path.GetDirectoryName(store.BlobPath(old[0])!)!, "sha256-" + new string('c', 64) + "-partial");
+        File.WriteAllText(partial, "half of a cancelled pull");
+        h.Get<AppModelRegistry>().Refresh();
+        var cleaner = h.Get<IDiskCleaner>();
+
+        var report = await cleaner.ReportAsync(None);
+
+        var row = report.Items.Single(i => i.Key == "component:ollama-model.qwen3:8b");
+        row.State.ShouldBe(DiskItemState.Unused);
+        DiskSelection.Unused(report.Items).ShouldContain(row);
+        var leftovers = report.Items.Single(i => i.Key == "models:app-ollama-unused");
+        leftovers.Bytes.ShouldBe(new FileInfo(partial).Length);
+        DiskSelection.Unused(report.Items).ShouldContain(leftovers);
+
+        var outcome = await cleaner.RemoveAsync([row, leftovers], None);
+
+        outcome.Removed.Count.ShouldBe(2);
+        store.HasManifest("qwen3:8b").ShouldBeFalse();
+        File.Exists(store.BlobPath(old[1])!).ShouldBeFalse();
+        File.Exists(partial).ShouldBeFalse();
+    }
+
     internal sealed class FakeBin : IRecycleBin
     {
         public List<string> Moved { get; } = [];

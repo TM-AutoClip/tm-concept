@@ -14,7 +14,16 @@ internal sealed class FakeAppOllamaLauncher : IAppOllamaLauncher
 
     public List<FakeAppOllamaProcess> Started { get; } = [];
 
+    /// <summary>The program folders an orphan sweep was asked for.</summary>
+    public List<string> Swept { get; } = [];
+
     public bool IsPortFree(int port) => !Taken.Contains(port);
+
+    public int EndLeftovers(string programFolder)
+    {
+        Swept.Add(programFolder);
+        return 0;
+    }
 
     public int AnyFreePort() => Free;
 

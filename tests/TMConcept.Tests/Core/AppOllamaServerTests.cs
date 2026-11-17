@@ -46,6 +46,7 @@ public sealed class AppOllamaServerTests : IDisposable
         launch.Environment["OLLAMA_MAX_LOADED_MODELS"].ShouldBe("1");
         launch.Environment["OLLAMA_NUM_PARALLEL"].ShouldBe("1");
         launch.Environment["OLLAMA_NO_CLOUD"].ShouldBe("1");
+        launch.Environment["OLLAMA_NOPRUNE"].ShouldBe("1", "a cancelled pull keeps its received part across restarts");
         launch.Environment["HOME"].ShouldBe(Layout.HomeDirectory);
         launch.Environment["USERPROFILE"].ShouldBe(Layout.HomeDirectory);
         Directory.Exists(Layout.ModelsDirectory).ShouldBeTrue();
@@ -135,6 +136,52 @@ public sealed class AppOllamaServerTests : IDisposable
         error.Message.ShouldContain("address already in use");
         server.Running.ShouldBeFalse();
         server.Address.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task AnAnswerWhileTheStartedServerHasEndedIsNotTakenForTheAppsServer()
+    {
+        // Another server answers on the port while the app's own could not bind and ended: the start fails, nothing is used.
+        var launcher = new FakeAppOllamaLauncher
+        {
+            OnStart = p =>
+            {
+                p.HasExited = true;
+                p.ExitCode = 1;
+            },
+        };
+        using var server = Server(launcher, new FakeAppOllamaApi { Up = true });
+
+        var error = await Should.ThrowAsync<AppOllamaException>(() => server.StartAsync(CancellationToken.None));
+
+        error.Code.ShouldBe("start");
+        server.Address.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task WhatACrashedServerLeftIsEndedButARunningServerIsNotTouched()
+    {
+        var launcher = new FakeAppOllamaLauncher();
+        var runtime = new FakeAppOllamaRuntime();
+        using var server = Server(launcher, runtime: runtime);
+        await server.StartAsync(CancellationToken.None);
+
+        await server.EndLeftoversAsync(CancellationToken.None);
+        launcher.Swept.ShouldBeEmpty("a running server and its runners are never touched");
+        server.Running.ShouldBeTrue();
+
+        // A crash: its model runner may still hold the card; the coordinator's unload ends what it left.
+        launcher.Started[0].HasExited = true;
+        await server.EndLeftoversAsync(CancellationToken.None);
+        launcher.Swept.ShouldBe([Path.GetDirectoryName(runtime.Executable)!]);
+        launcher.Started[0].Disposed.ShouldBeTrue();
+
+        // The same happens when the next use finds it crashed.
+        await server.StartAsync(CancellationToken.None);
+        launcher.Started[1].HasExited = true;
+        await server.StartAsync(CancellationToken.None);
+        launcher.Swept.Count.ShouldBe(2);
+        launcher.Started.Count.ShouldBe(3);
     }
 
     [Fact]

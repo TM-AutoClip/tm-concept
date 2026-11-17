@@ -119,6 +119,58 @@ public sealed partial class AppModelStore(AppOllamaLayout layout)
         return paths;
     }
 
+    /// <summary>
+    /// The files in <c>blobs/</c> that no manifest names: the received parts of a pull that was cancelled (<c>sha256-…-partial*</c>; the app's
+    /// server never prunes them itself, so a pull can go on from there) and layers no model uses any more. Every manifest under
+    /// <c>manifests/</c> counts, of any registry and complete or not. When one manifest cannot be read, or the folder cannot be listed,
+    /// nothing is named (that manifest might use any blob).
+    /// </summary>
+    public IReadOnlyList<string> UnreferencedBlobs()
+    {
+        var blobs = Path.Combine(layout.ModelsDirectory, "blobs");
+        if (!Directory.Exists(blobs))
+        {
+            return [];
+        }
+
+        var named = new HashSet<string>(StringComparer.Ordinal);
+        var manifests = Path.Combine(layout.ModelsDirectory, "manifests");
+        try
+        {
+            if (Directory.Exists(manifests))
+            {
+                foreach (var file in Directory.EnumerateFiles(manifests, "*", SearchOption.AllDirectories))
+                {
+                    if (JsonNode.Parse(File.ReadAllText(file)) is not JsonObject manifest)
+                    {
+                        return [];
+                    }
+
+                    var layers = (manifest["layers"] as JsonArray)?.OfType<JsonObject>().ToList() ?? [];
+                    if (manifest["config"] is JsonObject config)
+                    {
+                        layers.Add(config);
+                    }
+
+                    foreach (var layer in layers)
+                    {
+                        if (layer["digest"]?.GetValueKind() == JsonValueKind.String)
+                        {
+                            named.Add(layer["digest"]!.GetValue<string>().Replace(':', '-'));
+                        }
+                    }
+                }
+            }
+
+            return Directory.EnumerateFiles(blobs).Where(f => !named.Contains(Path.GetFileName(f))).Order(StringComparer.Ordinal).ToList();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            // A manifest that cannot be read might name any blob: none is called unused.
+            return [];
+        }
+    }
+
     /// <summary>Bytes of the files <see cref="OwnedPaths"/> names (what a removal frees).</summary>
     public long OwnedBytes(string tag) => OwnedPaths(tag).Sum(p => File.Exists(p) ? new FileInfo(p).Length : 0);
 

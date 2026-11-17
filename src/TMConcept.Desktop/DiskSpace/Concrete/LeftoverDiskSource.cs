@@ -1,3 +1,4 @@
+using TMConcept.Core.AppOllama;
 using TMConcept.Core.Components;
 using TMConcept.Core.DiskSpace;
 using TMConcept.Desktop.Localization;
@@ -11,6 +12,8 @@ namespace TMConcept.Desktop.DiskSpace;
 /// <list type="bullet">
 /// <item>unfinished downloads (<c>tools/downloads</c>) and the Python voices' helper folders (<c>speech-py/scripts</c>, <c>locks</c>,
 /// <c>home</c>: written again at the next install or narration);</item>
+/// <item>the files of the app's own Ollama models folder that no model uses (<see cref="AppModelStore.UnreferencedBlobs"/>: the received
+/// part of a cancelled pull, layers of a removed model);</item>
 /// <item>folders inside <c>tools/</c> that no component owns (an older pinned version, a build for another graphics setting);</item>
 /// <item>old components folders next to <c>tools/</c> left by "Reinstall from scratch" (<c>tools.old-*</c>, <c>tools.failed-*</c>,
 /// <c>tools.aside-*</c>);</item>
@@ -20,7 +23,8 @@ namespace TMConcept.Desktop.DiskSpace;
 /// </list>
 /// The database, keys, settings, backups, logs and the videos in the library are never rows here.
 /// </summary>
-public sealed class LeftoverDiskSource(AppPaths paths, PythonLayout python, ComponentPlanner planner, Localizer text, TimeProvider clock) : IDiskItemSource
+public sealed class LeftoverDiskSource(AppPaths paths, PythonLayout python, ComponentPlanner planner, AppModelStore appModels, Localizer text, TimeProvider clock)
+    : IDiskItemSource
 {
     /// <summary>The names an old components folder starts with (next to <c>tools</c>).</summary>
     public static readonly IReadOnlyList<string> AsidePrefixes =
@@ -38,6 +42,8 @@ public sealed class LeftoverDiskSource(AppPaths paths, PythonLayout python, Comp
 
         string[] helpers = [python.ScriptsFolder, python.LocksFolder, python.HomeFolder];
         yield return Folder("tools:speech-py-helpers", "storage.item.python_helpers", DiskArea.Tools, helpers, true);
+
+        yield return Folder("models:app-ollama-unused", "storage.item.app_model_leftovers", DiskArea.Models, appModels.UnreferencedBlobs(), true);
 
         var owned = planner.All.SelectMany(c => c.Folders()).Concat(helpers).Append(downloads).Select(Full).ToList();
         var unowned = Unowned(tools, owned).ToList();

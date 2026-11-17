@@ -108,6 +108,77 @@ public sealed class AppOllamaModelTests : IDisposable
     }
 
     [Fact]
+    public void EveryRecommendedModelFitsACardOfItsClass()
+    {
+        foreach (var (tier, tags) in AppModelCatalog.Recommended)
+        {
+            if (tier == VramTier.None)
+            {
+                continue;
+            }
+
+            AppModelAdvisor.Fit(AppModelAdvisor.Find(tags[0])!, (int)tier * GiB).ShouldBe(AppModelFit.Fits, $"the first model of the {(int)tier} GB class");
+            foreach (var tag in tags)
+            {
+                var fit = AppModelAdvisor.Fit(AppModelAdvisor.Find(tag)!, (int)tier * GiB);
+                if (tier == VramTier.Gb6 && tag == "gemma4:e4b-it-qat")
+                {
+                    // The developer's expectation for a 6 GB card: shown red (part in main memory), after the models that fit.
+                    fit.ShouldBe(AppModelFit.TooLarge);
+                    tags[^1].ShouldBe(tag);
+                    continue;
+                }
+
+                fit.ShouldBe(AppModelFit.Fits, $"{tag} in the {(int)tier} GB class");
+            }
+        }
+
+        AppModelCatalog.Recommended[VramTier.Gb24].ShouldContain("gemma4:26b-a4b-it-qat", "it needs about 17 GiB with its context");
+    }
+
+    [Fact]
+    public void AnInstalledModelTheCatalogueNoLongerNamesIsStillAComponent()
+    {
+        // A tag an older version offered: it stays in the pickers, so the storage manager must list and remove it too.
+        AppModelFiles.Write(Store, "qwen3:8b", "old weights", "shared");
+        AppModelFiles.Write(Store, "qwen3.5:4b-q4_K_M", "weights", "shared");
+        var registry = new AppModelRegistry(Store, NullLogger<AppModelRegistry>.Instance);
+        var source = new AppModelComponentSource(Store, registry, new FakeAppOllamaRuntime(), new Providers.FakeRunningAppServer("http://127.0.0.1:11534"), new FakeAppOllamaApi(),
+            NullLoggerFactory.Instance);
+        var planner = new ComponentPlanner([source], NullLogger<ComponentPlanner>.Instance);
+
+        var old = planner.Find(ComponentCodes.AppOllamaModelPrefix + "qwen3:8b").ShouldNotBeNull();
+        planner.All.Count.ShouldBe(AppModelCatalog.Models.Count + 1);
+        old.Ready.ShouldBeTrue();
+        old.Folders().ShouldContain(Store.ManifestPath("qwen3:8b"));
+        old.Folders().Count.ShouldBe(3, "its manifest, its config and its own weights; the shared layer stays");
+        planner.Find(ComponentCodes.AppOllamaModelPrefix + "qwen3:8b").ShouldBeSameAs(old, "one component per tag");
+
+        File.Delete(Store.ManifestPath("qwen3:8b"));
+        registry.Refresh();
+        planner.Find(ComponentCodes.AppOllamaModelPrefix + "qwen3:8b").ShouldBeNull();
+    }
+
+    [Fact]
+    public void FilesNoModelUsesAreFoundButNeverABlobAModelNeeds()
+    {
+        var qwen = AppModelFiles.Write(Store, "qwen3.5:4b-q4_K_M", "weights");
+        var blobs = Path.GetDirectoryName(Store.BlobPath(qwen[0])!)!;
+        var partial = Path.Combine(blobs, "sha256-" + new string('a', 64) + "-partial-0");
+        File.WriteAllText(partial, "half a layer");
+        var orphan = Path.Combine(blobs, "sha256-" + new string('b', 64));
+        File.WriteAllText(orphan, "a layer of a removed model");
+
+        Store.UnreferencedBlobs().ShouldBe(new[] { partial, orphan }.Order(StringComparer.Ordinal).ToList());
+
+        // A manifest that cannot be read might name anything: nothing is offered for removal then.
+        var broken = Store.ManifestPath("gemma4:e2b-it-qat");
+        Directory.CreateDirectory(Path.GetDirectoryName(broken)!);
+        File.WriteAllText(broken, "{ not json");
+        Store.UnreferencedBlobs().ShouldBeEmpty();
+    }
+
+    [Fact]
     public void InstalledModelsBecomeFreeTextModelsOfEveryPicker()
     {
         var registry = new AppModelRegistry(Store, NullLogger<AppModelRegistry>.Instance);

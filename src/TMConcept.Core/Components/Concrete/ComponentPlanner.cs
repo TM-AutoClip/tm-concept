@@ -13,11 +13,14 @@ namespace TMConcept.Core.Components;
 /// </summary>
 public sealed class ComponentPlanner(IEnumerable<IComponentSource> sources, ILogger<ComponentPlanner> logger, IInstallRecord? record = null)
 {
-    private readonly Lazy<IReadOnlyList<IComponent>> _all = new(() => sources.SelectMany(s => s.Components).ToList());
+    private readonly IReadOnlyList<IComponentSource> _sources = [.. sources];
     private readonly SemaphoreSlim _gate = new(1, 1);
 
-    /// <summary>Every component.</summary>
-    public IReadOnlyList<IComponent> All => _all.Value;
+    /// <summary>
+    /// Every component, asked from the sources each time: most sources keep a fixed list, but one may change (the app's own Ollama models
+    /// follow what is installed).
+    /// </summary>
+    public IReadOnlyList<IComponent> All => _sources.SelectMany(s => s.Components).ToList();
 
     /// <summary>A component by code; null when unknown.</summary>
     public IComponent? Find(string code) => All.FirstOrDefault(c => c.Code == code);

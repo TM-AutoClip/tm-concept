@@ -47,13 +47,16 @@ public sealed class AppOllamaInstallTests
         return memory.ToArray();
     }
 
-    private static (AppOllamaComponent Component, Downloads Network, TempPaths Paths) Create(byte[] body, GpuReport report, string? sha256 = null)
+    private static (AppOllamaComponent Component, Downloads Network, TempPaths Paths) Create(byte[] body, GpuReport report, string? sha256 = null) =>
+        Create(body, new Gpu(report), sha256);
+
+    private static (AppOllamaComponent Component, Downloads Network, TempPaths Paths) Create(byte[] body, Gpu gpu, string? sha256 = null)
     {
         var paths = new TempPaths();
         var network = new Downloads(body);
         var archive = AppOllamaRelease.Archives.First(a => a.Rid == "win-x64") with { Sha256 = sha256 ?? Convert.ToHexStringLower(SHA256.HashData(body)) };
         var component = new AppOllamaComponent(paths, new Platform("win-x64"), new ToolDownloader(new DownloadTransport(() => network), NullLogger<ToolDownloader>.Instance),
-            new Gpu(report), new AppOllamaLayout(Path.Combine(paths.ToolsDirectory, "ollama-models"), Path.Combine(paths.ToolsDirectory, "ollama-home")),
+            gpu, new AppOllamaLayout(Path.Combine(paths.ToolsDirectory, "ollama-models"), Path.Combine(paths.ToolsDirectory, "ollama-home")),
             NullLogger<AppOllamaComponent>.Instance)
         {
             Archives = [archive],
@@ -87,10 +90,16 @@ public sealed class AppOllamaInstallTests
         AppOllamaBackends.Keep(Nvidia(13000, 61)).ShouldBe([AppOllamaBackends.Cuda12, AppOllamaBackends.Vulkan], "CUDA 13 dropped Pascal cards");
         AppOllamaBackends.Keep(Nvidia(12080)).ShouldBe([AppOllamaBackends.Cuda12, AppOllamaBackends.Vulkan]);
         AppOllamaBackends.Keep(Nvidia(0)).ShouldBe([AppOllamaBackends.Cuda12, AppOllamaBackends.Cuda13, AppOllamaBackends.Vulkan], "an unknown driver keeps both");
+        AppOllamaBackends.Keep(Nvidia(13000)).ShouldBe([AppOllamaBackends.Cuda12, AppOllamaBackends.Cuda13, AppOllamaBackends.Vulkan],
+            "a CUDA 13 driver with an unknown card capability keeps both (an older card needs CUDA 12)");
         AppOllamaBackends.Keep(Amd).ShouldBe([AppOllamaBackends.Vulkan]);
         AppOllamaBackends.Keep(GpuReport.None).ShouldBeEmpty();
         AppOllamaBackends.IsBackend("rocm_v7_1").ShouldBeTrue();
         AppOllamaBackends.IsBackend("ggml-base.dll").ShouldBeFalse();
+        AppOllamaBackends.BackendOf("lib/ollama/cuda_v12/ggml-cuda.dll").ShouldBe("cuda_v12");
+        AppOllamaBackends.BackendOf("ollama-linux/lib/ollama/vulkan/").ShouldBe("vulkan");
+        AppOllamaBackends.BackendOf("lib/ollama/ggml-base.dll").ShouldBeNull();
+        AppOllamaBackends.BackendOf("ollama.exe").ShouldBeNull();
     }
 
     [Fact]
@@ -137,6 +146,54 @@ public sealed class AppOllamaInstallTests
     }
 
     [Fact]
+    public async Task ABackendTheComputerNeedsLaterMakesTheCopyNotReady()
+    {
+        // Installed while the card ran a CUDA 12 driver: CUDA 13 was never written. A newer driver needs it, so the copy is offered again.
+        var gpu = new Gpu(Nvidia(12080, 86));
+        var (component, _, paths) = Create(WindowsPackage(), gpu);
+        using (paths)
+        {
+            await component.InstallAsync(null, CancellationToken.None);
+            component.Ready.ShouldBeTrue();
+            Directory.Exists(Path.Combine(component.InstallFolder, "lib", "ollama", "cuda_v13")).ShouldBeFalse();
+
+            gpu.Report = Nvidia(13010, 89);
+
+            component.MissingBackends().ShouldBe([AppOllamaBackends.Cuda13]);
+            component.Ready.ShouldBeFalse();
+            component.Downloads().ShouldHaveSingleItem();
+
+            gpu.Report = Amd;
+            component.Ready.ShouldBeTrue("Vulkan was kept, nothing is missing");
+        }
+    }
+
+    [Fact]
+    public async Task AFailedUnpackKeepsTheVerifiedPackageForTheNextTry()
+    {
+        using var memory = new MemoryStream();
+        using (var zip = new ZipArchive(memory, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            using var writer = new StreamWriter(zip.CreateEntry("../outside.txt").Open());
+            writer.Write("no");
+        }
+
+        var body = memory.ToArray();
+        var (component, _, paths) = Create(body, Amd);
+        using (paths)
+        {
+            var error = await Should.ThrowAsync<ToolInstallException>(() => component.InstallAsync(null, CancellationToken.None));
+
+            error.Code.ShouldBe("extract");
+            component.Ready.ShouldBeFalse();
+            File.Exists(Path.Combine(paths.ToolsDirectory, "outside.txt")).ShouldBeFalse();
+            var part = Path.Combine(paths.ToolsDirectory, "downloads", "ollama-windows-amd64.zip.part");
+            File.ReadAllBytes(part).ShouldBe(body, "the verified package stays, so the next try does not download it again");
+            Directory.Exists(component.InstallFolder + ".unpack").ShouldBeFalse();
+        }
+    }
+
+    [Fact]
     public async Task APackageWhoseHashDoesNotMatchIsNeverUnpacked()
     {
         var (component, _, paths) = Create(WindowsPackage(), Amd, sha256: new string('0', 64));
@@ -171,6 +228,42 @@ public sealed class AppOllamaInstallTests
     }
 
     [Fact]
+    public async Task LinksInALinuxPackageAreMadeAndMustStayInside()
+    {
+        // Ollama's Linux packages carry versioned library links (libcudart.so.12 -> libcudart.so.12.8.90), some before their file.
+        using var paths = new TempPaths();
+        var archive = Path.Combine(paths.DataDirectory, "links.tar.zst");
+        WriteEntries(archive,
+            Link(TarEntryType.SymbolicLink, "lib/ollama/libcudart.so", "libcudart.so.12"),
+            Link(TarEntryType.SymbolicLink, "lib/ollama/libcudart.so.12", "libcudart.so.12.8.90"),
+            Regular("lib/ollama/libcudart.so.12.8.90", "cuda runtime"),
+            Regular("bin/ollama", "fake program"),
+            Link(TarEntryType.HardLink, "bin/ollama-hard", "bin/ollama"),
+            Link(TarEntryType.SymbolicLink, "lib/ollama/cuda_v13/libggml.so", "../libcudart.so.12.8.90"));
+        var target = Path.Combine(paths.DataDirectory, "unpacked");
+
+        await AppOllamaComponent.ExtractAsync(archive, target, CancellationToken.None, name => AppOllamaBackends.BackendOf(name) == "cuda_v13");
+
+        File.ReadAllText(Path.Combine(target, "lib", "ollama", "libcudart.so.12.8.90")).ShouldBe("cuda runtime");
+        File.ReadAllText(Path.Combine(target, "lib", "ollama", "libcudart.so.12")).ShouldBe("cuda runtime");
+        File.ReadAllText(Path.Combine(target, "lib", "ollama", "libcudart.so")).ShouldBe("cuda runtime", "a link to a link");
+        File.ReadAllText(Path.Combine(target, "bin", "ollama-hard")).ShouldBe("fake program");
+        Directory.Exists(Path.Combine(target, "lib", "ollama", "cuda_v13")).ShouldBeFalse("a skipped backend's links are skipped too");
+        if (!OperatingSystem.IsWindows())
+        {
+            new FileInfo(Path.Combine(target, "lib", "ollama", "libcudart.so.12")).LinkTarget.ShouldBe("libcudart.so.12.8.90");
+        }
+
+        var outside = Path.Combine(paths.DataDirectory, "outside.tar.zst");
+        WriteEntries(outside, Link(TarEntryType.SymbolicLink, "lib/evil.so", "../../outside.txt"));
+        await Should.ThrowAsync<InvalidDataException>(() => AppOllamaComponent.ExtractAsync(outside, Path.Combine(paths.DataDirectory, "o"), CancellationToken.None));
+
+        var hard = Path.Combine(paths.DataDirectory, "hard.tar.zst");
+        WriteEntries(hard, Link(TarEntryType.HardLink, "lib/evil.so", "../secret"));
+        await Should.ThrowAsync<InvalidDataException>(() => AppOllamaComponent.ExtractAsync(hard, Path.Combine(paths.DataDirectory, "h"), CancellationToken.None));
+    }
+
+    [Fact]
     public void TheModelsOfTheAppsOllamaAreComponentsThatNeedIt()
     {
         var models = new AppModelComponentSource(new AppModelStore(new AppOllamaLayout("m", "h")),
@@ -198,9 +291,27 @@ public sealed class AppOllamaInstallTests
         }
     }
 
+    private static PaxTarEntry Regular(string name, string text) =>
+        new(TarEntryType.RegularFile, name) { DataStream = new MemoryStream(Encoding.UTF8.GetBytes(text)) };
+
+    private static PaxTarEntry Link(TarEntryType type, string name, string target) => new(type, name) { LinkName = target };
+
+    private static void WriteEntries(string archive, params PaxTarEntry[] entries)
+    {
+        using var output = File.Create(archive);
+        using var zstd = new CompressionStream(output);
+        using var tar = new TarWriter(zstd, TarEntryFormat.Pax, leaveOpen: true);
+        foreach (var entry in entries)
+        {
+            tar.WriteEntry(entry);
+        }
+    }
+
     private sealed class Gpu(GpuReport report) : IGpuInfo
     {
-        public GpuReport Detect() => report;
+        public GpuReport Report { get; set; } = report;
+
+        public GpuReport Detect() => Report;
     }
 
     private sealed class Platform(string rid) : IToolPlatform

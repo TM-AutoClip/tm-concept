@@ -9,6 +9,16 @@ public interface IAppOllamaLauncher
     /// <summary>Any free port the system gives on 127.0.0.1.</summary>
     int AnyFreePort();
 
-    /// <summary>Starts <c>ollama serve</c> as <paramref name="launch"/> says; throws when the program cannot be started.</summary>
+    /// <summary>
+    /// Starts <c>ollama serve</c> as <paramref name="launch"/> says; throws <see cref="AppOllamaException"/> ("start") when the program
+    /// cannot be started.
+    /// </summary>
     IAppOllamaProcess Start(AppOllamaLaunch launch);
+
+    /// <summary>
+    /// Ends what an ended server left running (its model runners, which may still hold graphics memory): processes whose program lies in
+    /// <paramref name="programFolder"/> and whose parent is gone. A running server and its runners are never touched. Returns how many were
+    /// ended.
+    /// </summary>
+    int EndLeftovers(string programFolder);
 }

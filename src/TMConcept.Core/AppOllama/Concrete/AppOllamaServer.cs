@@ -9,7 +9,9 @@ namespace TMConcept.Core.AppOllama;
 /// (<see cref="AppOllamaPorts"/>; never the user's 11434), the environment is <see cref="AppOllamaEnvironment.For"/> (inherited
 /// <c>OLLAMA_*</c> variables removed). After the start it asks <c>/api/version</c> until the server answers (at most
 /// <see cref="StartTimeout"/>); a server that ended meanwhile fails at once with its last output lines. A server that ended later (a
-/// crash) is started again on the next use. One start or stop at a time.
+/// crash) is started again on the next use; what it left (its model runners, which may still hold graphics memory) is ended first
+/// (<see cref="IAppOllamaLauncher.EndLeftovers"/>). A health answer counts only while the started process still runs (another server on the
+/// port must never be taken for the app's own). One start or stop at a time.
 /// </summary>
 public sealed class AppOllamaServer(IAppOllamaRuntime runtime, IAppOllamaLauncher launcher, IAppOllamaApi api, AppOllamaLayout layout, TimeProvider clock,
     ILogger<AppOllamaServer> logger) : IAppOllamaServer, IDisposable
@@ -45,7 +47,7 @@ public sealed class AppOllamaServer(IAppOllamaRuntime runtime, IAppOllamaLaunche
             {
                 logger.LogWarning("{Server} had ended (exit code {Code}); starting it again", AppOllamaDefaults.Name,
                     ended.ExitCode?.ToString(CultureInfo.InvariantCulture) ?? "?");
-                Forget();
+                Forget(ended: true);
             }
 
             if (!runtime.Ready)
@@ -102,6 +104,25 @@ public sealed class AppOllamaServer(IAppOllamaRuntime runtime, IAppOllamaLaunche
         }
     }
 
+    /// <inheritdoc />
+    public async Task EndLeftoversAsync(CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (_process is { HasExited: true } ended)
+            {
+                logger.LogWarning("{Server} had ended (exit code {Code}); what it left is ended", AppOllamaDefaults.Name,
+                    ended.ExitCode?.ToString(CultureInfo.InvariantCulture) ?? "?");
+                Forget(ended: true);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     /// <summary>Ends the server (the app closes).</summary>
     public void Dispose()
     {
@@ -129,7 +150,13 @@ public sealed class AppOllamaServer(IAppOllamaRuntime runtime, IAppOllamaLaunche
 
             if (await api.IsUpAsync(root, cancellationToken).ConfigureAwait(false))
             {
-                return;
+                // Only while the started process still runs: a server that could not bind ends, and whatever answers then is not ours.
+                if (!process.HasExited)
+                {
+                    return;
+                }
+
+                continue;
             }
 
             if (clock.GetElapsedTime(started) >= StartTimeout)
@@ -150,19 +177,28 @@ public sealed class AppOllamaServer(IAppOllamaRuntime runtime, IAppOllamaLaunche
             return;
         }
 
-        if (!process.HasExited)
+        var ended = process.HasExited;
+        if (!ended)
         {
             process.Stop();
             logger.LogInformation("{Server} stopped", AppOllamaDefaults.Name);
         }
 
-        Forget();
+        Forget(ended);
     }
 
-    private void Forget()
+    /// <summary>
+    /// Lets go of the process; when it had ended by itself (not by <see cref="IAppOllamaProcess.Stop"/>, which ends the whole tree) its model
+    /// runners may still run, so they are ended too.
+    /// </summary>
+    private void Forget(bool ended)
     {
         _process?.Dispose();
         _process = null;
         _address = null;
+        if (ended && Path.GetDirectoryName(runtime.Executable) is { Length: > 0 } folder)
+        {
+            launcher.EndLeftovers(folder);
+        }
     }
 }

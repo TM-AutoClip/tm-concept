@@ -22,11 +22,16 @@ namespace TMConcept.Providers.Endpoints;
 /// unloads it when another local model needs the card) and images as base64 in the user message. A streamed call reads Ollama's lines
 /// (one JSON object each); thinking arrives apart (<c>message.thinking</c>) and is never part of the answer. <c>done_reason: length</c> is a
 /// cut answer with its text. A 400 with a format or think field is sent once more without them. After an answer one log line says how much
-/// of the model sits on the graphics card and how much in main memory.
+/// of the model sits on the graphics card and how much in main memory. A prompt that does not fit the context is refused before it is sent
+/// ("too_large"), with <paramref name="tooLargeHint"/> saying what the user can do (null: give the model a larger context under API keys,
+/// where the user's own servers are set up).
 /// </summary>
 public sealed class OllamaChatClient(LocalEndpoint endpoint, EndpointModel? saved, CatalogModel model, string token, OllamaServer server, LocalServerHttp http,
-    ILogger logger) : IChatClient
+    ILogger logger, string? tooLargeHint = null) : IChatClient
 {
+    /// <summary>What a prompt too large for the context of a user's own server's model can do.</summary>
+    public const string LargerContextHint = "Give the model a larger context in Settings → API keys.";
+
     private static readonly string[] Optional = ["format", "think"];
     private readonly Uri _root = LocalServerAddress.Root(endpoint);
 
@@ -92,7 +97,7 @@ public sealed class OllamaChatClient(LocalEndpoint endpoint, EndpointModel? save
             logger.LogWarning("{Provider} {Model}: the prompt (about {Prompt} tokens) does not fit the context of {Context} tokens; not sent", ServerName,
                 Model.Id, OpenAICompatibleChatClient.PromptTokens(request), Context);
             throw new ProviderException(string.Create(CultureInfo.InvariantCulture,
-                $"{ServerName}: the prompt (about {OpenAICompatibleChatClient.PromptTokens(request)} tokens) does not fit the context of {Model.Id} ({Context} tokens). Give the model a larger context in Settings → API keys."))
+                $"{ServerName}: the prompt (about {OpenAICompatibleChatClient.PromptTokens(request)} tokens) does not fit the context of {Model.Id} ({Context} tokens). {tooLargeHint ?? LargerContextHint}"))
             {
                 Code = "too_large",
             };

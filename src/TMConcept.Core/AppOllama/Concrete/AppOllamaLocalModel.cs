@@ -9,6 +9,7 @@ namespace TMConcept.Core.AppOllama;
 /// default <see cref="LocalModelBase.PlanMemory"/> plans it as slower, never refused). Loading starts the app's server when it does not run
 /// (the model itself loads on its first request). Unloading asks the server to drop it (<c>keep_alive: 0</c>, then <c>/api/ps</c> until it
 /// is gone); when the server still holds it, the server is ended instead, which certainly frees the card (it starts again on the next use).
+/// When the server crashed, the model runner it left is ended (<see cref="IAppOllamaServer.EndLeftoversAsync"/>).
 /// </summary>
 public sealed class AppOllamaLocalModel(CatalogModel catalog, AppModelInfo info, IAppOllamaServer server, IAppOllamaApi api, bool onCard, ILogger logger)
     : LocalModelBase(catalog), IAppOllamaModel
@@ -44,7 +45,8 @@ public sealed class AppOllamaLocalModel(CatalogModel catalog, AppModelInfo info,
     {
         if (server.Address is not { } root)
         {
-            // The server does not run: nothing of the model can be in memory.
+            // The server does not run; when it crashed, the runner it left may still hold the model, so that is ended.
+            await server.EndLeftoversAsync(cancellationToken).ConfigureAwait(false);
             return;
         }
 

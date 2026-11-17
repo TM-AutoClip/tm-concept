@@ -18,4 +18,6 @@ internal sealed class FakeRunningAppServer(string root) : IAppOllamaServer
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public Task EndLeftoversAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }
