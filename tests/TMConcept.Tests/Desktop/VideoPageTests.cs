@@ -234,7 +234,11 @@ public sealed class VideoPageTests
         request.User.ShouldNotContain("siege", Case.Insensitive, "no narration in the prompt");
         request.User.ShouldNotContain("caption");
         engine.Input!.Scenes.ShouldAllBe(s => s.Caption.Length == 0, "the code reads no narration at render time");
-        ((FakeMedia)h.Get<IMediaTools>()).Ass.ShouldBe([null], "nothing burned in");
+        // The overlay carries only the app-drawn progress bar of this template: no subtitle line is burned in.
+        var burned = ((FakeMedia)h.Get<IMediaTools>()).Overlays.Single().AssText.ShouldNotBeNull("the template's progress bar is drawn by the app");
+        burned.ShouldContain(@"\clip(");
+        burned.ShouldNotContain("siege", Case.Insensitive, "no subtitles burned in");
+        burned.Split('\n').ShouldNotContain(l => l.StartsWith("Dialogue:", StringComparison.Ordinal) && l.Contains(",Default,", StringComparison.Ordinal));
 
         // The kept input, the .srt and the narration file keep the real narration (a later version and the Produced page read them).
         var folder = LibraryPaths.Resolve(h.Get<IAppPaths>().LibraryDirectory, video.Folder);
