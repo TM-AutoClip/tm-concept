@@ -181,6 +181,11 @@ desktop session is required.
    password** is required (at least 12 characters): daily backups are encrypted with it. Write it down; without it a backup cannot be opened.
 4. **First profile:** choose a template or fill in your channel.
 
+**Help on every page.** A small **?** sits to the right of features, settings and sections (the Concepts sections and their options,
+the video queue and templates, every Settings page, the components, storage, research and MCP, the log filters, the update and install
+windows). Hover it, or reach it with Tab, for a one-line tip; click it, or press Enter or Space, for a short explanation of what it does
+and how to use it.
+
 ## Models and what they install
 
 There is no model setting in Settings: every model is chosen on the page that uses it, and the last choice is kept **per profile** (a
@@ -326,6 +331,12 @@ a profile renders with them), and
 when the bin cannot take it); nothing is removed while a video, a generation, a narration, an install or an engine's sample render runs. Your database, profiles,
 concepts, videos, backups and logs are never removed there.
 
+**What the catalog says about a model.** Every model in a picker has its own **?** with facts the app already knows, nothing judged:
+where it runs and whether it is free, its price, the languages of a voice (Turkish or not), its licence (commercial use allowed, only
+under conditions, or not at all), its graphics card class and whether this card runs it, the download size, the context and longest
+answer, whether it reads images or thinks, and whether a voice speaks with your own samples. The **?** next to a picker names the entries
+that share useful facts, for example "Turkish, commercial use and this card: …". A fact the catalog does not have is left out.
+
 Prices update by themselves, at most once a day: the app reads `pricing/prices.json` of this repository and OpenRouter's public model
 list (no key is sent), checks them and keeps the last good copy; offline, the built-in table is used. The estimate boxes show the date
 and the source; the Produced videos page shows this month's spending.
@@ -431,6 +442,10 @@ program stays next to the new one as `TMConcept.exe.old` until the new version h
 upgrade fails, the unlock window says how to go back to it. Nothing is downloaded before you confirm. Settings → General → *Updates* turns the check at
 start off and has **Check now**. A copy of TM Concept built from source, or one in a folder it cannot write (for example Program Files),
 shows the release page instead.
+
+**What's new:** at the first start after the version changed (an update from the app or a replaced program file) a window shows the
+notes of every version since the one that ran before, newest first, in the app's language. The notes are built into the app, so it works
+offline; it shows once, and never on a new install. Settings → General → **What's new** opens it at any time.
 
 **By hand:** download the new release and replace the program file (Windows: the `.exe`; Linux: unpack over the old folder).
 
@@ -538,4 +553,5 @@ released step and never write SQL by hand. Details: [docs/database.md](docs/data
 
 **Releases** must list the SHA-256 of every file in the release notes (`tools/package.py` prints the lines); the app's own updater installs
 only a file whose SHA-256 is there. Keep the notes' `## English` and `## Türkçe` sections: the update window shows only the one in the app's
-language (English when it is missing) and never the SHA-256 block.
+language (English when it is missing) and never the SHA-256 block. Every `docs/release-notes/v*.md` is built into the app for the **What's new** window, and a
+test asks for the running version's file: write `v<version>.md` before the version number changes.

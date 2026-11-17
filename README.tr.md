@@ -179,6 +179,11 @@ Masaüstü oturumu gerekir.
    (en az 12 karakter): günlük yedekler onunla şifrelenir. Bir yere yaz; parolasız yedek açılamaz.
 4. **İlk profil:** bir şablon seç ya da kanalını doldur.
 
+**Her sayfada yardım.** Özelliklerin, ayarların ve bölümlerin sağında küçük bir **?** var (Konseptler bölümleri ve seçenekleri, video
+sırası ve şablonlar, her Ayarlar sayfası, bileşenler, depolama, araştırma ve MCP, günlük filtreleri, güncelleme ve kurulum pencereleri).
+Üstüne gel ya da Tab ile ulaş: tek satırlık bir ipucu çıkar. Tıkla ya da Enter / Boşluk'a bas: ne işe yaradığını ve nasıl kullanılacağını
+anlatan kısa bir açıklama açılır.
+
 ## Modeller ve kurdukları
 
 Ayarlar'da model seçimi yok: her model onu kullanan sayfada seçilir ve son seçim **profil başına** saklanır (yeni profilde ücretli hiçbir
@@ -319,6 +324,12 @@ kullanılır; HyperFrames ve Revideo'nun tarayıcısı bir profil onlarla video 
 kutusuna gider (kutu alamazsa kalıcı silme ancak ayrı bir onayla); video, üretim, seslendirme, kurulum ya da bir motorun örnek videosu sürerken hiçbir şey kaldırılmaz.
 Veritabanın, profillerin, konseptlerin, videoların, yedeklerin ve günlüklerin orada asla silinmez.
 
+**Katalog bir model hakkında ne diyor.** Seçicideki her modelin kendi **?** işareti var; programın zaten bildiği bilgileri gösterir,
+hiçbir yorum katmaz: nerede çalıştığı ve ücretsiz olup olmadığı, fiyatı, bir sesin dilleri (Türkçe var mı), lisansı (ticari kullanım serbest,
+yalnız koşullarıyla ya da hiç), ekran kartı sınıfı ve bu kartta çalışıp çalışmadığı, indirme boyutu, bağlamı ve en uzun cevabı, görsel
+okuyup okumadığı ya da düşünüp düşünmediği, bir sesin kendi ses örneklerinle konuşup konuşmadığı. Seçicinin yanındaki **?** işe yarar
+bilgileri paylaşanları sayar, ör. "Türkçe, ticari kullanım ve bu kart: …". Katalogda olmayan bir bilgi yazılmaz, tahmin edilmez.
+
 Fiyatlar kendiliğinden, günde en çok bir kez güncellenir: program bu deponun `pricing/prices.json` dosyasını ve OpenRouter'ın herkese açık
 model listesini okur (anahtar gönderilmez), denetler ve son iyi kopyayı saklar; internet yoksa yerleşik tablo kullanılır. Tahmin
 kutuları tarihi ve kaynağı gösterir; Üretilen videolar sayfası bu ayın harcamasını gösterir.
@@ -423,6 +434,10 @@ veritabanını ve ana penceresini açana kadar yenisinin yanında `TMConcept.exe
 kilit açma penceresi ona nasıl döneceğini söyler. Sen onaylamadan hiçbir şey indirilmez. Ayarlar → Genel → *Güncellemeler* altında açılıştaki kontrolü
 kapatabilir, **Şimdi bak** ile hemen bakabilirsin. Kaynaktan derlenmiş bir kopya ya da yazılamayan bir klasördeki kopya (örneğin Program
 Files) bunun yerine sürüm sayfasını gösterir.
+
+**Yenilikler:** sürüm değiştikten sonraki ilk açılışta (programın içinden güncelleme ya da elle değiştirilen program dosyası) bir pencere,
+önceki çalışan sürümden bu yana her sürümün notlarını en yenisi üstte, programın dilinde gösterir. Notlar programın içinde gelir, yani
+internetsiz de çalışır; bir kez gösterilir, yeni kurulumda hiç gösterilmez. Ayarlar → Genel → **Yenilikler** onu istediğin zaman açar.
 
 **Elle:** yeni sürümü indir, program dosyasını değiştir (Windows: `.exe`; Linux: eski klasörün üstüne aç).
 
@@ -531,4 +546,5 @@ bir adımı asla değiştirme, elle SQL asla yazma. Ayrıntı: [docs/database.md
 
 **Sürümler** sürüm notlarında her dosyanın SHA-256'sını listelemelidir (`tools/package.py` satırları yazdırır); programın kendi güncelleyicisi
 yalnız SHA-256'sı orada olan dosyayı kurar. Notlardaki `## English` ve `## Türkçe` bölümleri kalmalı: güncelleme penceresi yalnız programın
-dilindekini (yoksa İngilizcesini) gösterir, SHA-256 bloğunu asla göstermez.
+dilindekini (yoksa İngilizcesini) gösterir, SHA-256 bloğunu asla göstermez. Her `docs/release-notes/v*.md` **Yenilikler** penceresi için programın içine
+gömülür ve bir test çalışan sürümün dosyasını arar: sürüm numarası değişmeden önce `v<sürüm>.md` dosyasını yaz.
