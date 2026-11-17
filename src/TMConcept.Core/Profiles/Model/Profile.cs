@@ -27,6 +27,13 @@ public sealed class Profile
     /// <summary>The template the fields were filled from (information only; the template never changes the profile later).</summary>
     public string? TemplateId { get; set; }
 
+    /// <summary>
+    /// The channel photo (avatar): a copy in the library folder, relative to it like <see cref="ProfileImage.FileName"/> (never a full
+    /// path); <c>null</c> when none. The closing end card shows it as a circle next to the channel name. Backups and deletes handle it with
+    /// the sample images.
+    /// </summary>
+    public string? ChannelPhoto { get; set; }
+
     /// <summary>Last concept number given in this profile (numbers are never reused, even after a permanent delete).</summary>
     public int ConceptCounter { get; set; }
 

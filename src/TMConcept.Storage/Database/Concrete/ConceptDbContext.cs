@@ -126,6 +126,9 @@ internal sealed class ConceptDbContext(DbContextOptions<ConceptDbContext> option
             e.ToTable(ConceptSchema.Profiles);
             e.HasKey(p => p.Id);
             e.Property(p => p.Id).ValueGeneratedNever();
+
+            // Not stored yet: the channel photo column comes with the 0.1.19 database step (then this line goes).
+            e.Ignore(p => p.ChannelPhoto);
         });
         modelBuilder.Entity<ProfileImage>(e =>
         {
