@@ -35,7 +35,7 @@ needed) and narrates it with a **free local voice**. It runs on Windows and Linu
   to subscribe for more videos!"; *subscribe* for YouTube, *follow* for Instagram and TikTok) in the narration, on screen, both or off,
   always in the video's language. The form shows a live preview. Each video takes a copy of its template when it starts, so editing or
   deleting a template never changes a made video.
-- **Generate concepts.** Three separate sections, used in any order; each one adds to the same list. **Generate from suggested topics**: suggest 5–100 topics, tick the ones you like and
+- **Generate concepts.** Four separate sections, used in any order; each one adds to the same list. **Generate from suggested topics**: suggest 5–100 topics, tick the ones you like and
   press **Generate selected**: exactly one concept per ticked topic. A topic you did not tick is not a bad one: it may be suggested again
   later; only a topic that got a concept never comes back (topics suggested before 0.1.18 stay blocked: that version did not record which
   ones got a concept). **Generate from an idea**: write an idea (or leave it empty) and
@@ -64,6 +64,20 @@ needed) and narrates it with a **free local voice**. It runs on Windows and Linu
   and a document's **Delete** move its copy to the recycle bin and delete its passages (nothing is removed while a document is being added).
   Backups carry the documents with the profiles (the records, the passages and the copies; the copies up to 256 MB per backup, the smallest
   first: the copies past that are left out, logged, and their records and passages are still in the backup).
+- **From research** (the fourth section, 0.1.22). The app researches a subject itself; no model searches the web on its own, so there is
+  no hidden search cost. **Search** asks Wikipedia (any language) and Wikidata (facts: dates, places, people), both free and without a
+  key, plus the addresses you type under *Options* and, if you set them up under **Settings → Research**, Tavily with your own key or
+  your own MCP servers. It reads the profile's language, English and up to two more languages: the ones you add and the ones the subject
+  points at (Greek for Byzantium, Persian for the Safavids, Turkish for the Ottomans; at most four in all). Only the profile's language
+  and English are searched; the other languages are reached through the found articles' language links, so the same entity is read in
+  its own Greek article. One entity in many languages is one source group (by its Wikidata item). **Search** only lists the pages it
+  would fetch, ticked by the plan (your own addresses first, about a third in the other languages); nothing is fetched and no model is
+  called. The button then fetches the ticked pages (at most 12, 4 MB and two minutes in all; cancellable; each step in the activity
+  panel) through the same guarded fetching as **My documents**, saves them there (passages, meaning search) and writes the concepts from
+  them alone, in the video's language, naming the pages they used (*Sources*). Text on a fetched page is data: invisible characters that
+  hide or reorder text are removed, and the page sits inside the prompt's data block, so it cannot give the model orders. Untick **Keep
+  in My documents** to send the pages a run added to the recycle bin afterwards. The model may be online or local: the passages are
+  fitted into its context like any document's.
 - **Concept to video.** Approved concepts on the left (a click opens one under the list, where it can be edited by hand or with AI),
   **Add to queue**, then **Produce in order**. The models (code with its engine, images, voice) are one folded line on top, next to the
   **template** (empty on a new install: nothing is produced until a code model and a template are chosen). While a video
@@ -349,6 +363,20 @@ never touched: add it as a custom server if you want to use it.
 
 Then choose the models on the pages that use them (see above). Nothing paid is chosen for you.
 
+## Research sources (Settings → Research)
+
+"From research" asks Wikipedia and Wikidata by default (free, no key). Two optional extras:
+
+- **Tavily** (web search made for AI apps, with a free monthly allowance): create a free account at tavily.com, copy your API key and
+  paste it under **Settings → Research**. The key is stored encrypted like your other keys, sent only to Tavily's own address and never
+  logged. Only Tavily's result list is used; the app fetches the pages itself.
+- **Advanced: my MCP servers** (off by default). Add a Streamable HTTP address or a program on this computer (on Windows type the full
+  program name, for example `npx.cmd`), press **Connect and list tools**, choose its search tool (and, optionally, a fetch tool) with
+  the argument each one takes, and save. Before a server is first started or reached the app shows a warning: an MCP server is someone
+  else's program or service; it runs with your rights and sees your search words. The app calls only the two tools you chose (a tool the
+  server does not list is refused), treats their answers like any web page, and starts a program without the app's environment, so keys
+  in environment variables do not reach it. DeepWiki and Context7 document code, not history: they are of no use here.
+
 ## Make your first video
 
 1. **Concepts:** choose the models (and, if you like, the fine-tuning of tone, audience and structure). Either **Suggest topics**, tick
@@ -441,7 +469,8 @@ Portable mode: start the program with `--data-dir <folder>`; then everything, vi
 - **Supertonic 3** (default voice): OpenRAIL-M. Say that the voice is AI-generated when you publish; no impersonation. The video details
   remind you.
 - **Kokoro 82M**: Apache-2.0. **Multilingual MiniLM** (sentence-transformers): Apache-2.0. **Multilingual E5 small**: MIT.
-- **Your documents** keep their own licences. Wikipedia text is CC BY-SA: a video that retells an article should credit it.
+- **Your documents** keep their own licences. Wikipedia text is CC BY-SA: a video that retells an article should credit it. Wikidata facts are CC0. A page "From research" fetched
+  keeps its own licence like any document.
 - **Python voices**: **XTTS-v2** (Coqui Public Model License), **F5-TTS Turkish** and **MMS-TTS Turkish** (CC BY-NC 4.0) are
   **non-commercial only**; the step asks you to accept the licence first. **VoxCPM2** Apache-2.0, **Trendyol-TTS** MIT, **Ahenk** CC BY 4.0
   (credit "Ahenk (github.com/ozguradmin/ahenk-turkish-tts), CC BY 4.0"). PyTorch and the voices' packages have their own (open) licences.

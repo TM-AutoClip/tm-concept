@@ -35,7 +35,7 @@ veritabanını şifreli tutar.
   için abone olmayı unutma!"; YouTube'da *abone ol*, Instagram ve TikTok'ta *takip et*) seste, ekranda, ikisinde ya da kapalı; her zaman
   videonun dilinde. Form canlı önizleme gösterir. Her video başlarken şablonunun bir kopyasını alır; şablonu düzenlemek ya da silmek
   yapılmış videoyu değiştirmez.
-- **Konsept üret.** Üç ayrı bölüm, istediğin sırayla kullanılır; hepsi aynı listeye ekler. **Konu önererek üret**: 5–100 konu önert, beğendiklerini işaretle, **Seçilenleri üret**'e bas: her
+- **Konsept üret.** Dört ayrı bölüm, istediğin sırayla kullanılır; hepsi aynı listeye ekler. **Konu önererek üret**: 5–100 konu önert, beğendiklerini işaretle, **Seçilenleri üret**'e bas: her
   işaretli konudan tam bir konsept. İşaretlemediğin konu kötü sayılmaz: sonra yeniden önerilebilir; yalnız konsepti yapılan konu bir daha
   gelmez (0.1.18'den önce önerilen konular engelli kalır: o sürüm hangisinden konsept yapıldığını kaydetmiyordu). **Fikirden üret**: bir fikir yaz (ya da boş bırak), 1–100 konsept seç. Her basış listeye ekler. Her
   düğmenin yanında küçük bir tahmini ücret görünür; sonra sağlayıcının bildirdiği kullanımdan kesin ücret gelir. Tekrar dört katmanda
@@ -63,6 +63,20 @@ veritabanını şifreli tutar.
   parçalarını siler (bir belge eklenirken hiçbir şey silinmez). Yedekler belgeleri profillerle birlikte taşır (kayıtlar, parçalar ve
   kopyalar; kopyalar yedek başına en çok 256 MB, küçükten büyüğe: sınırı aşanlar alınmaz, günlüğe yazılır, kayıtları ve parçaları yine
   yedektedir).
+- **Araştırmadan** (dördüncü bölüm, 0.1.22). Uygulama konuyu kendisi araştırır; hiçbir model kendi başına internette arama yapmaz, yani
+  gizli bir arama ücreti yoktur. **Ara**; Vikipedi'ye (her dilde) ve Wikidata'ya (bilgiler: tarihler, yerler, kişiler) sorar, ikisi de
+  ücretsiz ve anahtarsızdır; ayrıca *Seçenekler*'e yazdığın adreslere ve **Ayarlar → Araştırma**'da kurduysan kendi anahtarınla Tavily'ye
+  ya da kendi MCP sunucularına. Profilin dilini, İngilizceyi ve en çok iki dil daha okur: senin eklediklerini ve konunun işaret ettiklerini
+  (Bizans için Yunanca, Safeviler için Farsça, Osmanlı için Türkçe; toplam en çok dört). Yalnızca profilin dilinde ve İngilizcede arama
+  yapılır; diğer dillere bulunan makalelerin dil bağlantılarıyla ulaşılır, yani aynı konu kendi Yunanca makalesinden okunur. Bir konunun
+  birçok dildeki sürümü tek kaynak grubudur (Wikidata öğesiyle). **Ara** yalnızca alacağı sayfaları listeler ve plana göre işaretler (önce
+  senin adreslerin, yaklaşık üçte biri diğer dillerden); hiçbir şey indirilmez, model çağrılmaz. Düğme sonra işaretli sayfaları alır (toplam
+  en çok 12 sayfa, 4 MB ve iki dakika; iptal edilebilir; her adım etkinlik panelinde), bunu **Belgelerim**'deki korumalı alma ile yapar,
+  sayfaları oraya kaydeder (parçalar, anlam araması) ve konseptleri yalnız onlardan, videonun dilinde yazar; her konsept kullandığı
+  sayfaları söyler (*Kaynaklar*). Alınan bir sayfadaki yazı veridir: yazıyı gizleyen ya da sırasını değiştiren görünmez karakterler
+  silinir ve sayfa istemin veri bloğunun içinde durur, yani modele talimat veremez. Bir çalışmanın eklediği sayfaların sonradan geri
+  dönüşüm kutusuna gitmesi için **Belgelerim'de tut** işaretini kaldır. Model çevrimiçi ya da yerel olabilir: parçalar her belgede olduğu
+  gibi modelin bağlamına sığdırılır.
 - **Konseptten video.** Solda onaylı konseptler (tıklanan, listenin altında açılır; orada elle ya da yapay zekâyla düzenlenir), **Sıraya
   ekle**, sonra **Sırayla üret**. Modeller (motoruyla kod, görseller, ses) üstte tek bir katlanmış satırdır, yanında **şablon** seçici
   (yeni kurulumda boştur: kod modeli ve şablon seçilmeden video üretilmez). Video üretilirken her aşama
@@ -344,6 +358,21 @@ istersen özel sunucu olarak ekle.
 
 Sonra modelleri onları kullanan sayfalarda seç (yukarıya bak). Ücretli hiçbir şey senin yerine seçilmez.
 
+## Araştırma kaynakları (Ayarlar → Araştırma)
+
+"Araştırmadan" varsayılan olarak Vikipedi'ye ve Wikidata'ya sorar (ücretsiz, anahtarsız). İki isteğe bağlı ek:
+
+- **Tavily** (yapay zekâ uygulamaları için yapılmış, her ay ücretsiz kullanım hakkı veren bir web araması): tavily.com'da ücretsiz hesap
+  aç, API anahtarını kopyala ve **Ayarlar → Araştırma**'ya yapıştır. Anahtar diğer anahtarların gibi şifreli saklanır, yalnızca Tavily'nin
+  kendi adresine gönderilir ve günlüğe asla yazılmaz. Tavily'nin yalnızca sonuç listesi kullanılır; sayfaları uygulama kendisi alır.
+- **Gelişmiş: MCP sunucularım** (varsayılan kapalı). Bir Streamable HTTP adresi ya da bu bilgisayardaki bir program ekle (Windows'ta
+  programın tam adını yaz, ör. `npx.cmd`), **Bağlan ve araçları listele**'ye bas, arama aracını (isteğe bağlı olarak alma aracını) ve
+  her birinin aldığı argümanı seç, kaydet. Bir sunucu ilk kez başlatılmadan ya da ona ulaşılmadan önce uygulama bir uyarı gösterir: MCP
+  sunucusu başkasının programı ya da servisidir; senin yetkilerinle çalışır ve arama kelimelerini görür. Uygulama yalnızca seçtiğin iki
+  aracı çağırır (sunucunun listelemediği bir araç reddedilir), cevaplarına her web sayfası gibi davranır ve bir programı uygulamanın
+  ortam değişkenleri olmadan başlatır, yani ortam değişkenlerindeki anahtarlar ona ulaşmaz. DeepWiki ve Context7 kod belgeler, tarih
+  değil: burada işe yaramazlar.
+
 ## İlk videonu üret
 
 1. **Konseptler:** modelleri seç (istersen ton, izleyici ve anlatım biçimi ince ayarını da). Ya **Konu öner**'e basıp beğendiklerini
@@ -435,7 +464,8 @@ Taşınabilir kip: programı `--data-dir <klasör>` ile başlat; videolar dahil 
 - **Supertonic 3** (varsayılan ses): OpenRAIL-M. Yayınlarken sesin yapay zekâ ile üretildiğini belirt; kimseyi taklit etme. Video
   ayrıntısı bunu hatırlatır.
 - **Kokoro 82M**: Apache-2.0. **Multilingual MiniLM** (sentence-transformers): Apache-2.0. **Multilingual E5 small**: MIT.
-- **Belgelerin** kendi lisanslarını korur. Vikipedi metni CC BY-SA'dır: bir makaleyi anlatan videoda kaynağı belirt.
+- **Belgelerin** kendi lisanslarını korur. Vikipedi metni CC BY-SA'dır: bir makaleyi anlatan videoda kaynağı belirt. Wikidata bilgileri CC0'dır. "Araştırmadan"ın aldığı bir
+  sayfa, her belge gibi kendi lisansını korur.
 - **Python sesleri**: **XTTS-v2** (Coqui Public Model License), **F5-TTS Türkçe** ve **MMS-TTS Türkçe** (CC BY-NC 4.0) **yalnız ticari
   olmayan** işler içindir; adım önce lisansı kabul etmeni ister. **VoxCPM2** Apache-2.0, **Trendyol-TTS** MIT, **Ahenk** CC BY 4.0 (atıf:
   "Ahenk (github.com/ozguradmin/ahenk-turkish-tts), CC BY 4.0"). PyTorch'un ve seslerin paketlerinin kendi (açık) lisansları vardır.

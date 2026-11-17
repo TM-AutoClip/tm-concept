@@ -69,6 +69,14 @@ API kullanımı sohbet aboneliklerinden (Claude Pro, ChatGPT Plus…) ayrı ücr
 4. Anahtarı kopyala ve TM Concept'e yapıştır.
 5. fal'da ücretsiz deneme isteği yok: anahtar denenmeden kaydedilir, ilk görselde denetlenir. Fiyat görsel başınadır (FLUX 2 Flash ≈ 0,01 $).
 
+## Tavily (araştırma, isteğe bağlı)
+
+1. **tavily.com**'u aç ve ücretsiz bir hesap aç (her ay ücretsiz kullanım hakkı var; bunun için kart gerekmez).
+2. Panelden API anahtarını kopyala.
+3. **Ayarlar → Araştırma**'ya yapıştır (Anahtarlar'a değil) ve **Anahtarı kaydet**'e bas.
+4. Yalnızca Konseptler sayfasındaki "Araştırmadan" kullanır; yalnızca Tavily'nin kendi adresine gönderilir ve günlüğe asla yazılmaz.
+   Denenmeden kaydedilir: bir deneme kullanım hakkını harcardı. Bulunan sayfaları uygulama kendisi alır.
+
 ## Özel sunucu (OpenAI uyumlu)
 
 OpenAI API'siyle konuşan her sunucu her metin adımında kullanılabilir: konu önerileri, konseptler, bir konseptin yapay zekâ

@@ -69,6 +69,14 @@ API use is billed separately from chat subscriptions (Claude Pro, ChatGPT Plus�
 4. Copy the key and paste it into TM Concept.
 5. fal has no free test request: the key is saved untested and checked at its first image. Prices are per image (FLUX 2 Flash ≈ 0.01 $).
 
+## Tavily (research, optional)
+
+1. Open **tavily.com** and create a free account (a free monthly allowance; no card needed for it).
+2. Copy your API key from the dashboard.
+3. Paste it under **Settings → Research** (not under Keys) and press **Save key**.
+4. It is used only by "From research" on the Concepts page, sent only to Tavily's own address and never logged. It is saved untested:
+   a test would spend your allowance. The app fetches the found pages itself.
+
 ## Custom server (OpenAI-compatible)
 
 Any server that speaks the OpenAI API can be used in every text step: topic suggestions, concepts, AI edits of a concept, video code,
