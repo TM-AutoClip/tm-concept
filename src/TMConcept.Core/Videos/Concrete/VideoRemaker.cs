@@ -121,11 +121,12 @@ public sealed class VideoRemaker(IEnumerable<IVideoEngine> engines, SceneNarrato
                 var spoken = MarkerText.Spoken(script);
                 return new RenderSceneSource(s.Visual, spoken, s.Image, clips[i]?.DurationMs ?? SilentMs(script, input.Language), MarkerText.Transition(script));
             }).ToList();
-            var timed = RenderInputBuilder.Build(input.Title, input.Language, sources, input.Width, input.Height, input.Fps, input.Theme);
-            steps.Finish(VideoSteps.Timing);
-
-            // The version keeps the video's own subtitles choice and template snapshot: off = the engine gets no captions and nothing is burned in.
+            // The version keeps the video's own subtitles choice and template snapshot: off = the engine gets no captions and nothing is burned
+            // in; a closing card gets its silent hold at the end again.
             var options = Options(source.Record);
+            var timed = RenderInputBuilder.Build(input.Title, input.Language, sources, input.Width, input.Height, input.Fps, input.Theme,
+                Styles.VideoStyleRules.EndHoldMs(options.Style, input.Language));
+            steps.Finish(VideoSteps.Timing);
             var rendered = await assembler.RenderKeptAsync(source.Engine, source.Code, options, timed, work, steps, cancellationToken)
                 .ConfigureAwait(false);
             options.Speech = voice is not null;

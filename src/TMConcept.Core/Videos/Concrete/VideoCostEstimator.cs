@@ -49,7 +49,8 @@ public sealed class VideoCostEstimator(ICostCalculator costs)
             if (code is not null)
             {
                 var input = RenderInputBuilder.Build(concept.Title, profile.ContentLanguage, spoken.Select(s => new RenderSceneSource(s.Visual, s.Narration,
-                    string.Empty, VideoRemaker.SilentMs(s.Script, profile.ContentLanguage), s.Transition)).ToList(), width, height, 30);
+                    string.Empty, VideoRemaker.SilentMs(s.Script, profile.ContentLanguage), s.Transition)).ToList(), width, height, 30,
+                    endHoldMs: Styles.VideoStyleRules.EndHoldMs(style, profile.ContentLanguage));
                 total = total.Plus(Code(input, profile.ContentLanguage, engine, code, subtitles, style));
                 if (image is not null)
                 {

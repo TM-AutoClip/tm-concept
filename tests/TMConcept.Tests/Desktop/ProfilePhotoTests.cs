@@ -127,6 +127,120 @@ public sealed class ProfilePhotoTests
     }
 
     [AvaloniaFact]
+    public async Task AFailedSaveRemovesTheFreshCopyAndAReplacementLaterDeletesTheRightOldPhoto()
+    {
+        FlakyProfileStore? flaky = null;
+        using var h = new DesktopHarness(s =>
+        {
+            s.AddSingleton<TMConcept.Storage.Stores.ProfileStore>();
+            s.AddSingleton<IProfileStore>(sp => flaky = new FlakyProfileStore(sp.GetRequiredService<TMConcept.Storage.Stores.ProfileStore>()));
+        });
+        await FirstRunTests.CreateAsync(h);
+        var library = h.Get<IAppPaths>().LibraryDirectory;
+        var first = Path.Combine(h.Paths.DataDirectory, "first.png");
+        var second = Path.Combine(h.Paths.DataDirectory, "second.png");
+        await File.WriteAllBytesAsync(first, Png, TestContext.Current.CancellationToken);
+        await File.WriteAllBytesAsync(second, OtherPng, TestContext.Current.CancellationToken);
+        var page = h.Get<ProfileViewModel>();
+        page.StartNew();
+        page.Name = "Byzantium";
+        page.ConceptText = "History.";
+        page.ChooseChannelPhoto(first);
+        await page.SaveAsync();
+        var id = h.Get<AppSession>().Profile!.Id;
+        var firstCopy = LibraryPaths.Resolve(library, (await h.Get<IProfileStore>().GetAsync(id, CancellationToken.None))!.ChannelPhoto!);
+
+        // The database refuses the save: the new copy is gone, the row still points at the first photo.
+        page.ChooseChannelPhoto(second);
+        flaky.ShouldNotBeNull().FailNextSave = true;
+        await page.SaveAsync();
+        page.Status.ShouldContain("database is locked");
+        (await h.Get<IProfileStore>().GetAsync(id, CancellationToken.None))!.ChannelPhoto.ShouldNotBeNull().ShouldEndWith(Path.GetFileName(firstCopy));
+        Directory.GetFiles(Path.GetDirectoryName(firstCopy)!).Select(f => Path.GetFileName(f)).ShouldBe([Path.GetFileName(firstCopy)], "the fresh copy of the failed save is removed");
+
+        // Saved again: the first photo (the stored one) is the one deleted, nothing is orphaned.
+        await page.SaveAsync();
+        var secondCopy = LibraryPaths.Resolve(library, (await h.Get<IProfileStore>().GetAsync(id, CancellationToken.None))!.ChannelPhoto!);
+        File.ReadAllBytes(secondCopy).ShouldBe(OtherPng);
+        Directory.GetFiles(Path.GetDirectoryName(firstCopy)!).Select(f => Path.GetFileName(f)).ShouldBe([Path.GetFileName(secondCopy)]);
+    }
+
+    [AvaloniaFact]
+    public async Task ANewProfileWhosePickedImageIsGoneIsNotSavedAtAllAndCancelDropsIt()
+    {
+        using var h = new DesktopHarness();
+        await FirstRunTests.CreateAsync(h);
+        var library = h.Get<IAppPaths>().LibraryDirectory;
+        var kept = Path.Combine(h.Paths.DataDirectory, "kept.png");
+        var gone = Path.Combine(h.Paths.DataDirectory, "gone.png");
+        var photo = Path.Combine(h.Paths.DataDirectory, "avatar.png");
+        await File.WriteAllBytesAsync(kept, Png, TestContext.Current.CancellationToken);
+        await File.WriteAllBytesAsync(gone, OtherPng, TestContext.Current.CancellationToken);
+        await File.WriteAllBytesAsync(photo, OtherPng, TestContext.Current.CancellationToken);
+        var page = h.Get<ProfileViewModel>();
+        page.StartNew();
+        page.Name = "Lost Engineering";
+        page.ConceptText = "Ancient machines.";
+        await page.AddImageFilesAsync([kept, gone]);
+        page.ChooseChannelPhoto(photo);
+        File.Delete(gone);
+
+        await page.SaveAsync();
+
+        page.Status.ShouldContain("gone.png");
+        page.IsNew.ShouldBeTrue("nothing was saved, so the page still offers Cancel");
+        (await h.Get<IProfileStore>().ListAsync(CancellationToken.None)).ShouldBeEmpty();
+        (Directory.Exists(library) && Directory.EnumerateFiles(library, "*", SearchOption.AllDirectories).Any()).ShouldBeFalse("the copies made are removed");
+        await page.CancelNewAsync();
+        (await h.Get<IProfileStore>().ListAsync(CancellationToken.None)).ShouldBeEmpty();
+    }
+
+    [AvaloniaFact]
+    public async Task TwoProfilesOfTheSameNameWithTheSamePhotoKeepTheirOwnCopies()
+    {
+        var confirm = new FakeConfirm();
+        using var h = new DesktopHarness(s => s.AddSingleton<IConfirmDialog>(confirm));
+        await FirstRunTests.CreateAsync(h);
+        var library = h.Get<IAppPaths>().LibraryDirectory;
+        var logo = Path.Combine(h.Paths.DataDirectory, "logo.png");
+        await File.WriteAllBytesAsync(logo, Png, TestContext.Current.CancellationToken);
+        var page = h.Get<ProfileViewModel>();
+        foreach (var _ in new[] { 1, 2 })
+        {
+            page.StartNew();
+            page.Name = "Tarih";
+            page.ConceptText = "History.";
+            page.ChooseChannelPhoto(logo);
+            await page.SaveAsync();
+        }
+
+        var photos = (await h.Get<IProfileStore>().ListAsync(CancellationToken.None)).Select(p => p.ChannelPhoto!).ToList();
+        photos.Count.ShouldBe(2);
+        photos.Distinct().Count().ShouldBe(2, "the copy's name carries the profile's id");
+
+        // The second one (selected) is deleted; the first one's photo stays.
+        await page.DeleteAsync();
+        var left = (await h.Get<IProfileStore>().ListAsync(CancellationToken.None)).ShouldHaveSingleItem();
+        File.ReadAllBytes(LibraryPaths.Resolve(library, left.ChannelPhoto!)).ShouldBe(Png);
+    }
+
+    [AvaloniaFact]
+    public async Task DescribingAnImageOfAnUnsavedProfileAsksToSaveFirst()
+    {
+        using var h = new DesktopHarness();
+        await FirstRunTests.CreateAsync(h);
+        var source = Path.Combine(h.Paths.DataDirectory, "dome.png");
+        await File.WriteAllBytesAsync(source, Png, TestContext.Current.CancellationToken);
+        var page = h.Get<ProfileViewModel>();
+        page.StartNew();
+        await page.AddImageFilesAsync([source]);
+
+        await page.DescribeImageCommand.ExecuteAsync(page.Images.Single());
+
+        page.Status.ShouldBe(h.Get<Localizer>()["profile.describe.save_first"]);
+    }
+
+    [AvaloniaFact]
     public async Task TheAddImagesButtonWorksOnANewProfileAndThePhotoHasARoundPreview()
     {
         using var h = new DesktopHarness();

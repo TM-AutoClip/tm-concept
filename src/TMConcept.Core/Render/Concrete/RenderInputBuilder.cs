@@ -29,10 +29,11 @@ public static class RenderInputBuilder
 
     /// <summary>
     /// Builds the input from scene lengths: frames = ceil(ms × fps / 1000), scenes one after another, at least
-    /// <see cref="RenderTiming.SceneMinMs"/> each, <see cref="RenderTiming.ClosingMs"/> added to the last scene.
+    /// <see cref="RenderTiming.SceneMinMs"/> each, <see cref="RenderTiming.ClosingMs"/> and <paramref name="endHoldMs"/> (the closing card's
+    /// silent hold, <see cref="Styles.VideoStyleRules.EndHoldMs"/>) added to the last scene.
     /// </summary>
     public static RenderInput Build(string title, string language, IReadOnlyList<RenderSceneSource> scenes, int width, int height, int fps,
-        RenderTheme? theme = null)
+        RenderTheme? theme = null, long endHoldMs = 0)
     {
         ArgumentNullException.ThrowIfNull(scenes);
         if (scenes.Count == 0)
@@ -50,7 +51,7 @@ public static class RenderInputBuilder
         for (var i = 0; i < scenes.Count; i++)
         {
             var source = scenes[i];
-            var ms = Math.Max(RenderTiming.SceneMinMs, source.AudioMs) + (i == scenes.Count - 1 ? RenderTiming.ClosingMs : 0);
+            var ms = Math.Max(RenderTiming.SceneMinMs, source.AudioMs) + (i == scenes.Count - 1 ? RenderTiming.ClosingMs + Math.Max(0, endHoldMs) : 0);
             var count = (int)Math.Ceiling(ms * fps / 1000.0);
             input.Scenes.Add(new RenderScene
             {

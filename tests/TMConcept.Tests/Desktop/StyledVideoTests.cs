@@ -57,7 +57,7 @@ public sealed class StyledVideoTests
     });
 
     /// <summary>A profile (with a channel photo when asked), a concept and its first video made with <paramref name="style"/>.</summary>
-    private static async Task<(Profile Profile, VideoRecord Video)> MakeAsync(DesktopHarness h, VideoStyle? style, bool photo = true)
+    private static async Task<(Profile Profile, VideoRecord Video)> MakeAsync(DesktopHarness h, VideoStyle? style, bool photo = true, bool speech = true)
     {
         await FirstRunTests.CreateAsync(h);
         var profile = new Profile { Name = "Byzantium", ContentLanguage = ContentLanguages.English, ConceptText = "x" };
@@ -78,7 +78,7 @@ public sealed class StyledVideoTests
             profile.ChannelPhoto = "Byzantium/photo.png";
         }
 
-        var options = new VideoOptions { Speech = true };
+        var options = new VideoOptions { Speech = speech };
         if (style is not null)
         {
             VideoStyleRules.Snapshot(options, style);
@@ -133,8 +133,11 @@ public sealed class StyledVideoTests
         files.ShouldContain("channel-photo.png");
         var photo = overlay.Photo.ShouldNotBeNull();
         photo.File.ShouldBe("channel-photo.png");
-        photo.StartSeconds.ShouldBe(Math.Round(Math.Max(engine.Input.DurationSeconds * 0.6, engine.Input.DurationSeconds - StyleLayout.EndCardSeconds), 3),
-            "the last seconds (a short video: its last 40 %)");
+        photo.StartSeconds.ShouldBe(Math.Round(engine.Input.DurationSeconds - StyleLayout.EndCardSeconds, 3), "the last seconds");
+        var last = engine.Input.Scenes[^1];
+        last.DurationSeconds.ShouldBeGreaterThanOrEqualTo(StyleLayout.EndCardSeconds + (TMConcept.Core.Render.RenderTiming.ClosingMs / 1000.0),
+            "the last scene got the card's hold");
+        (last.StartSeconds + 0.1).ShouldBeLessThanOrEqualTo(photo.StartSeconds, "the card covers only the hold added after the narration (a 100 ms clip)");
         var text = ass.ShouldNotBeNull();
         text.ShouldContain("Style: Default,Poppins,");
         text.ShouldContain(@"\clip(0,0,0,");
@@ -191,9 +194,62 @@ public sealed class StyledVideoTests
         var error = await Should.ThrowAsync<VideoException>(() => MakeAsync(h, Template()));
 
         error.Code.ShouldBe("code");
-        error.Message.ShouldStartWith("The video code did not follow the template twice and was not run:");
+        error.Message.ShouldStartWith("The video code still did not follow the template after the repair and was not run:");
         error.Message.ShouldContain("font \"Arial\" is not the template font");
         engine.Renders.ShouldBe(0, "a code that breaks the template is never rendered");
+    }
+
+    [AvaloniaFact]
+    public async Task ASafetyFindingAndATemplateBreakAreRepairedTogether()
+    {
+        var engine = new FakeEngine();
+        var chat = new FakeChat()
+            .Answer(_ => Code(engine.SampleCode + "\nconst top = window.top;\nconst progressBar = document.createElement(\"div\");"))
+            .Answer(_ => Code(engine.SampleCode));
+        using var h = Harness(chat, new FakeVoice(), engine);
+
+        var (_, video) = await MakeAsync(h, Template());
+
+        chat.Requests.Count.ShouldBe(2, "one repair for both");
+        var repair = chat.Requests[1].User;
+        repair.ShouldContain("progress bar, timer or scene counter drawn by the code", customMessage: "the template finding is in the repair too");
+        engine.Renders.ShouldBe(1);
+        video.Warnings.ShouldContain(VideoWarnings.Repaired);
+    }
+
+    [AvaloniaFact]
+    public async Task ARepairThatFixesTheSafetyFindingButNotTheTemplateNamesTheTemplate()
+    {
+        var engine = new FakeEngine();
+        var chat = new FakeChat()
+            .Answer(_ => Code(engine.SampleCode + "\nconst top = window.top;"))
+            .Answer(_ => Code(engine.SampleCode + "\nroot.style.fontFamily = \"Arial\";"));
+        using var h = Harness(chat, new FakeVoice(), engine);
+
+        var error = await Should.ThrowAsync<VideoException>(() => MakeAsync(h, Template()));
+
+        error.Message.ShouldStartWith("The video code still did not follow the template after the repair and was not run:");
+        chat.Requests.Count.ShouldBe(2);
+    }
+
+    [AvaloniaFact]
+    public async Task ASpokenClosingWithNarrationOffIsShownOnTheCard()
+    {
+        var engine = new FakeEngine();
+        var voice = new FakeVoice();
+        using var h = Harness(new FakeChat().Answer(_ => Code(engine.SampleCode)), voice, engine);
+        var template = Template();
+        template.Closing = ClosingPlacement.Voice;
+
+        var (_, video) = await MakeAsync(h, template, speech: false);
+
+        voice.Requests.ShouldBeEmpty();
+        File.ReadAllText(Path.Combine(Folder(h, video), VideoFolders.NarrationFile)).ShouldNotContain("Don't forget to follow!", customMessage: "nothing silent added");
+        var (_, ass, _) = ((FakeMedia)h.Get<IMediaTools>()).Overlays.Single();
+        ass.ShouldNotBeNull().ShouldContain("Don't forget to follow!", customMessage: "on the card instead");
+        engine.Input!.Style.ShouldNotBeNull().EndCardSeconds.ShouldBe(StyleLayout.EndCardSeconds);
+        VideoRemaker.Options(video).Style.ShouldNotBeNull().Closing.ShouldBe(ClosingPlacement.Screen, "the video's snapshot says what it shows");
+        template.Closing.ShouldBe(ClosingPlacement.Voice);
     }
 
     [AvaloniaFact]

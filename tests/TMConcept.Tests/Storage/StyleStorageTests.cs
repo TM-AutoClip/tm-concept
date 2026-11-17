@@ -69,7 +69,7 @@ public sealed class StyleStorageTests
             await store.SaveAsync(style, None);
         }
 
-        await Should.ThrowAsync<InvalidOperationException>(() => store.SaveAsync(new VideoStyle { Name = "One too many" }, None));
+        await Should.ThrowAsync<VideoStyleLimitException>(() => store.SaveAsync(new VideoStyle { Name = "One too many" }, None));
         (await store.ListAsync(None)).Count.ShouldBe(VideoStyleLimits.Max);
 
         // At the limit a stored one can still be changed, and after a delete a new one fits again.

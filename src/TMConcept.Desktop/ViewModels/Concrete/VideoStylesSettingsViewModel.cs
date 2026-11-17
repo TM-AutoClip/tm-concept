@@ -14,7 +14,8 @@ namespace TMConcept.Desktop.ViewModels;
 /// computer, not tied to profiles, kept in the encrypted database. Each one says how videos look and end: subtitles, the progress bar (off by
 /// default), font, title style and position, colours, the drawing style of scenes without images, motion and the closing call to action.
 /// Add, edit (Save / Cancel) and delete (asked first; the template is removed completely, made videos keep their own copy). The Concept to
-/// video page picks one; each queued video reads it when it starts.
+/// video page picks one; each queued video reads it when it starts. Unsaved changes survive a page switch, and opening another template asks
+/// before they are dropped. A database error is logged and shown, never left to the dispatcher.
 /// </summary>
 public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store, Localizer text, IConfirmDialog confirm, IActivityLog activity,
     ILogger<VideoStylesSettingsViewModel> logger) : SettingsSectionBase
@@ -59,7 +60,7 @@ public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store,
     public partial bool Empty { get; set; }
 
     /// <inheritdoc />
-    public override Task ActivateAsync() => LoadAsync(SelectedStyle?.Id ?? (Editor is { IsNew: false } open ? open.Id : null));
+    public override Task ActivateAsync() => LoadSafeAsync(SelectedStyle?.Id ?? (Editor is { IsNew: false } open ? open.Id : null));
 
     /// <summary>Opens a form for a new template (refused at the limit).</summary>
     [RelayCommand]
@@ -99,18 +100,25 @@ public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store,
         {
             await store.SaveAsync(style, CancellationToken.None).ConfigureAwait(true);
         }
-        catch (InvalidOperationException ex)
+        catch (VideoStyleLimitException ex)
         {
             // The limit (another window or an earlier save filled it): said, nothing stored.
             logger.LogWarning(ex, "Template not saved: the limit of {Max} is reached", VideoStyleLimits.Max);
             Status = text.Format("styles.limit", VideoStyleLimits.Max);
             return;
         }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The database (busy during a backup, disk full, being restored): the form stays as it is, so nothing typed is lost.
+            logger.LogError(ex, "Template {Id} could not be saved", style.Id);
+            Status = text.Format("error.generic", ex.Message);
+            return;
+        }
 
         logger.LogInformation("Template {Id} saved ({State})", style.Id, editor.IsNew ? "new" : "changed");
         Status = text.Format("styles.saved", style.Name);
         activity.Add(ActivityLevel.Info, Status, text.Format("styles.saved", ActivityPlaceholders.Name));
-        await LoadAsync(style.Id).ConfigureAwait(true);
+        await LoadSafeAsync(style.Id).ConfigureAwait(true);
     }
 
     /// <summary>Puts the form back as the template is stored (a new one is dropped).</summary>
@@ -137,25 +145,91 @@ public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store,
             return;
         }
 
-        await store.DeleteAsync(style.Id, CancellationToken.None).ConfigureAwait(true);
+        try
+        {
+            await store.DeleteAsync(style.Id, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Template {Id} could not be deleted", style.Id);
+            Status = text.Format("error.generic", ex.Message);
+            return;
+        }
+
         logger.LogInformation("Template {Id} deleted", style.Id);
         Status = text.Format("styles.deleted", style.Name);
         activity.Add(ActivityLevel.Info, Status, text.Format("styles.deleted", ActivityPlaceholders.Name));
         Editor = null;
-        await LoadAsync(null).ConfigureAwait(true);
+        await LoadSafeAsync(null).ConfigureAwait(true);
     }
 
-    partial void OnSelectedStyleChanged(VideoStyle? value)
+    /// <summary>The last switch to another template in the list (its question may still be open); awaited by tests.</summary>
+    public Task Switching { get; private set; } = Task.CompletedTask;
+
+    partial void OnSelectedStyleChanged(VideoStyle? oldValue, VideoStyle? newValue)
     {
-        if (_loading)
+        if (_loading || newValue is null)
         {
             return;
         }
 
-        if (value is not null)
+        if (Editor is { } open && open.Id != newValue.Id && open.Changed)
         {
-            Editor = new VideoStyleEditorViewModel(value, isNew: false, text);
-            Status = string.Empty;
+            // Unsaved changes of the open template (or of a new one): asked before they are dropped.
+            Switching = SwitchAsync(oldValue, newValue);
+            return;
+        }
+
+        Editor = new VideoStyleEditorViewModel(newValue, isNew: false, text);
+        Status = string.Empty;
+    }
+
+    /// <summary>Asks before the unsaved form is dropped; No keeps the form and puts the list's selection back.</summary>
+    private async Task SwitchAsync(VideoStyle? previous, VideoStyle next)
+    {
+        try
+        {
+            var answer = await confirm.AskAsync(text["styles.discard.title"], text["styles.discard.message"], text["styles.discard.confirm"], danger: true)
+                .ConfigureAwait(true);
+            if (answer.Confirmed)
+            {
+                if (SelectedStyle?.Id == next.Id)
+                {
+                    Editor = new VideoStyleEditorViewModel(next, isNew: false, text);
+                    Status = string.Empty;
+                }
+
+                return;
+            }
+
+            _loading = true;
+            try
+            {
+                SelectedStyle = previous;
+            }
+            finally
+            {
+                _loading = false;
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Switching templates failed");
+            Status = text.Format("error.generic", ex.Message);
+        }
+    }
+
+    /// <summary><see cref="LoadAsync"/> with its error logged and shown (a template that cannot be read, a database that is busy).</summary>
+    private async Task LoadSafeAsync(Guid? select)
+    {
+        try
+        {
+            await LoadAsync(select).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "The templates could not be loaded");
+            Status = text.Format("error.generic", ex.Message);
         }
     }
 
@@ -180,7 +254,11 @@ public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store,
 
         if (SelectedStyle is { } chosen)
         {
-            Editor = new VideoStyleEditorViewModel(chosen, isNew: false, text);
+            // Coming back to the page keeps unsaved changes of the same template (the form is rebuilt only when it says what is stored).
+            if (Editor is not { IsNew: false } open || open.Id != chosen.Id || !open.Changed)
+            {
+                Editor = new VideoStyleEditorViewModel(chosen, isNew: false, text);
+            }
         }
         else if (Editor is { IsNew: false })
         {

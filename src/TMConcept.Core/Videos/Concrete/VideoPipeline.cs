@@ -147,6 +147,14 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         }
 
         var speechOn = voice is not null;
+        if (!speechOn && Styles.VideoStyleRules.WithoutVoice(options.Style) is { } shown && !ReferenceEquals(shown, options.Style))
+        {
+            // A spoken closing without a voice would only lengthen a silent scene (and be lost with subtitles off): this video's snapshot
+            // shows it on the closing card instead, so the overlay, the code's input and a later version agree.
+            logger.LogWarning("The template's closing is spoken but narration is off; it is shown on the closing card instead");
+            options.Style = shown;
+        }
+
         var split = SceneSplitter.Split(job.Concept.Content);
         if (split.Scenes.Count == 0 || split.Scenes.All(s => s.Narration.Length == 0))
         {
@@ -223,7 +231,8 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         steps.Report(VideoSteps.Timing, 0);
         var sources = scenes.Select((s, i) => new RenderSceneSource(s.Visual, s.Narration, sceneImages.ElementAtOrDefault(i) ?? string.Empty,
             clips.ElementAtOrDefault(i)?.DurationMs ?? VideoRemaker.SilentMs(s.Script, profile.ContentLanguage), s.Transition)).ToList();
-        var input = RenderInputBuilder.Build(job.Concept.Title, profile.ContentLanguage, sources, width, height, 30);
+        var input = RenderInputBuilder.Build(job.Concept.Title, profile.ContentLanguage, sources, width, height, 30,
+            endHoldMs: Styles.VideoStyleRules.EndHoldMs(options.Style, profile.ContentLanguage));
         steps.Finish(VideoSteps.Timing);
 
         // E + F. code (+ one repair after a rejected check), render (+ one repair with the error text)

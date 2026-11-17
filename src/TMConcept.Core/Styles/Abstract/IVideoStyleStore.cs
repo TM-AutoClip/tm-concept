@@ -13,7 +13,7 @@ public interface IVideoStyleStore
     Task<VideoStyle?> GetAsync(Guid id, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Adds or updates (the caller sets <see cref="VideoStyle.UpdatedAtUtc"/>). Throws <see cref="InvalidOperationException"/> when a new
+    /// Adds or updates (the caller sets <see cref="VideoStyle.UpdatedAtUtc"/>). Throws <see cref="VideoStyleLimitException"/> when a new
     /// template would make more than <see cref="VideoStyleLimits.Max"/>, and <see cref="ArgumentException"/> when
     /// <see cref="VideoStyleRules.Problems"/> finds a problem; nothing is written then.
     /// </summary>

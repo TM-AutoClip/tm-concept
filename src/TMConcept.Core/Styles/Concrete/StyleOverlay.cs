@@ -8,7 +8,9 @@ namespace TMConcept.Core.Styles;
 /// What the app itself draws over a video made with a template, as one ASS file burned in at the mux (libass, with the template's font from
 /// the copied font folder): the subtitles in the template's font and colours (when on), a thin progress bar along the top edge (only when the
 /// template has it on; it grows with the video's time, whatever the engine) and the closing card (a dimmed backdrop, the channel name, the
-/// closing sentence and a button in the accent colour) over the last <see cref="StyleLayout.EndCardSeconds"/> seconds. The round channel
+/// closing sentence and a button in the accent colour) over the last <see cref="StyleLayout.EndCardSeconds"/> seconds: the silent hold the
+/// timing added to the last scene for it (<see cref="VideoStyleRules.EndHoldMs"/>), so it covers no narration; a subtitle still on screen then
+/// ends where the card starts. The round channel
 /// photo is not text: ffmpeg lays it over the card at <see cref="EndCardLayout"/>. Drawn by the app, so the model's code never draws any of
 /// it and every engine (and kept code) gets the same result.
 /// </summary>
@@ -59,9 +61,11 @@ public static class StyleOverlay
             .Append("[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n");
         if (subtitles)
         {
-            foreach (var cue in cues)
+            // Nothing is said under the card (it covers the hold after the narration); a cue that would still run then ends where it starts.
+            var stop = card is null ? long.MaxValue : (long)Math.Round(card.StartSeconds * 1000);
+            foreach (var cue in cues.Where(c => c.StartMs < stop))
             {
-                Event(ass, 0, cue.StartMs, cue.EndMs, "Default", string.Join("\\N", cue.Lines.Select(Plain)));
+                Event(ass, 0, cue.StartMs, Math.Min(cue.EndMs, stop), "Default", string.Join("\\N", cue.Lines.Select(Plain)));
             }
         }
 
@@ -83,11 +87,14 @@ public static class StyleOverlay
         return new StyleOverlayResult(ass.ToString(), card);
     }
 
-    /// <summary>When and where the closing card goes (the photo's place; the texts follow it in <see cref="Build"/>).</summary>
+    /// <summary>
+    /// When and where the closing card goes (the photo's place; the texts follow it in <see cref="Build"/>): the last
+    /// <see cref="StyleLayout.EndCardSeconds"/> seconds, the hold the timing added for it.
+    /// </summary>
     public static EndCardLayout Card(int width, int height, double durationSeconds, bool photo)
     {
         var unit = Math.Min(width, height);
-        var start = Math.Max(durationSeconds * 0.6, durationSeconds - StyleLayout.EndCardSeconds);
+        var start = Math.Max(0, durationSeconds - StyleLayout.EndCardSeconds);
         var size = PhotoSize(unit);
         var top = Top(width, height, photo);
         return new EndCardLayout(Math.Round(start, 3), durationSeconds, photo, (width / 2) - (size / 2), top, size);

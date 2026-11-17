@@ -58,7 +58,7 @@ public sealed class VideoStyleStore(ConceptDatabase database) : IVideoStyleStore
         {
             if (await db.VideoStyles.CountAsync(cancellationToken).ConfigureAwait(false) >= VideoStyleLimits.Max)
             {
-                throw new InvalidOperationException($"There are already {VideoStyleLimits.Max} templates; delete one first.");
+                throw new VideoStyleLimitException();
             }
 
             db.VideoStyles.Add(row);

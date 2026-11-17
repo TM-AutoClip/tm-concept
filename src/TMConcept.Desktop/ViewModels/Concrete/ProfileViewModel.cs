@@ -21,7 +21,9 @@ namespace TMConcept.Desktop.ViewModels;
 /// here, where it is used; kept for the profile). The other models are chosen on the pages that use them. A new profile can take sample
 /// images and a photo before it is saved (until 0.1.18 "Add images" was disabled until the first save): they are copied into the library only
 /// by Save, and Cancel (or starting another new profile) drops them without a trace. The photo of a saved profile is replaced or removed by
-/// Save too; its old copy is deleted then. Saving with a required value missing is not possible. Deleting a profile is confirmed and
+/// Save too; its old copy is deleted then (unless another profile points at it; the copy's name carries the profile's id). A save copies
+/// every picked file before it writes the row, so one that fails writes nothing and removes its copies. Images of an unsaved profile cannot
+/// be described by a model yet (its model choice exists only after the first save). Saving with a required value missing is not possible. Deleting a profile is confirmed and
 /// permanent; video files and sample images stay on disk, the channel photo copy is deleted.
 /// </summary>
 public sealed partial class ProfileViewModel(AppSession session, IProfileStore profiles, ITemplateSource templates, IAppPaths paths, FileDialogs dialogs,
@@ -31,11 +33,18 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
     /// <summary>The model that describes a sample image (this profile's last choice).</summary>
     public StepPickerViewModel Picker { get; } = picker;
 
+    /// <summary>The channel photo's folder under the profile's library folder.</summary>
+    private const string PhotoFolder = "channel";
+
     private Profile? _editing;
 
     // The channel photo chosen but not saved yet (a file anywhere), and whether Save removes the stored one.
     private string? _photoSource;
     private bool _photoRemoved;
+
+    // The photo the stored row points at (from the last load or successful save): the old copy a save replaces, and what a failed save
+    // puts back.
+    private string? _storedPhoto;
     private Func<Task>? _profilesChanged;
 
     /// <inheritdoc />
@@ -224,35 +233,62 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
         _editing.Format = Vertical ? VideoFormat.Vertical : VideoFormat.Horizontal;
         _editing.TargetSeconds = (int)TargetSeconds!.Value;
         _editing.ConceptText = ConceptText.Trim();
+
+        // Every picked file (the photo, the images of a new profile) is copied BEFORE the row is written. A copy that fails (a picked file
+        // moved or deleted meanwhile) or a row that cannot be written stops the save: the files this save made are removed and the photo
+        // field is put back, so a new profile stays new (Cancel still drops it without a trace) and the stored photo is still the one the
+        // row points at (a later save deletes the right old copy).
+        var fresh = new List<string>();
+        var copied = new Dictionary<ProfileImageViewModel, string>();
         try
         {
-            // A new photo is copied before the profile row points at it; the old copy goes only after the row is saved.
-            var oldPhoto = _editing.ChannelPhoto;
             if (_photoSource is not null)
             {
-                _editing.ChannelPhoto = await CopyIntoLibraryAsync(_photoSource, "channel").ConfigureAwait(true);
+                _editing.ChannelPhoto = await CopyIntoLibraryAsync(_photoSource, PhotoFolder, fresh).ConfigureAwait(true);
             }
             else if (_photoRemoved)
             {
                 _editing.ChannelPhoto = null;
             }
 
-            await profiles.SaveAsync(_editing, CancellationToken.None).ConfigureAwait(true);
-            if (oldPhoto is not null && oldPhoto != _editing.ChannelPhoto)
+            foreach (var image in Images.Where(i => i.Pending).ToList())
             {
-                DeletePhotoFile(oldPhoto);
+                copied[image] = await CopyIntoLibraryAsync(image.FullPath, "images", fresh).ConfigureAwait(true);
             }
 
-            _photoSource = null;
-            _photoRemoved = false;
-            ChannelPhotoPath = StoredPhoto(_editing);
+            await profiles.SaveAsync(_editing, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _editing.ChannelPhoto = _storedPhoto;
+            DeleteCopies(fresh);
+            logger.LogError(ex, "Profile could not be saved; nothing was written");
+            Status = text.Format("error.generic", ex.Message);
+            return;
+        }
+
+        // The row is saved: from here on the profile exists, whatever else fails.
+        var oldPhoto = _storedPhoto;
+        _storedPhoto = _editing.ChannelPhoto;
+        if (oldPhoto is not null && oldPhoto != _storedPhoto)
+        {
+            await DeletePhotoFileAsync(oldPhoto, _editing.Id).ConfigureAwait(true);
+        }
+
+        _photoSource = null;
+        _photoRemoved = false;
+        ChannelPhotoPath = StoredPhoto(_editing);
+        var wasNew = IsNew;
+        IsNew = false;
+        string? failure = null;
+        try
+        {
             foreach (var image in Images.ToList())
             {
                 image.Image.Caption = image.Caption.Trim();
-                if (image.Pending)
+                if (copied.TryGetValue(image, out var stored))
                 {
-                    // Picked while the profile was new: copied now, under the saved name.
-                    var stored = await CopyIntoLibraryAsync(image.FullPath, "images").ConfigureAwait(true);
+                    // Picked while the profile was new: its copy, under the saved name.
                     image.Image.ProfileId = _editing.Id;
                     image.Image.FileName = stored;
                     Images[Images.IndexOf(image)] = new ProfileImageViewModel(image.Image, LibraryPaths.Resolve(paths.LibraryDirectory, stored))
@@ -263,26 +299,32 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
 
                 await profiles.SaveImageAsync(image.Image, CancellationToken.None).ConfigureAwait(true);
             }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Profile {Id} saved, but its sample images could not be saved", _editing.Id);
+            failure = ex.Message;
+        }
 
-            var wasNew = IsNew;
-            IsNew = false;
+        try
+        {
             await session.SelectProfileAsync(_editing, CancellationToken.None).ConfigureAwait(true);
             if (_profilesChanged is not null)
             {
                 await _profilesChanged().ConfigureAwait(true);
             }
-
-            Status = text["common.saved"];
-            logger.LogInformation("Profile {Id} saved ({State})", _editing.Id, wasNew ? "new" : "changed");
-            if (wasNew)
-            {
-                activity.Add(ActivityLevel.Info, text.Format("profile.created", _editing.Name), text.Format("profile.created", ActivityPlaceholders.Name));
-            }
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Profile could not be saved");
-            Status = text.Format("error.generic", ex.Message);
+            logger.LogError(ex, "Profile {Id} saved, but it could not be selected", _editing.Id);
+            failure ??= ex.Message;
+        }
+
+        Status = failure is null ? text["common.saved"] : text.Format("error.generic", failure);
+        logger.LogInformation("Profile {Id} saved ({State})", _editing.Id, wasNew ? "new" : "changed");
+        if (wasNew)
+        {
+            activity.Add(ActivityLevel.Info, text.Format("profile.created", _editing.Name), text.Format("profile.created", ActivityPlaceholders.Name));
         }
     }
 
@@ -365,6 +407,13 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
     {
         if (image is null)
         {
+            return;
+        }
+
+        if (image.Pending || IsNew)
+        {
+            // A profile that is not saved yet has no model choice of its own (its picker is not tied to a profile until the first save).
+            Status = text["profile.describe.save_first"];
             return;
         }
 
@@ -525,10 +574,10 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
         try
         {
             await profiles.DeleteAsync(_editing.Id, CancellationToken.None).ConfigureAwait(true);
-            if (_editing.ChannelPhoto is { } photo)
+            if (_storedPhoto is { } photo)
             {
                 // The photo goes with the profile (the backup taken above holds it); sample images and videos stay on disk.
-                DeletePhotoFile(photo);
+                await DeletePhotoFileAsync(photo, _editing.Id).ConfigureAwait(true);
             }
 
             activity.Add(ActivityLevel.Info, text.Format("profile.deleted", _editing.Name), text.Format("profile.deleted", ActivityPlaceholders.Name));
@@ -572,6 +621,7 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
     {
         _photoSource = null;
         _photoRemoved = false;
+        _storedPhoto = profile.ChannelPhoto;
         ChannelPhotoPath = StoredPhoto(profile);
         Name = profile.Name;
         Language = Languages.FirstOrDefault(l => l.Value == profile.ContentLanguage) ?? Languages.First(l => l.Value == ContentLanguages.English);
@@ -650,30 +700,68 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
         }
     }
 
-    /// <summary>Copies <paramref name="source"/> into the profile's <paramref name="folder"/> in the library; the stored relative path.</summary>
-    private async Task<string> CopyIntoLibraryAsync(string source, string folder)
+    /// <summary>
+    /// Copies <paramref name="source"/> into the profile's <paramref name="folder"/> in the library; the stored relative path. A file this call
+    /// creates is added to <paramref name="fresh"/> (one that is already there, the same content under the same name, is left alone and
+    /// not listed: it may belong to the stored row or to another profile of the same name). The channel photo's name carries the profile's
+    /// id, so two profiles of the same name never share it and deleting one never deletes the other's.
+    /// </summary>
+    private async Task<string> CopyIntoLibraryAsync(string source, string folder, List<string> fresh)
     {
         var bytes = await File.ReadAllBytesAsync(source).ConfigureAwait(true);
         var hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
         var directory = Path.Combine(paths.LibraryDirectory, LibraryPaths.SafeName(_editing!.Name, "profile"), folder);
         Directory.CreateDirectory(directory);
-        var target = Path.Combine(directory, hash[..10] + "-" + LibraryPaths.SafeName(Path.GetFileName(source), "image" + Path.GetExtension(source)));
-        await File.WriteAllBytesAsync(target, bytes).ConfigureAwait(true);
+        var name = folder == PhotoFolder
+            ? _editing.Id.ToString("N") + "-" + hash[..10] + "." + LibraryPaths.SafeName(Path.GetExtension(source).TrimStart('.').ToLowerInvariant(), "png")
+            : hash[..10] + "-" + LibraryPaths.SafeName(Path.GetFileName(source), "image" + Path.GetExtension(source));
+        var target = Path.Combine(directory, name);
+        if (!File.Exists(target))
+        {
+            await File.WriteAllBytesAsync(target, bytes).ConfigureAwait(true);
+            fresh.Add(target);
+        }
+
         return LibraryPaths.Relative(paths.LibraryDirectory, target);
     }
 
-    /// <summary>Deletes a channel photo copy that no profile points at any more (a failure is logged and shown; the profile is saved).</summary>
-    private void DeletePhotoFile(string stored)
+    /// <summary>Deletes the copies a failed save made (a failure is logged; the save's own error is what is shown).</summary>
+    private void DeleteCopies(List<string> fresh)
+    {
+        foreach (var file in fresh)
+        {
+            try
+            {
+                File.Delete(file);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                logger.LogWarning(ex, "A copy made by a failed profile save could not be deleted");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Deletes a channel photo copy that <paramref name="owner"/> no longer points at, unless another profile still does (a failure is logged
+    /// and shown; the profile is saved).
+    /// </summary>
+    private async Task DeletePhotoFileAsync(string stored, Guid owner)
     {
         try
         {
+            if ((await profiles.ListAsync(CancellationToken.None).ConfigureAwait(true)).Any(p => p.Id != owner && p.ChannelPhoto == stored))
+            {
+                logger.LogInformation("The old channel photo copy is kept: another profile uses it");
+                return;
+            }
+
             var file = LibraryPaths.Resolve(paths.LibraryDirectory, stored);
             if (File.Exists(file))
             {
                 File.Delete(file);
             }
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "The old channel photo copy could not be deleted");
             activity.Add(ActivityLevel.Warning, text.Format("profile.photo.delete_failed", ex.Message));

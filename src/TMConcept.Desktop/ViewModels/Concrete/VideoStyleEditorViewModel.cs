@@ -66,6 +66,9 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
     /// <summary>The template's id (a new one keeps it when saved).</summary>
     public Guid Id => _source.Id;
 
+    /// <summary>The form differs from the template it was opened with (the change time aside): unsaved changes.</summary>
+    public bool Changed => !VideoStyleRules.SameContent(ToStyle(), _source);
+
     /// <summary>The colour palettes with their swatches.</summary>
     public IReadOnlyList<PaletteOption> Palettes { get; }
 

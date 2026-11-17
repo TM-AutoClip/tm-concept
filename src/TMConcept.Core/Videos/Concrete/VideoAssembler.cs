@@ -81,9 +81,10 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
             catch (EngineException again) when (again.Code == "check")
             {
                 await File.WriteAllTextAsync(Path.Combine(work, Rejected + "2.txt"), code, cancellationToken).ConfigureAwait(false);
+                // Named after what is left: the first answer may have broken the safety rules only, and the repair the template only.
                 var what = again.Message.StartsWith(TemplateRejection, StringComparison.Ordinal)
-                    ? "The video code did not follow the template twice and was not run: "
-                    : "The video code did not pass the safety check twice and was not run: ";
+                    ? "The video code still did not follow the template after the repair and was not run: "
+                    : "The video code still did not pass the safety check after the repair and was not run: ";
                 throw new VideoException(what + string.Join(" · ", again.Findings.Take(4))) { Code = "code" };
             }
         }
@@ -470,17 +471,23 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
     }
 
     /// <summary>
-    /// Writes the project after the safety check (the engine's) and, with a template, the template check: a finding is an
-    /// <see cref="EngineException"/> "check" (the caller's single repair); colours outside the palette are replaced in the code that is written.
+    /// Writes the project after the safety check (the engine's) and, with a template, the template check. Both run before anything is
+    /// rejected, so one <see cref="EngineException"/> "check" carries every finding and the caller's single repair sees them all (before the
+    /// 0.1.19 review the template check ran only on code that passed the safety check: a repair that fixed the safety finding then failed on
+    /// a template rule it had never been told about). The message starts with <see cref="TemplateRejection"/> only when every finding is a
+    /// template one. Colours outside the palette are replaced first, in the code that is checked and written.
     /// </summary>
     private EngineRenderRequest Write(IVideoEngine engine, EngineRenderRequest request, VideoStyle? style)
     {
-        if (style is not null && EngineCodeCheck.Check(engine.Kind, request.Code).Count == 0)
+        if (style is not null)
         {
             var result = VideoStyleCheck.Check(request.Code, style, request.Input.Language);
-            if (result.Findings.Count > 0)
+            var safety = EngineCodeCheck.Check(engine.Kind, result.Code);
+            if (safety.Count > 0 || result.Findings.Count > 0)
             {
-                throw new EngineException(TemplateRejection + string.Join(" · ", result.Findings.Take(6))) { Code = "check", Findings = result.Findings };
+                var findings = safety.Concat(result.Findings).ToList();
+                var message = safety.Count > 0 ? $"{engine.Name} code did not pass the safety check: " : TemplateRejection;
+                throw new EngineException(message + string.Join(" · ", findings.Take(6))) { Code = "check", Findings = findings };
             }
 
             if (result.Fixes.Count > 0)

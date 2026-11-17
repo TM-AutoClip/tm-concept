@@ -42,10 +42,11 @@ public static partial class VideoStyleCheck
         var lines = code.Split('\n');
         var bare = WithoutComments(code).Split('\n');
         var family = VideoStyleRules.Font(style, language).Family;
+        var lengths = LengthNames(bare);
         for (var i = 0; i < bare.Length; i++)
         {
             var line = bare[i];
-            if (Chrome().IsMatch(line) || Counter(line) || GrowsOverTheVideo(line))
+            if (Chrome().IsMatch(line) || Counter(line) || GrowsOverTheVideo(line, lengths))
             {
                 findings.Add($"line {i + 1}: progress bar, timer or scene counter drawn by the code (the app draws the progress bar itself; never draw one, a timer or a scene counter) — {Head(lines[i])}");
             }
@@ -164,8 +165,42 @@ public static partial class VideoStyleCheck
     private static bool Counter(string line) =>
         SceneCount().IsMatch(line) && (QuotedSlash().IsMatch(line) || TemplateSlash().IsMatch(line));
 
-    /// <summary>A width or horizontal scale animated over the whole video (the length of a progress bar), not over a scene.</summary>
-    private static bool GrowsOverTheVideo(string line) => WholeLength().IsMatch(line) && Growth().IsMatch(line);
+    /// <summary>
+    /// A width or horizontal scale set or animated over the whole video (the length of a progress bar), not over a scene. The length is read
+    /// from the input (<c>input.durationSeconds</c>, <c>totalFrames</c>), from Remotion's <c>durationInFrames</c> used as a value, or from a
+    /// name it was given earlier (<paramref name="lengths"/>: <c>const total = INPUT.durationSeconds;</c>). Reading the video's size
+    /// (<c>input.width</c>) is not a growth: a slow background drift over the whole video is ordinary motion.
+    /// </summary>
+    private static bool GrowsOverTheVideo(string line, IReadOnlyCollection<string> lengths) =>
+        Growth().IsMatch(line) && (WholeLength().IsMatch(line) || lengths.Any(name => Regex.IsMatch(line, $@"(?<![\w$.]){Regex.Escape(name)}(?![\w$])")));
+
+    /// <summary>
+    /// The names the code gives the whole video's length: <c>const total = input.durationSeconds</c> (or totalFrames, durationInFrames), and
+    /// <c>durationSeconds</c> / <c>totalFrames</c> destructured from the input. A name declared on the line only (no growth there) is
+    /// judged where it is used.
+    /// </summary>
+    private static List<string> LengthNames(IEnumerable<string> lines)
+    {
+        var names = new List<string>();
+        foreach (var line in lines)
+        {
+            names.AddRange(LengthAssignment().Matches(line).Select(m => m.Groups[1].Value));
+            foreach (Match match in LengthDestructuring().Matches(line))
+            {
+                foreach (var part in match.Groups[1].Value.Split(','))
+                {
+                    // "{durationSeconds}" or "{durationSeconds: total}": the local name is after the colon.
+                    var pieces = part.Split(':');
+                    if (pieces[0].Trim() is "durationSeconds" or "totalFrames" or "durationInFrames")
+                    {
+                        names.Add((pieces.Length > 1 ? pieces[1] : pieces[0]).Split('=')[0].Trim());
+                    }
+                }
+            }
+        }
+
+        return names.Where(n => n.Length > 0 && n != "durationInFrames").Distinct(StringComparer.Ordinal).ToList();
+    }
 
     /// <summary>The font families a line names that are neither the template's font nor generic (values built in code are not judged).</summary>
     private static List<string> ForeignFonts(string line, string family)
@@ -209,7 +244,7 @@ public static partial class VideoStyleCheck
         return text.Length <= 80 ? text : text[..80] + "…";
     }
 
-    [GeneratedRegex(@"progress[\s_-]*(?:bar|line|track|indicator|fill|ring|dots?)|\bscrubber|\bseek[\s_-]*bar|\bcount[\s_-]*down|\btimer(?:s|el|text|label|box)?\b|\btime[\s_-]*(?:left|remaining)\b|\bremaining[\s_-]*time\b|\belapsed[\s_-]*(?:time|label|text)\b|\bscene[\s_-]*(?:counter|indicator|badge|count[\s_-]*label|index[\s_-]*label|number[\s_-]*label)\b|\b(?:page|step|slide)[\s_-]*(?:counter|indicator)\b|\bdots?[\s_-]*indicator\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"progress[\s_-]*(?:bar|line|track|indicator|fill|ring|dots?)|\bscrubber|\bseek[\s_-]*bar|\bcount[\s_-]*down|\btimer(?:s|el|text|label|box)?\b|\btime[\s_-]*(?:left|remaining)\b|\bremaining[\s_-]*time\b|\belapsed[\s_-]*(?:time[\s_-]*)?(?:label|text)\b|\bscene[\s_-]*(?:counter|indicator|badge|count[\s_-]*label|index[\s_-]*label|number[\s_-]*label)\b|\b(?:page|step|slide)[\s_-]*(?:counter|indicator)\b|\bdots?[\s_-]*indicator\b", RegexOptions.IgnoreCase)]
     private static partial Regex Chrome();
 
     [GeneratedRegex(@"\bscenes\s*\.\s*length\b")]
@@ -221,11 +256,20 @@ public static partial class VideoStyleCheck
     [GeneratedRegex(@"\}\s*(?:/|of)\s*\$\{")]
     private static partial Regex TemplateSlash();
 
-    [GeneratedRegex(@"\b(?:input|INPUT|props|data)\s*\.\s*(?:durationSeconds|totalFrames)\b")]
+    // durationInFrames counts as a value (useVideoConfig's), not as the key or attribute of a Sequence or a composition.
+    [GeneratedRegex(@"\b(?:input|INPUT|props|data)\s*\.\s*(?:durationSeconds|totalFrames)\b|\bdurationInFrames\b(?!\s*[:=])")]
     private static partial Regex WholeLength();
 
-    [GeneratedRegex(@"\b(?:width|scaleX|x2|strokeDashoffset)\b|scale-x")]
+    // A size property set or animated ("width:", ".style.width =", "width={", setAttribute("x2", …), Revideo's ".width(…)"), never the
+    // video's size read from the input (input.width) or a Revideo getter (view.width()).
+    [GeneratedRegex(@"(?<!\b(?:input|INPUT|props|data|config|videoConfig)\s*\.\s*)(?<![\w$-])(?:width|scaleX|x2|strokeDashoffset)['""]?\s*(?:[:,]|\((?!\s*\))|=(?!=))|scale-x")]
     private static partial Regex Growth();
+
+    [GeneratedRegex(@"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:(?:input|INPUT|props|data)\s*\.\s*(?:durationSeconds|totalFrames)\b|(?:useVideoConfig\s*\(\s*\)\s*\.\s*)?durationInFrames\b)")]
+    private static partial Regex LengthAssignment();
+
+    [GeneratedRegex(@"\b(?:const|let|var)\s*\{([^{}]*\b(?:durationSeconds|totalFrames|durationInFrames)\b[^{}]*)\}\s*=")]
+    private static partial Regex LengthDestructuring();
 
     [GeneratedRegex(@"[\w$\)\]]\s*\??\.\s*caption\b")]
     private static partial Regex CaptionAccess();

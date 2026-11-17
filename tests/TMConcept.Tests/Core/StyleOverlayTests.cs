@@ -80,6 +80,52 @@ public sealed class StyleOverlayTests
     }
 
     [Fact]
+    public void ASubtitleStillOnScreenEndsWhereTheCardStartsAndNoneStartsUnderIt()
+    {
+        IReadOnlyList<SubtitleCue> cues = [new(0, 2000, ["In 672 the city was under siege."]), new(15000, 17500, ["Late line."]), new(17000, 19000, ["Under the card."])];
+
+        var ass = StyleOverlay.Build(1080, 1920, 20, cues, Style(subtitles: true, closing: ClosingPlacement.Screen), ContentLanguages.English,
+            VideoStyleRules.Closing(Style(closing: ClosingPlacement.Screen), ContentLanguages.English), "c", photo: false).Ass!;
+
+        ass.ShouldContain("Dialogue: 0,0:00:00.00,0:00:02.00,Default,,0,0,0,,In 672 the city was under siege.");
+        ass.ShouldContain("Dialogue: 0,0:00:15.00,0:00:16.50,Default,,0,0,0,,Late line.", customMessage: "cut where the card starts");
+        ass.ShouldNotContain("Under the card.");
+    }
+
+    [Fact]
+    public void TheClosingCardsHoldIsAddedToTheLastSceneOnlyWhenTheCardIsShown()
+    {
+        IReadOnlyList<TMConcept.Core.Render.RenderSceneSource> scenes = [new("a", "b", string.Empty, 4000), new("c", "d", string.Empty, 5000)];
+        var plain = TMConcept.Core.Render.RenderInputBuilder.Build("t", "en", scenes, 1080, 1920, 30);
+        var screen = Style(closing: ClosingPlacement.Screen);
+        var held = TMConcept.Core.Render.RenderInputBuilder.Build("t", "en", scenes, 1080, 1920, 30,
+            endHoldMs: VideoStyleRules.EndHoldMs(screen, ContentLanguages.English));
+
+        VideoStyleRules.EndHoldMs(screen, ContentLanguages.English).ShouldBe(3500);
+        VideoStyleRules.EndHoldMs(Style(closing: ClosingPlacement.Both), ContentLanguages.English).ShouldBe(3500);
+        VideoStyleRules.EndHoldMs(Style(closing: ClosingPlacement.Voice), ContentLanguages.English).ShouldBe(0);
+        VideoStyleRules.EndHoldMs(screen, "xx").ShouldBe(0, "no sentences, no card, no hold");
+        VideoStyleRules.EndHoldMs(null, ContentLanguages.English).ShouldBe(0);
+        held.Scenes[0].FrameCount.ShouldBe(plain.Scenes[0].FrameCount);
+        held.Scenes[1].FrameCount.ShouldBe(plain.Scenes[1].FrameCount + 105, "3.5 s at 30 fps");
+        var card = StyleOverlay.Card(1080, 1920, held.DurationSeconds, photo: false);
+        card.StartSeconds.ShouldBe(plain.DurationSeconds, "the card covers only the hold");
+    }
+
+    [Fact]
+    public void ASpokenClosingWithoutAVoiceGoesOnTheCard()
+    {
+        var both = Style(closing: ClosingPlacement.Both);
+
+        VideoStyleRules.WithoutVoice(both).ShouldNotBeNull().Closing.ShouldBe(ClosingPlacement.Screen);
+        both.Closing.ShouldBe(ClosingPlacement.Both, "the template itself is not changed");
+        VideoStyleRules.WithoutVoice(Style(closing: ClosingPlacement.Voice))!.Closing.ShouldBe(ClosingPlacement.Screen);
+        var off = Style();
+        VideoStyleRules.WithoutVoice(off).ShouldBeSameAs(off);
+        VideoStyleRules.WithoutVoice(null).ShouldBeNull();
+    }
+
+    [Fact]
     public void WithoutAPhotoTheCardHasNoRing()
     {
         var result = Build(Style(closing: ClosingPlacement.Both), photo: false);

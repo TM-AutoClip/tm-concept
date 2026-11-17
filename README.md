@@ -329,14 +329,15 @@ A video made with a template (Settings → Templates) follows it without relying
 - **Drawn by the program, not by the model:** the subtitles (in the template's font and colours), the thin progress bar along the top
   edge (only when the template has it on) and the closing card are burned in when the video is put together. The video code is never asked
   to draw them, and code that draws a progress bar, a timer or a scene counter itself, reads the narration of a video without subtitles or
-  names another font is sent back for its one repair; if the repair breaks the template again, the video is not made and the queue shows
-  the error (night mode counts it as an error).
+  names another font is sent back for its one repair (together with any safety finding, so the repair hears every problem at once); if
+  the repaired code still breaks the template, the video is not made and the queue shows the error (night mode counts it as an error).
 - **Colours and font:** the code gets the template's palette and font (six bundled SIL OFL fonts that draw every Turkish letter). A colour
   outside the palette is replaced by the nearest palette colour on this computer, without a paid repair.
 - **Closing:** the chosen sentence is in the video's language, with the platform's wording (YouTube: subscribe; Instagram and TikTok:
   follow). *Voice* adds it to the end of the last scene's narration before it is spoken, so it is also in the subtitles and in
-  `narration.txt`; *Screen* shows a closing card over the last seconds with the profile's channel photo (round, when the profile has one),
-  the channel name, the sentence and a button.
+  `narration.txt`; *Screen* adds a few silent seconds to the end of the video and shows a closing card there with the profile's channel
+  photo (round, when the profile has one), the channel name, the sentence and a button, so the card never covers the last scene or its
+  narration. With narration off a spoken closing is shown on the card instead.
 - **Drawing style:** scenes without an image are drawn in the template's style, and generated images are asked for in the same style.
 - A new version made from the kept code keeps the template the video was made with.
 

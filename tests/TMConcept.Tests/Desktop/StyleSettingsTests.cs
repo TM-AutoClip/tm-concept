@@ -104,6 +104,78 @@ public sealed class StyleSettingsTests
     }
 
     [AvaloniaFact]
+    public async Task UnsavedChangesSurviveAPageSwitchAndOpeningAnotherTemplateAsksFirst()
+    {
+        var confirm = new FakeConfirm();
+        using var h = new DesktopHarness(s => s.AddSingleton<IConfirmDialog>(confirm));
+        await FirstRunTests.CreateAsync(h);
+        var store = h.Get<IVideoStyleStore>();
+        await store.SaveAsync(new VideoStyle { Name = "Kanal A" }, CancellationToken.None);
+        await store.SaveAsync(new VideoStyle { Name = "Kanal B" }, CancellationToken.None);
+        var settings = h.Get<SettingsViewModel>();
+        var section = (await settings.ShowAsync<VideoStylesSettingsViewModel>()).ShouldNotBeNull();
+        section.SelectedStyle = section.Styles.Single(s => s.Name == "Kanal A");
+        section.Editor.ShouldNotBeNull().Changed.ShouldBeFalse();
+        section.Editor!.Palette = section.Editor.Palettes.Single(p => p.Palette.Id == "paper");
+
+        // Another page and back: the change is still in the form.
+        await section.ActivateAsync();
+        section.Editor!.Palette.Palette.Id.ShouldBe("paper");
+        section.Editor.Changed.ShouldBeTrue();
+
+        // Another template: asked first; No keeps the form and the selection.
+        confirm.Answer = false;
+        section.SelectedStyle = section.Styles.Single(s => s.Name == "Kanal B");
+        await section.Switching;
+        confirm.Asked.ShouldContain(h.Get<Localizer>()["styles.discard.title"]);
+        section.Editor!.Name.ShouldBe("Kanal A");
+        section.Editor.Palette.Palette.Id.ShouldBe("paper");
+        section.SelectedStyle.ShouldNotBeNull().Name.ShouldBe("Kanal A");
+
+        // Yes drops the change and opens the other one.
+        confirm.Answer = true;
+        section.SelectedStyle = section.Styles.Single(s => s.Name == "Kanal B");
+        await section.Switching;
+        section.Editor!.Name.ShouldBe("Kanal B");
+        (await store.ListAsync(CancellationToken.None)).Single(s => s.Name == "Kanal A").PaletteId.ShouldBe(VideoPalettes.DefaultId, "nothing was saved");
+
+        // An unchanged form switches without a question.
+        var asked = confirm.Asked.Count;
+        section.SelectedStyle = section.Styles.Single(s => s.Name == "Kanal A");
+        section.Editor!.Name.ShouldBe("Kanal A");
+        confirm.Asked.Count.ShouldBe(asked);
+    }
+
+    [AvaloniaFact]
+    public async Task ADatabaseErrorOnSaveOrDeleteIsShownAndNotCalledTheLimit()
+    {
+        var store = new FailingStyleStore();
+        store.Styles.Add(new VideoStyle { Name = "Kanal A" });
+        var confirm = new FakeConfirm();
+        using var h = new DesktopHarness(s =>
+        {
+            s.AddSingleton<IVideoStyleStore>(store);
+            s.AddSingleton<IConfirmDialog>(confirm);
+        });
+        await FirstRunTests.CreateAsync(h);
+        var text = h.Get<Localizer>();
+        var section = (await h.Get<SettingsViewModel>().ShowAsync<VideoStylesSettingsViewModel>()).ShouldNotBeNull();
+        section.SelectedStyle = section.Styles.Single();
+        section.Editor!.Name = "Kanal A2";
+
+        await section.SaveAsync();
+        section.Status.ShouldBe(text.Format("error.generic", "the database is being restored"));
+        section.Editor!.Name.ShouldBe("Kanal A2", "the form is kept");
+
+        await section.DeleteAsync();
+        section.Status.ShouldBe(text.Format("error.generic", "the database is being restored"));
+
+        store.Error = new VideoStyleLimitException();
+        await section.SaveAsync();
+        section.Status.ShouldBe(text.Format("styles.limit", VideoStyleLimits.Max));
+    }
+
+    [AvaloniaFact]
     public async Task AtTheLimitNoTemplateIsAdded()
     {
         using var h = new DesktopHarness();

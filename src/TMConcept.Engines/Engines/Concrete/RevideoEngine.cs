@@ -107,9 +107,10 @@ public sealed class RevideoEngine(IAppPaths paths, ToolInstaller tools, ChromeLo
     };
 
     /// <summary>
-    /// The template's font for Revideo (experimental): the files are served from <c>public/fonts</c> and loaded with the FontFace API when the
-    /// project starts. Revideo does not wait for them, so the first frames may still use a fallback font (not checked in a real render yet); a
-    /// failure is written to the render's browser log. Nothing without a template.
+    /// The template's font for Revideo (experimental): the files are served from <c>public/fonts</c> and loaded with the FontFace API before
+    /// the project is exported (a top-level await in <c>project.ts</c>, an ES module served by Vite), so no frame is measured or drawn in a
+    /// fallback font. A face that cannot load throws, and the render fails with that error instead of drawing another font (the template is
+    /// enforced, not hoped for). Nothing without a template.
     /// </summary>
     public static string FontLoader(RenderInput input)
     {
@@ -128,17 +129,16 @@ public sealed class RevideoEngine(IAppPaths paths, ToolInstaller tools, ChromeLo
 
         return $$"""
 
-            // The template's font (served from public/fonts).
+            // The template's font (served from public/fonts): loaded before the project starts, so every frame uses it.
             if (typeof document !== 'undefined') {
-              for (const [file, weight] of [{{string.Join(", ", faces)}}]) {
-                new FontFace({{Quote(style.Font)}}, `url('/${file}') format('truetype')`, {weight}).load()
-                  .then((face) => {
-                    document.fonts.add(face);
-                  })
-                  .catch((error: unknown) => {
-                    console.error('TM Concept: the template font could not be loaded', error);
-                  });
-              }
+              const faces: [string, string][] = [{{string.Join(", ", faces)}}];
+              await Promise.all(faces.map(async ([file, weight]) => {
+                try {
+                  document.fonts.add(await new FontFace({{Quote(style.Font)}}, `url('/${file}') format('truetype')`, {weight}).load());
+                } catch (error: unknown) {
+                  throw new Error(`TM Concept: the template font ${file} could not be loaded: ${String(error)}`);
+                }
+              }));
             }
 
             """;

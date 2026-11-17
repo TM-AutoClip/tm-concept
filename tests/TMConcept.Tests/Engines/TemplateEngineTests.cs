@@ -99,6 +99,10 @@ public sealed class TemplateEngineTests
         fonts.ShouldContain("cancelRender(", customMessage: "a font that cannot load stops the render instead of drawing another font");
         RemotionEngine.FontsTs(SampleRender.Input()).ShouldContain("const faces: [string, string, string][] = [];");
         RevideoEngine.FontLoader(SampleRender.Input()).ShouldBeEmpty();
+        var revideo = RevideoEngine.FontLoader(Styled());
+        revideo.ShouldContain("await Promise.all(", customMessage: "the project waits for the font before any frame is drawn");
+        revideo.ShouldContain("throw new Error(", customMessage: "a font that cannot load fails the render instead of drawing another font");
+        revideo.ShouldNotContain("console.error(");
         RemotionEngine.InputTs.ShouldContain("style?: ConceptStyle;");
     }
 

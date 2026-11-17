@@ -321,12 +321,14 @@ Bir şablonla (Ayarlar → Şablonlar) üretilen video, modelin iyi niyetine kal
 - **Modelin değil, programın çizdikleri:** altyazı (şablonun yazı tipi ve renkleriyle), üst kenardaki ince ilerleme çubuğu (yalnız
   şablonda açıksa) ve kapanış kartı video birleştirilirken programca eklenir. Video kodundan bunları çizmesi istenmez; kendisi ilerleme
   çubuğu, sayaç ya da sahne numarası çizen, altyazısız bir videoda anlatımı okuyan ya da başka bir yazı tipi adı yazan kod tek onarımına
-  geri gönderilir. Onarılan kod şablonu yine bozarsa video üretilmez ve hata sırada görünür (gece modu bunu hata sayar).
+  geri gönderilir (varsa güvenlik bulgularıyla birlikte; onarım bütün sorunları bir kerede duyar). Onarılan kod şablonu yine bozarsa
+  video üretilmez ve hata sırada görünür (gece modu bunu hata sayar).
 - **Renkler ve yazı tipi:** kod şablonun paletini ve yazı tipini alır (programla gelen, Türkçenin bütün harflerini çizen altı SIL OFL yazı
   tipi). Paletin dışındaki bir renk, ücretli bir onarım olmadan bu bilgisayarda paletin en yakın rengiyle değiştirilir.
 - **Kapanış:** seçtiğin cümle videonun dilindedir ve platformun söylediği gibidir (YouTube: abone ol; Instagram ve TikTok: takip et).
   *Seste*: cümle, seslendirilmeden önce son sahnenin anlatımının sonuna eklenir; böylece altyazıda ve `narration.txt`'de de olur.
-  *Ekranda*: son saniyelerde profilin kanal fotoğrafı (profilde varsa, yuvarlak), kanal adı, cümle ve bir düğmeyle bir kapanış kartı çıkar.
+  *Ekranda*: videonun sonuna birkaç sessiz saniye eklenir ve orada profilin kanal fotoğrafı (profilde varsa, yuvarlak), kanal adı, cümle
+  ve bir düğmeyle bir kapanış kartı çıkar; kart son sahneyi ya da anlatımını hiç örtmez. Seslendirme kapalıysa sesli kapanış kartta gösterilir.
 - **Çizim tarzı:** görseli olmayan sahneler şablonun tarzında çizilir, üretilen görseller de aynı tarzda istenir.
 - Saklanan koddan yapılan yeni bir sürüm, videonun üretildiği şablonu korur.
 

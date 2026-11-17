@@ -9,7 +9,10 @@ public static class StyleLayout
     /// <summary>Space kept free at the bottom for the subtitles, as a fraction of the height.</summary>
     public const double SubtitleBottom = 0.22;
 
-    /// <summary>Seconds at the end of the video the closing card is shown (in a short video at most its last 40 %, so it never covers the whole video).</summary>
+    /// <summary>
+    /// Seconds the closing card is shown. The video is that much longer for it (a silent hold at the end of the last scene,
+    /// <see cref="VideoStyleRules.EndHoldMs"/>), so the card never covers the narration or the scene's content.
+    /// </summary>
     public const double EndCardSeconds = 3.5;
 
     /// <summary>Fade-in of the closing card.</summary>

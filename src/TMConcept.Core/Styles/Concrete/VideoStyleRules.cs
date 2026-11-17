@@ -61,6 +61,44 @@ public static class VideoStyleRules
         style is not null && style.Closing != ClosingPlacement.Off && ClosingFor(language) is null;
 
     /// <summary>
+    /// The silent hold added to the end of the last scene for the closing card (<see cref="StyleLayout.EndCardSeconds"/> when the card is
+    /// shown, else 0): the timing of a new video and of a new version adds it, so the code, the mux and the card agree and the card covers
+    /// no narration or content.
+    /// </summary>
+    public static long EndHoldMs(VideoStyle? style, string language) =>
+        Closing(style, language) is { Screen: true } ? (long)Math.Round(StyleLayout.EndCardSeconds * 1000) : 0;
+
+    /// <summary>
+    /// The template of a video whose spoken closing cannot be spoken (no voice: narration off): the closing goes on screen instead
+    /// (Voice → Screen, Both → Screen), so the video still ends with it. A copy; the stored template is not changed. Any other template is
+    /// returned as it is.
+    /// </summary>
+    public static VideoStyle? WithoutVoice(VideoStyle? style)
+    {
+        if (style is not { Closing: ClosingPlacement.Voice or ClosingPlacement.Both })
+        {
+            return style;
+        }
+
+        var copy = Copy(style);
+        copy.Closing = ClosingPlacement.Screen;
+        return copy;
+    }
+
+    /// <summary>The same template content (every field but the change time), for "unsaved changes" in Settings.</summary>
+    public static bool SameContent(VideoStyle a, VideoStyle b)
+    {
+        ArgumentNullException.ThrowIfNull(a);
+        ArgumentNullException.ThrowIfNull(b);
+        var left = Copy(a);
+        var right = Copy(b);
+        left.UpdatedAtUtc = right.UpdatedAtUtc;
+        left.Name = left.Name.Trim();
+        right.Name = right.Name.Trim();
+        return JsonSerializer.Serialize(left, CoreJsonContext.Default.VideoStyle) == JsonSerializer.Serialize(right, CoreJsonContext.Default.VideoStyle);
+    }
+
+    /// <summary>
     /// The old three-colour theme of the input file, filled from the palette, so code that reads <c>theme</c> (kept code made before
     /// templates) follows the template too.
     /// </summary>

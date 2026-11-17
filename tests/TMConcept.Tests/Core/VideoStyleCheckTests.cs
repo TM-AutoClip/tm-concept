@@ -28,7 +28,11 @@ public sealed class VideoStyleCheckTests
     [InlineData("label.textContent = (i + 1) + \" / \" + input.scenes.length;")]
     [InlineData("label.textContent = `${i + 1}/${input.scenes.length}`;")]
     [InlineData("tl.to(line, { width: \"100%\", duration: input.durationSeconds, ease: \"none\" }, 0);")]
-    [InlineData("const w = interpolate(frame, [0, props.totalFrames], [0, input.width]); // scaleX")]
+    [InlineData("<div style={{width: interpolate(frame, [0, props.totalFrames], [0, input.width])}} /> // scaleX")]
+    [InlineData("<div style={{width: `${frame / durationInFrames * 100}%`, height: 8}} />")]
+    [InlineData("bar.style.width = (time / input.durationSeconds * 100) + \"%\";")]
+    [InlineData("yield* bar().width(input.width, input.durationSeconds);")]
+    [InlineData("line.setAttribute(\"x2\", String(frame / input.totalFrames * 1080));")]
     public void AProgressBarTimerOrSceneCounterIsRejected(string line)
     {
         var findings = Findings(line);
@@ -51,7 +55,32 @@ public sealed class VideoStyleCheckTests
     [InlineData("const timelineAxis = document.createElement(\"div\");")]
     [InlineData("chapter.textContent = String(scene.number).padStart(2, \"0\");")]
     [InlineData("label.textContent = \"a//b\"; const x = 1;")]
+    [InlineData("tl.to(bg, { x: -input.width * 0.05, duration: input.durationSeconds, ease: \"none\" }, 0);")]
+    [InlineData("yield* bg().x(-input.width * 0.1, input.durationSeconds);")]
+    [InlineData("const x = interpolate(frame, [0, input.totalFrames], [0, input.width * 0.1]);")]
+    [InlineData("yield* bg().x(-view.width() * 0.1, input.durationSeconds);")]
+    [InlineData("const elapsedTime = frame / input.fps;")]
+    [InlineData("<Sequence from={scene.startFrame} durationInFrames={scene.frameCount}><div style={{width: 400}} /></Sequence>")]
     public void OrdinaryCodeAndCommentsPass(string line) => Findings(line).ShouldBeEmpty();
+
+    [Fact]
+    public void ABarGrownOverTheVideosLengthKeptInANameIsRejected()
+    {
+        // HyperFrames: the length in a variable first, the bar on a later line.
+        var named = VideoStyleCheck.Check(Ok + "const total = INPUT.durationSeconds;\ntl.to(line, {width: \"100%\", duration: total}, 0);\n", Style(),
+            ContentLanguages.English).Findings;
+        named.ShouldHaveSingleItem().ShouldStartWith("line 3:");
+
+        // Remotion: the length from useVideoConfig, destructured (also under another name).
+        VideoStyleCheck.Check(Ok + "const {fps, durationInFrames: all} = useVideoConfig();\nconst bar = <div style={{width: (frame / all) * 1080}} />;\n", Style(),
+            ContentLanguages.English).Findings.ShouldHaveSingleItem().ShouldStartWith("line 3:");
+        VideoStyleCheck.Check(Ok + "const {durationSeconds} = input;\nbar.style.width = (t / durationSeconds * 100) + \"%\";\n", Style(),
+            ContentLanguages.English).Findings.ShouldHaveSingleItem();
+
+        // The same name used for a background drift is not a bar.
+        VideoStyleCheck.Check(Ok + "const total = INPUT.durationSeconds;\ntl.to(bg, {x: -40, duration: total}, 0);\n", Style(), ContentLanguages.English)
+            .Findings.ShouldBeEmpty();
+    }
 
     [Theory]
     [InlineData("box.textContent = scene.caption;")]
