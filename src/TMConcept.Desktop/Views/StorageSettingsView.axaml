@@ -1,0 +1,64 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:TMConcept.Desktop.ViewModels"
+             xmlns:views="using:TMConcept.Desktop.Views"
+             x:Class="TMConcept.Desktop.Views.StorageSettingsView"
+             x:DataType="vm:StorageSettingsViewModel">
+  <!-- What takes space on this computer and taking it away (to the recycle bin; refused while work runs). -->
+  <ScrollViewer>
+    <StackPanel Spacing="12" Margin="0,12" MaxWidth="820" HorizontalAlignment="Left">
+      <StackPanel Orientation="Horizontal">
+        <TextBlock Text="{DynamicResource storage.explain}" Classes="muted" TextWrapping="Wrap" VerticalAlignment="Center" MaxWidth="760" />
+        <views:HelpTip Text="{DynamicResource storage.explain.more}" />
+      </StackPanel>
+      <ItemsControl Name="StorageTotals" ItemsSource="{Binding Totals}">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <WrapPanel />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:DiskTotalLine">
+            <Border Classes="card" Margin="0,0,8,8" Padding="12,8">
+              <StackPanel Spacing="2">
+                <TextBlock Text="{Binding Label}" Classes="small muted" />
+                <TextBlock Text="{Binding Size}" FontWeight="SemiBold" />
+              </StackPanel>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button Name="RemoveSelectedButton" Classes="danger" Content="{DynamicResource storage.remove_selected}" Command="{Binding RemoveSelectedCommand}"
+                IsEnabled="{Binding Idle}" />
+        <Button Name="CleanUnusedButton" Content="{DynamicResource storage.clean}" Command="{Binding CleanUnusedCommand}" IsEnabled="{Binding Idle}"
+                ToolTip.Tip="{DynamicResource storage.clean.tip}" />
+        <Button Name="FullDeleteButton" Classes="danger" Content="{DynamicResource storage.full}" Command="{Binding FullDeleteCommand}"
+                IsEnabled="{Binding Idle}" ToolTip.Tip="{DynamicResource storage.full.tip}" />
+        <Button Content="{DynamicResource storage.refresh}" Command="{Binding RefreshCommand}" IsEnabled="{Binding Idle}" />
+      </StackPanel>
+      <ProgressBar IsIndeterminate="True" IsVisible="{Binding Busy}" />
+      <SelectableTextBlock Name="StorageStatus" Text="{Binding Status}" TextWrapping="Wrap" />
+      <TextBlock Text="{DynamicResource storage.empty}" Classes="muted" IsVisible="{Binding Empty}" />
+      <ItemsControl Name="StorageItems" ItemsSource="{Binding Items}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:DiskItemRowViewModel">
+            <Grid ColumnDefinitions="Auto,*,110,90" ColumnSpacing="10" Margin="0,4">
+              <CheckBox IsChecked="{Binding IsSelected}" IsEnabled="{Binding CanSelect}" VerticalAlignment="Center" />
+              <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                <TextBlock Text="{Binding Name}" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding UsedBy}" Classes="small muted" TextWrapping="Wrap" IsVisible="{Binding HasUsedBy}" />
+              </StackPanel>
+              <Panel Grid.Column="2" VerticalAlignment="Center">
+                <TextBlock Text="{Binding State}" Classes="small ok" IsVisible="{Binding IsUsed}" />
+                <TextBlock Text="{Binding State}" Classes="small warning" IsVisible="{Binding IsIncomplete}" />
+                <TextBlock Text="{Binding State}" Classes="small muted" IsVisible="{Binding IsFree}" />
+              </Panel>
+              <TextBlock Grid.Column="3" Text="{Binding Size}" Classes="small" VerticalAlignment="Center" HorizontalAlignment="Right" />
+            </Grid>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

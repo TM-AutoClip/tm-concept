@@ -20,7 +20,8 @@ namespace TMConcept.Desktop.ViewModels;
 /// <summary>
 /// General settings: interface language (changes at once), drawing (after a restart), the bottom-right notifications, the answer limit of
 /// "Suggest topics" (saved with the notifications' Save button), and the installed
-/// components (read-only list with sizes of what is on disk, an incomplete one marked; Remove after a confirmation; a ready engine can
+/// components (read-only list with sizes of what is on disk, an incomplete one marked; Remove after a confirmation, to the recycle bin
+/// like Settings → Storage; a ready engine can
 /// render its sample; on Linux the apt command for Chrome's missing libraries). Components are installed when a process that needs them starts (after one confirmation).
 /// Image acceleration (per computer): which stable-diffusion.cpp build runs the local image models, with what Automatic picks here (the
 /// card found and its memory); a change installs that build at once when a local image model is already on disk (one confirmation).
@@ -28,7 +29,8 @@ namespace TMConcept.Desktop.ViewModels;
 public sealed partial class GeneralSettingsViewModel(AppSession session, Localizer text, UiPreferencesFile preferences, INotifier notifier,
     ComponentPlanner components, IToolPlatform platform, Engines.Engines.SampleRender sample, IConfirmDialog confirm, ShellLauncher shell,
     IActivityLog activity, PreferencesImageAcceleration acceleration, Engines.Images.ImageBackendSelector backends, ComponentInstallFlow installs,
-    ILogger<GeneralSettingsViewModel> logger, ComponentReinstaller reinstaller, Updates.AppUpdater updater, IAppUpdateDialog updateDialog)
+    ILogger<GeneralSettingsViewModel> logger, ComponentReinstaller reinstaller, Updates.AppUpdater updater, IAppUpdateDialog updateDialog,
+    DiskSpace.IDiskCleaner cleaner)
     : SettingsSectionBase
 {
     /// <summary>Look for a newer version of the app at start (stored at once, per computer).</summary>
@@ -174,7 +176,10 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
         await RefreshInstalledAsync().ConfigureAwait(true);
     }
 
-    /// <summary>Removes a component after a confirmation (it is downloaded again when a setting needs it).</summary>
+    /// <summary>
+    /// Removes a component after a confirmation (it is downloaded again when a setting needs it), through the storage manager
+    /// (<see cref="DiskSpace.IDiskCleaner"/>).
+    /// </summary>
     [RelayCommand]
     public async Task RemoveAsync(ComponentRowViewModel? row)
     {
@@ -196,10 +201,30 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
         row.Busy = true;
         try
         {
-            await components.RemoveAsync(row.Component, CancellationToken.None).ConfigureAwait(true);
-            activity.Add(ActivityLevel.Info, text.Format("components.removed", row.Name));
+            // The same way as Settings → Storage: not while work runs, the voice workers ended and the card freed first, the recycle bin
+            // (for good only after its own confirmation).
+            var outcome = await cleaner.RemoveAsync([cleaner.ItemOf(row.Component)], CancellationToken.None).ConfigureAwait(true);
+            if (outcome.Busy)
+            {
+                Status = text["storage.busy"];
+                activity.Add(ActivityLevel.Warning, Status);
+            }
+            else if (outcome.Failed.Count > 0)
+            {
+                Status = text.Format("components.remove_failed", row.Name, outcome.Failed[0].Reason);
+                activity.Add(ActivityLevel.Error, Status);
+            }
+            else if (outcome.Kept.Count > 0)
+            {
+                Status = text.Format("storage.kept", row.Name);
+                activity.Add(ActivityLevel.Warning, Status);
+            }
+            else
+            {
+                activity.Add(ActivityLevel.Info, text.Format("components.removed", row.Name));
+            }
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
             logger.LogError(ex, "{Component} could not be removed", row.Component.Code);
             activity.Add(ActivityLevel.Error, text.Format("components.remove_failed", row.Name, ex.Message));

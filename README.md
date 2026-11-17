@@ -246,6 +246,15 @@ fixed Hugging Face commit; a broken image weights download is tried again and co
 HTTPS from Google, which publishes no checksum for it. Settings → **General** → *Installed components* lists what is on disk with its size
 (an unfinished or no longer usable one is marked *incomplete*), can remove it, and can render an engine's sample without any model or network.
 
+**Storage.** The app starts small and downloads only what your choices need, so Settings → **Storage** shows what takes space: totals for
+programs, models, work caches, backups and logs, and every component with its size, whether it is *used*, *unused* or *incomplete*, and
+which profile and step use it (from every profile's saved model choices). Switched from a 10 GB voice to a 5 GB one? The old one shows as
+*unused*. **Remove selected** removes the ticked rows, **Clean up unused** removes every component no profile uses plus leftovers that come
+back by themselves (unfinished downloads, old component versions and folders, cached narration, work folders older than 7 days), and
+**Full delete** removes every component and cache. Everything goes to the recycle bin (a permanent delete only after its own confirmation,
+when the bin cannot take it); nothing is removed while a video, a generation, a narration or an install runs. Your database, profiles,
+concepts, videos, backups and logs are never removed there.
+
 Prices update by themselves, at most once a day: the app reads `pricing/prices.json` of this repository and OpenRouter's public model
 list (no key is sent), checks them and keeps the last good copy; offline, the built-in table is used. The estimate boxes show the date
 and the source; the Produced videos page shows this month's spending.
@@ -285,8 +294,10 @@ Then choose the models on the pages that use them (see above). Nothing paid is c
 
 ## Update
 
-**From the app:** at start (at most once a day) TM Concept reads the project's latest release on GitHub (no account, nothing about you is
-sent) and, when there is a newer version, shows its version and release notes. **Download and install** downloads the file for your system,
+**From the app:** at start (at most once a day) TM Concept reads the project's release list on GitHub (no account, no server of ours,
+nothing about you is sent) and, when there is a newer version, shows the notes of every version between yours and the newest, oldest first,
+in the app's language. Only the newest is downloaded: it carries every database upgrade step, so skipping versions is safe. **Download and
+install** downloads the file for your system,
 checks it against the SHA-256 in the release notes (a file without one, or with a different one, is never installed), replaces the program
 file at the same path and starts the new version. Closing the window (also with its X) cancels a running download. On Windows the previous
 program stays next to the new one as `TMConcept.exe.old` until the new version has opened its database and main window: if its database
@@ -393,4 +404,5 @@ personal data.
 released step and never write SQL by hand. Details: [docs/database.md](docs/database.md).
 
 **Releases** must list the SHA-256 of every file in the release notes (`tools/package.py` prints the lines); the app's own updater installs
-only a file whose SHA-256 is there.
+only a file whose SHA-256 is there. Keep the notes' `## English` and `## Türkçe` sections: the update window shows only the one in the app's
+language (English when it is missing) and never the SHA-256 block.

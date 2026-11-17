@@ -9,4 +9,5 @@ namespace TMConcept.Desktop.Paths;
 [JsonSerializable(typeof(List<Core.Components.InstalledComponent>))]
 [JsonSerializable(typeof(Updates.UpdateCheckState))]
 [JsonSerializable(typeof(Updates.GitHubRelease))]
+[JsonSerializable(typeof(List<Updates.GitHubRelease>))]
 internal sealed partial class DesktopJsonContext : JsonSerializerContext;

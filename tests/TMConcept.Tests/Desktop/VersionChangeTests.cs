@@ -263,7 +263,7 @@ public sealed class VersionChangeTests
             (await planner.InstalledAsync(CancellationToken.None)).ShouldBe([used.Code, unused.Code]);
             h.Get<IInstallRecord>().List().Single(r => r.Code == used.Code).AppVersion.ShouldBeEmpty();
 
-            await planner.RemoveAsync(unused, CancellationToken.None);
+            await planner.RemoveAsync(unused, h.Get<TMConcept.Desktop.DiskSpace.PermanentDiscard>(), CancellationToken.None);
             h.Get<IInstallRecord>().List().Select(r => r.Code).ShouldBe([used.Code]);
         }
     }
