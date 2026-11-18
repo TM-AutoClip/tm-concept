@@ -68,6 +68,10 @@ public static class ToolManifest
 
         // ModelScope: the RapidOCR models of the local OCR (0.1.25), served directly (no redirect); each file is pinned by its SHA-256.
         "www.modelscope.cn",
+
+        // nuget.org's package files (0.1.27): two files of the DirectML build of ONNX Runtime and of DirectML, fetched entry by entry with
+        // a range request (served directly, no redirect); each unpacked file is pinned by its SHA-256.
+        "api.nuget.org",
     ];
 
     /// <summary>Host suffixes a download may be redirected to: Hugging Face's own file servers (us.aws.cdn.hf.co, cas-bridge.xethub.hf.co …).</summary>
