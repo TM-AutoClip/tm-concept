@@ -59,8 +59,15 @@ needed) and narrates it with a **free local voice**. It runs on Windows and Linu
   their language. The prompt tells the model to use only the documents' facts and to name the documents it used (the
   detail panel shows them as *Sources*); the concepts are written in the video's language even when the documents are in another one.
   Passages are picked by their words (BM25; a suffixed word also finds its stem, "Osmanlıların" finds "Osmanlı") and, when you install the optional meaning search (multilingual-e5-small, about 135 MB,
-  downloaded only after you confirm it, run on this computer's processor), also by meaning. Scanned PDFs without a text layer are kept but
-  cannot be used (no text recognition). Settings → **Storage** lists every document; **Clean up unused** never takes one, **Full delete**
+  downloaded only after you confirm it, run on this computer's processor), also by meaning. **Scanned pages** are read automatically: a
+  page without a usable text layer (a scan, text drawn as shapes, or a layer of broken characters) is drawn whole by PDFium (0.1.27, about
+  4 MB, optional, offered the first time scanned pages are read; it also reads JPEG 2000, JBIG2 and CCITT fax scans and turned pages) and read
+  by the engine of *Text from scanned pages*: the local OCR (PaddleOCR PP-OCRv5, free, on this computer; used when no engine is chosen)
+  or a vision model. On Windows the local OCR reads on the graphics card when it is free (DirectML, any make of card; an optional ~15 MB
+  download under Microsoft's DirectML licence, offered once; a page never waits more than two seconds for the card, so a video or a
+  local model keeps it), otherwise on the processor; Settings → General → *Text recognition* can keep it on the processor. Pages read
+  once are kept with the document and never read again; **Write from documents** and **Find topics** first read the pages of the chosen
+  documents that are still missing. Settings → **Storage** lists every document; **Clean up unused** never takes one, **Full delete**
   and a document's **Delete** move its copy to the recycle bin and delete its passages (nothing is removed while a document is being added).
   Backups carry the documents with the profiles (the records, the passages and the copies; the copies up to 256 MB per backup, the smallest
   first: the copies past that are left out, logged, and their records and passages are still in the backup).
@@ -334,6 +341,9 @@ every attempt is paid and counted in the cost, and after three unreadable answer
 | Ahenk Cep int8 ONNX (Turkish; needs sherpa-onnx) | huggingface.co | 13 MB |
 | Multilingual MiniLM (paraphrase-multilingual-MiniLM-L12-v2, int8 ONNX + tokenizer; needs sherpa-onnx) | huggingface.co | 127 MB |
 | Multilingual E5 small (intfloat/multilingual-e5-small, int8 ONNX + tokenizer; the documents' meaning search, optional; runs in the app with its bundled ONNX Runtime) | huggingface.co | 135 MB |
+| Local OCR: PaddleOCR PP-OCRv5 detector + Latin recogniser (RapidOCR ONNX files; *Text from scanned pages*; runs in the app with its bundled ONNX Runtime) | www.modelscope.cn | 13 MB |
+| PDFium 159.0.8138 (draws scanned PDF pages for the OCR or a vision model; installed with the engine of *Text from scanned pages*) | github.com (bblanchon) | about 4 MB |
+| ONNX Runtime 1.24.4 DirectML build + DirectML 1.15.4 (the local OCR on the graphics card; Windows x64 with a graphics card, optional, Microsoft's DirectML licence) | api.nuget.org | about 15 MB (36 MB on disk) |
 | stable-diffusion.cpp (Windows master-1106, Linux master-1043), the build of Image acceleration (Windows: CUDA 12 build + CUDA runtime, Vulkan or processor build; Linux x64: Vulkan or processor build) | github.com (leejet) | CUDA 975 MB, Vulkan 30–38 MB, processor 18–27 MB |
 | Local image model weights (diffusion model, text encoder(s), VAE), only the model you choose | huggingface.co | 2.9 GB (SDXL Lightning) to 30 GB (Qwen-Image Q8); e.g. FLUX.2 klein 4B 5.3 GB, Z-Image Turbo 9.4 GB |
 | uv 0.13.6 + Python 3.11.18 (for the Python voices) | github.com (astral-sh) | 45 MB |
@@ -585,7 +595,9 @@ Today's lines are followed live while the page is open.
 - Videos up to 3 minutes; no long horizontal videos yet.
 - The program is not code-signed (SmartScreen warning on Windows).
 - Revideo is experimental. On Linux ARM64 an external Chromium is needed for HyperFrames and Revideo.
-- Documents: no text recognition for scanned PDFs; web pages are read without running their scripts, so a page that builds its text with
+- Documents: the local OCR reads Latin-script languages only; reading on the graphics card (DirectML) has not been tried on a real
+  graphics card yet (if it fails, the processor reads and the app says so once), and PDFium has not been tried on Linux yet; text layers
+  kept by 0.1.25–0.1.26 are not checked again. Web pages are read without running their scripts, so a page that builds its text with
   JavaScript gives little or nothing; at most 50 MB per file and 5 MB per page. The meaning model's int8 file was made for processors with
   AVX-512 VNNI; on others (and on ARM64) it runs, but its speed was not measured.
 - Real provider requests were not part of the automated tests (they use fake HTTP); the first real use happens on your machine.

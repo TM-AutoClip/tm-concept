@@ -58,7 +58,14 @@ veritabanını şifreli tutar.
   başka dilde olsa da konseptler videonun dilinde yazılır. Parçalar kelimelerine (BM25; ekli bir kelime kökünü de bulur, "Osmanlıların"
   "Osmanlı"yı bulur) ve isteğe bağlı anlam aramasını kurarsan
   (multilingual-e5-small, yaklaşık 135 MB, yalnız onaylarsan indirilir, bu bilgisayarın işlemcisinde çalışır) anlamlarına göre seçilir.
-  Metin katmanı olmayan taranmış PDF'ler saklanır ama kullanılamaz (yazı tanıma yok). Ayarlar → **Depolama** her belgeyi listeler;
+  **Taranmış sayfalar** kendiliğinden okunur: kullanılabilir metin katmanı olmayan bir sayfa (tarama, şekil olarak çizilmiş yazı ya da
+  bozuk karakterlerden oluşan bir katman) PDFium ile bütün olarak çizilir (0.1.27, yaklaşık 4 MB, isteğe bağlı, taranmış sayfalar ilk kez okunurken sorulur;
+  JPEG 2000, JBIG2 ve CCITT faks taramalarını ve döndürülmüş sayfaları da okur) ve *Taranmış sayfalardan yazı* motoru okur: yerel OCR
+  (PaddleOCR PP-OCRv5, ücretsiz, bu bilgisayarda; motor seçilmemişse bu kullanılır) ya da bir görsel modeli. Windows'ta yerel OCR ekran
+  kartı boştaysa ekran kartında okur (DirectML, her marka kart; Microsoft'un DirectML lisansındaki isteğe bağlı ~15 MB'lık indirme, bir
+  kez sorulur; bir sayfa kart için en fazla iki saniye bekler, yani video ya da yerel bir model kartı elinde tutar), değilse işlemcide;
+  Ayarlar → Genel → *Yazı tanıma* ile hep işlemcide kalabilir. Bir kez okunan sayfalar belgeyle saklanır ve bir daha okunmaz;
+  **Belgelerden yaz** ve **Konu bul** önce seçili belgelerin hâlâ eksik olan sayfalarını okur. Ayarlar → **Depolama** her belgeyi listeler;
   **Kullanılmayanları temizle** hiçbirini almaz, **Kapsamlı silme** ve bir belgenin **Sil**'i kopyasını geri dönüşüm kutusuna taşır ve
   parçalarını siler (bir belge eklenirken hiçbir şey silinmez). Yedekler belgeleri profillerle birlikte taşır (kayıtlar, parçalar ve
   kopyalar; kopyalar yedek başına en çok 256 MB, küçükten büyüğe: sınırı aşanlar alınmaz, günlüğe yazılır, kayıtları ve parçaları yine
@@ -327,6 +334,9 @@ iki kez daha gönderilir; her deneme ödenir ve maliyete sayılır, üç okunama
 | Ahenk Cep int8 ONNX (Türkçe; sherpa-onnx gerekir) | huggingface.co | 13 MB |
 | Multilingual MiniLM (paraphrase-multilingual-MiniLM-L12-v2, int8 ONNX + tokenizer; sherpa-onnx gerekir) | huggingface.co | 127 MB |
 | Multilingual E5 small (intfloat/multilingual-e5-small, int8 ONNX + tokenizer; belgelerin anlam araması, isteğe bağlı; uygulamanın içindeki ONNX Runtime ile çalışır) | huggingface.co | 135 MB |
+| Yerel OCR: PaddleOCR PP-OCRv5 algılayıcı + Latin tanıyıcı (RapidOCR ONNX dosyaları; *Taranmış sayfalardan yazı*; uygulamanın içindeki ONNX Runtime ile çalışır) | www.modelscope.cn | 13 MB |
+| PDFium 159.0.8138 (taranmış PDF sayfalarını OCR ya da görsel modeli için çizer; *Taranmış sayfalardan yazı* motoruyla birlikte kurulur) | github.com (bblanchon) | yaklaşık 4 MB |
+| ONNX Runtime 1.24.4 DirectML derlemesi + DirectML 1.15.4 (yerel OCR ekran kartında; ekran kartlı Windows x64, isteğe bağlı, Microsoft'un DirectML lisansı) | api.nuget.org | yaklaşık 15 MB (diskte 36 MB) |
 | stable-diffusion.cpp (Windows master-1106, Linux master-1043), Görsel hızlandırma'nın seçtiği derleme (Windows: CUDA 12 derlemesi + CUDA kitaplıkları, Vulkan ya da işlemci derlemesi; Linux x64: Vulkan ya da işlemci derlemesi) | github.com (leejet) | CUDA 975 MB, Vulkan 30–38 MB, işlemci 18–27 MB |
 | Yerel görsel modeli ağırlıkları (difüzyon modeli, metin kodlayıcı(lar), VAE), yalnız seçtiğin model | huggingface.co | 2,9 GB (SDXL Lightning) ile 30 GB (Qwen-Image Q8) arası; ör. FLUX.2 klein 4B 5,3 GB, Z-Image Turbo 9,4 GB |
 | uv 0.13.6 + Python 3.11.18 (Python sesleri için) | github.com (astral-sh) | 45 MB |
@@ -578,7 +588,9 @@ seviye süzgeci (tümü, uyarılar ve hatalar, yalnız hatalar), arama, *Yalnız
 - Videolar en çok 3 dakika; uzun yatay video henüz yok.
 - Program kod imzalı değil (Windows'ta SmartScreen uyarısı).
 - Revideo deneysel. Linux ARM64'te HyperFrames ve Revideo için harici Chromium gerekir.
-- Belgeler: taranmış PDF'lerde yazı tanıma yok; web sayfaları betikleri çalıştırılmadan okunur, metnini JavaScript ile kuran bir sayfadan
+- Belgeler: yerel OCR yalnız Latin alfabeli dilleri okur; ekran kartında okuma (DirectML) henüz gerçek bir ekran kartında denenmedi (olmazsa
+  işlemci okur ve uygulama bunu bir kez söyler), PDFium da henüz Linux'ta denenmedi; 0.1.25–0.1.26'nın sakladığı metin katmanlarına yeniden
+  bakılmaz. Web sayfaları betikleri çalıştırılmadan okunur, metnini JavaScript ile kuran bir sayfadan
   az şey ya da hiçbir şey gelmez; dosya başına en çok 50 MB, sayfa başına 5 MB. Anlam modelinin int8 dosyası AVX-512 VNNI'li işlemciler
   için hazırlanmış; başkalarında (ve ARM64'te) çalışır ama hızı ölçülmedi.
 - Otomatik testlerde gerçek sağlayıcı isteği yoktur (sahte HTTP); ilk gerçek kullanım senin bilgisayarında olur.
