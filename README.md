@@ -48,8 +48,7 @@ needed) and narrates it with a **free local voice**. It runs on Windows and Linu
   files, a web page (its readable text, fetched once; no script runs) or a Wikipedia article in any language (by its address, or by its
   title and a language code; only public addresses: an address on this computer or the local network is refused, also after a redirect,
   and a page has 30 seconds in all). The app keeps its own copy of each one in its data folder (not encrypted); the text, cut into
-  passages, is in the encrypted database. Documents belong to the profile they were added in; deleting a profile moves its copies to the
-  recycle bin. Write an optional subject and choose how many: **Write from
+  passages, is in the encrypted database. Documents belong to the profile they were added in; deleting a profile deletes its copies. Write an optional subject and choose how many: **Write from
   documents** writes that many concepts at once, or **Find topics** looks for that many topics in the documents first and the button then
   writes one concept per ticked topic. Each call gets only the passages that fit the model's context (a small local model with an 8k
   context gets about 3–4 thousand tokens of passages, a lower answer limit and, when even that is not enough, fewer concepts per call; a
@@ -67,8 +66,8 @@ needed) and narrates it with a **free local voice**. It runs on Windows and Linu
   download under Microsoft's DirectML licence, offered once; a page never waits more than two seconds for the card, so a video or a
   local model keeps it), otherwise on the processor; Settings → General → *Text recognition* can keep it on the processor. Pages read
   once are kept with the document and never read again; **Write from documents** and **Find topics** first read the pages of the chosen
-  documents that are still missing. Settings → **Storage** lists every document; **Clean up unused** never takes one, **Full delete**
-  and a document's **Delete** move its copy to the recycle bin and delete its passages (nothing is removed while a document is being added).
+  documents that are still missing. Settings → **Storage** lists every document; neither **Clean up unused** nor **Full delete** takes one;
+  ticking its row or a document's **Delete** deletes its copy and passages for good (nothing is removed while a document is being added).
   Backups carry the documents with the profiles (the records, the passages and the copies; the copies up to 256 MB per backup, the smallest
   first: the copies past that are left out, logged, and their records and passages are still in the backup).
 - **From research** (the fourth section, 0.1.22). The app researches a subject itself; no model searches the web on its own, so there is
@@ -88,7 +87,7 @@ needed) and narrates it with a **free local voice**. It runs on Windows and Linu
   the model orders. A page that Tavily or an MCP server found is fetched only when the site's robots.txt allows it; an address you typed
   is fetched as you asked. The fetching is kind to the free services: one request at a time per site, a "please wait" answer is honoured
   once, and every request names the app and its project page (as Wikimedia asks), nothing about you. Untick **Keep in My documents** to
-  send the pages a run added to the recycle bin afterwards, also when the run is canceled or fails midway. The model may be online or
+  delete the pages a run added afterwards, also when the run is canceled or fails midway. The model may be online or
   local: the passages are fitted into its context like any document's.
 - **Concept to video.** Approved concepts on the left (a click opens one under the list, where it can be edited by hand or with AI),
   **Add to queue**, then **Produce in order**. The models (code with its engine, images, voice) are one folded line on top, next to the
@@ -102,7 +101,7 @@ needed) and narrates it with a **free local voice**. It runs on Windows and Linu
   a lack of memory fails that video instead of asking, and 3 failed videos in a row stop the queue completely (so no money is wasted).
 - **Produced videos.** Thumbnail, a built-in player (play/pause, seek bar, time, volume, full screen; nothing starts by itself), the whole
   narration scene by scene and the whole concept text, details (engine, models, cost per step, voice notes), open in the system player,
-  open the folder, produce again, delete a version and, if you want, move its files to the recycle bin.
+  open the folder, produce again, delete a version (with its files, for good; the confirmation shows the size).
 - **Rate your videos.** **👍 I liked it** / **👎 I didn't like it** under the preview (Produced videos and Concept to video); pressing the
   same button again clears it. One vote counts for all versions of a video. The next topic and concept suggestions stay away from a
   disliked video's topic and close ones, and take a liked one as an example (similar spirit, different topics). Making a video is not a
@@ -365,9 +364,21 @@ back by themselves (unfinished downloads, old component versions and folders, ca
 narration and scene images stay, a retry uses them instead of paying again; the browser of HyperFrames and Revideo counts as used while
 a profile renders with them; an image model folder this copy does not know, installed by a newer version or model catalog, is listed
 on its own and is never taken by the clean-up), and
-**Full delete** removes every component and cache. Everything goes to the recycle bin (a permanent delete only after its own confirmation,
-when the bin cannot take it); nothing is removed while a video, a generation, a narration, an install or an engine's sample render runs. Your database, profiles,
-concepts, videos, backups and logs are never removed there.
+**Full delete** removes every tool and cache. Neither clean-up takes a model (voices, image models, the meaning-check model, the app's
+Ollama models, the text recognition) or a document: tick its row and use **Remove selected**. Everything is deleted for good after a
+confirmation that shows the size (there is no recycle bin step: an old components folder is gigabytes); a row that cannot be deleted
+(a file in use) is reported with its reason; nothing is removed while a video, a generation, a narration, an install or an engine's sample
+render runs. Your database, profiles, concepts, videos, backups and logs are never removed there. The page also finds what was left
+behind: **video folders without a record** and **images no profile uses** in the video library (only the app's own files; removed only
+when ticked), the scene images of deleted concepts, and the listen and sample render files.
+
+**Deleting.** Deleting something deletes everything it made, for good, after a confirmation with the size: a video takes its version
+folder (and its concept's folder with the last version); concepts deleted from the Trash take their videos and scene images; a profile
+takes its videos, sample images, channel photo, document copies and its concepts' scene images (a file another profile still uses stays);
+a removed sample image takes its file; a deleted voice sample takes the narration cached with it. Files go first and the record after:
+when a file is in use, the record stays, the reason is shown, and trying again finishes it. Models are never touched by a delete or a
+clean-up unless you tick them. Old work files (cached narration and work folders older than 7 days) are cleaned at start and at the end
+of a video queue.
 
 **What the catalog says about a model.** Every model in a picker has its own **?** with facts the app already knows, nothing judged
 (in the open list it is a tooltip; the **?** right after the picker opens the chosen model's notes): where it runs and whether it is free
@@ -411,7 +422,7 @@ or the next free one; never 11434), keeps its models in the app's data folder (`
 it (`keep_alive: 0`) when another local model needs the card, and ends when TM Concept closes. Installed models are offered in every text
 step (topics, concepts, video code, image prompts…) like any other model, free and without a key. Settings → **Storage** lists the program
 and each model with its size and which profile uses it (also a model an older version offered), plus the model files no model uses (the
-received part of a cancelled download, which the app's server never deletes by itself), and removes them (to the recycle bin). **Stop the
+received part of a cancelled download, which the app's server never deletes by itself), and removes them when ticked (for good). **Stop the
 server** (Settings → Local AI) is refused while a step, a video, an install or a download may be using the server. A prompt larger than a
 model's context fails before it is sent and points at a larger model. An Ollama or LM Studio you run yourself is
 never touched: add it as a custom server if you want to use it.
@@ -511,8 +522,8 @@ Either way your data, tools and videos stay where they are. At the first start o
   and start fresh or restore a backup. One made by a newer version is not opened either: update the app.
 - **The components** (engines, voices, image models) are offered for an update or a reinstall. What was installed is recorded in
   `installed-components.json` (outside the components folder, with the app version of each), so a cancelled or failed reinstall is asked
-  again at the next start. **Reinstall from scratch** sets the components folder aside, installs again, and only then moves the old folder
-  to the recycle bin; if you cancel the download, the old folder goes back. An empty folder or an unfinished download never counts as
+  again at the next start. **Reinstall from scratch** sets the components folder aside, installs again, and only then deletes the old folder
+  for good (the confirmation shows its size); if you cancel the download, the old folder goes back. An empty folder or an unfinished download never counts as
   installed.
 
 Downloads go on after a bad connection: each file is tried up to 5 times with a growing pause, and the part already received is kept

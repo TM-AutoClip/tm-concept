@@ -47,7 +47,7 @@ veritabanını şifreli tutar.
   bir web sayfası (okunabilir metni, bir kez çekilir; hiçbir betik çalışmaz) ya da herhangi bir dilde bir Vikipedi makalesi (adresiyle ya da
   başlığı ve dil koduyla; yalnız açık internetteki adresler: bu bilgisayardaki ya da yerel ağdaki bir adres, yönlendirmeyle gelse bile
   alınmaz, bir sayfanın toplam 30 saniyesi var). Uygulama her birinin kendi kopyasını veri klasöründe tutar (şifresiz); parçalara bölünmüş
-  metni şifreli veritabanındadır. Belgeler eklendikleri profile aittir; bir profil silinince kopyaları geri dönüşüm kutusuna gider. İstersen bir konu yaz ve kaç tane istediğini seç: **Belgelerden yaz** o kadar
+  metni şifreli veritabanındadır. Belgeler eklendikleri profile aittir; bir profil silinince kopyaları da silinir. İstersen bir konu yaz ve kaç tane istediğini seç: **Belgelerden yaz** o kadar
   konsepti bir seferde yazar, ya da **Konu bul** önce belgelerde o kadar konu arar, düğme sonra işaretli her konuya bir konsept yazar.
   Her çağrıya yalnız modelin bağlamına sığan parçalar gider (8k bağlamlı küçük bir yerel model yaklaşık 3–4 bin token parça, daha düşük
   bir yanıt sınırı ve o da yetmezse çağrı başına daha az konsept alır; ücretli bir model çağrı başına en çok 12 bin token, büyük bağlam
@@ -66,8 +66,8 @@ veritabanını şifreli tutar.
   kez sorulur; bir sayfa kart için en fazla iki saniye bekler, yani video ya da yerel bir model kartı elinde tutar), değilse işlemcide;
   Ayarlar → Genel → *Yazı tanıma* ile hep işlemcide kalabilir. Bir kez okunan sayfalar belgeyle saklanır ve bir daha okunmaz;
   **Belgelerden yaz** ve **Konu bul** önce seçili belgelerin hâlâ eksik olan sayfalarını okur. Ayarlar → **Depolama** her belgeyi listeler;
-  **Kullanılmayanları temizle** hiçbirini almaz, **Kapsamlı silme** ve bir belgenin **Sil**'i kopyasını geri dönüşüm kutusuna taşır ve
-  parçalarını siler (bir belge eklenirken hiçbir şey silinmez). Yedekler belgeleri profillerle birlikte taşır (kayıtlar, parçalar ve
+  ne **Kullanılmayanları temizle** ne **Kapsamlı silme** birini alır; satırını işaretlemek ya da bir belgenin **Sil**'i
+  kopyasını ve parçalarını kalıcı olarak siler (bir belge eklenirken hiçbir şey silinmez). Yedekler belgeleri profillerle birlikte taşır (kayıtlar, parçalar ve
   kopyalar; kopyalar yedek başına en çok 256 MB, küçükten büyüğe: sınırı aşanlar alınmaz, günlüğe yazılır, kayıtları ve parçaları yine
   yedektedir).
 - **Araştırmadan** (dördüncü bölüm, 0.1.22). Uygulama konuyu kendisi araştırır; hiçbir model kendi başına internette arama yapmaz, yani
@@ -87,7 +87,7 @@ veritabanını şifreli tutar.
   sunucusunun bulduğu sayfa yalnızca sitenin robots.txt'si izin veriyorsa alınır; senin yazdığın adres istediğin gibi alınır. Alma işi
   ücretsiz servisleri yormaz: her siteye aynı anda tek istek gider, "biraz bekle" cevabına bir kez uyulur ve her istek uygulamanın adını
   ve proje sayfasını söyler (Wikimedia böyle istiyor), senin hakkında hiçbir şey söylemez. Bir çalışmanın eklediği sayfaların sonradan
-  geri dönüşüm kutusuna gitmesi için **Belgelerim'de tut** işaretini kaldır; çalışma iptal edilse ya da yarıda kalsa da öyle olur. Model
+  silinmesi için **Belgelerim'de tut** işaretini kaldır; çalışma iptal edilse ya da yarıda kalsa da öyle olur. Model
   çevrimiçi ya da yerel olabilir: parçalar her belgede olduğu gibi modelin bağlamına sığdırılır.
 - **Konseptten video.** Solda onaylı konseptler (tıklanan, listenin altında açılır; orada elle ya da yapay zekâyla düzenlenir), **Sıraya
   ekle**, sonra **Sırayla üret**. Modeller (motoruyla kod, görseller, ses) üstte tek bir katlanmış satırdır, yanında **şablon** seçici
@@ -104,8 +104,8 @@ veritabanını şifreli tutar.
   (tahmin önce gösterilir ve onaylatılır); görseller, ses klipleri ve metinler yeniden kullanılır. Her yeni sürüm ayrı bir klasör (v2, v3…);
   eskiler kalır.
 - **Üretilen videolar.** Küçük resim, program içi oynatıcı (oynat/duraklat, sarma çubuğu, süre, ses düzeyi, tam ekran; kendiliğinden
-  başlamaz), ayrıntılar (motor, modeller, adım adım ücret, ses notları, konsept metni), sistem oynatıcısında aç, yeniden üret, klasörü aç, kaydı sil ve
-  istersen dosyaları geri dönüşüm kutusuna taşı.
+  başlamaz), ayrıntılar (motor, modeller, adım adım ücret, ses notları, konsept metni), sistem oynatıcısında aç, yeniden üret, klasörü aç, sürümü sil
+  (dosyalarıyla birlikte, kalıcı olarak; onay boyutu gösterir).
 - **Videolarını oyla.** Önizlemenin altında **👍 Beğendim** / **👎 Beğenmedim** (Üretilen videolar ve Konseptten video); aynı düğmeye
   tekrar basınca oy kalkar. Bir oy videonun bütün sürümleri için geçer. Sonraki konu ve konsept önerileri beğenmediğin videonun konusundan
   ve yakın konulardan uzak durur, beğendiğini örnek alır (benzer ruhta, farklı konular). Video yapmak beğenmek sayılmaz; oylanmamış video
@@ -358,9 +358,22 @@ mi geçtin? Eskisi *kullanılmıyor* görünür. **Seçilenleri kaldır** işare
 kullanmadığı bileşenleri ve kendiliğinden yeniden oluşan artıkları (yarım indirmeler, eski bileşen sürümleri ve klasörleri, 7 günden eski
 önbellekteki seslendirmeler ve iş klasörleri; yeni seslendirmeler ve sahne görselleri kalır, yeniden denemede yeniden ödemek yerine
 kullanılır; HyperFrames ve Revideo'nun tarayıcısı bir profil onlarla video yaptıkça kullanılıyor sayılır) kaldırır; bu kopyanın
-tanımadığı, daha yeni bir sürümün ya da model kataloğunun kurduğu bir görsel model klasörü ayrı satırda durur ve temizlik onu hiç almaz, **Kapsamlı silme** bütün bileşenleri ve önbellekleri kaldırır. Her şey geri dönüşüm
-kutusuna gider (kutu alamazsa kalıcı silme ancak ayrı bir onayla); video, üretim, seslendirme, kurulum ya da bir motorun örnek videosu sürerken hiçbir şey kaldırılmaz.
-Veritabanın, profillerin, konseptlerin, videoların, yedeklerin ve günlüklerin orada asla silinmez.
+tanımadığı, daha yeni bir sürümün ya da model kataloğunun kurduğu bir görsel model klasörü ayrı satırda durur ve temizlik onu hiç almaz, **Kapsamlı silme** bütün araçları ve önbellekleri kaldırır. İki temizlik de hiçbir
+modeli (sesler, görsel modelleri, anlam denetimi modeli, programın Ollama modelleri, yazı tanıma) ve belgeyi almaz: satırını işaretleyip
+**Seçilenleri kaldır**'ı kullan. Her şey, boyutu gösteren bir onaydan sonra kalıcı olarak silinir (geri dönüşüm kutusu adımı yok: eski
+bileşen klasörü gigabaytlarca tutar); silinemeyen bir satır (kullanımdaki bir dosya) nedeniyle bildirilir; video, üretim, seslendirme,
+kurulum ya da bir motorun örnek videosu sürerken hiçbir şey kaldırılmaz. Veritabanın, profillerin, konseptlerin, videoların, yedeklerin ve
+günlüklerin orada asla silinmez. Sayfa geride kalanı da bulur: video kütüphanesindeki **kaydı olmayan video klasörleri** ve **hiçbir
+profilin kullanmadığı görseller** (yalnız programın kendi dosyaları; yalnız işaretlersen silinir), silinmiş konseptlerin sahne görselleri,
+dinleme ve deneme çıktısı dosyaları.
+
+**Silme.** Bir şeyi silmek, ondan doğan her şeyi, boyutu gösteren bir onaydan sonra kalıcı olarak siler: video sürüm klasörünü (son sürümle
+birlikte konseptin klasörünü de) götürür; çöpten silinen konseptler videolarını ve sahne görsellerini götürür; profil videolarını, örnek
+görsellerini, kanal fotoğrafını, belge kopyalarını ve konseptlerinin sahne görsellerini götürür (başka bir profilin hâlâ kullandığı dosya
+kalır); kaldırılan örnek görsel dosyasını götürür; silinen ses örneği onunla önbelleğe alınan seslendirmeyi götürür. Önce dosyalar, sonra
+kayıt gider: bir dosya kullanımdaysa kayıt kalır, nedeni gösterilir, tekrar deneyince iş biter. Modellere, sen işaretlemedikçe hiçbir
+silme ya da temizlik dokunmaz. Eski iş dosyaları (7 günden eski önbellekteki seslendirme ve iş klasörleri) açılışta ve video kuyruğunun
+sonunda temizlenir.
 
 **Katalog bir model hakkında ne diyor.** Seçicideki her modelin kendi **?** işareti var; programın zaten bildiği bilgileri gösterir,
 hiçbir yorum katmaz (açık listede ipucu olarak çıkar; seçicinin hemen sağındaki **?** seçili modelin notlarını açar): nerede çalıştığı ve
@@ -406,7 +419,7 @@ programın veri klasöründe (`tools/ollama-models`) tutar, aynı anda tek model
 (`keep_alive: 0`) ve TM Concept kapanınca kapanır. Kurulan modeller her metin adımında (konular, konseptler, video kodu, görsel
 istemleri…) diğer modeller gibi ücretsiz ve anahtarsız sunulur. Ayarlar → **Depolama** programı ve her modeli boyutuyla, hangi profilin
 kullandığıyla (eski bir sürümün önerdiği bir model de dahil), ayrıca hiçbir modelin kullanmadığı model dosyalarını (iptal edilen bir
-indirmenin gelen kısmı; programın sunucusu bunu kendi silmez) listeler ve kaldırır (geri dönüşüm kutusuna). **Sunucuyu durdur**, bir
+indirmenin gelen kısmı; programın sunucusu bunu kendi silmez) listeler ve işaretlenince kaldırır (kalıcı olarak). **Sunucuyu durdur**, bir
 adım, video, kurulum ya da indirme sunucuyu kullanıyor olabilirken reddedilir. Modelin bağlamından büyük bir istem gönderilmeden hata
 verir ve daha büyük bir model seçmeni söyler. Kendi çalıştırdığın Ollama ya da LM Studio'ya hiç dokunulmaz: kullanmak
 istersen özel sunucu olarak ekle.
@@ -505,7 +518,7 @@ her şey dosyanın tamamını reddettirir ve yerleşik liste kalır. Ayrıntı: 
 - **Bileşenler** (motorlar, sesler, görsel modelleri) için güncelleme ya da yeniden kurulum önerilir. Neyin kurulu olduğu
   `installed-components.json` içinde (bileşen klasörünün dışında, her birinin kurulduğu sürümle) kaydedilir; bu yüzden iptal edilen ya da
   başarısız olan bir yeniden kurulum bir sonraki açılışta yine sorulur. **Sıfırdan yeniden kur** bileşen klasörünü kenara alır, yeniden kurar
-  ve eski klasörü ancak ondan sonra geri dönüşüm kutusuna taşır; indirmeyi iptal edersen eski klasör yerine geri döner. Boş bir klasör ya da
+  ve eski klasörü ancak ondan sonra kalıcı olarak siler (onay boyutunu gösterir); indirmeyi iptal edersen eski klasör yerine geri döner. Boş bir klasör ya da
   yarım kalmış bir indirme asla kurulu sayılmaz.
 
 İndirmeler kötü bir bağlantıdan sonra devam eder: her dosya, aralarındaki bekleme giderek uzayarak en çok 5 kez denenir ve inen kısım
