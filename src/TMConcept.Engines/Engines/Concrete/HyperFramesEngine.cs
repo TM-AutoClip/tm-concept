@@ -230,7 +230,7 @@ public sealed class HyperFramesEngine(IAppPaths paths, ToolInstaller tools, Chro
             .Append(c, $"--tm-accent2: {Css(colors.Accent2)}; --tm-text: {Css(colors.Text)}; --tm-muted: {Css(colors.Muted)}; ")
             .Append(c, $"--tm-font: \"{family}\", sans-serif; --tm-unit: {Math.Min(input.Width, input.Height)}px; }}\n")
             .Append(c, $"#root {{ color: var(--tm-text); background: var(--tm-background); font-weight: {style.TextWeight}; font-style: {slant}; }}\n")
-            .Append(Readable(style.Outline))
+            .Append(Readable(style.Outline, style.OutlineBoost))
             .Append(c, $".tm-title {{ font-family: var(--tm-font); font-weight: {style.TitleWeight}; font-style: {slant}; color: var(--tm-text); font-size: calc(var(--tm-unit) * 0.075); line-height: 1.15; }}\n")
             .Append(".tm-title-band { background: var(--tm-surface); padding-top: 0.35em; padding-bottom: 0.35em; }\n")
             .Append(".tm-title-outline { -webkit-text-stroke: 0.06em var(--tm-background); paint-order: stroke fill; }\n")
@@ -250,8 +250,10 @@ public sealed class HyperFramesEngine(IAppPaths paths, ToolInstaller tools, Chro
     /// <summary>
     /// Readable text (the template's default since 0.1.24): every text on the page inherits an outline and a soft shadow in the colour
     /// opposite to the text colour (text-shadow is inherited, so the code's own text gets it too); nothing when the template has it off.
+    /// <paramref name="boost"/> (0.1.25, <see cref="Core.Styles.TextBackdrop"/>) widens it over images with too little contrast; from
+    /// <see cref="Core.Styles.TextBackdrop.BackdropBoost"/> on a soft halo behind the text works as a subtle backdrop.
     /// </summary>
-    public static string Readable(string outline)
+    public static string Readable(string outline, double boost = 1)
     {
         ArgumentNullException.ThrowIfNull(outline);
         if (outline.Length == 0)
@@ -260,7 +262,10 @@ public sealed class HyperFramesEngine(IAppPaths paths, ToolInstaller tools, Chro
         }
 
         var o = Css(outline);
-        return $"#root {{ --tm-outline: {o}; text-shadow: 0 0 0.05em {o}, 0 0 0.05em {o}, 0 0 0.1em {o}, 0 0.04em 0.14em {o}99; }}\n";
+        var b = Math.Clamp(boost, 1, Core.Styles.TextBackdrop.BackdropBoost);
+        string Em(double value) => (value * b).ToString("0.###", CultureInfo.InvariantCulture) + "em";
+        var halo = b >= Core.Styles.TextBackdrop.BackdropBoost ? $", 0 0 0.5em {o}80" : string.Empty;
+        return $"#root {{ --tm-outline: {o}; text-shadow: 0 0 {Em(0.05)} {o}, 0 0 {Em(0.05)} {o}, 0 0 {Em(0.1)} {o}, 0 {Em(0.04)} {Em(0.14)} {o}99{halo}; }}\n";
     }
 
     /// <summary>A value for the page's style: only characters a font name, file name or colour needs (the app's own values pass unchanged).</summary>

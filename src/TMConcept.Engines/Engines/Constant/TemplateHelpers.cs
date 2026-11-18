@@ -182,7 +182,17 @@ public static class TemplateHelpers
         export const tmFont = (input: ConceptInput): string => (input.style ? input.style.font : 'sans-serif');
 
         // Readable text: give every Txt these props (an outline in the colour opposite to the text); empty when the template has it off.
-        export const tmOutline = (input: ConceptInput): {stroke?: string; lineWidth?: number; strokeFirst?: boolean} =>
-          input.style?.outline ? {stroke: input.style.outline, lineWidth: Math.min(input.width, input.height) * 0.006, strokeFirst: true} : {};
+        // Over images with too little contrast the outline is wider and a soft shadow of the same colour is added (outlineBoost).
+        export const tmOutline = (input: ConceptInput): {stroke?: string; lineWidth?: number; strokeFirst?: boolean; shadowColor?: string; shadowBlur?: number} => {
+          const o = input.style?.outline;
+          if (!o) {
+            return {};
+          }
+
+          const unit = Math.min(input.width, input.height);
+          const b = Math.min(Math.max(input.style?.outlineBoost ?? 1, 1), 2.2);
+          const line = {stroke: o, lineWidth: unit * 0.006 * b, strokeFirst: true};
+          return b > 1 ? {...line, shadowColor: o, shadowBlur: unit * 0.012 * b} : line;
+        };
         """;
 }

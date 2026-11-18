@@ -1672,6 +1672,18 @@ public sealed class VideoPageTests
 
         public Task<bool> ThumbnailAsync(string video, string jpeg, CancellationToken cancellationToken) =>
             FailThumbnail ? throw new IOException("disk full") : Task.FromResult(false);
+
+        /// <summary>Every sample asked for (readable text, 0.1.25): the file's name, the moments and the region.</summary>
+        public List<(string File, IReadOnlyList<long> AtMs, FrameRegion Region)> Samples { get; } = [];
+
+        /// <summary>The pixels of a sample (file name, moment); none by default, so the normal readable look is kept.</summary>
+        public Func<string, long, FramePixels?> Pixels { get; set; } = (_, _) => null;
+
+        public Task<IReadOnlyList<FramePixels?>> SampleAsync(string file, IReadOnlyList<long> atMs, FrameRegion region, CancellationToken cancellationToken)
+        {
+            Samples.Add((Path.GetFileName(file), atMs, region));
+            return Task.FromResult<IReadOnlyList<FramePixels?>>(atMs.Select(at => Pixels(Path.GetFileName(file), at)).ToList());
+        }
     }
 
     internal sealed class FakeVoice : TMConcept.Core.Speech.ISpeechEngine

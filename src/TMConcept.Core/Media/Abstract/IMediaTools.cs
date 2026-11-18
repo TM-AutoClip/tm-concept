@@ -16,4 +16,10 @@ public interface IMediaTools
 
     /// <summary>Writes a thumbnail from the first frame that is not black; false when none was found.</summary>
     Task<bool> ThumbnailAsync(string video, string jpeg, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Small RGB copies of <paramref name="region"/> of <paramref name="file"/> (a video, or a picture with one moment 0) at each of
+    /// <paramref name="atMs"/>, in order, for <see cref="Styles.TextBackdrop"/>; <c>null</c> for a moment ffmpeg could not read (past the end).
+    /// </summary>
+    Task<IReadOnlyList<FramePixels?>> SampleAsync(string file, IReadOnlyList<long> atMs, FrameRegion region, CancellationToken cancellationToken);
 }

@@ -152,6 +152,29 @@ public sealed class StyledVideoTests
     }
 
     [AvaloniaFact]
+    public async Task SubtitlesOverABrightVideoGetABackdropMeasuredUnderTheirOwnPlace()
+    {
+        var engine = new FakeEngine();
+        using var h = Harness(new FakeChat().Answer(_ => Code(engine.SampleCode)), new FakeVoice(), engine);
+        var media = (FakeMedia)h.Get<IMediaTools>();
+
+        // The rendered video is as bright as the template's text behind every subtitle (generated frames, 0.1.25).
+        media.Pixels = (file, _) => file == "silent.mp4"
+            ? new FramePixels(4, 2, Enumerable.Repeat((byte)250, 4 * 2 * 3).ToArray())
+            : null;
+        await MakeAsync(h, Template(), photo: false);
+
+        var sample = media.Samples.Single(s => s.File == "silent.mp4");
+        sample.Region.ShouldBe(TextBackdrop.SubtitleRegion(engine.Input!.Width, engine.Input.Height));
+        var ass = media.Overlays.Single().AssText.ShouldNotBeNull();
+        sample.AtMs.Count.ShouldBe(ass.Split('\n').Count(l => l.StartsWith("Dialogue: 0,", StringComparison.Ordinal)), "one sample per subtitle");
+        ass.ShouldContain("Style: TmBoxed,Poppins,");
+        ass.ShouldContain(",TmBoxed,,0,0,0,,");
+        ass.ShouldNotContain(",Default,,0,0,0,,", Case.Sensitive, "every subtitle is over the bright video");
+        engine.Input.Style!.OutlineBoost.ShouldBe(1, "no scene image to measure: the on-screen text keeps the normal outline");
+    }
+
+    [AvaloniaFact]
     public async Task WithoutAChannelPhotoTheCardIsDrawnWithoutIt()
     {
         var engine = new FakeEngine();
