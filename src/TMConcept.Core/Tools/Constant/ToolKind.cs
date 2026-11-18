@@ -66,6 +66,18 @@ public enum ToolKind
     /// <summary>A model file of the local OCR engine of scanned pages (0.1.25; one ONNX file, run in the app with its bundled ONNX Runtime).</summary>
     OcrWeights = 17,
 
+    /// <summary>
+    /// PDFium (0.1.27; the pdfium-binaries build, BSD-3-Clause with permissive parts): draws any PDF page as a picture for the OCR or a vision
+    /// model (JPEG 2000, JBIG2 and CCITT fax scans, text drawn as shapes), loaded by the app from the tools folder.
+    /// </summary>
+    PdfRenderer = 18,
+
+    /// <summary>
+    /// The DirectML build of ONNX Runtime with Microsoft's DirectML library (0.1.27, Windows): the local OCR on any graphics card. Two files of
+    /// two NuGet packages, fetched entry by entry; DirectML is under Microsoft's own licence terms (downloaded after the user agreed).
+    /// </summary>
+    OcrGpuRuntime = 19,
+
     /// <summary>A new version of the app itself (a release asset; its SHA-256 comes from the release notes). Not a component.</summary>
     AppUpdate = 100,
 }

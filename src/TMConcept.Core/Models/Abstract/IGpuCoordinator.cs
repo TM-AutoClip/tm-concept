@@ -28,6 +28,15 @@ public interface IGpuCoordinator
     /// </summary>
     Task<IGpuLease> AcquireAsync(IModel model, ModelMemoryNeed? need, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// A lease for <paramref name="model"/> only when the card can be had soon (0.1.27, the local OCR's pages): it waits at most
+    /// <paramref name="wait"/> for another local model in use, never asks the user anything (the memory is measured once; too little gives the
+    /// card back) and returns null when the card is busy, short of memory, or this flow already holds another model's lease; the caller then
+    /// works on the processor. A model that is not on the card gets its lease at once. <see cref="OperationCanceledException"/> only for
+    /// <paramref name="cancellationToken"/>.
+    /// </summary>
+    Task<IGpuLease?> TryAcquireAsync(IModel model, TimeSpan wait, CancellationToken cancellationToken);
+
     /// <summary>A lease for the model of a catalog entry (<see cref="IModelDirectory.Get"/>).</summary>
     Task<IGpuLease> AcquireAsync(CatalogModel model, CancellationToken cancellationToken);
 

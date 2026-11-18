@@ -698,6 +698,9 @@ public sealed class ImageBackendTests
         public Task<IGpuLease> AcquireAsync(IModel model, ModelMemoryNeed? need, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
+        public Task<IGpuLease?> TryAcquireAsync(IModel model, TimeSpan wait, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
         public Task<IGpuLease> AcquireAsync(CatalogModel model, CancellationToken cancellationToken)
         {
             Held++;

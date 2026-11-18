@@ -79,6 +79,30 @@ public sealed class GpuCoordinator(IModelDirectory directory, IVramProbe probe, 
     }
 
     /// <inheritdoc />
+    public Task<IGpuLease?> TryAcquireAsync(IModel model, TimeSpan wait, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(model);
+        if (model is not ILocalModel { Device: ModelDevice.Gpu } local)
+        {
+            return Task.FromResult<IGpuLease?>(new GpuLease(model, false, VramReading.None, null));
+        }
+
+        // As in AcquireAsync: the list belongs to the caller's flow. A flow that holds another model's lease is not refused with an
+        // exception here: it simply does not get the card.
+        var held = Held.Value ??= [];
+        lock (held)
+        {
+            if (held.FirstOrDefault(k => k != local.Key) is { } other)
+            {
+                logger.LogInformation("{Model} does not take the graphics card: this flow holds {Other}", local.Key, other);
+                return Task.FromResult<IGpuLease?>(null);
+            }
+        }
+
+        return TryGrantAsync(local, held, wait, cancellationToken);
+    }
+
+    /// <inheritdoc />
     public async Task FreeAsync(CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -189,6 +213,123 @@ public sealed class GpuCoordinator(IModelDirectory directory, IVramProbe probe, 
             }
 
             await busy!.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// <see cref="TryAcquireAsync"/>: the steps of <see cref="GrantAsync"/>, but a busy card is waited for only until <paramref name="wait"/>
+    /// has passed (null then), and the memory check is a single quiet reading (<see cref="QuietCheckAsync"/>).
+    /// </summary>
+    private async Task<IGpuLease?> TryGrantAsync(ILocalModel model, List<string> held, TimeSpan wait, CancellationToken cancellationToken)
+    {
+        var deadline = clock.GetUtcNow() + wait;
+        while (true)
+        {
+            Task? busy = null;
+            TaskCompletionSource? check = null;
+            await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                if (_loaded is not null && _loaded.Key != model.Key)
+                {
+                    if (_users > 0)
+                    {
+                        busy = _idle.Task;
+                    }
+                    else
+                    {
+                        var previous = _loaded;
+                        await UnloadAsync(previous, cancellationToken).ConfigureAwait(false);
+                        await RetryStuckAsync(model, previous, cancellationToken).ConfigureAwait(false);
+                        logger.LogInformation("Graphics card: {Previous} unloaded for {Model}", previous.Key, model.Key);
+                    }
+                }
+                else if (_loaded is null)
+                {
+                    await SweepOnceAsync(model, cancellationToken).ConfigureAwait(false);
+                    await RetryStuckAsync(model, null, cancellationToken).ConfigureAwait(false);
+                }
+
+                if (busy is null)
+                {
+                    if (_loaded is not null && _verified)
+                    {
+                        return await GrantNowAsync(model, held, cancellationToken).ConfigureAwait(false);
+                    }
+
+                    if (_checking is { } running)
+                    {
+                        busy = running.Task;
+                    }
+                    else
+                    {
+                        check = _checking = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                        Reserve(model, held);
+                    }
+                }
+            }
+            finally
+            {
+                _gate.Release();
+            }
+
+            if (check is not null)
+            {
+                return await QuietCheckAsync(model, held, check, cancellationToken).ConfigureAwait(false);
+            }
+
+            var left = deadline - clock.GetUtcNow();
+            if (left <= TimeSpan.Zero)
+            {
+                logger.LogInformation("{Model} does not take the graphics card: {Other} is in use", model.Key, _loaded?.Key ?? "another model");
+                return null;
+            }
+
+            try
+            {
+                await busy!.WaitAsync(left, clock, cancellationToken).ConfigureAwait(false);
+            }
+            catch (TimeoutException)
+            {
+                logger.LogInformation("{Model} does not take the graphics card: {Other} is still in use", model.Key, _loaded?.Key ?? "another model");
+                return null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// The memory check of <see cref="TryAcquireAsync"/>: one reading, no wait and no question. Too little memory on the card (a placement off
+    /// the card) gives the reserved lease back and answers null; a failure or a cancel gives it back and goes to the caller.
+    /// </summary>
+    private async Task<IGpuLease?> QuietCheckAsync(ILocalModel model, List<string> held, TaskCompletionSource check, CancellationToken cancellationToken)
+    {
+        var lease = new GpuLease(model, true, VramReading.None, l => ReleaseAsync(l, held));
+        try
+        {
+            var reading = await probe.MeasureAsync(null, cancellationToken).ConfigureAwait(false);
+            var plan = model.PlanMemory(new MemorySnapshot(reading, memory?.AvailableBytes()), null);
+            if (reading.Measured && plan.Placement != MemoryPlacement.Card)
+            {
+                logger.LogInformation("{Model} does not take the graphics card: {Free:0.0} GiB free is too little ({Placement})", model.Key,
+                    Math.Max(reading.FreeBytes, reading.SystemFreeBytes ?? 0) / Gibibyte, plan.Placement);
+                await SettleCheckAsync(check, false).ConfigureAwait(false);
+                await lease.DisposeAsync().ConfigureAwait(false);
+                return null;
+            }
+
+            if (!model.IsLoaded)
+            {
+                await model.LoadAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            await SettleCheckAsync(check, true).ConfigureAwait(false);
+            return new GpuLease(model, true, reading, l => ReleaseAsync(l, held));
+        }
+        catch
+        {
+            await SettleCheckAsync(check, false).ConfigureAwait(false);
+            await lease.DisposeAsync().ConfigureAwait(false);
+            throw;
         }
     }
 

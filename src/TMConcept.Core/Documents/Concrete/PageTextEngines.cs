@@ -16,6 +16,12 @@ public static class PageTextEngines
     /// <summary>The component of the local OCR engine's two model files.</summary>
     public const string LocalOcrComponent = "ocr.pp-ocr-latin";
 
+    /// <summary>The component that draws PDF pages as pictures for the OCR or a vision model (PDFium, 0.1.27).</summary>
+    public const string PdfRendererComponent = "pdf.pdfium";
+
+    /// <summary>The component that runs the local OCR on the graphics card (ONNX Runtime with DirectML, Windows, 0.1.27).</summary>
+    public const string OcrGpuComponent = "ocr.directml";
+
     /// <summary>Seconds one dense scanned page takes on ONE processor thread (detection of a page of about 1,600 pixels and some 40 lines).</summary>
     public const double OcrSecondsPerPageOneThread = 6;
 
