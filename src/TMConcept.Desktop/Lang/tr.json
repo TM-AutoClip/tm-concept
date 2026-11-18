@@ -1355,7 +1355,7 @@
   "documents.fail.key": "site isteği reddetti ({0})",
   "documents.fail.robots": "site, uygulamaların almasına izin vermiyor (robots.txt, {0})",
   "step.document-text": "Taranmış sayfalardan yazı (isteğe bağlı)",
-  "step.document-text.purpose": "Sayfaları resim olan (taranmış) bir PDF eklediğinde yazıları bu model okur. Yalnız resim okuyabilen modeller listelenir: çevrimiçi biri (sayfa başı ücretli) ya da yerel biri (ücretsiz, bu bilgisayarda).",
+  "step.document-text.purpose": "Sayfaları resim olan (taranmış) bir PDF eklediğinde yazıları bu motor okur: yerel OCR (ücretsiz, bu bilgisayarın işlemcisinde; Türkçe, İngilizce gibi Latin alfabeli diller), yerel bir görsel model (ücretsiz, bu bilgisayarda) ya da çevrimiçi biri (sayfa başı ücretli). Konseptleri yazan modelden ayrı seçilir, yani her karışım olur. Okuduğu yazı PDF'le birlikte saklanır, bir daha okunmaz.",
   "step.document-text.off": "Kapalı — taranmış sayfalar atlanır",
   "step.document-text.off.note": "Bir PDF'in taranmış sayfalarını okumak için burada bir model seç.",
   "steps.short.document-text": "Taranmış yazı",

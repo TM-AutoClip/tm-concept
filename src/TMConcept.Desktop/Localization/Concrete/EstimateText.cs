@@ -20,6 +20,17 @@ public static class EstimateText
         return price + " · " + Time(text, estimate.TimeMin, estimate.TimeMax);
     }
 
+    /// <summary>
+    /// The line of reading scanned pages with <paramref name="model"/> (0.1.25): the local OCR's "free, on this computer's processor, about
+    /// …", otherwise <see cref="Line"/>.
+    /// </summary>
+    public static string Extraction(Localizer text, Core.Models.CatalogModel model, WorkEstimate estimate)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        ArgumentNullException.ThrowIfNull(estimate);
+        return PageTextEngines.IsLocalOcr(model) ? text.Format("documents.ocr.estimate", Time(text, estimate.TimeMin, estimate.TimeMax)) : Line(text, estimate);
+    }
+
     /// <summary>"≈ 12–25 min" (minutes up to two hours, then hours), or "under a minute".</summary>
     public static string Time(Localizer text, TimeSpan low, TimeSpan high)
     {

@@ -27,6 +27,9 @@ namespace TMConcept.Desktop.ViewModels;
 /// 0.1.24: a picked PDF first waits in <see cref="Pending"/> with its page count, how much of it looks scanned, a page range to add and
 /// whether its image pages are read by the page's text extraction model (<see cref="PipelineSteps.DocumentText"/>), each with its estimate
 /// (pages, price, rough time); "Add" then reads it page by page, the progress also in the activity line.
+/// 0.1.25: the engine of "Text from scanned pages" may be the local OCR (free, on this computer) or a vision model (local or online), chosen
+/// apart from the model that writes the concepts; a PDF's row says which of its pages are read and kept and offers to read only the missing
+/// ones (<see cref="ReadMissingAsync"/>); pages read before (another range of the file, a canceled add) are reused and said.
 /// </summary>
 public sealed partial class DocumentLibraryViewModel(AppSession session, DocumentLibrary library, IDiskCleaner cleaner, IConfirmDialog confirm,
     ComponentInstallFlow installs, FileDialogs dialogs, IActivityLog activity, Localizer text, ILogger<DocumentLibraryViewModel> logger,
@@ -122,6 +125,9 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
         var profile = session.Profile;
         var ticked = Documents.Where(d => d.Checked).Select(d => d.Id).ToHashSet();
         IReadOnlyList<SourceDocument> documents = profile is null ? [] : await library.ListAsync(profile.Id, CancellationToken.None).ConfigureAwait(true);
+        var states = profile is null
+            ? new Dictionary<Guid, DocumentPageState>()
+            : await library.PageStatesAsync(profile.Id, documents, CancellationToken.None).ConfigureAwait(true);
         if (session.Profile?.Id != profile?.Id)
         {
             return;
@@ -135,11 +141,19 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
         Documents.Clear();
         foreach (var document in documents)
         {
-            var row = new DocumentRowViewModel(document, Info(document), Problem(document)) { Checked = ticked.Contains(document.Id) };
+            var state = states.GetValueOrDefault(document.Id) ?? DocumentPageState.Unknown;
+            var row = new DocumentRowViewModel(document, Info(document), state.Known ? NoTextProblem(document) : Problem(document))
+            {
+                Checked = ticked.Contains(document.Id),
+                Pages = state,
+                PagesLine = PagesLine(state),
+                ReadMissingText = text.Format("documents.pages.read_missing", state.Missing.Count),
+            };
             row.PropertyChanged += OnRow;
             Documents.Add(row);
         }
 
+        RefreshRows();
         Raise();
     }
 
@@ -229,13 +243,38 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
         OnPropertyChanged(nameof(HasPending));
     }
 
-    /// <summary>The estimates of the waiting PDFs again (the text extraction model may have changed).</summary>
+    /// <summary>The estimates of the waiting PDFs and of the documents' missing pages again (the text extraction engine may have changed).</summary>
     public void RefreshPending()
     {
         foreach (var row in Pending)
         {
             Estimate(row);
         }
+
+        RefreshRows();
+    }
+
+    /// <summary>
+    /// Reads only the pages of <paramref name="row"/>'s PDF that are still to read (0.1.25), with the engine of "Text from scanned pages" (the
+    /// local OCR is installed after its question, a vision model's run is counted); the pages read before are reused, the document's passages
+    /// are cut again.
+    /// </summary>
+    [RelayCommand]
+    public Task ReadMissingAsync(DocumentRowViewModel? row)
+    {
+        if (row is null || !row.HasMissing)
+        {
+            return Task.CompletedTask;
+        }
+
+        if (TextModel is null)
+        {
+            Say(text["documents.pages.read_missing.none"], error: true);
+            return Task.CompletedTask;
+        }
+
+        return RunAsync([(row.Title, (Func<Guid, IProgress<DocumentProgress>, CancellationToken, Task<DocumentAddResult>>)(
+            (profile, progress, token) => ReadMissingOneAsync(profile, row, progress, token)))], countAdded: false);
     }
 
     /// <summary>Adds the waiting PDFs as chosen (a page range that is not one of its file stops it with the reason).</summary>
@@ -447,6 +486,71 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
 
     private CatalogModel? TextModel => _picker?.Invoke()?.Model(PipelineSteps.DocumentText);
 
+    /// <summary>Reads the missing pages of one document with the chosen engine (its run ended with the outcome, like an add).</summary>
+    private async Task<DocumentAddResult> ReadMissingOneAsync(Guid profile, DocumentRowViewModel row, IProgress<DocumentProgress> progress, CancellationToken token)
+    {
+        var engine = await StartRecognizerAsync(profile, row.Title, row.MissingCount, token).ConfigureAwait(true);
+        if (engine is null)
+        {
+            throw new OperationCanceledException();
+        }
+
+        var status = RunStatus.Failed;
+        var error = string.Empty;
+        try
+        {
+            var result = await library.ReadMissingAsync(row.Document, new DocumentReadOptions(Recognizer: engine.Recognizer), progress, token).ConfigureAwait(true);
+            status = RunStatus.Succeeded;
+            Tell(result, engine);
+            var state = (await library.PageStatesAsync(profile, [result.Document], CancellationToken.None).ConfigureAwait(true))[result.Document.Id];
+            _notes.Add(text.Format("documents.pages.done", result.Document.Title, state.Ready, state.Pages));
+            return result;
+        }
+        catch (OperationCanceledException)
+        {
+            status = RunStatus.Canceled;
+            error = "canceled";
+            throw;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            throw;
+        }
+        finally
+        {
+            await FinishRecognizerAsync(engine, status, error).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>Each document row's button and estimate for its missing pages, with the engine chosen now.</summary>
+    private void RefreshRows()
+    {
+        var model = TextModel;
+        foreach (var row in Documents.Where(r => r.HasMissing))
+        {
+            row.CanReadMissing = model is not null;
+            row.ReadMissingEstimate = model is null
+                ? text["documents.pages.read_missing.none"]
+                : text.Format("documents.pages.read_missing.estimate", row.MissingCount, model.Name,
+                    EstimateText.Extraction(text, model, reader.Estimate(model, row.MissingCount, _card ?? 0)));
+        }
+    }
+
+    /// <summary>"Pages read: 680 of 700 · 20 still to read · 120 read from images" (empty when not known).</summary>
+    private string PagesLine(DocumentPageState state)
+    {
+        if (!state.Known)
+        {
+            return string.Empty;
+        }
+
+        var line = state.Missing.Count == 0
+            ? text.Format("documents.pages.state", state.Ready, state.Pages)
+            : text.Format("documents.pages.state_missing", state.Ready, state.Pages, state.Missing.Count);
+        return line + (state.Recognized > 0 ? text.Format("documents.pages.state_recognized", state.Recognized) : string.Empty);
+    }
+
     /// <summary>
     /// Adds one waiting PDF: its page range, and, when its image pages are to be read, the text extraction model made ready (a local one is
     /// installed after its question) and its run started; the run is ended with the add's outcome, so its cost is counted whatever happens.
@@ -535,13 +639,23 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
             _notes.Add(text.Format("documents.added_pages_read", title, result.PagesRecognized, engine?.Name ?? string.Empty, text.Usd(engine?.Vision?.Run.ActualUsd ?? 0)));
         }
 
+        if (result.PagesReused > 0)
+        {
+            _notes.Add(text.Format("documents.pages.reused", title, result.PagesReused));
+        }
+
         if (result.RecognitionStopped.Length > 0)
         {
             _notes.Add(text.Format("documents.extract_stopped", title, ProviderErrors.Text(text, result.RecognitionStopped)));
         }
-        else if (result.PagesUnread > 0)
+        else if (result.PagesUnread > result.PagesUnsupported)
         {
-            _notes.Add(text.Format("documents.added_pages_unread", title, result.PagesUnread));
+            _notes.Add(text.Format("documents.added_pages_unread", title, result.PagesUnread - result.PagesUnsupported));
+        }
+
+        if (result.PagesUnsupported > 0)
+        {
+            _notes.Add(text.Format("documents.pages.unsupported", title, result.PagesUnsupported));
         }
     }
 
@@ -566,7 +680,8 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
             lines.Add(model is null
                 ? text["documents.import.extract.none"]
                 : row.Extract
-                    ? text.Format("documents.import.extract.estimate", row.ImagePages, model.Name, EstimateText.Line(text, reader.Estimate(model, row.ImagePages, _card ?? 0)))
+                    ? text.Format("documents.import.extract.estimate", row.ImagePages, model.Name,
+                        EstimateText.Extraction(text, model, reader.Estimate(model, row.ImagePages, _card ?? 0)))
                     : string.Empty);
         }
 
@@ -596,7 +711,7 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
     }
 
     private async Task RunAsync(IReadOnlyList<(string Name, Func<Guid, IProgress<DocumentProgress>, CancellationToken, Task<DocumentAddResult>> Add)> adds,
-        bool clearAddress = false)
+        bool clearAddress = false, bool countAdded = true)
     {
         if (adds.Count == 0)
         {
@@ -677,7 +792,7 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
             Address = string.Empty;
         }
 
-        var line = string.Join("\n", new[] { added > 0 ? text.Format("documents.added", added) : string.Empty }.Concat(notes).Concat(failures).Where(l => l.Length > 0));
+        var line = string.Join("\n", new[] { added > 0 && countAdded ? text.Format("documents.added", added) : string.Empty }.Concat(notes).Concat(failures).Where(l => l.Length > 0));
         Say(line, error: failures.Count > 0);
         await LoadAsync().ConfigureAwait(true);
         Changed?.Invoke(this, EventArgs.Empty);
@@ -724,6 +839,11 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
 
         return string.Join(" · ", parts);
     }
+
+    /// <summary>The problem of a document whose pages are known (0.1.25): only that nothing could be read, or that it was cut; the pages line says the rest.</summary>
+    private string NoTextProblem(SourceDocument document) => document.Status == DocumentStatus.NoText
+        ? text[document.Kind == DocumentKind.Pdf ? "documents.problem.scan" : "documents.problem.empty"]
+        : document.StatusDetail == "cut" ? text["documents.problem.cut"] : string.Empty;
 
     private string Problem(SourceDocument document) => document.Status == DocumentStatus.NoText
         ? text[document.Kind == DocumentKind.Pdf ? "documents.problem.scan" : "documents.problem.empty"]

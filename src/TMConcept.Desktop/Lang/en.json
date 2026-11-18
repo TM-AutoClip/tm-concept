@@ -1355,7 +1355,7 @@
   "documents.fail.key": "the site refused the request ({0})",
   "documents.fail.robots": "the site does not allow apps to fetch it (robots.txt, {0})",
   "step.document-text": "Text from scanned pages (optional)",
-  "step.document-text.purpose": "When you add a PDF whose pages are images (a scan), this model reads their text. Only models that read images are listed: an online one (paid per page) or a local one (free, on this computer).",
+  "step.document-text.purpose": "When you add a PDF whose pages are images (a scan), this engine reads their text: the local OCR (free, on this computer's processor, Latin-script languages such as Turkish and English), a local vision model (free, on this computer) or an online one (paid per page). It is chosen apart from the model that writes the concepts, so any mix works. What it reads is kept with the PDF and never read again.",
   "step.document-text.off": "Off — scanned pages are left out",
   "step.document-text.off.note": "Choose a model here to read the scanned pages of a PDF.",
   "steps.short.document-text": "Scanned text",

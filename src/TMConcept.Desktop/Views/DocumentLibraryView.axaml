@@ -91,6 +91,13 @@
                     <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
                     <TextBlock Text="{Binding Info}" Classes="tiny" TextTrimming="CharacterEllipsis" />
                     <TextBlock Text="{Binding Problem}" Classes="small warning" TextWrapping="Wrap" IsVisible="{Binding HasProblem}" />
+                    <TextBlock Name="DocumentPagesLine" Text="{Binding PagesLine}" Classes="tiny" TextWrapping="Wrap" IsVisible="{Binding HasPagesLine}" />
+                    <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding HasMissing}">
+                      <Button Name="ReadMissingButton" Classes="small" Content="{Binding ReadMissingText}" IsEnabled="{Binding CanReadMissing}"
+                              ToolTip.Tip="{DynamicResource documents.pages.read_missing.tip}"
+                              Command="{Binding $parent[ItemsControl].((vm:DocumentLibraryViewModel)DataContext).ReadMissingCommand}" CommandParameter="{Binding}" />
+                      <TextBlock Text="{Binding ReadMissingEstimate}" Classes="tiny" TextWrapping="Wrap" VerticalAlignment="Center" />
+                    </StackPanel>
                   </StackPanel>
                   <Button Grid.Column="2" Classes="small danger" Content="{DynamicResource documents.delete}" VerticalAlignment="Center"
                           Command="{Binding $parent[ItemsControl].((vm:DocumentLibraryViewModel)DataContext).DeleteCommand}" CommandParameter="{Binding}" />
