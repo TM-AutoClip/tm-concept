@@ -25,13 +25,22 @@ public sealed class DocumentTextReader(IChatClientFactory chats, ICostCalculator
     /// <summary>Answer tokens of a dense page (an encyclopedia page in two columns).</summary>
     public const int PageOutputMax = 2_000;
 
-    /// <summary>The estimate of reading <paramref name="pages"/> scanned pages with <paramref name="model"/> (graphics card of <paramref name="cardBytes"/>).</summary>
+    /// <summary>
+    /// The estimate of reading <paramref name="pages"/> scanned pages with <paramref name="model"/> (graphics card of <paramref name="cardBytes"/>); the
+    /// local OCR's by this computer's processor (<see cref="PageTextEngines.OcrEstimate"/>).
+    /// </summary>
     public WorkEstimate Estimate(CatalogModel model, int pages, long cardBytes)
     {
         ArgumentNullException.ThrowIfNull(model);
         if (pages <= 0)
         {
             return WorkEstimate.None;
+        }
+
+        if (PageTextEngines.IsLocalOcr(model))
+        {
+            // The local OCR (0.1.25): free, on this computer's processor; its time follows the processor's threads, not the graphics card.
+            return PageTextEngines.OcrEstimate(pages, Environment.ProcessorCount);
         }
 
         var cost = costs.EstimateChat(model, (long)pages * (ImageTokensPerPage + InstructionTokens), 0, (long)pages * PageOutputMin, (long)pages * PageOutputMax);

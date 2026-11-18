@@ -30,7 +30,8 @@ namespace TMConcept.Desktop.ViewModels;
 /// </summary>
 public sealed partial class DocumentLibraryViewModel(AppSession session, DocumentLibrary library, IDiskCleaner cleaner, IConfirmDialog confirm,
     ComponentInstallFlow installs, FileDialogs dialogs, IActivityLog activity, Localizer text, ILogger<DocumentLibraryViewModel> logger,
-    DocumentTextReader reader, StepModelResolver resolver, IVramProbe vram, WorkStatus work, SpendingMeter spending) : ObservableObject
+    DocumentTextReader reader, StepModelResolver resolver, IVramProbe vram, WorkStatus work, SpendingMeter spending, TMConcept.Documents.Ocr.LocalOcrEngine ocr)
+    : ObservableObject
 {
     /// <summary>Seconds a text page takes to read on this computer, at least and at most (an estimate).</summary>
     private const double PageSecondsMin = 0.02;
@@ -452,43 +453,14 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
     /// </summary>
     private async Task<DocumentAddResult> AddPendingAsync(Guid profile, DocumentImportViewModel row, IProgress<DocumentProgress> progress, CancellationToken token)
     {
-        VisionPageRecognizer? recognizer = null;
-        var modelName = string.Empty;
-        if (row.Extract && row.HasImagePages && _picker?.Invoke() is { } picker && picker.Model(PipelineSteps.DocumentText) is not null)
-        {
-            if (!await picker.PrepareAsync([PipelineSteps.DocumentText], "install.purpose.document_text", token).ConfigureAwait(true))
-            {
-                _notes.Add(picker.Status.Length > 0 ? picker.Status : text["install.cancelled"]);
-            }
-            else
-            {
-                var model = await resolver.ResolveAsync(PipelineSteps.DocumentText, picker.Choice(PipelineSteps.DocumentText), token).ConfigureAwait(true);
-                modelName = model.Model.Name;
-                recognizer = await reader.StartAsync(profile, model, row.Name, row.ImagePages, token).ConfigureAwait(true);
-            }
-        }
-
+        var engine = row.Extract && row.HasImagePages ? await StartRecognizerAsync(profile, row.Name, row.ImagePages, token).ConfigureAwait(true) : null;
         var status = RunStatus.Failed;
         var error = string.Empty;
         try
         {
-            var result = await library.AddFileAsync(profile, row.File, new DocumentReadOptions(row.Pages, recognizer), progress, token).ConfigureAwait(true);
+            var result = await library.AddFileAsync(profile, row.File, new DocumentReadOptions(row.Pages, engine?.Recognizer), progress, token).ConfigureAwait(true);
             status = RunStatus.Succeeded;
-            var title = result.Document.Title;
-            if (result.PagesRecognized > 0)
-            {
-                _notes.Add(text.Format("documents.added_pages_read", title, result.PagesRecognized, modelName, text.Usd(recognizer?.Run.ActualUsd ?? 0)));
-            }
-
-            if (result.RecognitionStopped.Length > 0)
-            {
-                _notes.Add(text.Format("documents.extract_stopped", title, ProviderErrors.Text(text, result.RecognitionStopped)));
-            }
-            else if (result.PagesUnread > 0)
-            {
-                _notes.Add(text.Format("documents.added_pages_unread", title, result.PagesUnread));
-            }
-
+            Tell(result, engine);
             return result;
         }
         catch (OperationCanceledException)
@@ -504,11 +476,72 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
         }
         finally
         {
-            if (recognizer is not null)
-            {
-                await reader.FinishAsync(recognizer, status, error).ConfigureAwait(true);
-                await spending.RefreshAsync().ConfigureAwait(true);
-            }
+            await FinishRecognizerAsync(engine, status, error).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>
+    /// The text extraction engine of the page's "Text from scanned pages" step, made ready (a local one is installed after its question): the
+    /// local OCR (free, on this computer), or a vision model (local or online) whose run is started so its cost is counted whatever happens;
+    /// null when no engine is chosen or the user declined the install (said in the notes).
+    /// </summary>
+    private async Task<PageEngine?> StartRecognizerAsync(Guid profile, string name, int pages, CancellationToken token)
+    {
+        if (_picker?.Invoke() is not { } picker || picker.Model(PipelineSteps.DocumentText) is null)
+        {
+            return null;
+        }
+
+        if (!await picker.PrepareAsync([PipelineSteps.DocumentText], "install.purpose.document_text", token).ConfigureAwait(true))
+        {
+            _notes.Add(picker.Status.Length > 0 ? picker.Status : text["install.cancelled"]);
+            return null;
+        }
+
+        var model = await resolver.ResolveAsync(PipelineSteps.DocumentText, picker.Choice(PipelineSteps.DocumentText), token).ConfigureAwait(true);
+        if (PageTextEngines.IsLocalOcr(model.Model))
+        {
+            // Loading the two models reads files: off the interface thread.
+            var local = await Task.Run(ocr.Create, token).ConfigureAwait(true);
+            return new PageEngine(local, null, model.Model.Name);
+        }
+
+        var vision = await reader.StartAsync(profile, model, name, pages, token).ConfigureAwait(true);
+        return new PageEngine(vision, vision, model.Model.Name);
+    }
+
+    /// <summary>Ends the engine's run (its pages, outcome and cost are saved) and lets the local OCR's models go.</summary>
+    private async Task FinishRecognizerAsync(PageEngine? engine, RunStatus status, string error)
+    {
+        if (engine is null)
+        {
+            return;
+        }
+
+        (engine.Recognizer as IDisposable)?.Dispose();
+        if (engine.Vision is { } vision)
+        {
+            await reader.FinishAsync(vision, status, error).ConfigureAwait(true);
+            await spending.RefreshAsync().ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>The notes of an add or a read of missing pages: pages read and by what, a stop, pages left unread.</summary>
+    private void Tell(DocumentAddResult result, PageEngine? engine)
+    {
+        var title = result.Document.Title;
+        if (result.PagesRecognized > 0)
+        {
+            _notes.Add(text.Format("documents.added_pages_read", title, result.PagesRecognized, engine?.Name ?? string.Empty, text.Usd(engine?.Vision?.Run.ActualUsd ?? 0)));
+        }
+
+        if (result.RecognitionStopped.Length > 0)
+        {
+            _notes.Add(text.Format("documents.extract_stopped", title, ProviderErrors.Text(text, result.RecognitionStopped)));
+        }
+        else if (result.PagesUnread > 0)
+        {
+            _notes.Add(text.Format("documents.added_pages_unread", title, result.PagesUnread));
         }
     }
 

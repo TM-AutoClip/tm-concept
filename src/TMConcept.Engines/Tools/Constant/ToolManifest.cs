@@ -56,7 +56,7 @@ public static class ToolManifest
 
     /// <summary>Tools that are libraries, not programs: never looked for on the system PATH.</summary>
     public static readonly IReadOnlyList<ToolKind> Libraries = [ToolKind.SpeechRuntime, ToolKind.ImageRuntime, ToolKind.ImageRuntimeCuda, ToolKind.ImageRuntimeVulkan,
-        ToolKind.ImageRuntimeCpu, ToolKind.ImageWeights, ToolKind.EmbeddingWeights, ToolKind.Uv, ToolKind.PythonVoiceWeights];
+        ToolKind.ImageRuntimeCpu, ToolKind.ImageWeights, ToolKind.EmbeddingWeights, ToolKind.Uv, ToolKind.PythonVoiceWeights, ToolKind.OcrWeights];
 
     /// <summary>Tools that may come from the system PATH when their pinned download is gone (404) or does not match its hash.</summary>
     public static readonly IReadOnlyList<ToolKind> FallbackToSystem = [ToolKind.Ffmpeg];
@@ -65,6 +65,9 @@ public static class ToolManifest
     public static readonly IReadOnlyList<string> AllowedHosts =
     [
         "nodejs.org", "github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com", "huggingface.co",
+
+        // ModelScope: the RapidOCR models of the local OCR (0.1.25), served directly (no redirect); each file is pinned by its SHA-256.
+        "www.modelscope.cn",
     ];
 
     /// <summary>Host suffixes a download may be redirected to: Hugging Face's own file servers (us.aws.cdn.hf.co, cas-bridge.xethub.hf.co …).</summary>

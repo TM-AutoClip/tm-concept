@@ -63,6 +63,9 @@ public enum ToolKind
     /// </summary>
     AppOllama = 16,
 
+    /// <summary>A model file of the local OCR engine of scanned pages (0.1.25; one ONNX file, run in the app with its bundled ONNX Runtime).</summary>
+    OcrWeights = 17,
+
     /// <summary>A new version of the app itself (a release asset; its SHA-256 comes from the release notes). Not a component.</summary>
     AppUpdate = 100,
 }

@@ -220,6 +220,11 @@ public static class DesktopServices
         services.AddSingleton<Core.Documents.DocumentTopicFinder>();
         services.AddSingleton<Core.Documents.DocumentTextReader>();
         services.AddSingleton<Core.Documents.DocumentDigester>();
+
+        // 0.1.25: the local OCR of scanned pages (an optional component) and its image decoder.
+        services.AddSingleton<TMConcept.Documents.Ocr.IPageImageDecoder, Documents.SkiaPageImageDecoder>();
+        services.AddSingleton<TMConcept.Documents.Ocr.LocalOcrEngine>();
+        services.AddSingleton<Core.Components.IComponentSource, TMConcept.Documents.Ocr.LocalOcrComponentSource>();
         AddResearch(services);
     }
 

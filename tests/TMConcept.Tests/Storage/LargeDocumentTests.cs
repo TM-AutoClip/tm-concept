@@ -208,7 +208,7 @@ public sealed class LargeDocumentTests
     }
 
     /// <summary>A model that answers every call with the text the test makes of it (1,700 tokens in, 600 out).</summary>
-    private sealed class EveryCallChat(Func<ChatRequest, string> answer) : IChatClientFactory
+    internal sealed class EveryCallChat(Func<ChatRequest, string> answer) : IChatClientFactory
     {
         public List<ChatRequest> Requests { get; } = [];
 
@@ -243,7 +243,7 @@ public sealed class LargeDocumentTests
     }
 
     /// <summary>A run store for an estimate (never written).</summary>
-    private sealed class NoRuns : IRunStore
+    internal sealed class NoRuns : IRunStore
     {
         public Task AddAsync(Run run, CancellationToken cancellationToken) => throw new InvalidOperationException("no run in an estimate");
 

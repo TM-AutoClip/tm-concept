@@ -16,4 +16,8 @@
   <ItemGroup>
     <InternalsVisibleTo Include="TMConcept.Tests" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- The local OCR recogniser's character list (PaddleOCR, Apache-2.0, 0.1.25): bundled so its Turkish letters are checked by a test. -->
+    <EmbeddedResource Include="Ocr\Files\ppocrv5_latin_dict.txt" LogicalName="TMConcept.Documents.Ocr.ppocrv5_latin_dict.txt" WithCulture="false" />
+  </ItemGroup>
 </Project>

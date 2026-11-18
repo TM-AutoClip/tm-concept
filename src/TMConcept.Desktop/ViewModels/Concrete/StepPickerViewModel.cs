@@ -565,7 +565,8 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
     };
 
     private bool Usable(PipelineStep step, CatalogModel model) =>
-        step.Capability != ModelCapability.Speech || speech.EngineOf(model) is { } engine && engine.Supports(_language);
+        (step.Code == PipelineSteps.DocumentText || !Core.Documents.PageTextEngines.IsLocalOcr(model))
+        && (step.Capability != ModelCapability.Speech || speech.EngineOf(model) is { } engine && engine.Supports(_language));
 
     /// <summary>
     /// A model's entry: a local model with a graphics card class shows its class, green when this card's class sees it (its own class and
