@@ -46,6 +46,7 @@ public static class ProviderServices
         // transport serves every server (codes endpoint:<id>) and also tests a server's address (GET models).
         services.AddSingleton(EndpointTransport.Network);
         services.AddSingleton<EndpointRegistry>();
+        services.AddSingleton<LocalServerSync>();
         services.AddSingleton<EmbeddedModelCatalog>();
         services.AddSingleton<IModelCatalog, MergedModelCatalog>();
         services.AddSingleton<EndpointChatTransport>();

@@ -4,6 +4,8 @@ using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using TMConcept.Core.AppOllama;
+using TMConcept.Core.Components;
 using TMConcept.Core.Endpoints;
 using TMConcept.Core.Engines;
 using TMConcept.Core.Hardware;
@@ -35,7 +37,7 @@ namespace TMConcept.Desktop.ViewModels;
 /// </summary>
 public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepModelStore steps, StepModelResolver resolver, IEnumerable<IVideoEngine> engines,
     SpeechService speech, VoiceSampleLibrary voiceSamples, ComponentInstallFlow installs, AppSession session, IConfirmDialog confirm, IApiKeyDialog keyDialog, Engines.Images.ImageBackendSelector backends, IGpuInfo gpu, IAppPaths paths,
-    ShellLauncher shell, Localizer text, ILogger<StepPickerViewModel> logger) : ObservableObject
+    ShellLauncher shell, Localizer text, ILogger<StepPickerViewModel> logger, LocalServerSync localServers) : ObservableObject
 {
     /// <summary>The "saved" mark of a row whose saved choice is not offered any more: never equal to a row's key, so it is saved again.</summary>
     private const string StaleChoice = "\u0000stale";
@@ -52,6 +54,7 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
     // The image build chosen when the page was loaded (the graphics card and its class), for the colour of each local image model.
     private ImageBackendChoice? _imageChoice;
     private GpuReport? _speechCards;
+    private GpuReport? _appCards;
 
     /// <summary>Raised when a choice changes (the page updates its estimate).</summary>
     public event EventHandler? Changed;
@@ -122,6 +125,9 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
         // A Node.js on the PATH counts as installed only once it was looked at (once per run): before any note says "not installed".
         await installs.Planner.RefreshAllAsync(CancellationToken.None).ConfigureAwait(true);
 
+        // The user's own Ollama or LM Studio, not added by hand yet, is added with its models (at most once a minute; a short wait).
+        await localServers.SyncAsync(force: false, CancellationToken.None).ConfigureAwait(true);
+
         // The user's own voices (a voice that copies a voice lists them): added or removed on the settings page meanwhile.
         await voiceSamples.RefreshAsync(CancellationToken.None).ConfigureAwait(true);
         var saved = profileId is { } id ? await steps.ListAsync(id, CancellationToken.None).ConfigureAwait(true) : [];
@@ -129,6 +135,9 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
         // The graphics cards are looked at once per load (native calls; on Linux maybe a short nvidia-smi run): off the UI thread.
         _imageChoice = stepCodes.Contains(PipelineSteps.Images) ? await Task.Run(backends.Choose).ConfigureAwait(true) : null;
         _speechCards = stepCodes.Contains(PipelineSteps.Speech) ? await Task.Run(gpu.Detect).ConfigureAwait(true) : null;
+
+        // The card the app's Ollama would use, for whether each of its models fits (only when the catalog has such models).
+        _appCards = catalog.All.Any(m => m.Provider == ModelProviders.AppOllama) ? _speechCards ?? await Task.Run(gpu.Detect).ConfigureAwait(true) : null;
         foreach (var old in Rows)
         {
             old.PropertyChanged -= OnRowChanged;
@@ -483,10 +492,14 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
             row.Options.Add(new StepOption(StepOptionKind.Samples, null, text["step.images.samples"]));
         }
 
-        foreach (var model in catalog.With(step.Capability).Where(m => Usable(step, m))
-            .OrderBy(m => m.Provider == ModelProviders.Local ? 0 : m.Provider == ModelProviders.AppOllama ? 1 : EndpointCodes.IsEndpoint(m.Provider) ? 2 : 3).ThenBy(m => m.Provider, StringComparer.Ordinal).ThenBy(m => m.Name, StringComparer.Ordinal))
+        // What this card can run first, what it cannot run last (the developer, 18 Nov 2026); within each, the usual order.
+        var options = catalog.With(step.Capability).Where(m => Usable(step, m))
+            .OrderBy(m => m.Provider == ModelProviders.Local ? 0 : m.Provider == ModelProviders.AppOllama ? 1 : EndpointCodes.IsEndpoint(m.Provider) ? 2 : 3).ThenBy(m => m.Provider, StringComparer.Ordinal).ThenBy(m => m.Name, StringComparer.Ordinal)
+            .Select(Option)
+            .ToList();
+        foreach (var option in options.OrderBy(o => o.IsError ? 1 : 0))
         {
-            row.Options.Add(Option(model));
+            row.Options.Add(option);
         }
 
         // The "?" over the list: which entries share useful catalog facts (the profile's language, own voices, commercial use, this card).
@@ -604,6 +617,27 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
                 ok = true;
             }
         }
+        else if (model.Provider == ModelProviders.AppOllama && _appCards is { } report)
+        {
+            // The same estimate as Settings → Local AI: weights and context on the card (green), larger than the card (red: Ollama puts the
+            // rest in main memory, much slower), no card it can use (yellow: the processor).
+            var info = AppModelAdvisor.Find(model.Id) ?? AppModelAdvisor.Unknown(model.Id, (long)model.MemoryGb * 1024 * 1024 * 1024);
+            var bytes = AppOllamaModelSource.OnCard(report) ? report.Largest()?.VideoMemoryBytes : null;
+            switch (AppModelAdvisor.Fit(info, bytes))
+            {
+                case AppModelFit.Fits:
+                    ok = true;
+                    break;
+                case AppModelFit.TooLarge:
+                    label += " · " + text["models.fit.too_large"];
+                    error = true;
+                    break;
+                default:
+                    label += " · " + text["models.tier.processor"];
+                    warning = true;
+                    break;
+            }
+        }
 
         switch (model.LicenseUse)
         {
@@ -681,8 +715,10 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
 
         if (model.Provider == ModelProviders.AppOllama)
         {
-            // The app's own Ollama copy: the catalog name already says "model · Ollama (TM Concept)"; free, no key, its card class.
-            return model.Name + " · " + text["models.local_free"] + (model.MinVideoMemoryGb > 0 ? " · " + text.Format("models.tier", model.MinVideoMemoryGb) : string.Empty);
+            // The app's own Ollama copy: the catalog name already says "model · Ollama (TM Concept)"; free, no key, its card class; one that is
+            // not installed yet says so (it is installed, after a confirmation, when a run starts).
+            return model.Name + " · " + text["models.local_free"] + (model.MinVideoMemoryGb > 0 ? " · " + text.Format("models.tier", model.MinVideoMemoryGb) : string.Empty)
+                + (installs.Planner.Find(ComponentCodes.AppOllamaModelPrefix + model.Id) is { Ready: false } ? " · " + text["models.not_installed"] : string.Empty);
         }
 
         if (EndpointCodes.IsEndpoint(model.Provider))
