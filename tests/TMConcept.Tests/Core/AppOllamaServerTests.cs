@@ -10,7 +10,7 @@ namespace TMConcept.Tests.Core;
 /// </summary>
 public sealed class AppOllamaServerTests : IDisposable
 {
-    private readonly string _folder = Path.Combine(Path.GetTempPath(), "tmconcept-tests", "app-ollama-" + Guid.NewGuid().ToString("N"));
+    private readonly string _folder = Path.Combine(TestFolders.Root, "app-ollama-" + Guid.NewGuid().ToString("N"));
 
     private AppOllamaLayout Layout => new(Path.Combine(_folder, "ollama-models"), Path.Combine(_folder, "ollama-home"));
 

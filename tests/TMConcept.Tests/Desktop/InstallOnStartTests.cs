@@ -203,7 +203,7 @@ public sealed class InstallOnStartTests
     [AvaloniaFact]
     public async Task TheInstalledListLooksAtTheSystemFirstAndShowsIncompleteComponents()
     {
-        var folder = Path.Combine(Path.GetTempPath(), "tmconcept-tests", "component-" + Guid.NewGuid().ToString("N"));
+        var folder = Path.Combine(TestFolders.Root, "component-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
         await File.WriteAllBytesAsync(Path.Combine(folder, "part.gguf"), new byte[2_000_000]);
         try

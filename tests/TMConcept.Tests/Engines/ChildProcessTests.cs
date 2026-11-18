@@ -59,7 +59,7 @@ public sealed class ChildProcessTests
     [Fact]
     public void TheSweepEndsARealOrphanFromTheToolsFolderButNotAProgramThatOnlyNamesItInItsArguments()
     {
-        var tools = Path.Combine(Path.GetTempPath(), "tmconcept-tests", "sweep-" + Guid.NewGuid().ToString("N"), "tools");
+        var tools = Path.Combine(TestFolders.Root, "sweep-" + Guid.NewGuid().ToString("N"), "tools");
         var copy = Path.Combine(tools, "bin", Path.GetFileName(SystemProgram()));
         Directory.CreateDirectory(Path.GetDirectoryName(copy)!);
         File.Copy(SystemProgram(), copy);
@@ -113,7 +113,7 @@ public sealed class ChildProcessTests
     [Fact]
     public void TheSweepRuleEndsOnlyToolProcessesWhoseParentIsGoneOrForeign()
     {
-        var root = Path.Combine(Path.GetTempPath(), "tmconcept-rule");
+        var root = Path.Combine(TestFolders.Root, "tmconcept-rule");
         var tools = Path.Combine(root, "data", "tools");
         string Tool(string name) => Path.Combine(tools, "node", name);
         var app = Path.Combine(root, "elsewhere", Path.GetFileName(Environment.ProcessPath)!);

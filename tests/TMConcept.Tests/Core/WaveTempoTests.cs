@@ -38,7 +38,7 @@ public sealed class WaveTempoTests
     [Fact]
     public void AFileIsStretchedInPlace()
     {
-        var file = Path.Combine(Path.GetTempPath(), "tmconcept-tests", "tempo-" + Guid.NewGuid().ToString("N") + ".wav");
+        var file = Path.Combine(TestFolders.Root, "tempo-" + Guid.NewGuid().ToString("N") + ".wav");
         Directory.CreateDirectory(Path.GetDirectoryName(file)!);
         try
         {

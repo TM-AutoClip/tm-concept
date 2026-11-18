@@ -23,7 +23,7 @@ namespace TMConcept.Tests.Providers;
 public sealed class AppOllamaApiTests : IDisposable
 {
     private static readonly Uri Root = new("http://127.0.0.1:11534/");
-    private readonly string _folder = Path.Combine(Path.GetTempPath(), "tmconcept-tests", "app-ollama-api-" + Guid.NewGuid().ToString("N"));
+    private readonly string _folder = Path.Combine(TestFolders.Root, "app-ollama-api-" + Guid.NewGuid().ToString("N"));
 
     public void Dispose()
     {

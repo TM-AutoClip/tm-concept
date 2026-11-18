@@ -216,7 +216,7 @@ public sealed class ImageAccelerationTests
     [AvaloniaFact]
     public async Task AChangeInstallsTheNewBuildWhenALocalImageModelIsOnDisk()
     {
-        var folder = Path.Combine(Path.GetTempPath(), "tmconcept-tests", "image-" + Guid.NewGuid().ToString("N"));
+        var folder = Path.Combine(TestFolders.Root, "image-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
         await File.WriteAllBytesAsync(Path.Combine(folder, "part.gguf"), new byte[1000]);
         try

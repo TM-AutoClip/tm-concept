@@ -89,7 +89,7 @@ public sealed class AhenkCepTests
     [Fact]
     public void Clips48KilohertzAreJoinedWithTheirOwnRate()
     {
-        var folder = Path.Combine(Path.GetTempPath(), "tmc-ahenk-" + Guid.NewGuid().ToString("N"));
+        var folder = Path.Combine(TestFolders.Root, "tmc-ahenk-" + Guid.NewGuid().ToString("N"));
         try
         {
             var a = Path.Combine(folder, "a.wav");

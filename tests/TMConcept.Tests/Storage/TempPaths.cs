@@ -7,7 +7,7 @@ namespace TMConcept.Tests.Storage;
 internal sealed class TempPaths : IAppPaths, IDisposable
 {
     public TempPaths()
-        : this(Path.Combine(Path.GetTempPath(), "tmconcept-tests", Guid.NewGuid().ToString("N")))
+        : this(TestFolders.New("data-"))
     {
     }
 
@@ -46,13 +46,7 @@ internal sealed class TempPaths : IAppPaths, IDisposable
             return;
         }
 
-        try
-        {
-            Directory.Delete(DataDirectory, recursive: true);
-        }
-        catch (IOException)
-        {
-            // A file may still be open on Windows for a moment; the temp folder is cleaned by the system later.
-        }
+        // A file may still be open on Windows for a moment: tried again; what stays goes with the run's folder at the end (TestRunFolder).
+        TestFolders.Delete(DataDirectory);
     }
 }

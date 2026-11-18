@@ -8,7 +8,7 @@ public sealed class SingleInstanceTests
     [Fact]
     public void TheLockFileOfTheDataFolderLetsOnlyOneInstanceBeFirst()
     {
-        var folder = Path.Combine(Path.GetTempPath(), "tmconcept-tests", "instance-" + Guid.NewGuid().ToString("N"));
+        var folder = Path.Combine(TestFolders.Root, "instance-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
         try
         {
@@ -34,7 +34,7 @@ public sealed class SingleInstanceTests
     public async Task ASecondStartWhileTheFirstIsClosingOpensOnceTheLockIsFree()
     {
         // "Install TM Concept": Setup opens the installed copy while the portable one still frees the graphics card at exit.
-        var folder = Path.Combine(Path.GetTempPath(), "tmconcept-tests", "instance-" + Guid.NewGuid().ToString("N"));
+        var folder = Path.Combine(TestFolders.Root, "instance-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
         try
         {

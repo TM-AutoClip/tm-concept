@@ -504,7 +504,7 @@ public sealed class AppUpdateTests
         var restarter = new FakeRestarter();
         using var h = Harness(new FakeGitHub(release), out var program, out _, restarter, more: s =>
         {
-            s.AddSingleton<IAppEdition>(new VelopackEdition("0.1.17", false, Path.Combine(Path.GetTempPath(), "tmconcept-tests", "installed"), TMConcept.Desktop.Os.TaskbarIcon.AppId));
+            s.AddSingleton<IAppEdition>(new VelopackEdition("0.1.17", false, Path.Combine(TestFolders.Root, "installed"), TMConcept.Desktop.Os.TaskbarIcon.AppId));
             s.AddSingleton<IInstalledUpdates>(packages);
         });
         var updater = Updater(h);
@@ -592,7 +592,7 @@ public sealed class AppUpdateTests
     private static DesktopHarness Harness(FakeGitHub github, out string program, out FakeTimeProvider clock, FakeRestarter? restarter = null,
         FlakyServer? downloads = null, Action<IServiceCollection>? more = null)
     {
-        var folder = Path.Combine(Path.GetTempPath(), "tmconcept-tests", "program-" + Guid.NewGuid().ToString("N"));
+        var folder = Path.Combine(TestFolders.Root, "program-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
         var file = Path.Combine(folder, "TMConcept-0.1.17-win-x64.exe");
         File.WriteAllText(file, "the old program");

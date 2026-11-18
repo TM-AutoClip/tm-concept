@@ -9,7 +9,7 @@ namespace TMConcept.Tests.Desktop;
 /// <summary>Daily log files: names, 7-day retention by name, rollover at midnight, the daily size limit, the scrubber and the crash entries.</summary>
 public sealed class LoggingTests : IDisposable
 {
-    private readonly string _folder = Path.Combine(Path.GetTempPath(), "tmconcept-tests", "logs-" + Guid.NewGuid().ToString("N"));
+    private readonly string _folder = Path.Combine(TestFolders.Root, "logs-" + Guid.NewGuid().ToString("N"));
 
     public LoggingTests() => Directory.CreateDirectory(_folder);
 

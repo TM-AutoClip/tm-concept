@@ -59,7 +59,7 @@ public sealed class VramProbeTests
     [Fact]
     public async Task AmdSysfsFilesGiveTheFreeMemory()
     {
-        var root = Path.Combine(Path.GetTempPath(), "tmconcept-tests", "sysfs-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(TestFolders.Root, "sysfs-" + Guid.NewGuid().ToString("N"));
         var device = Path.Combine(root, "card1", "device");
         Directory.CreateDirectory(device);
         try

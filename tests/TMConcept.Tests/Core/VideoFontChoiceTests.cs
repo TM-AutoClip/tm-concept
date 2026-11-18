@@ -17,7 +17,7 @@ namespace TMConcept.Tests.Core;
 public sealed class VideoFontChoiceTests : IDisposable
 {
     private static readonly IReadOnlyList<SubtitleCue> Cues = [new(0, 2000, ["Rome."])];
-    private readonly string _folder = Path.Combine(Path.GetTempPath(), "tmc-fonts-" + Guid.NewGuid().ToString("N"));
+    private readonly string _folder = Path.Combine(TestFolders.Root, "tmc-fonts-" + Guid.NewGuid().ToString("N"));
 
     public VideoFontChoiceTests() => Directory.CreateDirectory(_folder);
 

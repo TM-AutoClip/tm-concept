@@ -283,7 +283,7 @@ public sealed class VersionTests
     [Fact]
     public void PartsAndPausesAreJoinedIntoOneClipOfOneFormat()
     {
-        var folder = Path.Combine(Path.GetTempPath(), "tmconcept-tests", "wave-" + Guid.NewGuid().ToString("N"));
+        var folder = Path.Combine(TestFolders.Root, "wave-" + Guid.NewGuid().ToString("N"));
         try
         {
             var a = Path.Combine(folder, "a.wav");

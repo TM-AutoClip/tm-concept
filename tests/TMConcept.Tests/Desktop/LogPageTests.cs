@@ -22,7 +22,7 @@ namespace TMConcept.Tests.Desktop;
 /// </summary>
 public sealed class LogPageTests : IDisposable
 {
-    private readonly string _folder = Path.Combine(Path.GetTempPath(), "tmconcept-tests", "logs-" + Guid.NewGuid().ToString("N"));
+    private readonly string _folder = Path.Combine(TestFolders.Root, "logs-" + Guid.NewGuid().ToString("N"));
     private readonly DateTimeOffset _now = DateTimeOffset.Now;
     private readonly DateTimeOffset _before;
 

@@ -17,7 +17,7 @@ namespace TMConcept.Tests.Core;
 public sealed class AppOllamaModelTests : IDisposable
 {
     private const long GiB = 1024L * 1024 * 1024;
-    private readonly string _folder = Path.Combine(Path.GetTempPath(), "tmconcept-tests", "app-models-" + Guid.NewGuid().ToString("N"));
+    private readonly string _folder = Path.Combine(TestFolders.Root, "app-models-" + Guid.NewGuid().ToString("N"));
 
     public AppOllamaModelTests()
     {

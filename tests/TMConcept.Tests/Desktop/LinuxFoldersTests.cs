@@ -8,7 +8,7 @@ public sealed class LinuxFoldersTests
     [Fact]
     public void DocumentsFolderComesFromUserDirs()
     {
-        var home = Path.Combine(Path.GetTempPath(), "tmconcept-tests", "home-" + Guid.NewGuid().ToString("N"));
+        var home = Path.Combine(TestFolders.Root, "home-" + Guid.NewGuid().ToString("N"));
         var config = Path.Combine(home, ".config");
         Directory.CreateDirectory(config);
         try

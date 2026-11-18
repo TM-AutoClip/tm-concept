@@ -19,7 +19,7 @@ public sealed class AppOllamaLauncherTests
     {
         using var guard = ChildProcessTests.Guard();
         var launcher = new AppOllamaLauncher(guard, NullLogger<AppOllamaLauncher>.Instance);
-        var folder = Path.Combine(Path.GetTempPath(), "tmconcept-tests", "no-ollama-" + Guid.NewGuid().ToString("N"));
+        var folder = Path.Combine(TestFolders.Root, "no-ollama-" + Guid.NewGuid().ToString("N"));
         var launch = new AppOllamaLaunch(Path.Combine(folder, "ollama.exe"), Path.GetTempPath(), 11534, new Dictionary<string, string>());
 
         var error = Should.Throw<AppOllamaException>(() => launcher.Start(launch));

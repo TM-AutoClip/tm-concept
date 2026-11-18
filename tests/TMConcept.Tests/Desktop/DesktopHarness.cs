@@ -11,7 +11,7 @@ internal sealed class DesktopHarness : IDisposable
     private readonly string _folder;
 
     public DesktopHarness(Action<IServiceCollection>? overrides = null)
-        : this(Path.Combine(Path.GetTempPath(), "tmconcept-tests", "desktop-" + Guid.NewGuid().ToString("N")), overrides)
+        : this(TestFolders.New("desktop-"), overrides)
     {
     }
 
@@ -63,13 +63,7 @@ internal sealed class DesktopHarness : IDisposable
     {
         Services.Dispose();
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-        try
-        {
-            Directory.Delete(_folder, recursive: true);
-        }
-        catch (IOException)
-        {
-            // Windows may still hold a file for a moment; the temp folder is cleaned later.
-        }
+        // Windows may still hold a file for a moment: tried again; what stays goes with the run's folder at the end (TestRunFolder).
+        TestFolders.Delete(_folder);
     }
 }

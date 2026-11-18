@@ -11,7 +11,7 @@ namespace TMConcept.Tests.Core;
 public sealed class NarrationSilenceTests : IDisposable
 {
     private const int Rate = 24_000;
-    private readonly string _folder = Path.Combine(Path.GetTempPath(), "tmc-silence-" + Guid.NewGuid().ToString("N"));
+    private readonly string _folder = Path.Combine(TestFolders.Root, "tmc-silence-" + Guid.NewGuid().ToString("N"));
 
     public NarrationSilenceTests() => Directory.CreateDirectory(_folder);
 

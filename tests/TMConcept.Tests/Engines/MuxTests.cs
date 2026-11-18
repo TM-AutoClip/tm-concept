@@ -69,7 +69,7 @@ public sealed class MuxTests
             Assert.Skip("ffmpeg was not found (PATH or TMCONCEPT_TEST_FFMPEG).");
         }
 
-        var folder = Path.Combine(Path.GetTempPath(), "tmconcept-tests", "fade-" + Guid.NewGuid().ToString("N"));
+        var folder = Path.Combine(TestFolders.Root, "fade-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
         try
         {

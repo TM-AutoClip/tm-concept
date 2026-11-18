@@ -196,7 +196,7 @@ public sealed class PlaybackTests
             Assert.Skip("ffmpeg was not found (PATH or TMCONCEPT_TEST_FFMPEG).");
         }
 
-        var folder = Path.Combine(Path.GetTempPath(), "tmconcept-tests", "playback");
+        var folder = Path.Combine(TestFolders.Root, "playback");
         Directory.CreateDirectory(folder);
         var clip = Path.Combine(folder, "clip-2s.mp4");
         if (File.Exists(clip))

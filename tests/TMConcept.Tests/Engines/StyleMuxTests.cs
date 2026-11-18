@@ -60,7 +60,7 @@ public sealed class StyleMuxTests
             Assert.Skip("ffmpeg was not found (PATH or TMCONCEPT_TEST_FFMPEG).");
         }
 
-        var folder = Path.Combine(Path.GetTempPath(), "tmconcept-tests", "style-mux-" + Guid.NewGuid().ToString("N"));
+        var folder = Path.Combine(TestFolders.Root, "style-mux-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
         try
         {

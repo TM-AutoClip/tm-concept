@@ -181,7 +181,7 @@ public sealed class TextBackdropTests
             Assert.Skip("ffmpeg was not found (PATH or TMCONCEPT_TEST_FFMPEG).");
         }
 
-        var folder = Path.Combine(Path.GetTempPath(), "tmconcept-tests", "backdrop-" + Guid.NewGuid().ToString("N"));
+        var folder = Path.Combine(TestFolders.Root, "backdrop-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
         try
         {

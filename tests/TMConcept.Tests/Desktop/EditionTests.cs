@@ -156,7 +156,7 @@ public sealed class EditionTests
     [Fact]
     public void TheDataFolderMustNotBeOrHoldOrLieInTheInstallFolder()
     {
-        var local = Path.Combine(Path.GetTempPath(), "tmconcept-tests", "local");
+        var local = Path.Combine(TestFolders.Root, "local");
         var data = Path.Combine(local, "TM Concept");
         var root = Path.Combine(local, "TMConcept");
 
@@ -330,7 +330,7 @@ public sealed class EditionTests
 
     private static string Folder()
     {
-        var folder = Path.Combine(Path.GetTempPath(), "tmconcept-tests", "edition-" + Guid.NewGuid().ToString("N"));
+        var folder = Path.Combine(TestFolders.Root, "edition-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
         return folder;
     }
