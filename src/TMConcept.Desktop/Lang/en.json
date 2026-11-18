@@ -1015,6 +1015,8 @@
   "styles.name": "Name",
   "styles.subtitles": "Subtitles in the picture",
   "styles.subtitles.tip": "On: the narration is shown as subtitles at the bottom of the video, in the template's font. Off: no subtitles and no narration text on screen (the video code never gets the text). The .srt file is always written.",
+  "styles.readable": "Readable text",
+  "styles.readable.tip": "On (the default): subtitles and on-screen text get an outline and a soft shadow in the colour opposite to the text (black under light text, white under dark text), so they stay readable over an image or a background of their own colour.",
   "styles.progress": "Progress bar",
   "styles.progress.tip": "On: the app draws a thin bar in the accent colour that fills up as the video plays. Off (the default): no progress bar, timer or scene counter; a video code that draws one is sent back for repair.",
   "styles.preview": "Preview",

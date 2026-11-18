@@ -179,5 +179,9 @@ public static class TemplateHelpers
         };
 
         export const tmFont = (input: ConceptInput): string => (input.style ? input.style.font : 'sans-serif');
+
+        // Readable text: give every Txt these props (an outline in the colour opposite to the text); empty when the template has it off.
+        export const tmOutline = (input: ConceptInput): {stroke?: string; lineWidth?: number; strokeFirst?: boolean} =>
+          input.style?.outline ? {stroke: input.style.outline, lineWidth: Math.min(input.width, input.height) * 0.006, strokeFirst: true} : {};
         """;
 }

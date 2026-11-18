@@ -1015,6 +1015,8 @@
   "styles.name": "Ad",
   "styles.subtitles": "Videoda altyazı",
   "styles.subtitles.tip": "Açık: anlatım videonun altında, şablonun yazı tipiyle altyazı olarak görünür. Kapalı: altyazı da, ekranda anlatım yazısı da olmaz (video kodu bu yazıyı hiç almaz). .srt dosyası her zaman yazılır.",
+  "styles.readable": "Okunur yazı",
+  "styles.readable.tip": "Açık (varsayılan): altyazıya ve ekrandaki yazılara, yazı renginin tersi renkte (açık yazıya siyah, koyu yazıya beyaz) bir kontur ve hafif gölge eklenir; yazı, kendi renginde bir görselin ya da arka planın üstünde de okunur.",
   "styles.progress": "İlerleme çubuğu",
   "styles.progress.tip": "Açık: program, video oynadıkça dolan ince bir çubuğu vurgu renginde kendisi çizer. Kapalı (varsayılan): ilerleme çubuğu, sayaç ya da sahne sayacı olmaz; bunlardan birini çizen video kodu düzeltmeye geri gönderilir.",
   "styles.preview": "Önizleme",

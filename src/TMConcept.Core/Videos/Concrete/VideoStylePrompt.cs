@@ -28,6 +28,7 @@ public static class VideoStylePrompt
             .Append(c, $"- Font: ONLY input.style.font (\"{tokens.Font}\"); it is already loaded")
             .Append(engine == EngineKind.HyperFrames ? " and is the page's font (var(--tm-font))" : string.Empty)
             .Append(". Never name another font family.\n")
+            .Append(Readable(engine, tokens))
             .Append(c, $"- Titles: {tokens.TitleStyle} ({TitleWords(style.TitleStyle)}), at the {RenderStyleBuilder.Words(style.TitlePosition)} of the safe area")
             .Append(" (input.style.titleX / titleY, 0–1).\n")
             .Append(c, $"- Scenes without an image are drawn as {DrawWords(style.DrawStyle)}.\n")
@@ -56,6 +57,16 @@ public static class VideoStylePrompt
         return text.Append(Helpers(engine)).ToString().TrimEnd();
     }
 
+    /// <summary>
+    /// The readable-text line (the template's default since 0.1.24): HTML engines get the outline from the app's page style, Revideo draws
+    /// on a canvas, so its code spreads the helper's props into every text. Empty when the template has it off.
+    /// </summary>
+    private static string Readable(EngineKind engine, RenderStyle tokens) => tokens.Outline.Length == 0
+        ? string.Empty
+        : engine == EngineKind.Revideo
+            ? "- Readable text: spread tmOutline(input) into every Txt (an outline in the colour opposite to the text).\n"
+            : "- Readable text: the app gives every text an outline and shadow in the colour opposite to the text; never set text-shadow yourself.\n";
+
     /// <summary>The ready helpers of an engine (app-owned files the code may use; they read input.style).</summary>
     public static string Helpers(EngineKind engine) => engine switch
     {
@@ -69,7 +80,8 @@ public static class VideoStylePrompt
             <TmTitle input={input} text={…} /> a title already styled and placed (wrap it in an element to animate it).
             """,
         EngineKind.Revideo => """
-            - Helpers: `import {tmColor, tmFont} from './tm';` tmColor(input, name) gives a colour, tmFont(input) the font family (Txt fontFamily).
+            - Helpers: `import {tmColor, tmFont, tmOutline} from './tm';` tmColor(input, name) gives a colour, tmFont(input) the font family (Txt fontFamily),
+            tmOutline(input) the readable-text props of a Txt.
             """,
         _ => string.Empty,
     };

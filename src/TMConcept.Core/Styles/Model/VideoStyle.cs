@@ -22,6 +22,13 @@ public sealed class VideoStyle
     /// <summary>Progress bar drawn by the app (off by default; when off, the code may not draw a progress bar, timer or scene counter).</summary>
     public bool ProgressBar { get; set; }
 
+    /// <summary>
+    /// Readable text (0.1.24, on by default; a template saved before has it on too): subtitles and on-screen text get an outline and a soft
+    /// shadow in the colour opposite to the text colour (<see cref="PaletteColors.Opposite"/>), so text stays readable over an image or a
+    /// scene of its own colour.
+    /// </summary>
+    public bool ReadableText { get; set; } = true;
+
     /// <summary>Font id from <see cref="VideoFonts"/> (titles, on-screen text and subtitles).</summary>
     public string FontId { get; set; } = VideoFonts.DefaultId;
 

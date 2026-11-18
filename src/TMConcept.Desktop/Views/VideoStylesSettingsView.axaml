@@ -41,6 +41,10 @@
                       <views:HelpTip Text="{DynamicResource styles.subtitles.tip}" />
                     </StackPanel>
                     <StackPanel Orientation="Horizontal">
+                      <CheckBox Name="StyleReadable" IsChecked="{Binding ReadableText}" Content="{DynamicResource styles.readable}" />
+                      <views:HelpTip Text="{DynamicResource styles.readable.tip}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal">
                       <CheckBox Name="StyleProgress" IsChecked="{Binding ProgressBar}" Content="{DynamicResource styles.progress}" />
                       <views:HelpTip Text="{DynamicResource styles.progress.tip}" />
                     </StackPanel>
@@ -69,7 +73,11 @@
                           </StackPanel>
                         </Border>
                         <TextBlock Text="{DynamicResource styles.preview.subtitle}" FontFamily="{Binding Font.Preview}" FontSize="11" Margin="0,0,0,8"
-                                   HorizontalAlignment="Center" VerticalAlignment="Bottom" Foreground="{Binding PreviewText}" IsVisible="{Binding Subtitles}" />
+                                   HorizontalAlignment="Center" VerticalAlignment="Bottom" Foreground="{Binding PreviewText}" IsVisible="{Binding Subtitles}">
+                          <TextBlock.Effect>
+                            <DropShadowEffect OffsetX="0" OffsetY="1" BlurRadius="3" Opacity="1" Color="{Binding PreviewReadableOutline}" />
+                          </TextBlock.Effect>
+                        </TextBlock>
                       </Grid>
                     </Border>
                   </StackPanel>

@@ -130,6 +130,43 @@ public static partial class PaletteColors
         return ((2 + (meanRed / 256)) * dr * dr) + (4 * dg * dg) + ((2 + ((255 - meanRed) / 256)) * db * db);
     }
 
+    /// <summary>Relative luminance of a colour (WCAG 2: 0 = black, 1 = white).</summary>
+    public static double Luminance(ColorValue color)
+    {
+        static double Linear(byte channel)
+        {
+            var c = channel / 255.0;
+            return c <= 0.04045 ? c / 12.92 : Math.Pow((c + 0.055) / 1.055, 2.4);
+        }
+
+        return (0.2126 * Linear(color.R)) + (0.7152 * Linear(color.G)) + (0.0722 * Linear(color.B));
+    }
+
+    /// <summary>Contrast ratio of two colours (WCAG 2: 1 to 21; body text wants 4.5, large text and shapes 3).</summary>
+    public static double Contrast(ColorValue first, ColorValue second)
+    {
+        var a = Luminance(first);
+        var b = Luminance(second);
+        return (Math.Max(a, b) + 0.05) / (Math.Min(a, b) + 0.05);
+    }
+
+    /// <summary>Contrast ratio of two <c>#rrggbb</c> values; <see cref="ArgumentException"/> when one is not a colour.</summary>
+    public static double Contrast(string first, string second) =>
+        Contrast(TryParse(first, out var a) ? a : throw new ArgumentException($"'{first}' is not a colour.", nameof(first)),
+            TryParse(second, out var b) ? b : throw new ArgumentException($"'{second}' is not a colour.", nameof(second)));
+
+    /// <summary>
+    /// The colour that stands out against <paramref name="hex"/>: black for a light colour, white for a dark one (whichever contrasts more).
+    /// The outline and shadow of readable text (<see cref="VideoStyle.ReadableText"/>).
+    /// </summary>
+    public static string Opposite(string hex)
+    {
+        var color = TryParse(hex, out var value) ? value : throw new ArgumentException($"'{hex}' is not a colour.", nameof(hex));
+        var black = new ColorValue(0, 0, 0, 1);
+        var white = new ColorValue(255, 255, 255, 1);
+        return Contrast(color, black) >= Contrast(color, white) ? "#000000" : "#FFFFFF";
+    }
+
     private static ColorValue Parse(string hex) =>
         TryParse(hex, out var color) ? color : throw new InvalidOperationException($"Palette colour '{hex}' is not a colour.");
 

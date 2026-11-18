@@ -19,6 +19,12 @@ public sealed class RenderStyle
     /// <summary>The bold font file, relative to the project; empty for a single-weight font.</summary>
     public string FontBold { get; set; } = string.Empty;
 
+    /// <summary>
+    /// The outline and shadow colour of readable text (opposite to the text colour, <see cref="Styles.VideoStyle.ReadableText"/>); empty
+    /// when the template has it off. The app's page style and helpers put it on every text.
+    /// </summary>
+    public string Outline { get; set; } = string.Empty;
+
     /// <summary>How titles look: plain, band, outline, underline or boxed.</summary>
     public string TitleStyle { get; set; } = string.Empty;
 

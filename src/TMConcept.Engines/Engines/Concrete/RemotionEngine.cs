@@ -100,6 +100,7 @@ public sealed class RemotionEngine(IAppPaths paths, ToolInstaller tools, ChromeL
           font: string;
           fontRegular: string;
           fontBold: string;
+          outline?: string;
           titleStyle: string;
           titleX: number;
           titleY: number;
@@ -175,15 +176,27 @@ public sealed class RemotionEngine(IAppPaths paths, ToolInstaller tools, ChromeL
     private const string RootTsx = """
         // The app's file (TM Concept); length, fps and size come from input.json (calculated in C#).
         import React from 'react';
-        import {Composition} from 'remotion';
+        import {AbsoluteFill, Composition} from 'remotion';
         import './fonts';
         import {Scene} from './Scene';
         import type {ConceptInput} from './input';
 
+        const SceneView = Scene as unknown as React.FC<Record<string, unknown>>;
+
+        // Readable text (the template's default): every text inherits an outline and a soft shadow in the colour opposite to the text.
+        const Framed: React.FC<Record<string, unknown>> = (props) => {
+          const o = (props as unknown as ConceptInput).style?.outline;
+          return o ? (
+            <AbsoluteFill style={{textShadow: `0 0 0.05em ${o}, 0 0 0.05em ${o}, 0 0 0.1em ${o}, 0 0.04em 0.14em ${o}99`}}>
+              <SceneView {...props} />
+            </AbsoluteFill>
+          ) : <SceneView {...props} />;
+        };
+
         export const Root: React.FC = () => (
           <Composition
             id="Concept"
-            component={Scene as unknown as React.FC<Record<string, unknown>>}
+            component={Framed}
             durationInFrames={1}
             fps={30}
             width={1080}

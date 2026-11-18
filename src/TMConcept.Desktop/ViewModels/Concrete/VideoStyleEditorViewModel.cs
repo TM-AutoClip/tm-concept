@@ -46,6 +46,7 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         Name = _source.Name;
         Subtitles = _source.Subtitles;
         ProgressBar = _source.ProgressBar;
+        ReadableText = _source.ReadableText;
         Font = Fonts.FirstOrDefault(f => f.Font.Id == _source.FontId) ?? Fonts[0];
         Palette = Palettes.FirstOrDefault(p => p.Palette.Id == _source.PaletteId) ?? Palettes[0];
         TitleStyle = Pick(TitleStyles, (int)_source.TitleStyle);
@@ -108,6 +109,14 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
     /// <summary>Progress bar drawn by the app.</summary>
     [ObservableProperty]
     public partial bool ProgressBar { get; set; }
+
+    /// <summary>Readable text: an outline and shadow in the colour opposite to the text (on by default).</summary>
+    [ObservableProperty]
+    public partial bool ReadableText { get; set; }
+
+    /// <summary>Preview: the outline colour of readable text (opposite to the text colour).</summary>
+    [ObservableProperty]
+    public partial Color PreviewReadableOutline { get; set; }
 
     /// <summary>Font.</summary>
     [ObservableProperty]
@@ -204,6 +213,7 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         style.Name = Name.Trim();
         style.Subtitles = Subtitles;
         style.ProgressBar = ProgressBar;
+        style.ReadableText = ReadableText;
         style.FontId = Font.Font.Id;
         style.PaletteId = Palette.Palette.Id;
         style.TitleStyle = (TitleStyle)TitleStyle.Value;
@@ -267,6 +277,7 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         PreviewAccent = Brush(palette.Accent);
         PreviewText = Brush(palette.Text);
         PreviewOutline = Color.Parse(palette.Background);
+        PreviewReadableOutline = ReadableText ? Color.Parse(PaletteColors.Opposite(palette.Text)) : Colors.Transparent;
         PreviewTitleBox = style switch
         {
             Core.Styles.TitleStyle.Band => Brush(palette.Surface),

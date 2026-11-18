@@ -41,6 +41,7 @@ public static class RenderStyleBuilder
                 Text = palette.Text,
                 Muted = palette.Muted,
             },
+            Outline = style.ReadableText ? PaletteColors.Opposite(palette.Text) : string.Empty,
             Font = font.Family,
             FontRegular = VideoFontFiles.Folder + "/" + font.RegularFile,
             FontBold = font.BoldFile is { } bold ? VideoFontFiles.Folder + "/" + bold : string.Empty,
