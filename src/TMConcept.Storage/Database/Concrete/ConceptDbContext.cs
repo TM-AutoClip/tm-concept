@@ -95,6 +95,9 @@ internal sealed class ConceptDbContext(DbContextOptions<ConceptDbContext> option
     /// <summary>The meaning-search vectors of the passages.</summary>
     public DbSet<DocumentChunkVector> DocumentChunkVectors => Set<DocumentChunkVector>();
 
+    /// <summary>The kept page texts of the profiles' PDF files (0.1.25).</summary>
+    public DbSet<DocumentPageText> DocumentPages => Set<DocumentPageText>();
+
     /// <summary>The file's tables and indexes (<c>sqlite_master</c>).</summary>
     public DbSet<SchemaObjectRow> SchemaObjects => Set<SchemaObjectRow>();
 
@@ -282,6 +285,12 @@ internal sealed class ConceptDbContext(DbContextOptions<ConceptDbContext> option
             e.HasKey(v => new { v.ChunkId, v.Model });
             e.HasIndex(v => new { v.ProfileId, v.Model });
             e.HasOne<DocumentChunk>().WithMany().HasForeignKey(v => v.ChunkId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<DocumentPageText>(e =>
+        {
+            e.ToTable("document_pages");
+            e.HasKey(p => new { p.ProfileId, p.FileSha256, p.Page });
+            e.HasOne<Profile>().WithMany().HasForeignKey(p => p.ProfileId).OnDelete(DeleteBehavior.Cascade);
         });
         // SQLite's views of the file. A pragma with an argument is read through its hidden "arg" column (pragma_table_info WHERE arg = …).
         modelBuilder.Entity<SchemaObjectRow>(e =>

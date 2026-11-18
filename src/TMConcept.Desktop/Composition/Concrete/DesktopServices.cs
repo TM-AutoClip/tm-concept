@@ -278,6 +278,7 @@ public static class DesktopServices
         services.AddSingleton<Core.Concepts.IPromptMemorySource, Core.Concepts.PromptMemorySource>();
         services.AddSingleton<IEmbeddingStore, EmbeddingStore>();
         services.AddSingleton<Core.Documents.IDocumentStore, DocumentStore>();
+        services.AddSingleton<Core.Documents.IDocumentPageStore>(s => (DocumentStore)s.GetRequiredService<Core.Documents.IDocumentStore>());
 
         // Local servers (package B): kept as settings rows, no table of their own.
         services.AddSingleton<Core.Endpoints.IEndpointStore, EndpointStore>();

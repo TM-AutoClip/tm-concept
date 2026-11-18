@@ -8,6 +8,9 @@ namespace TMConcept.Core.Documents;
 /// </summary>
 public interface IPageTextRecognizer
 {
+    /// <summary>What it is, as kept with the pages it reads (<see cref="PageTextSources"/>: <c>ocr:…</c> or <c>vision:provider/model</c>; 0.1.25).</summary>
+    string Source { get; }
+
     /// <summary>Pages read so far.</summary>
     int Recognized { get; }
 

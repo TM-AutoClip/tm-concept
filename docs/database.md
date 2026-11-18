@@ -52,6 +52,10 @@ What happens at the start (`SchemaUpgrader`, called by `Vault.OpenAsync`, `Vault
    `Version0125Costs` (the runs' `ConceptId` column, indexed: an AI edit names its concept) needs none: an older edit names no concept
    (empty), and its cost is never guessed. Steps of one version from parallel work are named after their subject (`Version0125Costs`,
    `Version0125Documents`); each is generated on its own, the second one after merging the first.
+   `Version0125Documents` (0.1.25: the kept page texts `document_pages`, keyed by profile, file SHA-256 and page, and the documents'
+   `FileSha256` and `FirstPage` columns) needs none either: a document added before has no kept pages, and the empty file key and page 0
+   mark it as such (its pages are simply read again when it is added again). A step name may carry a word after the version number when two
+   branches of one version add a step each.
 4. Build and run the tests: `SchemaUpgradeTests.TheAppsStepsMatchItsMappingAndANewFileRecordsThem` fails while the mapping and the steps
    differ (EF Core would also refuse to upgrade with pending model changes), and `CompiledModelTests` fails while the compiled model is old.
 5. Add a test that upgrades a file of the previous step with real data (see `SchemaUpgradeTests` for the pattern) when the step moves data.

@@ -1475,5 +1475,19 @@
   "notes.tip.fits": "Run on this computer: {0}",
   "notes.tip.all": "Commercial use and runs on this computer: {0}",
   "notes.tip.all.language": "{0}, commercial use and runs on this computer: {1}",
-  "notes.tip.more": "+{0} more"
+  "notes.tip.more": "+{0} more",
+  "storage.item.document_pages": "Read page texts no document holds any more (kept from an add that was canceled)",
+  "documents.pages.state": "Pages read: {0} of {1}",
+  "documents.pages.state_missing": "Pages read: {0} of {1} · {2} still to read",
+  "documents.pages.state_recognized": " · {0} read from images",
+  "documents.pages.read_missing": "Read the {0} missing pages",
+  "documents.pages.read_missing.tip": "Reads only the pages that have no text yet, with the engine chosen for \"Text from scanned pages\"; the pages read before are kept and reused.",
+  "documents.pages.read_missing.none": "Choose an engine for \"Text from scanned pages\" in this page's model bar to read the missing pages.",
+  "documents.pages.read_missing.estimate": "{0} pages with {1}: {2} (estimate).",
+  "documents.pages.reused": "\"{0}\": {1} pages were already read before and were reused.",
+  "documents.pages.done": "\"{0}\": {1} of {2} pages are read now.",
+  "documents.pages.unsupported": "\"{0}\": {1} image pages are in a format the app cannot read (JPEG 2000, JBIG2 or CCITT fax); they were left out.",
+  "documents.ocr.estimate": "free, on this computer's processor, about {0} (estimate)",
+  "documents.topics.read_all_progress": "Reading everything for the topics: call {0} of {1}",
+  "documents.topics.read_all_done": "Read everything for the topics: {0} notes from {1} calls · {2}"
 }

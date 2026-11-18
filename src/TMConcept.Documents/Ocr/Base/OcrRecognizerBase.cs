@@ -21,6 +21,9 @@ public abstract class OcrRecognizerBase(IPageImageDecoder decoder, ILogger logge
     /// <summary>Lines each column needs before the page counts as two columns.</summary>
     public const int ColumnLinesMin = 3;
 
+    /// <inheritdoc />
+    public override string Source => PageTextSources.OcrPrefix + PageTextEngines.LocalOcrId;
+
     /// <summary>Boxes in reading order, one column: rows top to bottom, each row left to right.</summary>
     public static IReadOnlyList<OcrLineBox> ReadingOrder(IReadOnlyList<OcrLineBox> boxes)
     {

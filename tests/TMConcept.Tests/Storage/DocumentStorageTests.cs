@@ -28,7 +28,7 @@ public sealed class DocumentStorageTests
 
     private static DocumentLibrary Library(StorageHarness h, IDocumentEmbedder? embedder = null) =>
         new(h.Paths, new DocumentStore(h.Database), [new PlainTextExtractor(), new MarkdownExtractor()], [], embedder ?? new FixedEmbedder(false),
-            TimeProvider.System, NullLogger<DocumentLibrary>.Instance);
+            TimeProvider.System, NullLogger<DocumentLibrary>.Instance, new DocumentStore(h.Database));
 
     private static async Task<(Profile Profile, string File)> PrepareAsync(StorageHarness h, string text = "Silk came by caravan.\n\nThe emperor taxed it.")
     {
@@ -75,7 +75,7 @@ public sealed class DocumentStorageTests
         using var h = await StorageHarness.CreatedAsync();
         var (profile, file) = await PrepareAsync(h, "   \n\n  ");
         var library = new DocumentLibrary(h.Paths, new DocumentStore(h.Database), [new PlainTextExtractor(), new BrokenExtractor()], [], new FixedEmbedder(false),
-            TimeProvider.System, NullLogger<DocumentLibrary>.Instance);
+            TimeProvider.System, NullLogger<DocumentLibrary>.Instance, new DocumentStore(h.Database));
 
         var empty = await library.AddFileAsync(profile.Id, file, null, None);
         (empty.Document.Status, empty.Document.StatusDetail, empty.Document.Chunks).ShouldBe((DocumentStatus.NoText, "no_text", 0));
@@ -165,6 +165,8 @@ public sealed class DocumentStorageTests
         var document = new SourceDocument { ProfileId = profileId, Title = "Trade", Sha256 = "abc", Chunks = 1 };
         await store.AddAsync(document, [new DocumentChunk { DocumentId = document.Id, ProfileId = profileId, Text = "Silk." }], None);
         (await store.ChunksAsync(profileId, [document.Id], None)).ShouldHaveSingleItem().Text.ShouldBe("Silk.");
+        (await store.FindAsync(document.Id, None)).ShouldNotBeNull().ShouldSatisfyAllConditions(d => d.FileSha256.ShouldBeEmpty(), d => d.FirstPage.ShouldBe(0));
+        (await store.MarksAsync(profileId, None)).ShouldBeEmpty("0.1.25's kept pages start empty");
         concept.Sources = "Trade";
     }
 
@@ -247,7 +249,7 @@ public sealed class DocumentStorageTests
         // The copy is canceled while it is written: no ".part" stays behind.
         using var cancel = new CancellationTokenSource();
         var library = new DocumentLibrary(h.Paths, new CancelOnLookup(store, cancel), [new PlainTextExtractor()], [], new FixedEmbedder(false), TimeProvider.System,
-            NullLogger<DocumentLibrary>.Instance);
+            NullLogger<DocumentLibrary>.Instance, new DocumentStore(h.Database));
         await Should.ThrowAsync<OperationCanceledException>(() => library.AddFileAsync(profile.Id, file, null, cancel.Token));
         Directory.GetFiles(library.Folder, "*.part", SearchOption.AllDirectories).ShouldBeEmpty();
         library.Busy.ShouldBeFalse();

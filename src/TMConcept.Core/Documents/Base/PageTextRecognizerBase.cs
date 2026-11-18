@@ -15,6 +15,9 @@ public abstract class PageTextRecognizerBase(ILogger logger) : IPageTextRecogniz
     private int _inARow;
 
     /// <inheritdoc />
+    public virtual string Source => PageTextSources.Unknown;
+
+    /// <inheritdoc />
     public int Recognized { get; private set; }
 
     /// <inheritdoc />

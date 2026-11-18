@@ -14,6 +14,10 @@ namespace TMConcept.Documents.Extractors;
 /// (<see cref="PdfPageImages"/>) are read by it; when that engine stops (<see cref="PageRecognitionStoppedException"/>: a wrong key, too many
 /// failures in a row) the rest of the pages are still read for their text layer and the document keeps what was read, with the reason's code
 /// (<see cref="ExtractedDocument.RecognitionStopped"/>: the provider's error code, or <c>error</c>; the details are in the log). The document's own title is used when it has one.
+/// 0.1.25: with a <see cref="DocumentReadOptions.Memory"/>, a page read before is taken as kept (the PDF page is not even parsed), and every
+/// page read now is kept: its text layer, or the engine's reading at once (also an empty one), so a cancel or a stop loses nothing that was
+/// paid for or waited for. A scanned page whose images are all JPEG 2000, JBIG2 or CCITT fax is counted apart
+/// (<see cref="ExtractedDocument.PagesUnsupported"/>).
 /// </summary>
 public sealed class PdfExtractor : DocumentExtractorBase
 {
@@ -73,6 +77,8 @@ public sealed class PdfExtractor : DocumentExtractorBase
         var empty = 0;
         var unread = 0;
         var recognized = 0;
+        var reused = 0;
+        var unsupported = 0;
         var characters = 0L;
         var stopped = false;
         var halted = string.Empty;
@@ -90,6 +96,21 @@ public sealed class PdfExtractor : DocumentExtractorBase
                     break;
                 }
 
+                if (options.Memory?.Find(number) is { } kept)
+                {
+                    // Read before (its text layer, or an engine's reading): taken as it is, the PDF page is not even parsed.
+                    reused++;
+                    if (kept.Text.Length == 0)
+                    {
+                        empty++;
+                        continue;
+                    }
+
+                    characters += kept.Text.Length;
+                    sections.Add(new ExtractedSection(number, string.Empty, kept.Text));
+                    continue;
+                }
+
                 if (pdf is null || (number - range.From) % DocumentLimits.PdfReopenPages == 0)
                 {
                     // What PdfPig parsed so far is let go with the document; the next pages start from a fresh one.
@@ -102,18 +123,25 @@ public sealed class PdfExtractor : DocumentExtractorBase
                 }
 
                 var current = pdf;
-                var (text, images) = Pdf(() =>
+                var (text, images, cannot) = Pdf(() =>
                 {
                     var page = current.GetPage(number);
                     var read = PageText(page);
-                    return (read, read.Length == 0 && options.Recognizer is not null ? PdfPageImages.Of(page) : []);
+                    var (parts, unsupportedImages) = read.Length == 0 && options.Recognizer is not null ? PdfPageImages.Read(page) : ([], false);
+                    return (read, parts, unsupportedImages);
                 });
+                if (text.Length > 0 && options.Memory is { } layer)
+                {
+                    await layer.KeepAsync(number, text, PageTextSources.Layer, cancellationToken).ConfigureAwait(false);
+                }
+
                 if (text.Length == 0 && options.Recognizer is { } recognizer)
                 {
                     if (halted.Length > 0 || images.Count == 0)
                     {
                         // No image that can be sent (a vector drawing, or an image format that cannot be handed on): the page stays unread.
                         unread++;
+                        unsupported += halted.Length == 0 && cannot ? 1 : 0;
                     }
                     else
                     {
@@ -130,6 +158,12 @@ public sealed class PdfExtractor : DocumentExtractorBase
                         }
 
                         unread += result.Failed ? 1 : 0;
+                        if (!result.Failed && options.Memory is { } memory)
+                        {
+                            // Kept at once, also an empty page: what was paid for or waited for is never read again.
+                            await memory.KeepAsync(number, result.Text, recognizer.Source, CancellationToken.None).ConfigureAwait(false);
+                        }
+
                         if (!result.Failed && result.Text.Length > 0)
                         {
                             recognized++;
@@ -152,6 +186,11 @@ public sealed class PdfExtractor : DocumentExtractorBase
         {
             pdf?.Dispose();
             stream?.Dispose();
+            if (options.Memory is { } memory)
+            {
+                // A cancel or a failure keeps what was read up to it.
+                await memory.FlushAsync(CancellationToken.None).ConfigureAwait(false);
+            }
         }
 
         options.Progress?.Report(new DocumentProgress(options.Name, DocumentStage.Extracting, count, count));
@@ -159,6 +198,8 @@ public sealed class PdfExtractor : DocumentExtractorBase
         {
             PagesRecognized = recognized,
             PagesUnread = unread,
+            PagesReused = reused,
+            PagesUnsupported = unsupported,
             StoppedAtLimit = stopped,
             RecognitionStopped = halted,
         };

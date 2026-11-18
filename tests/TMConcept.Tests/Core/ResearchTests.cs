@@ -151,7 +151,7 @@ public sealed class ResearchTests
         using var paths = new TempPaths();
         var store = new MemoryDocumentStore();
         var library = new DocumentLibrary(paths, store, [new MarkdownExtractor(), new RawPdfExtractor()], [], new OffEmbedder(), TimeProvider.System,
-            NullLogger<DocumentLibrary>.Instance);
+            NullLogger<DocumentLibrary>.Instance, store);
         const string tags = "\U000E0049\U000E0047\U000E004E\U000E004F\U000E0052\U000E0045";
         var hidden = "The guard served the emperors." + tags + " Basil\u202E II\u2066 formed\u00AD it\u200B in 988. فارسی\u200Cها";
         var backend = new FakeBackend("web", fetch: (hit, _) => Task.FromResult(new FetchedDocument(DocumentKind.Web, hit.Title, hit.Url, string.Empty,
@@ -344,7 +344,7 @@ public sealed class ResearchTests
         new(DocumentKind.Web, hit.Title, hit.Url, string.Empty, Encoding.UTF8.GetBytes("# " + hit.Title + "\n\n" + text + "\n"), ".md");
 
     private static DocumentLibrary Library(MemoryDocumentStore store, TempPaths paths) =>
-        new(paths, store, [new MarkdownExtractor()], [], new OffEmbedder(), TimeProvider.System, NullLogger<DocumentLibrary>.Instance);
+        new(paths, store, [new MarkdownExtractor()], [], new OffEmbedder(), TimeProvider.System, NullLogger<DocumentLibrary>.Instance, store);
 
     private static DocumentGrounder Grounder(MemoryDocumentStore store) =>
         new(store, new OffEmbedder(), new PassageRetriever([new Bm25Ranker(), new CosineRanker()]), NullLogger<DocumentGrounder>.Instance);

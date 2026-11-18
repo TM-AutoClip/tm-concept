@@ -11,7 +11,7 @@ namespace TMConcept.Storage.Database
     public partial class ConceptDbContextModel
     {
         private ConceptDbContextModel()
-            : base(skipDetectChanges: false, modelId: new Guid("3ef9e2bc-a615-4105-99ee-7d94f4bb40c1"), entityTypeCount: 22)
+            : base(skipDetectChanges: false, modelId: new Guid("47174184-33b6-4915-95ff-4af284fb3fc5"), entityTypeCount: 23)
         {
         }
 
@@ -22,6 +22,7 @@ namespace TMConcept.Storage.Database
             var topicSuggestion = TopicSuggestionEntityType.Create(this);
             var documentChunk = DocumentChunkEntityType.Create(this);
             var documentChunkVector = DocumentChunkVectorEntityType.Create(this);
+            var documentPageText = DocumentPageTextEntityType.Create(this);
             var sourceDocument = SourceDocumentEntityType.Create(this);
             var conceptEmbedding = ConceptEmbeddingEntityType.Create(this);
             var apiKey = ApiKeyEntityType.Create(this);
@@ -45,6 +46,7 @@ namespace TMConcept.Storage.Database
             TopicSuggestionEntityType.CreateForeignKey1(topicSuggestion, profile);
             DocumentChunkEntityType.CreateForeignKey1(documentChunk, sourceDocument);
             DocumentChunkVectorEntityType.CreateForeignKey1(documentChunkVector, documentChunk);
+            DocumentPageTextEntityType.CreateForeignKey1(documentPageText, profile);
             SourceDocumentEntityType.CreateForeignKey1(sourceDocument, profile);
             ConceptEmbeddingEntityType.CreateForeignKey1(conceptEmbedding, concept);
             StepModelChoiceEntityType.CreateForeignKey1(stepModelChoice, profile);
@@ -62,6 +64,7 @@ namespace TMConcept.Storage.Database
             TopicSuggestionEntityType.CreateAnnotations(topicSuggestion);
             DocumentChunkEntityType.CreateAnnotations(documentChunk);
             DocumentChunkVectorEntityType.CreateAnnotations(documentChunkVector);
+            DocumentPageTextEntityType.CreateAnnotations(documentPageText);
             SourceDocumentEntityType.CreateAnnotations(sourceDocument);
             ConceptEmbeddingEntityType.CreateAnnotations(conceptEmbedding);
             ApiKeyEntityType.CreateAnnotations(apiKey);

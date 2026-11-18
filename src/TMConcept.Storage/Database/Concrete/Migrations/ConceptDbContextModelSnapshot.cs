@@ -194,6 +194,33 @@ namespace TMConcept.Storage.Database
                     b.ToTable("document_chunk_vectors", (string)null);
                 });
 
+            modelBuilder.Entity("TMConcept.Core.Documents.DocumentPageText", b =>
+                {
+                    b.Property<string>("ProfileId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FileSha256")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Page")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("ReadAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("ProfileId", "FileSha256", "Page");
+
+                    b.ToTable("document_pages", (string)null);
+                });
+
             modelBuilder.Entity("TMConcept.Core.Documents.SourceDocument", b =>
                 {
                     b.Property<string>("Id")
@@ -212,6 +239,13 @@ namespace TMConcept.Storage.Database
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("Chunks")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("FileSha256")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("FirstPage")
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("Kind")
@@ -895,6 +929,15 @@ namespace TMConcept.Storage.Database
                     b.HasOne("TMConcept.Core.Documents.DocumentChunk", null)
                         .WithMany()
                         .HasForeignKey("ChunkId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TMConcept.Core.Documents.DocumentPageText", b =>
+                {
+                    b.HasOne("TMConcept.Core.Profiles.Profile", null)
+                        .WithMany()
+                        .HasForeignKey("ProfileId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

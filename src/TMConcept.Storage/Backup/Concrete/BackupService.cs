@@ -464,6 +464,7 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
         {
             await db.DocumentChunkVectors.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
             await db.DocumentChunks.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+            await db.DocumentPages.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
             await db.Documents.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
             await db.ProfileImages.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
             await db.ProfileStepModels.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);

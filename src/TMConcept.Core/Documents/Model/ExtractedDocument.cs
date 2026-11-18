@@ -15,6 +15,12 @@ public sealed record ExtractedDocument(string Title, IReadOnlyList<ExtractedSect
     /// <summary>Why the text extraction of scanned pages stopped before the end: the provider's error code or <c>error</c> (empty = it did not; 0.1.24).</summary>
     public string RecognitionStopped { get; init; } = string.Empty;
 
+    /// <summary>Pages taken as kept from an earlier read instead of being read again (0.1.25).</summary>
+    public int PagesReused { get; init; }
+
+    /// <summary>Pages without a text layer whose images are all in a format that cannot be read (JPEG 2000, JBIG2, CCITT fax; 0.1.25).</summary>
+    public int PagesUnsupported { get; init; }
+
     /// <summary>Whether reading stopped at <see cref="DocumentLimits.CharactersMax"/> before the last page (0.1.24: the rest is not even read).</summary>
     public bool StoppedAtLimit { get; init; }
 

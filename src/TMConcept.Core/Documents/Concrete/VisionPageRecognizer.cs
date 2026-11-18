@@ -24,6 +24,9 @@ public sealed class VisionPageRecognizer(IChatClient client, ResolvedModel model
     /// <summary>Longest answer of one page (a dense encyclopedia page is about 1,500–2,500 tokens).</summary>
     public const int PageOutputMax = 4_000;
 
+    /// <inheritdoc />
+    public override string Source => PageTextSources.VisionPrefix + model.Model.Provider + "/" + model.Model.Id;
+
     /// <summary>The run the calls are charged to.</summary>
     public Run Run { get; } = run;
 

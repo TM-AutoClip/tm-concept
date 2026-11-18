@@ -20,7 +20,7 @@ namespace TMConcept.Storage.Database
                 "TMConcept.Core.Documents.SourceDocument",
                 typeof(SourceDocument),
                 baseEntityType,
-                propertyCount: 18,
+                propertyCount: 20,
                 foreignKeyCount: 1,
                 unnamedIndexCount: 1,
                 keyCount: 1);
@@ -68,6 +68,19 @@ namespace TMConcept.Storage.Database
                 typeof(int),
                 propertyInfo: typeof(SourceDocument).GetProperty("Chunks", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
                 fieldInfo: typeof(SourceDocument).GetField("<Chunks>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                sentinel: 0);
+
+            var fileSha256 = runtimeEntityType.AddProperty(
+                "FileSha256",
+                typeof(string),
+                propertyInfo: typeof(SourceDocument).GetProperty("FileSha256", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(SourceDocument).GetField("<FileSha256>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly));
+
+            var firstPage = runtimeEntityType.AddProperty(
+                "FirstPage",
+                typeof(int),
+                propertyInfo: typeof(SourceDocument).GetProperty("FirstPage", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(SourceDocument).GetField("<FirstPage>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
                 sentinel: 0);
 
             var kind = runtimeEntityType.AddProperty(

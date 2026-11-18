@@ -17,9 +17,13 @@ namespace TMConcept.Core.Documents;
 /// recycle bin first (<see cref="IFolderDiscard"/>) and only then deletes the record with its passages and vectors. One add, vector run or
 /// delete at a time (a delete waits for a running add), and <see cref="Busy"/> tells the storage manager not to clean up meanwhile (a copy
 /// being written has no record yet). A copy that could not be finished (canceled, a failed copy) is taken away again.
+/// 0.1.25: the text of every page of a PDF (its text layer, or what the local OCR or a vision model read) is kept with the file
+/// (<see cref="IDocumentPageStore"/>, under the whole file's SHA-256) as it is read; another page range of the same file, an add again after a
+/// cancel and <see cref="ReadMissingAsync"/> take the kept pages instead of reading them again; <see cref="PageStatesAsync"/> tells which pages
+/// of each document are ready or still to read. The kept pages go with the last document of their file, or with the profile.
 /// </summary>
 public sealed class DocumentLibrary(IAppPaths paths, IDocumentStore store, IEnumerable<IDocumentExtractor> extractors, IEnumerable<IDocumentFetcher> fetchers,
-    IDocumentEmbedder embedder, TimeProvider clock, ILogger<DocumentLibrary> logger)
+    IDocumentEmbedder embedder, TimeProvider clock, ILogger<DocumentLibrary> logger, IDocumentPageStore pageStore)
 {
     /// <summary>Passages embedded per model call.</summary>
     public const int EmbedBatch = 16;
@@ -76,6 +80,7 @@ public sealed class DocumentLibrary(IAppPaths paths, IDocumentStore store, IEnum
         }
 
         var title = Path.GetFileNameWithoutExtension(file);
+        var fileSha = sha;
         if (read.Pages is { } pages)
         {
             // The range's own key: the copy is named by it, and the same range of the same file is found again.
@@ -89,7 +94,19 @@ public sealed class DocumentLibrary(IAppPaths paths, IDocumentStore store, IEnum
             Title = title,
             OriginalName = name,
             Bytes = info.Length,
+            FileSha256 = extractor.Kind == DocumentKind.Pdf ? fileSha : string.Empty,
+            FirstPage = extractor.Kind == DocumentKind.Pdf ? read.Pages?.From ?? 1 : 0,
         };
+        if (extractor.Kind == DocumentKind.Pdf && read.Memory is null)
+        {
+            // The pages this file had read before (another range, an add that was canceled) are taken, the new ones kept.
+            read = read with
+            {
+                Memory = await PageTextMemory.LoadAsync(pageStore, profileId, fileSha, read.Pages?.From ?? 1, read.Pages?.To ?? int.MaxValue, clock, cancellationToken)
+                    .ConfigureAwait(false),
+            };
+        }
+
         return await AddAsync(profileId, sha, extension, (target, token) => CopyAsync(file, target, token), extractor, document, progress, cancellationToken,
             read: read).ConfigureAwait(false);
     }
@@ -230,6 +247,114 @@ public sealed class DocumentLibrary(IAppPaths paths, IDocumentStore store, IEnum
         }
     }
 
+    /// <summary>
+    /// Which pages of each PDF document of the profile (added since 0.1.25) are ready (kept: a text layer or an engine's reading) and which are
+    /// still to read; <see cref="DocumentPageState.Unknown"/> for the others. Reads no text, only which pages are kept.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<Guid, DocumentPageState>> PageStatesAsync(Guid profileId, IReadOnlyList<SourceDocument> documents,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(documents);
+        var marks = (await pageStore.MarksAsync(profileId, cancellationToken).ConfigureAwait(false))
+            .GroupBy(m => m.FileSha256, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.ToDictionary(m => m.Page), StringComparer.Ordinal);
+        var states = new Dictionary<Guid, DocumentPageState>();
+        foreach (var document in documents)
+        {
+            if (document.Kind != DocumentKind.Pdf || document.FileSha256.Length == 0 || document.FirstPage <= 0 || document.Pages <= 0)
+            {
+                states[document.Id] = DocumentPageState.Unknown;
+                continue;
+            }
+
+            var kept = marks.GetValueOrDefault(document.FileSha256) ?? [];
+            var pages = Enumerable.Range(document.FirstPage, document.Pages).ToList();
+            var ready = pages.Where(kept.ContainsKey).Select(p => kept[p]).ToList();
+            states[document.Id] = new DocumentPageState(document.Pages, ready.Count, ready.Count(m => m.Source != PageTextSources.Layer),
+                pages.Where(p => !kept.ContainsKey(p)).ToList(), ready.Sum(m => (long)m.Characters));
+        }
+
+        return states;
+    }
+
+    /// <summary>
+    /// Reads the pages of a PDF document that are still to read (0.1.25: scanned pages never read, or left out by a cancel or a stop) with
+    /// <paramref name="read"/>'s engine; the pages read before are taken as kept, so only the missing ones are read (and paid for). The
+    /// document's passages are then cut again from all its pages and replace the old ones (their vectors made again when the meaning model is
+    /// installed). <see cref="DocumentRejectedException"/> (<c>unreadable</c>) when its copy is gone or it is not such a document.
+    /// </summary>
+    public async Task<DocumentAddResult> ReadMissingAsync(SourceDocument document, DocumentReadOptions read, IProgress<DocumentProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(read);
+        var name = document.Title;
+        var file = document.StoredFile.Length > 0 ? FileOf(document) : string.Empty;
+        var extractor = _extractors.FirstOrDefault(e => e.Kind == document.Kind);
+        if (document.Kind != DocumentKind.Pdf || document.FileSha256.Length == 0 || document.FirstPage <= 0 || extractor is null || !File.Exists(file))
+        {
+            throw new DocumentRejectedException("unreadable", "Its copy is gone, or its pages were not kept (added before 0.1.25).", name);
+        }
+
+        await EnterAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var range = new DocumentPageRange(document.FirstPage, document.FirstPage + Math.Max(1, document.Pages) - 1);
+            var memory = await PageTextMemory.LoadAsync(pageStore, document.ProfileId, document.FileSha256, range.From, range.To, clock, cancellationToken)
+                .ConfigureAwait(false);
+            progress?.Report(new DocumentProgress(name, DocumentStage.Extracting));
+            ExtractedDocument extracted;
+            try
+            {
+                extracted = await extractor.ExtractAsync(file, read with { Pages = range, Memory = memory, Progress = progress, Name = name }, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (InvalidDataException ex)
+            {
+                throw new DocumentRejectedException("unreadable", ex.Message, name, ex);
+            }
+
+            progress?.Report(new DocumentProgress(name, DocumentStage.Chunking));
+            var chunks = DocumentChunker.Chunk(extracted);
+            foreach (var chunk in chunks)
+            {
+                chunk.DocumentId = document.Id;
+                chunk.ProfileId = document.ProfileId;
+            }
+
+            document.PagesWithoutText = extracted.PagesWithoutText;
+            document.Characters = extracted.Characters;
+            document.Chunks = chunks.Count;
+            document.Status = chunks.Count == 0 ? DocumentStatus.NoText : DocumentStatus.Ready;
+            document.StatusDetail = chunks.Count == 0 ? "no_text" : DocumentExtractorBase.IsCut(extracted) ? "cut" : string.Empty;
+            document.ChunkerVersion = DocumentLimits.ChunkerVersion;
+            await pageStore.ReplaceAsync(document, chunks, cancellationToken).ConfigureAwait(false);
+            logger.LogInformation("Document {Id}: missing pages read ({Recognized} read by a text-extraction model, {Unread} unread, {Reused} kept from before), "
+                + "{Chunks} passages now", document.Id, extracted.PagesRecognized, extracted.PagesUnread, extracted.PagesReused, chunks.Count);
+            var error = string.Empty;
+            try
+            {
+                await EmbedAsync(chunks, name, progress, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or IOException or InvalidDataException or UnauthorizedAccessException)
+            {
+                logger.LogError(ex, "Document {Id}: the meaning-search vectors could not be made", document.Id);
+                error = ex.Message;
+            }
+
+            progress?.Report(new DocumentProgress(name, DocumentStage.Done));
+            return new DocumentAddResult(document, error)
+            {
+                PagesRecognized = extracted.PagesRecognized, PagesUnread = extracted.PagesUnread, RecognitionStopped = extracted.RecognitionStopped,
+                PagesReused = extracted.PagesReused, PagesUnsupported = extracted.PagesUnsupported,
+            };
+        }
+        finally
+        {
+            Exit();
+        }
+    }
+
     private static string DocumentTitle(string title) => title.Length <= DocumentLimits.TitleMax ? title : title[..DocumentLimits.TitleMax].TrimEnd();
 
     /// <summary>The reader of <paramref name="file"/>'s kind; refused when there is none, the file is not there or it is larger than the kind allows.</summary>
@@ -292,6 +417,8 @@ public sealed class DocumentLibrary(IAppPaths paths, IDocumentStore store, IEnum
             IReadOnlyList<DocumentChunk> chunks;
             var recognized = 0;
             var unread = 0;
+            var reused = 0;
+            var unsupported = 0;
             var halted = string.Empty;
             try
             {
@@ -309,6 +436,8 @@ public sealed class DocumentLibrary(IAppPaths paths, IDocumentStore store, IEnum
 
                 recognized = extracted.PagesRecognized;
                 unread = extracted.PagesUnread;
+                reused = extracted.PagesReused;
+                unsupported = extracted.PagesUnsupported;
                 halted = extracted.RecognitionStopped;
                 progress?.Report(new DocumentProgress(name, DocumentStage.Chunking));
                 chunks = DocumentChunker.Chunk(extracted);
@@ -338,9 +467,9 @@ public sealed class DocumentLibrary(IAppPaths paths, IDocumentStore store, IEnum
                 throw;
             }
 
-            logger.LogInformation("Document {Id} added: {Kind}, {Pages} pages ({NoText} without text, {Recognized} read by a text-extraction model, {Unread} unread), "
-                + "{Characters} characters, {Chunks} passages, {Status}", document.Id, document.Kind, document.Pages, document.PagesWithoutText, recognized, unread,
-                document.Characters, document.Chunks, document.Status);
+            logger.LogInformation("Document {Id} added: {Kind}, {Pages} pages ({NoText} without text, {Recognized} read by a text-extraction model, {Unread} unread, "
+                + "{Reused} kept from before), {Characters} characters, {Chunks} passages, {Status}", document.Id, document.Kind, document.Pages, document.PagesWithoutText,
+                recognized, unread, reused, document.Characters, document.Chunks, document.Status);
             var error = string.Empty;
             try
             {
@@ -354,7 +483,10 @@ public sealed class DocumentLibrary(IAppPaths paths, IDocumentStore store, IEnum
             }
 
             progress?.Report(new DocumentProgress(name, DocumentStage.Done));
-            return new DocumentAddResult(document, error) { PagesRecognized = recognized, PagesUnread = unread, RecognitionStopped = halted };
+            return new DocumentAddResult(document, error)
+            {
+                PagesRecognized = recognized, PagesUnread = unread, RecognitionStopped = halted, PagesReused = reused, PagesUnsupported = unsupported,
+            };
         }
         finally
         {

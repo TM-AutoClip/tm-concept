@@ -25,13 +25,13 @@ public sealed class LargeDocumentTests
 {
     private static readonly CancellationToken None = CancellationToken.None;
 
-    private static readonly CatalogModel Paid = new()
+    internal static readonly CatalogModel Paid = new()
     {
         Provider = "anthropic", Id = "claude-haiku-5-5", Name = "Claude Haiku 5.5", Capabilities = ModelCapability.Chat | ModelCapability.Vision,
         InputUsd = 1m, OutputUsd = 5m, ContextTokens = 200_000, MaxOutputTokens = 64_000,
     };
 
-    private static readonly CatalogModel Small = new()
+    internal static readonly CatalogModel Small = new()
     {
         Provider = ModelProviders.AppOllama, Id = "gemma-small", Name = "Gemma small", Capabilities = ModelCapability.Chat, ContextTokens = 8_192,
         MaxOutputTokens = 8_192, MinVideoMemoryGb = 6,
@@ -39,7 +39,7 @@ public sealed class LargeDocumentTests
 
     private static DocumentLibrary Library(StorageHarness h) =>
         new(h.Paths, new DocumentStore(h.Database), [new PdfExtractor(), new PlainTextExtractor()], [], new OffEmbedder(), TimeProvider.System,
-            NullLogger<DocumentLibrary>.Instance);
+            NullLogger<DocumentLibrary>.Instance, new DocumentStore(h.Database));
 
     private static async Task<Profile> ProfileAsync(StorageHarness h)
     {
@@ -230,7 +230,7 @@ public sealed class LargeDocumentTests
     }
 
     /// <summary>No meaning model.</summary>
-    private sealed class OffEmbedder : DocumentEmbedderBase
+    internal sealed class OffEmbedder : DocumentEmbedderBase
     {
         public override string ModelId => "off";
 

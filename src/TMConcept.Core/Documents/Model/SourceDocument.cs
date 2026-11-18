@@ -34,6 +34,15 @@ public sealed class SourceDocument
     /// <summary>SHA-256 of the copy (the same content is not added twice to a profile).</summary>
     public string Sha256 { get; set; } = string.Empty;
 
+    /// <summary>
+    /// SHA-256 of the whole added file (0.1.25; the same as <see cref="Sha256"/> unless it is a page range; empty for a web page, an article
+    /// or a document added before): the read pages of the file are kept under it (<see cref="DocumentPageText"/>).
+    /// </summary>
+    public string FileSha256 { get; set; } = string.Empty;
+
+    /// <summary>The first page of the file it holds (0.1.25; 1 for a whole PDF, the range's start for a page range, 0 otherwise or before).</summary>
+    public int FirstPage { get; set; }
+
     /// <summary>Bytes of the copy.</summary>
     public long Bytes { get; set; }
 

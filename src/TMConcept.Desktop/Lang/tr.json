@@ -1475,5 +1475,19 @@
   "notes.tip.fits": "Bu bilgisayarda çalışanlar: {0}",
   "notes.tip.all": "Ticari kullanım ve bu bilgisayarda çalışır: {0}",
   "notes.tip.all.language": "{0}, ticari kullanım ve bu bilgisayarda çalışır: {1}",
-  "notes.tip.more": "+{0} tane daha"
+  "notes.tip.more": "+{0} tane daha",
+  "storage.item.document_pages": "Hiçbir belgenin tutmadığı okunmuş sayfa yazıları (iptal edilen bir eklemeden saklandı)",
+  "documents.pages.state": "Okunan sayfa: {0} / {1}",
+  "documents.pages.state_missing": "Okunan sayfa: {0} / {1} · {2} sayfa okunmayı bekliyor",
+  "documents.pages.state_recognized": " · {0} tanesi resimden okundu",
+  "documents.pages.read_missing": "Eksik {0} sayfayı oku",
+  "documents.pages.read_missing.tip": "Yalnız henüz yazısı olmayan sayfaları \"Taranmış sayfalardan yazı\" için seçtiğin motorla okur; önceden okunan sayfalar saklı, yeniden kullanılır.",
+  "documents.pages.read_missing.none": "Eksik sayfaları okumak için bu sayfanın model çubuğunda \"Taranmış sayfalardan yazı\" için bir motor seç.",
+  "documents.pages.read_missing.estimate": "{1} ile {0} sayfa: {2} (tahmini).",
+  "documents.pages.reused": "\"{0}\": {1} sayfa daha önce okunmuştu, tekrar okunmadan kullanıldı.",
+  "documents.pages.done": "\"{0}\": artık {2} sayfanın {1} tanesi okundu.",
+  "documents.pages.unsupported": "\"{0}\": {1} resim sayfası uygulamanın okuyamadığı bir biçimde (JPEG 2000, JBIG2 ya da CCITT faks); atlandı.",
+  "documents.ocr.estimate": "ücretsiz, bu bilgisayarın işlemcisinde, yaklaşık {0} (tahmini)",
+  "documents.topics.read_all_progress": "Konular için hepsi okunuyor: {0}. çağrı / {1}",
+  "documents.topics.read_all_done": "Konular için hepsi okundu: {1} çağrıdan {0} not · {2}"
 }

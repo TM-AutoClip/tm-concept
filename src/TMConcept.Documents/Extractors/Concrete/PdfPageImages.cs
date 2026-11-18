@@ -14,13 +14,21 @@ namespace TMConcept.Documents.Extractors;
 public static class PdfPageImages
 {
     /// <summary>The images of <paramref name="page"/> that can be sent (empty = none).</summary>
-    public static IReadOnlyList<ImagePart> Of(Page page)
+    public static IReadOnlyList<ImagePart> Of(Page page) => Read(page).Parts;
+
+    /// <summary>
+    /// The images of <paramref name="page"/> that can be sent, and whether it had images of the right size of which none could be handed on
+    /// (0.1.25: a JPEG 2000, JBIG2 or CCITT fax scan; such a page is reported apart, not only counted as unread).
+    /// </summary>
+    public static (IReadOnlyList<ImagePart> Parts, bool Unsupported) Read(Page page)
     {
         ArgumentNullException.ThrowIfNull(page);
         var parts = new List<ImagePart>();
         var images = page.GetImages()
             .Where(i => !i.IsImageMask && i.WidthInSamples >= DocumentLimits.PageImagePixelsMin && i.HeightInSamples >= DocumentLimits.PageImagePixelsMin)
-            .OrderByDescending(i => (long)i.WidthInSamples * i.HeightInSamples);
+            .OrderByDescending(i => (long)i.WidthInSamples * i.HeightInSamples)
+            .ToList();
+        var unreadable = 0;
         foreach (var image in images)
         {
             if (parts.Count >= DocumentLimits.PageImagesMax)
@@ -28,13 +36,17 @@ public static class PdfPageImages
                 break;
             }
 
-            if (Part(image) is { } part && part.Data.Length <= DocumentLimits.PageImageBytesMax)
+            if (Part(image) is not { } part)
+            {
+                unreadable++;
+            }
+            else if (part.Data.Length <= DocumentLimits.PageImageBytesMax)
             {
                 parts.Add(part);
             }
         }
 
-        return parts;
+        return (parts, parts.Count == 0 && unreadable > 0);
     }
 
     /// <summary>Whether <paramref name="bytes"/> start like a JPEG file.</summary>

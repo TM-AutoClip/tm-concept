@@ -2,9 +2,40 @@ using TMConcept.Core.Documents;
 
 namespace TMConcept.Tests.Core;
 
-/// <summary>An <see cref="IDocumentStore"/> in memory, for the sources and the library.</summary>
-internal sealed class MemoryDocumentStore : IDocumentStore
+/// <summary>An <see cref="IDocumentStore"/> (and, 0.1.25, <see cref="IDocumentPageStore"/>) in memory, for the sources and the library.</summary>
+internal sealed class MemoryDocumentStore : IDocumentStore, IDocumentPageStore
 {
+    public List<DocumentPageText> Pages { get; } = [];
+
+    public Task<IReadOnlyList<DocumentPageText>> PagesAsync(Guid profileId, string fileSha256, int from, int to, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<DocumentPageText>>(Pages.Where(p => p.ProfileId == profileId && p.FileSha256 == fileSha256 && p.Page >= from && p.Page <= to).ToList());
+
+    public Task SavePagesAsync(IReadOnlyList<DocumentPageText> pages, CancellationToken cancellationToken)
+    {
+        Pages.RemoveAll(p => pages.Any(n => n.ProfileId == p.ProfileId && n.FileSha256 == p.FileSha256 && n.Page == p.Page));
+        Pages.AddRange(pages);
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<DocumentPageMark>> MarksAsync(Guid profileId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<DocumentPageMark>>(Pages.Where(p => p.ProfileId == profileId)
+            .Select(p => new DocumentPageMark(p.ProfileId, p.FileSha256, p.Page, p.Text.Length, p.Source)).ToList());
+
+    public Task ForgetAsync(Guid profileId, string fileSha256, CancellationToken cancellationToken)
+    {
+        Pages.RemoveAll(p => p.ProfileId == profileId && p.FileSha256 == fileSha256);
+        return Task.CompletedTask;
+    }
+
+    public Task ReplaceAsync(SourceDocument document, IReadOnlyList<DocumentChunk> chunks, CancellationToken cancellationToken)
+    {
+        var old = Chunks.Where(c => c.DocumentId == document.Id).Select(c => c.Id).ToHashSet();
+        Vectors.RemoveAll(v => old.Contains(v.ChunkId));
+        Chunks.RemoveAll(c => c.DocumentId == document.Id);
+        Chunks.AddRange(chunks);
+        return Task.CompletedTask;
+    }
+
     public List<SourceDocument> Documents { get; } = [];
 
     public List<DocumentChunk> Chunks { get; } = [];
