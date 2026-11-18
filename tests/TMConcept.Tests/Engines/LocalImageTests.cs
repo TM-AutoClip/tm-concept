@@ -64,7 +64,8 @@ public sealed class LocalImageTests
             LocalImageModels.All.ShouldContain(m => m.Tier == tier, $"the {(int)tier} GB class has a model");
         }
 
-        LocalImageModels.All.Where(m => m.LicenseUse == LicenseUse.NonCommercial).Select(m => m.Id).ShouldBe(["flux2-klein-9b", "flux2-klein-9b-q8"], ignoreOrder: true);
+        LocalImageModels.All.Where(m => m.LicenseUse == LicenseUse.NonCommercial).Select(m => m.Id)
+            .ShouldBe(["flux2-klein-9b", "flux2-klein-9b-q8", "qwen-image-2.1-turbo", "qwen-image-2.1-turbo-q8", "qwen-image-2.1"], ignoreOrder: true);
         LocalImageModels.Flux3Klein.LicenseUse.ShouldBe(LicenseUse.Limited);
         LocalImageModels.Sd35Medium.LicenseUse.ShouldBe(LicenseUse.Limited);
         LocalImageModels.ZImageTurbo.LicenseUse.ShouldBe(LicenseUse.Commercial);
@@ -79,7 +80,7 @@ public sealed class LocalImageTests
 
     [Theory]
     [InlineData(VramTier.Gb4, "z-image-turbo-q3,flux2-klein-4b,sdxl-lightning")]
-    [InlineData(VramTier.Gb8, "z-image-turbo-q3,flux2-klein-4b,sdxl-lightning,z-image-turbo,flux3-klein,sd35-medium,sdxl-lightning-q8,flux2-klein-9b")]
+    [InlineData(VramTier.Gb8, "z-image-turbo-q3,flux2-klein-4b,sdxl-lightning,z-image-turbo,flux3-klein,sd35-medium,sdxl-lightning-q8,qwen-image-2.1-turbo,flux2-klein-9b")]
     public void ACardSeesTheModelsOfItsOwnClassAndEveryLowerOne(VramTier card, string ids) =>
         LocalImageModels.All.Where(m => VramTiers.Sees(card, m.Tier)).Select(m => m.Id).ShouldBe(ids.Split(','));
 
@@ -172,6 +173,53 @@ public sealed class LocalImageTests
         After(qwen, "--flow-shift").ShouldBe("3.0");
         After(qwen, "--steps").ShouldBe("20");
         After(qwen, "-n").ShouldBe(LocalImageModels.DefaultNegativePrompt);
+    }
+
+    [Fact]
+    public void QwenImageTwoPointOneTurboRunsEightStepsOnItsOwnScheduleWithItsOwnEncoderAndVae()
+    {
+        var turbo = Arguments(LocalImageModels.QwenImage21Turbo, "a neon sign", "never shown");
+        After(turbo, "--diffusion-model").ShouldBe("/w/Qwen-Image-2.1-Turbo-AD-Q4_K.gguf");
+        After(turbo, "--llm").ShouldBe("/w/Qwen3VL-8B-Instruct-Q4_K_M.gguf");
+        After(turbo, "--vae").ShouldBe("/w/qwen_image_2.1_vae_bf16.safetensors", "the Qwen-Image VAE does not fit 2.1");
+        After(turbo, "--steps").ShouldBe("8");
+        After(turbo, "--cfg-scale").ShouldBe("1.0");
+        After(turbo, "--sigmas").ShouldBe("qwen-image-2.1-turbo", "without the preset sd-cli uses the base model's schedule");
+        turbo.ShouldNotContain("-n");
+        turbo.ShouldNotContain("--flow-shift", "sd-cli picks the resolution-dependent schedule itself");
+
+        var full = Arguments(LocalImageModels.QwenImage21, "a poster", null);
+        After(full, "--diffusion-model").ShouldBe("/w/qwen_image_2.1-Q8_0.gguf");
+        After(full, "--llm").ShouldBe("/w/Qwen3VL-8B-Instruct-Q8_0.gguf");
+        After(full, "--cfg-scale").ShouldBe("6.0");
+        After(full, "--steps").ShouldBe("40");
+        After(full, "-n").ShouldBe(LocalImageModels.DefaultNegativePrompt);
+        full.ShouldNotContain("--sigmas");
+    }
+
+    [Fact]
+    public void QwenImageTwoPointOneIsNonCommercialSizedFromItsFilesAndRunsWithThePinnedSdCppBuilds()
+    {
+        LocalImageModel[] models = [LocalImageModels.QwenImage21Turbo, LocalImageModels.QwenImage21TurboQ8, LocalImageModels.QwenImage21];
+        foreach (var model in models)
+        {
+            model.LicenseUse.ShouldBe(LicenseUse.NonCommercial, model.Id + ": Qwen Research License, research or evaluation only");
+            model.License.ShouldBe("qwen-research");
+            model.Family.ShouldBe("qwen-image-2.1");
+            model.MinSdCppBuild.ShouldBe(LocalImageModels.QwenImage21Build);
+            SdCppImageEngine.TooOld(model, ToolManifest.SdCppTag).ShouldBeNull(model.Id + " on Windows");
+            SdCppImageEngine.TooOld(model, ToolManifest.SdCppLinuxTag).ShouldBeNull(model.Id + " on Linux");
+            SdCppImageEngine.TooOld(model, "master-958-792bcd3").ShouldNotBeNull("the build before the Turbo preset");
+        }
+
+        // The memory class comes from the real file sizes: the 4.2 GB Turbo for 6 GB cards (more than 4 GB), Q8 like the other Q8 pairs.
+        LocalImageModels.QwenImage21Turbo.Tier.ShouldBe(VramTier.Gb6);
+        LocalImageModels.QwenImage21Turbo.Diffusion.ApproximateBytes.ShouldBe(4_201_694_944);
+        LocalImageModels.QwenImage21Turbo.TotalBytes.ShouldBe(4_201_694_944 + 5_027_784_800 + 675_509_688);
+        LocalImageModels.QwenImage21TurboQ8.Tier.ShouldBe(VramTier.Gb12);
+        LocalImageModels.QwenImage21TurboQ8.TotalBytes.ShouldBe(7_591_577_312 + 8_709_519_456 + 675_509_688);
+        LocalImageModels.QwenImage21.Tier.ShouldBe(VramTier.Gb16);
+        LocalImageModels.QwenImage21.TotalBytes.ShouldBe(7_687_155_744 + 8_709_519_456 + 675_509_688);
     }
 
     [Theory]

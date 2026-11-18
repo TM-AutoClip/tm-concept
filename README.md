@@ -197,19 +197,19 @@ the model that describes a sample image. Each step says what it is for:
   sends no effort (the provider's default). **Video code** also has the **video engine**: HyperFrames (default), Remotion (asks you to
   accept its license: free for individuals and companies of up to 3 people), Revideo (experimental). The video code model also writes
   the image prompts.
-- **Images** — *Off* (default: the video is drawn by its code only), an online image model, or one of 17 local ones that run on your
+- **Images** — *Off* (default: the video is drawn by its code only), an online image model, or one of 20 local ones that run on your
   graphics card, each in a graphics memory class (the list shows it; green = your card runs it, red = "this card cannot run it", and such a
   model is never downloaded):
   - **4 GB**: Z-Image Turbo (small), FLUX.2 klein 4B (fastest), SDXL Lightning
-  - **6 GB**: Z-Image Turbo, FLUX.3 Image Klein, Stable Diffusion 3.5 Medium, SDXL Lightning (Q8)
+  - **6 GB**: Z-Image Turbo, FLUX.3 Image Klein, Stable Diffusion 3.5 Medium, SDXL Lightning (Q8), Qwen-Image 2.1 Turbo (**non-commercial**)
   - **8 GB**: FLUX.2 klein 9B (**non-commercial**)
-  - **12 GB**: Z-Image Turbo (Q8), FLUX.2 klein 4B (Q8), Stable Diffusion 3.5 Medium (Q8)
-  - **16 GB**: Qwen-Image (strong at text in pictures), FLUX.3 Image Klein (Q8)
+  - **12 GB**: Z-Image Turbo (Q8), FLUX.2 klein 4B (Q8), Stable Diffusion 3.5 Medium (Q8), Qwen-Image 2.1 Turbo (Q8, **non-commercial**)
+  - **16 GB**: Qwen-Image (strong at text in pictures), FLUX.3 Image Klein (Q8), Qwen-Image 2.1 (**non-commercial**)
   - **24 GB**: Z-Image Turbo (full quality), FLUX.2 klein 9B (Q8, **non-commercial**), Qwen-Image (Q6)
   - **32 GB**: Qwen-Image (Q8)
 
-  A model is downloaded only when you choose it and confirm. Licenses: most are Apache-2.0 (free for any use); **FLUX.2 klein 9B is
-  non-commercial** (orange badge: not for monetized videos; red only ever means "this card cannot run it"); FLUX.3 Image Klein (FLUX Kommunity License: by Black Forest Labs' announcement free
+  A model is downloaded only when you choose it and confirm. Licenses: most are Apache-2.0 (free for any use); **FLUX.2 klein 9B and Qwen-Image 2.1
+  (Qwen Research License) are non-commercial** (orange badge: not for monetized videos; red only ever means "this card cannot run it"); FLUX.3 Image Klein (FLUX Kommunity License: by Black Forest Labs' announcement free
   commercial use under 5 million USD annual revenue), Stable Diffusion 3.5 Medium (Stability AI Community License: under 1 million USD) and
   SDXL Lightning (OpenRAIL++ use restrictions) have conditions (yellow badge). Each of these asks you to accept its license once, before its
   first download. Before every picture the app measures the card's **free** memory: the VAE is always tiled, about an eighth (at least
@@ -504,7 +504,7 @@ Portable mode: start the program with `--data-dir <folder>`; then everything, vi
 - **Sample images**: you must have the right to use them.
 - **ffmpeg**: GPL, downloaded as a separate program.
 - **Local image models**: Z-Image Turbo, FLUX.2 klein 4B, Qwen-Image and every text encoder / VAE used are Apache-2.0 (the SDXL VAE MIT);
-  **FLUX.2 klein 9B is non-commercial**; FLUX.3 Image Klein (FLUX Kommunity License), Stable Diffusion 3.5 Medium (Stability AI Community
+  **FLUX.2 klein 9B and Qwen-Image 2.1 (Qwen Research License) are non-commercial**; FLUX.3 Image Klein (FLUX Kommunity License), Stable Diffusion 3.5 Medium (Stability AI Community
   License) and SDXL Lightning (OpenRAIL++) have conditions; stable-diffusion.cpp is MIT. They are downloaded from Hugging Face / GitHub only
   after you confirm (and accept the license where it has conditions).
 
