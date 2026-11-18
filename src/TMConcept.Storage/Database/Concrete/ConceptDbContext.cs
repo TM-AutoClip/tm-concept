@@ -171,6 +171,7 @@ internal sealed class ConceptDbContext(DbContextOptions<ConceptDbContext> option
             e.HasKey(r => r.Id);
             e.Property(r => r.Id).ValueGeneratedNever();
             e.HasIndex(r => r.StartedAtUtc);
+            e.HasIndex(r => r.ConceptId);
         });
         modelBuilder.Entity<QueueItem>(e =>
         {

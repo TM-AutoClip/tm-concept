@@ -254,5 +254,8 @@ public sealed class LargeDocumentTests
         public Task<IReadOnlyList<Run>> ListAsync(DateTimeOffset sinceUtc, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Run>>([]);
 
         public Task<double> AverageConceptOutputTokensAsync(Guid profileId, CancellationToken cancellationToken) => Task.FromResult(0d);
+
+        public Task<IReadOnlyList<Run>> ConceptEditsNotInVideosAsync(Guid conceptId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<Run>>([]);
     }
 }

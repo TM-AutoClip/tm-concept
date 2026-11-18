@@ -475,6 +475,9 @@ namespace TMConcept.Storage.Database
                     b.Property<long>("CachedTokens")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("ConceptId")
+                        .HasColumnType("TEXT");
+
                     b.Property<long>("CostExact")
                         .HasColumnType("INTEGER");
 
@@ -534,6 +537,8 @@ namespace TMConcept.Storage.Database
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ConceptId");
 
                     b.HasIndex("StartedAtUtc");
 

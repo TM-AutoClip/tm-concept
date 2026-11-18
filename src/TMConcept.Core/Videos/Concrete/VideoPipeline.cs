@@ -270,17 +270,32 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
     /// <summary>
     /// The concept's share of the run it was generated in (that run's cost ÷ the concepts it kept), as a cost line of its own: shown first in
     /// the video's cost details, but not in the video's total (the run is counted once, in the month's spending of the concept runs).
-    /// Nothing when the concept has no run (made by hand) or the run is gone.
+    /// Nothing when the concept has no run (made by hand) or the run is gone. The AI edits of the concept that no earlier video recorded
+    /// follow as lines of their own (<see cref="VideoCostBreakdown.ConceptEdits"/>), outside the total too.
     /// </summary>
     private async Task<IReadOnlyList<VideoCost>> ConceptShareAsync(Concept concept, Guid videoId)
     {
-        if (concept.RunId is not { } runId || await runs.GetAsync(runId, CancellationToken.None).ConfigureAwait(false) is not { } run)
+        var lines = new List<VideoCost>();
+        if (concept.RunId is { } runId && await runs.GetAsync(runId, CancellationToken.None).ConfigureAwait(false) is { } run)
         {
-            return [];
+            var share = VideoCostBreakdown.ConceptShare(run.ActualUsd, run.Accepted);
+            if (share > 0)
+            {
+                lines.Add(new VideoCost { VideoId = videoId, Step = PipelineSteps.Concepts, RunId = runId, Usd = share, Exact = run.CostExact });
+            }
         }
 
-        var share = VideoCostBreakdown.ConceptShare(run.ActualUsd, run.Accepted);
-        return share <= 0 ? [] : [new VideoCost { VideoId = videoId, Step = PipelineSteps.Concepts, RunId = runId, Usd = share, Exact = run.CostExact }];
+        // The AI edits of the concept no earlier video recorded (0.1.25: edit runs name their concept), one line each, outside the total
+        // like the share. A free edit (a local model) stores no line.
+        foreach (var edit in await runs.ConceptEditsNotInVideosAsync(concept.Id, CancellationToken.None).ConfigureAwait(false))
+        {
+            if (edit.ActualUsd > 0)
+            {
+                lines.Add(new VideoCost { VideoId = videoId, Step = VideoCostBreakdown.ConceptEdits, RunId = edit.Id, Usd = edit.ActualUsd, Exact = edit.CostExact });
+            }
+        }
+
+        return lines;
     }
 
     /// <summary>
