@@ -12,9 +12,16 @@ public static class VideoCostBreakdown
     /// <summary>Pseudo step of the narration text and the scene split (no model, no cost).</summary>
     public const string NarrationText = "narration-text";
 
+    /// <summary>
+    /// Cost label of the AI edits of the video's concept (0.1.25: one line per edit run, stored with the first video made after the edits).
+    /// Outside the video's own total like the concept share: the edit runs are counted once, in the month's spending. Videos made before
+    /// 0.1.25 have none (their edits were not linked to the concept; never guessed).
+    /// </summary>
+    public const string ConceptEdits = "concept-edits";
+
     /// <summary>The display order.</summary>
     public static readonly IReadOnlyList<string> Order =
-        [PipelineSteps.Concepts, NarrationText, PipelineSteps.ImagePromptCost, PipelineSteps.Images, PipelineSteps.Speech, PipelineSteps.VideoCode];
+        [PipelineSteps.Concepts, ConceptEdits, NarrationText, PipelineSteps.ImagePromptCost, PipelineSteps.Images, PipelineSteps.Speech, PipelineSteps.VideoCode];
 
     /// <summary>
     /// The concept's share of the run it was generated in: the run's cost divided by the concepts it kept (5 concepts for 0.11 $ → 0.022 $
@@ -53,6 +60,13 @@ public static class VideoCostBreakdown
         return known
             ? new ConceptShareLine(ConceptShareKind.FromRun, ConceptShare(run!.ActualUsd, run.Accepted), run.CostExact, runUsd, kept)
             : new ConceptShareLine(ConceptShareKind.Unknown, 0, false, null, null);
+    }
+
+    /// <summary>What the AI edits of the video's concept cost together (0 when it has none recorded).</summary>
+    public static decimal EditsUsd(IReadOnlyList<VideoCost> costs)
+    {
+        ArgumentNullException.ThrowIfNull(costs);
+        return costs.Where(c => c.Step == ConceptEdits).Sum(c => c.Usd);
     }
 
     /// <summary>The lines in <see cref="Order"/> (steps the video did not use are left out; the free narration line is always there).</summary>

@@ -42,6 +42,15 @@ public sealed class RunStore(ConceptDatabase database) : IRunStore
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<Run>> ConceptEditsNotInVideosAsync(Guid conceptId, CancellationToken cancellationToken)
+    {
+        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
+        var edits = await db.Runs.Where(r => r.Kind == RunKind.ConceptEdit && r.ConceptId == conceptId
+                && !db.VideoCosts.Any(c => c.RunId == r.Id)).ToListAsync(cancellationToken).ConfigureAwait(false);
+        return edits.OrderBy(r => r.StartedAtUtc).ToList();
+    }
+
+    /// <inheritdoc />
     public async Task<double> AverageConceptOutputTokensAsync(Guid profileId, CancellationToken cancellationToken)
     {
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);

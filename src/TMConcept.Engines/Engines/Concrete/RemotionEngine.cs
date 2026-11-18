@@ -101,6 +101,7 @@ public sealed class RemotionEngine(IAppPaths paths, ToolInstaller tools, ChromeL
           fontRegular: string;
           fontBold: string;
           outline?: string;
+          outlineBoost?: number;
           faces?: {file: string; weight: string; style: string; format: string}[];
           textWeight?: number;
           titleWeight?: number;
@@ -185,13 +186,16 @@ public sealed class RemotionEngine(IAppPaths paths, ToolInstaller tools, ChromeL
         const SceneView = Scene as unknown as React.FC<Record<string, unknown>>;
 
         // The template's text weight and slant, and readable text (its default: every text inherits an outline and a soft shadow in the
-        // colour opposite to the text).
+        // colour opposite to the text), wider over images with too little contrast (outlineBoost; from 2.2 on a soft halo as a backdrop).
         const Framed: React.FC<Record<string, unknown>> = (props) => {
           const s = (props as unknown as ConceptInput).style;
           const o = s?.outline;
+          const b = Math.min(Math.max(s?.outlineBoost ?? 1, 1), 2.2);
+          const e = (v: number) => `${Number((v * b).toFixed(3))}em`;
+          const halo = b >= 2.2 ? `, 0 0 0.5em ${o}80` : '';
           return s ? (
             <AbsoluteFill style={{fontWeight: s.textWeight ?? 400, fontStyle: s.textStyle ?? 'normal',
-              textShadow: o ? `0 0 0.05em ${o}, 0 0 0.05em ${o}, 0 0 0.1em ${o}, 0 0.04em 0.14em ${o}99` : undefined}}>
+              textShadow: o ? `0 0 ${e(0.05)} ${o}, 0 0 ${e(0.05)} ${o}, 0 0 ${e(0.1)} ${o}, 0 ${e(0.04)} ${e(0.14)} ${o}99${halo}` : undefined}}>
               <SceneView {...props} />
             </AbsoluteFill>
           ) : <SceneView {...props} />;

@@ -19,8 +19,8 @@ namespace TMConcept.Storage.Database
                 "TMConcept.Core.Runs.Run",
                 typeof(Run),
                 baseEntityType,
-                propertyCount: 22,
-                unnamedIndexCount: 1,
+                propertyCount: 23,
+                unnamedIndexCount: 2,
                 keyCount: 1);
 
             var id = runtimeEntityType.AddProperty(
@@ -60,6 +60,14 @@ namespace TMConcept.Storage.Database
                 propertyInfo: typeof(Run).GetProperty("CachedTokens", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
                 fieldInfo: typeof(Run).GetField("<CachedTokens>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
                 sentinel: 0L);
+
+            var conceptId = runtimeEntityType.AddProperty(
+                "ConceptId",
+                typeof(Guid?),
+                propertyInfo: typeof(Run).GetProperty("ConceptId", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(Run).GetField("<ConceptId>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true,
+                valueConverter: new StoredIdConverter());
 
             var costExact = runtimeEntityType.AddProperty(
                 "CostExact",
@@ -186,6 +194,9 @@ namespace TMConcept.Storage.Database
             runtimeEntityType.SetPrimaryKey(key);
 
             var index = runtimeEntityType.AddIndex(
+                new[] { conceptId });
+
+            var index0 = runtimeEntityType.AddIndex(
                 new[] { startedAtUtc });
 
             return runtimeEntityType;

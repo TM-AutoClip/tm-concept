@@ -9,6 +9,12 @@ public sealed class Run
     /// <summary>Profile (may be empty for a connection test).</summary>
     public Guid? ProfileId { get; set; }
 
+    /// <summary>
+    /// The concept an AI edit worked on (<see cref="RunKind.ConceptEdit"/>, 0.1.25), so the video made from it shows what its edits cost;
+    /// empty for every other run and for the edits of older versions (never guessed). Not a foreign key: the run outlives its concept.
+    /// </summary>
+    public Guid? ConceptId { get; set; }
+
     /// <summary>Kind.</summary>
     public RunKind Kind { get; set; }
 

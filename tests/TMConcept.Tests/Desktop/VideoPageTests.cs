@@ -966,6 +966,46 @@ public sealed class VideoPageTests
     }
 
     [AvaloniaFact]
+    public async Task AMadeVideoCarriesTheAiEditsOfItsConceptOnceOutsideItsOwnTotal()
+    {
+        var engine = new FakeEngine();
+        using var h = Harness(new FakeChat().Answer(_ => Code(engine.SampleCode)).Answer(_ => Code(engine.SampleCode)), engine);
+        var (_, concept) = await PrepareAsync(h);
+        var store = h.Get<TMConcept.Core.Runs.IRunStore>();
+        TMConcept.Core.Runs.Run Edit(Guid? conceptId, decimal usd, bool exact = true) => new()
+        {
+            ProfileId = concept.ProfileId, ConceptId = conceptId, Kind = TMConcept.Core.Runs.RunKind.ConceptEdit, ActualUsd = usd, CostExact = exact,
+            Status = TMConcept.Core.Runs.RunStatus.Succeeded,
+        };
+
+        // Two paid edits of this concept (one canceled, so its cost is estimated), a free one (a local model), an edit of another concept
+        // and an edit from before 0.1.25 that names no concept: only this concept's paid edits are its cost.
+        var first = Edit(concept.Id, 0.03m);
+        var canceled = Edit(concept.Id, 0.01m, exact: false);
+        foreach (var run in new[] { first, canceled, Edit(concept.Id, 0), Edit(Guid.NewGuid(), 0.5m), Edit(null, 0.7m) })
+        {
+            await store.AddAsync(run, CancellationToken.None);
+        }
+
+        var record = await RunAsync(h, concept, new VideoOptions { Engine = engine.Kind, Speech = false });
+
+        var costs = await h.Get<IVideoStore>().CostsAsync(record.Id, CancellationToken.None);
+        var edits = costs.Where(c => c.Step == VideoCostBreakdown.ConceptEdits).ToList();
+        edits.Select(c => (c.RunId, c.Usd, c.Exact)).ShouldBe([((Guid?)first.Id, 0.03m, true), (canceled.Id, 0.01m, false)], ignoreOrder: true);
+        VideoCostBreakdown.EditsUsd(costs).ShouldBe(0.04m);
+        record.TotalUsd.ShouldBe(costs.Where(c => c.Step != VideoCostBreakdown.ConceptEdits).Sum(c => c.Usd), "the edit runs count in the month once");
+
+        // A second video of the same concept records only the edits made after the first one.
+        var later = Edit(concept.Id, 0.02m);
+        await store.AddAsync(later, CancellationToken.None);
+        (await store.ConceptEditsNotInVideosAsync(concept.Id, CancellationToken.None)).Select(r => r.Id).ShouldContain(later.Id);
+        (await store.ConceptEditsNotInVideosAsync(concept.Id, CancellationToken.None)).Select(r => r.Id).ShouldNotContain(first.Id);
+        var again = await RunAsync(h, concept, new VideoOptions { Engine = engine.Kind, Speech = false });
+        (await h.Get<IVideoStore>().CostsAsync(again.Id, CancellationToken.None)).Where(c => c.Step == VideoCostBreakdown.ConceptEdits)
+            .Select(c => c.RunId).ShouldBe([(Guid?)later.Id]);
+    }
+
+    [AvaloniaFact]
     public async Task ACutOffVideoCodeSaysSoWithWhatWasPaidAndTheCallUsesTheWholeBudgetAndStreams()
     {
         var engine = new FakeEngine();
@@ -1632,6 +1672,18 @@ public sealed class VideoPageTests
 
         public Task<bool> ThumbnailAsync(string video, string jpeg, CancellationToken cancellationToken) =>
             FailThumbnail ? throw new IOException("disk full") : Task.FromResult(false);
+
+        /// <summary>Every sample asked for (readable text, 0.1.25): the file's name, the moments and the region.</summary>
+        public List<(string File, IReadOnlyList<long> AtMs, FrameRegion Region)> Samples { get; } = [];
+
+        /// <summary>The pixels of a sample (file name, moment); none by default, so the normal readable look is kept.</summary>
+        public Func<string, long, FramePixels?> Pixels { get; set; } = (_, _) => null;
+
+        public Task<IReadOnlyList<FramePixels?>> SampleAsync(string file, IReadOnlyList<long> atMs, FrameRegion region, CancellationToken cancellationToken)
+        {
+            Samples.Add((Path.GetFileName(file), atMs, region));
+            return Task.FromResult<IReadOnlyList<FramePixels?>>(atMs.Select(at => Pixels(Path.GetFileName(file), at)).ToList());
+        }
     }
 
     internal sealed class FakeVoice : TMConcept.Core.Speech.ISpeechEngine

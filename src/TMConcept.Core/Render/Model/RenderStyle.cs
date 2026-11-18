@@ -37,6 +37,13 @@ public sealed class RenderStyle
     /// </summary>
     public string Outline { get; set; } = string.Empty;
 
+    /// <summary>
+    /// How much stronger the outline and shadow of readable text are drawn (0.1.25, <see cref="Styles.TextBackdrop"/>): 1 normally, more when
+    /// the scene images leave the text too little contrast or are busy; from <see cref="Styles.TextBackdrop.BackdropBoost"/> on the engines add
+    /// a soft halo behind the text. Absent (1) in the input of older videos.
+    /// </summary>
+    public double OutlineBoost { get; set; } = 1;
+
     /// <summary>How titles look: plain, band, outline, underline or boxed.</summary>
     public string TitleStyle { get; set; } = string.Empty;
 

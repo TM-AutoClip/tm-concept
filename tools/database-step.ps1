@@ -1,6 +1,7 @@
 # Adds the database schema step of a new app version (an EF Core migration written by EF Core's own tooling, never by hand) and writes the
 # compiled model again. Run it once per app version that changes ConceptDbContext's mapping, after the mapping change:
 #   tools/database-step.ps1 -Name Version0118
+# (a version with steps from parallel work names each after its subject: Version0125Costs, Version0125Documents.)
 # The step goes to src/TMConcept.Storage/Database/Concrete/Migrations. Each step knows only the schema of the step before it; the app runs
 # every missing step in order at the next start (docs/database.md). Do not edit a step that was released: add a new one.
 #
@@ -8,7 +9,7 @@
 # of the repository: both live in a temporary folder that is removed afterwards. Nothing is sent anywhere but to NuGet (the tool, the package).
 param(
     [Parameter(Mandatory = $true)]
-    [ValidatePattern('^Version\d{4,}$')]
+    [ValidatePattern('^Version\d{4,}[A-Za-z]*$')]
     [string]$Name
 )
 $ErrorActionPreference = 'Stop'

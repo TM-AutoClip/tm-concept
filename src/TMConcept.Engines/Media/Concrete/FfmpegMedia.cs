@@ -30,6 +30,72 @@ public sealed class FfmpegMedia(FfmpegMuxer muxer, ToolInstaller tools, IProcess
             .Replace(folder, "<video folder>", StringComparison.Ordinal))
         .Trim();
 
+    /// <summary>Width of a sampled region (<see cref="SampleAsync"/>): small, the measure is a mean.</summary>
+    public const int SampleWidth = 96;
+
+    /// <summary>Height of a sampled region.</summary>
+    public const int SampleHeight = 48;
+
+    /// <summary>
+    /// The ffmpeg arguments of one sample: the frame at <paramref name="atMs"/> (fast seek), <paramref name="region"/> cut out and averaged
+    /// down to <see cref="SampleWidth"/> × <see cref="SampleHeight"/> RGB pixels, written raw to <paramref name="output"/>.
+    /// </summary>
+    public static IReadOnlyList<string> SampleArguments(string file, long atMs, FrameRegion region, string output)
+    {
+        ArgumentNullException.ThrowIfNull(region);
+        var c = CultureInfo.InvariantCulture;
+        static double Share(double value) => Math.Clamp(value, 0, 1);
+        var width = Math.Max(0.01, Share(region.Width));
+        var height = Math.Max(0.01, Share(region.Height));
+        var crop = string.Create(c, $"crop=w=iw*{width:0.####}:h=ih*{height:0.####}:x=iw*{Math.Min(Share(region.X), 1 - width):0.####}:y=ih*{Math.Min(Share(region.Y), 1 - height):0.####}");
+        return ["-hide_banner", "-loglevel", "error", "-y", "-ss", (Math.Max(0, atMs) / 1000.0).ToString("0.###", c), "-i", file, "-frames:v", "1",
+            "-vf", string.Create(c, $"{crop},scale={SampleWidth}:{SampleHeight}:flags=area,format=rgb24"), "-f", "rawvideo", output];
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<FramePixels?>> SampleAsync(string file, IReadOnlyList<long> atMs, FrameRegion region, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(atMs);
+        var ffmpeg = tools.Require(ToolKind.Ffmpeg);
+        var folder = Path.GetDirectoryName(Path.GetFullPath(file))!;
+        var output = Path.Combine(folder, ".sample-" + Guid.NewGuid().ToString("N") + ".rgb");
+        var samples = new List<FramePixels?>();
+        var size = SampleWidth * SampleHeight * 3;
+        try
+        {
+            foreach (var at in atMs)
+            {
+                if (File.Exists(output))
+                {
+                    File.Delete(output);
+                }
+
+                var result = await runner.RunAsync(new ProcessStart(ffmpeg, [.. SampleArguments(file, at, region, output)], folder), null, cancellationToken)
+                    .ConfigureAwait(false);
+                if (result.ExitCode != 0 || !File.Exists(output) || new FileInfo(output).Length < size)
+                {
+                    // Past the end of the video, or a file ffmpeg cannot read: this moment has no sample (the caller keeps the normal look).
+                    logger.LogWarning("ffmpeg could not sample {File} at {Ms} ms (exit {Code}): {Error}", Path.GetFileName(file), at, result.ExitCode,
+                        Core.Processes.ChildOutput.Summary(result.LastLines.Replace(folder, "<folder>", StringComparison.Ordinal)).Trim());
+                    samples.Add(null);
+                    continue;
+                }
+
+                var bytes = await File.ReadAllBytesAsync(output, cancellationToken).ConfigureAwait(false);
+                samples.Add(new FramePixels(SampleWidth, SampleHeight, bytes.AsMemory(0, size)));
+            }
+
+            return samples;
+        }
+        finally
+        {
+            if (File.Exists(output))
+            {
+                File.Delete(output);
+            }
+        }
+    }
+
     /// <inheritdoc />
     public async Task<bool> ThumbnailAsync(string video, string jpeg, CancellationToken cancellationToken)
     {

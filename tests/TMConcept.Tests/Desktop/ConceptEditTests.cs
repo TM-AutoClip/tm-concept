@@ -174,6 +174,7 @@ public sealed class ConceptEditTests
         var run = await RunOfAsync(h);
         run.Status.ShouldBe(RunStatus.Succeeded);
         run.ActualUsd.ShouldBeGreaterThan(0);
+        run.ConceptId.ShouldBe(concept.Id, "0.1.25: the edit names its concept, so the video made from it shows what the edit cost");
         detail.IsAiEditing.ShouldBeFalse();
         detail.IsEditing.ShouldBeTrue();
         detail.EditHeadline.ShouldBe(other.Title);
@@ -249,6 +250,7 @@ public sealed class ConceptEditTests
         cut.Error.ShouldBe("truncated");
         cut.ActualUsd.ShouldBeGreaterThan(0, "a cut-off answer was billed");
         cut.CostExact.ShouldBeTrue();
+        cut.ConceptId.ShouldBe(concept.Id, "a failed but billed edit is the concept's cost too");
         detail.AiFailed.ShouldBeTrue();
         detail.AiStatus.ShouldBe(text.Format("concepts.ai.failed", ProviderErrors.Text(text, "truncated"), text.Usd(cut.ActualUsd)));
         detail.IsAiEditing.ShouldBeTrue("the box stays open");

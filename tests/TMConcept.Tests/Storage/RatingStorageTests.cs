@@ -151,7 +151,7 @@ public sealed class RatingStorageTests
         await h.Vault.OpenAsync(None);
 
         (await h.QueryAsync(async db => (await db.Database.GetAppliedMigrationsAsync(None)).Select(SchemaUpgrader.Name).ToList()))
-            .ShouldBe(["Version0117", "Version0118", "Version0119", "Version0120"]);
+            .ShouldBe(await h.QueryAsync(db => Task.FromResult(db.Database.GetMigrations().Select(SchemaUpgrader.Name).ToList())), "upgraded through every known step");
         var suggestion = (await new TopicSuggestionStore(h.Database).ListAsync(profile.Id, 10, None)).ShouldHaveSingleItem();
         suggestion.Id.ShouldBe(suggestionId);
         suggestion.Text.ShouldBe("Greek fire");

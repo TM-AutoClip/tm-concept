@@ -49,6 +49,9 @@ What happens at the start (`SchemaUpgrader`, called by `Vault.OpenAsync`, `Vault
    template, and the profile's `ChannelPhoto` column) needs none: no row gets a template, and an empty photo is the right value.
    `Version0120` (the documents: `documents`, `document_chunks`, `document_chunk_vectors`, and the concepts' `Sources` column) needs none
    either: no document exists before it, and an older concept has no sources (empty).
+   `Version0125Costs` (the runs' `ConceptId` column, indexed: an AI edit names its concept) needs none: an older edit names no concept
+   (empty), and its cost is never guessed. Steps of one version from parallel work are named after their subject (`Version0125Costs`,
+   `Version0125Documents`); each is generated on its own, the second one after merging the first.
 4. Build and run the tests: `SchemaUpgradeTests.TheAppsStepsMatchItsMappingAndANewFileRecordsThem` fails while the mapping and the steps
    differ (EF Core would also refuse to upgrade with pending model changes), and `CompiledModelTests` fails while the compiled model is old.
 5. Add a test that upgrades a file of the previous step with real data (see `SchemaUpgradeTests` for the pattern) when the step moves data.

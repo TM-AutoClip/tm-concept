@@ -194,19 +194,19 @@ adım ne işe yaradığını yazar:
 - **Konsept üretimi** ve **Video kodu** — ücretini ödediğin online modeller. **Çaba** yalnız bunu alan modelde görünür; *Otomatik* çaba
   göndermez (sağlayıcının varsayılanı). **Video kodu**'nda **video motoru** da var: HyperFrames (varsayılan), Remotion (lisansını kabul
   etmeni ister: bireyler ve en çok 3 kişilik şirketler için ücretsiz), Revideo (deneysel). Görsel istemlerini de video kodu modeli yazar.
-- **Görseller** — *Kapalı* (varsayılan: video yalnız koddan çizilir), bir online görsel modeli ya da ekran kartında çalışan 17 yerel
+- **Görseller** — *Kapalı* (varsayılan: video yalnız koddan çizilir), bir online görsel modeli ya da ekran kartında çalışan 20 yerel
   modelden biri; her model bir ekran kartı bellek sınıfındadır (listede yazar; yeşil = kartın çalıştırır, kırmızı = "bu kart çalıştıramaz",
   böyle bir model hiç indirilmez):
   - **4 GB**: Z-Image Turbo (küçük), FLUX.2 klein 4B (en hızlı), SDXL Lightning
-  - **6 GB**: Z-Image Turbo, FLUX.3 Image Klein, Stable Diffusion 3.5 Medium, SDXL Lightning (Q8)
+  - **6 GB**: Z-Image Turbo, FLUX.3 Image Klein, Stable Diffusion 3.5 Medium, SDXL Lightning (Q8), Qwen-Image 2.1 Turbo (**ticari kullanıma kapalı**)
   - **8 GB**: FLUX.2 klein 9B (**ticari kullanıma kapalı**)
-  - **12 GB**: Z-Image Turbo (Q8), FLUX.2 klein 4B (Q8), Stable Diffusion 3.5 Medium (Q8)
-  - **16 GB**: Qwen-Image (görsel içinde yazıda güçlü), FLUX.3 Image Klein (Q8)
+  - **12 GB**: Z-Image Turbo (Q8), FLUX.2 klein 4B (Q8), Stable Diffusion 3.5 Medium (Q8), Qwen-Image 2.1 Turbo (Q8, **ticari kullanıma kapalı**)
+  - **16 GB**: Qwen-Image (görsel içinde yazıda güçlü), FLUX.3 Image Klein (Q8), Qwen-Image 2.1 (**ticari kullanıma kapalı**)
   - **24 GB**: Z-Image Turbo (tam kalite), FLUX.2 klein 9B (Q8, **ticari kullanıma kapalı**), Qwen-Image (Q6)
   - **32 GB**: Qwen-Image (Q8)
 
-  Bir model yalnız sen seçip onaylayınca indirilir. Lisanslar: çoğu Apache-2.0 (her kullanım serbest); **FLUX.2 klein 9B ticari kullanıma
-  kapalı** (turuncu etiket: para kazandığın videolarda kullanılamaz; kırmızı yalnız "bu kart çalıştıramaz" demektir); FLUX.3 Image Klein (FLUX Kommunity Lisansı: Black Forest Labs'in
+  Bir model yalnız sen seçip onaylayınca indirilir. Lisanslar: çoğu Apache-2.0 (her kullanım serbest); **FLUX.2 klein 9B ve Qwen-Image 2.1
+  (Qwen Research Lisansı) ticari kullanıma kapalı** (turuncu etiket: para kazandığın videolarda kullanılamaz; kırmızı yalnız "bu kart çalıştıramaz" demektir); FLUX.3 Image Klein (FLUX Kommunity Lisansı: Black Forest Labs'in
   duyurusuna göre yıllık geliri 5 milyon doların altındakiler için ticari kullanım ücretsiz), Stable Diffusion 3.5 Medium (Stability AI
   Topluluk Lisansı: 1 milyon doların altı) ve SDXL Lightning (OpenRAIL++ kullanım kısıtları) koşullu (sarı etiket). Bunların her biri ilk
   indirmeden önce bir kez lisansını kabul etmeni ister. Program her görselden önce kartın **boş** belleğini ölçer: VAE hep parça parça
@@ -497,7 +497,7 @@ Taşınabilir kip: programı `--data-dir <klasör>` ile başlat; videolar dahil 
 - **Örnek görseller**: kullanım hakkı sende olmalı.
 - **ffmpeg**: GPL, ayrı bir program olarak indirilir.
 - **Yerel görsel modelleri**: Z-Image Turbo, FLUX.2 klein 4B, Qwen-Image ve kullanılan bütün metin kodlayıcı / VAE'ler Apache-2.0
-  (SDXL VAE'si MIT); **FLUX.2 klein 9B ticari kullanıma kapalı**; FLUX.3 Image Klein (FLUX Kommunity Lisansı), Stable Diffusion 3.5 Medium
+  (SDXL VAE'si MIT); **FLUX.2 klein 9B ve Qwen-Image 2.1 (Qwen Research Lisansı) ticari kullanıma kapalı**; FLUX.3 Image Klein (FLUX Kommunity Lisansı), Stable Diffusion 3.5 Medium
   (Stability AI Topluluk Lisansı) ve SDXL Lightning (OpenRAIL++) koşullu; stable-diffusion.cpp MIT. Yalnız onayından sonra (koşullu
   lisanslarda lisansı da kabul edince) Hugging Face / GitHub'dan indirilir.
 

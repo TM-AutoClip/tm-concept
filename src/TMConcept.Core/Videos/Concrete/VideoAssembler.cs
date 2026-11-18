@@ -54,6 +54,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         var subtitles = VideoStyleRules.SubtitlesOn(options);
         var style = options.Style;
         RenderStyleBuilder.Apply(input, style);
+        await BoostAsync(input, work, cancellationToken).ConfigureAwait(false);
         var chat = chats.Create(codeModel.Model, codeModel.Key.Secret);
         var local = IsLocal(codeModel.Model);
         var system = VideoCodePrompt.System(engine, subtitles, style, input.Language, local);
@@ -175,6 +176,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(steps);
         RenderStyleBuilder.Apply(input, options.Style);
+        await BoostAsync(input, work, cancellationToken).ConfigureAwait(false);
         PlaceFonts(Path.Combine(work, "project"), options.Style, input.Language);
         var request = new EngineRenderRequest(Path.Combine(work, "project"), code, RenderInputBuilder.ForEngine(input, VideoStyleRules.SubtitlesOn(options)),
             Path.Combine(work, "silent.mp4"), Workers());
@@ -575,7 +577,11 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
 
         var closing = VideoStyleRules.Closing(style, input.Language);
         var photo = closing is { Screen: true } ? PlacePhoto(save.Profile, save.Work) : null;
-        var drawn = StyleOverlay.Build(input.Width, input.Height, input.DurationSeconds, cues, style, input.Language, closing, save.Profile.Name, photo is not null);
+        var needs = style.ReadableText && style.Subtitles && cues.Count > 0
+            ? await SubtitleNeedsAsync(save.Render.Request.Output, cues, input, VideoStyleRules.Palette(style).Text, cancellationToken).ConfigureAwait(false)
+            : null;
+        var drawn = StyleOverlay.Build(input.Width, input.Height, input.DurationSeconds, cues, style, input.Language, closing, save.Profile.Name, photo is not null,
+            needs);
         if (drawn.Ass is null)
         {
             return MuxOverlay.None;
@@ -620,6 +626,80 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         var name = PhotoFile + Path.GetExtension(source).ToLowerInvariant();
         File.Copy(source, Path.Combine(work, name), overwrite: true);
         return name;
+    }
+
+    /// <summary>
+    /// What each subtitle needs over the rendered video behind it (<see cref="TextBackdrop"/>): a frame at the middle of each subtitle (at
+    /// most <see cref="TextBackdrop.MaxSamples"/>) is read under the subtitles' place and measured against the text colour. A frame that
+    /// cannot be read leaves its subtitles to their neighbours; when ffmpeg cannot read the video at all, the cause is logged and every
+    /// subtitle keeps the normal readable edge (the video is still made).
+    /// </summary>
+    private async Task<IReadOnlyList<TextBackdropNeed>?> SubtitleNeedsAsync(string video, IReadOnlyList<Subtitles.SubtitleCue> cues, RenderInput input,
+        string textColour, CancellationToken cancellationToken)
+    {
+        var indexes = TextBackdrop.SampleIndexes(cues.Count);
+        IReadOnlyList<Media.FramePixels?> frames;
+        try
+        {
+            frames = await media.SampleAsync(video, indexes.Select(i => (cues[i].StartMs + cues[i].EndMs) / 2).ToList(),
+                TextBackdrop.SubtitleRegion(input.Width, input.Height), cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "The video behind the subtitles could not be measured; they keep the normal readable outline");
+            return null;
+        }
+
+        var sampled = new Dictionary<int, TextBackdropNeed>();
+        for (var i = 0; i < indexes.Count && i < frames.Count; i++)
+        {
+            if (frames[i] is { } frame)
+            {
+                sampled[indexes[i]] = TextBackdrop.Need(TextBackdrop.Measure(frame, textColour));
+            }
+        }
+
+        var needs = TextBackdrop.Spread(cues.Count, sampled);
+        logger.LogInformation("Subtitles over the video: {Plain} plain, {Stronger} with a stronger outline, {Backdrop} with a backdrop ({Sampled} of {Count} measured)",
+            needs.Count(n => n == TextBackdropNeed.Plain), needs.Count(n => n == TextBackdropNeed.Stronger), needs.Count(n => n == TextBackdropNeed.Backdrop),
+            sampled.Count, cues.Count);
+        return needs;
+    }
+
+    /// <summary>
+    /// The on-screen text boost of a video with readable text (<see cref="RenderStyle.OutlineBoost"/>): every scene image is measured as a
+    /// whole against the text colour (where the code puts its text is not known) and the strongest need wins, so the text stays readable on
+    /// every scene. Scenes without an image keep the normal outline (the code draws on the template's own colours). An image that cannot be
+    /// read is logged and left out.
+    /// </summary>
+    private async Task BoostAsync(RenderInput input, string work, CancellationToken cancellationToken)
+    {
+        if (input.Style is not { Outline.Length: > 0 } style)
+        {
+            return;
+        }
+
+        var strongest = TextBackdropNeed.Plain;
+        foreach (var scene in input.Scenes.Where(s => s.Image.Length > 0))
+        {
+            var file = Path.Combine(work, scene.Image);
+            try
+            {
+                var frames = await media.SampleAsync(file, [0], Media.FrameRegion.Whole, cancellationToken).ConfigureAwait(false);
+                if (frames.Count > 0 && frames[0] is { } frame)
+                {
+                    var need = TextBackdrop.Need(TextBackdrop.Measure(frame, style.Colors.Text));
+                    strongest = need > strongest ? need : strongest;
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogWarning(ex, "Scene {Number}'s image could not be measured for readable text", scene.Number);
+            }
+        }
+
+        style.OutlineBoost = TextBackdrop.Boost(strongest);
+        logger.LogInformation("On-screen text over the scene images: {Need} (outline boost {Boost})", strongest, style.OutlineBoost);
     }
 
     /// <summary>The overlay file's name in the work folder.</summary>

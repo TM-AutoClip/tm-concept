@@ -11,7 +11,8 @@ namespace TMConcept.Engines.Images;
 /// <para>Memory classes (<see cref="VramTier"/>; a card sees its own class and every lower one): the class a model runs in comfortably with
 /// the memory options of <see cref="ImageMemoryPlanner"/> (weights in main memory where the card is too small). Measured only on a 6 GB RTX
 /// 3060 Laptop at 1280×720 (FLUX.2 klein 4B Q4 about 20 s, Z-Image Turbo Q8 about 71 s); the others are estimates from the file sizes.</para>
-/// <para>Licenses: Z-Image Turbo, FLUX.2 klein 4B, Qwen-Image and every text encoder (Qwen3, Qwen3-VL, Qwen2.5-VL) Apache-2.0; the FLUX.2 VAE
+/// <para>Licenses: Z-Image Turbo, FLUX.2 klein 4B, Qwen-Image and every text encoder (Qwen3, Qwen3-VL, Qwen2.5-VL) Apache-2.0;
+/// Qwen-Image 2.1 (its Turbo and its VAE too) is under the Qwen Research License: non-commercial; the FLUX.2 VAE
 /// is the Apache-2.0 copy of Comfy-Org/Flux-2-Klein-4B (not the one of FLUX.2 dev, which is non-commercial); FLUX.2 klein 9B is
 /// non-commercial; FLUX.3 Image Klein (FLUX Kommunity License) and Stable Diffusion 3.5 Medium (Stability AI Community License) allow
 /// commercial use only under conditions (a revenue limit); SDXL Lightning is OpenRAIL++ (use restrictions), its fp16 VAE MIT. Anything but
@@ -25,10 +26,20 @@ public static class LocalImageModels
     /// <summary>The oldest stable-diffusion.cpp build that knows FLUX.3 (master-968-8cd731e, "add FLUX.3 Image Klein").</summary>
     public const int Flux3Build = 968;
 
+    /// <summary>
+    /// The oldest stable-diffusion.cpp build for Qwen-Image 2.1 (master-959-d637cfb, "add Qwen Image 2.1 Turbo sigma preset"; the model itself
+    /// came in master-883, its schedule and VAE fixes in master-913/914). Both pinned sd-cli builds (Windows 1106, Linux 1043) are newer.
+    /// </summary>
+    public const int QwenImage21Build = 959;
+
+    /// <summary>The fixed 8-step schedule of Qwen-Image 2.1 Turbo by its sd-cli preset name (without it sd-cli uses the base model's schedule).</summary>
+    public static readonly IReadOnlyList<string> QwenImage21TurboSigmas = ["--sigmas", "qwen-image-2.1-turbo"];
+
     private const string FluxNonCommercialUrl = "https://huggingface.co/black-forest-labs/FLUX.2-klein-9B";
     private const string FluxKommunityUrl = "https://huggingface.co/black-forest-labs/flux-3-image-klein";
     private const string StabilityCommunityUrl = "https://huggingface.co/stabilityai/stable-diffusion-3.5-medium";
     private const string SdxlLightningUrl = "https://huggingface.co/ByteDance/SDXL-Lightning";
+    private const string QwenResearchUrl = "https://huggingface.co/Qwen/Qwen-Image-2.1";
 
     private const string ZImageGguf = "c61c0e422dc8b541b7548cf33a4ef8302b0f8085";
     private const string ZImageComfy = "6fc90a3b1b653e935a0d175e260736de25b84df5";
@@ -43,6 +54,10 @@ public static class LocalImageModels
     private const string SdxlLightningGguf = "4fe21f71b298e088be341bb6545f6a2df950b5ff";
     private const string QwenImageGguf = "257f261fa92593bed760aa6fa3f7921a49fea00f";
     private const string Qwen25Vl = "cfa2baa09946b211c107e6e104948987a64dd2c1";
+    private const string QwenImage21Comfy = "aacf31a6d48e707f352ecba714cee0680da3479b";
+    private const string QwenImage21Gguf = "0bca76da6edd8a18211e9717454615c1bbaaf6ed";
+    private const string QwenImage21TurboGguf = "cbcb9ff83b17e1eeef693479a8d34cea355a0ee4";
+    private const string Qwen3Vl8 = "f982a07559d4a2f6c8744d840bf6fccab30eea96";
 
     /// <summary>The Z-Image VAE (Comfy-Org, Apache-2.0).</summary>
     public static readonly ImageModelFile ZImageVae = new(ImageFileRole.Vae, HuggingFaceFile.Pinned("Comfy-Org/Z-Image-Turbo", ZImageComfy,
@@ -55,6 +70,10 @@ public static class LocalImageModels
     /// <summary>The Qwen-Image VAE (Comfy-Org, Apache-2.0).</summary>
     public static readonly ImageModelFile QwenImageVae = new(ImageFileRole.Vae, HuggingFaceFile.Pinned("Comfy-Org/Qwen-Image_ComfyUI", "1f12b17be14c89b026c51a91d67c32f84bb047bc",
         "split_files/vae/qwen_image_vae.safetensors", "a70580f0213e67967ee9c95f05bb400e8fb08307e017a924bf3441223e023d1f", 253_806_246));
+
+    /// <summary>The Qwen-Image 2.1 VAE (Comfy-Org's copy; Qwen Research License like the model; not interchangeable with the Qwen-Image VAE).</summary>
+    public static readonly ImageModelFile QwenImage21Vae = new(ImageFileRole.Vae, HuggingFaceFile.Pinned("Comfy-Org/Qwen-Image-2.1", QwenImage21Comfy,
+        "vae/qwen_image_2.1_vae_bf16.safetensors", "bb21f7473051e1ac368515dd3f2e15cd44d7a11748ee8823e1ddca3e4876b7c9", 675_509_688)); // SHA-256 (HF LFS)
 
     /// <summary>The SDXL VAE that works in fp16 (madebyollin, MIT).</summary>
     public static readonly ImageModelFile SdxlVae = new(ImageFileRole.Vae, HuggingFaceFile.Pinned("madebyollin/sdxl-vae-fp16-fix", "207b116dae70ace3637169f1ddd2434b91b3a8cd",
@@ -89,6 +108,12 @@ public static class LocalImageModels
 
     private static readonly ImageModelFile Qwen25VlQ8 = new(ImageFileRole.Llm, HuggingFaceFile.Pinned("mradermacher/Qwen2.5-VL-7B-Instruct-GGUF", Qwen25Vl,
         "Qwen2.5-VL-7B-Instruct.Q8_0.gguf", "577bfb3e41f93f00414e594c56a38bbe91207b3b636ab7faf343e34a20aa73ca", 8_098_524_160));
+
+    private static readonly ImageModelFile Qwen3Vl8Q4 = new(ImageFileRole.Llm, HuggingFaceFile.Pinned("Qwen/Qwen3-VL-8B-Instruct-GGUF", Qwen3Vl8,
+        "Qwen3VL-8B-Instruct-Q4_K_M.gguf", "67d1659bfe71b89d50b45a4ad1a9e5b997e5bb16ce5da66a6a6167abd569e9e2", 5_027_784_800)); // SHA-256 (HF LFS)
+
+    private static readonly ImageModelFile Qwen3Vl8Q8 = new(ImageFileRole.Llm, HuggingFaceFile.Pinned("Qwen/Qwen3-VL-8B-Instruct-GGUF", Qwen3Vl8,
+        "Qwen3VL-8B-Instruct-Q8_0.gguf", "0d264b3941185d00a74f75c4245521dae088ff1efc90ab8d1754e83f5844adb0", 8_709_519_456)); // SHA-256 (HF LFS)
 
     private static readonly ImageModelFile Sd35ClipL = new(ImageFileRole.ClipL, HuggingFaceFile.Pinned("second-state/stable-diffusion-3.5-medium-GGUF", Sd35Gguf,
         "clip_l-Q8_0.gguf", "482dfa677edb6499a689f1936f287351f3c104d5da9094d8c797da527a98323b", 130_864_000));
@@ -167,6 +192,21 @@ public static class LocalImageModels
         Tier = VramTier.Gb6, License = "stability-community", LicenseUse = LicenseUse.Limited, LicenseUrl = StabilityCommunityUrl,
     };
 
+    /// <summary>
+    /// Qwen-Image 2.1 Turbo (AtomicChat's importance-matrix Q4_K, 4.2 GB, built and checked with stable-diffusion.cpp; Qwen3-VL 8B Q4_K_M):
+    /// 8 steps on its own sigma schedule, no guidance; strong at text in pictures. Qwen Research License: NON-COMMERCIAL; asked before the download.
+    /// </summary>
+    public static readonly LocalImageModel QwenImage21Turbo = new("qwen-image-2.1-turbo", "Qwen-Image 2.1 Turbo",
+    [
+        new(ImageFileRole.Diffusion, HuggingFaceFile.Pinned("AtomicChat/Qwen-Image-2.1-Turbo-GGUF", QwenImage21TurboGguf, "Qwen-Image-2.1-Turbo-AD-Q4_K.gguf",
+            "4bb73c53cbe284bbd6d69b9fdc59539c531f0389dd2aa567663d777f8130bc59", 4_201_694_944)), // SHA-256 (HF LFS)
+        Qwen3Vl8Q4, QwenImage21Vae,
+    ])
+    {
+        Family = "qwen-image-2.1", Steps = 8, ExtraArguments = QwenImage21TurboSigmas, Tier = VramTier.Gb6, MinSdCppBuild = QwenImage21Build,
+        License = "qwen-research", LicenseUse = LicenseUse.NonCommercial, LicenseUrl = QwenResearchUrl,
+    };
+
     /// <summary>SDXL Lightning at Q8_0: sharper than Q4.</summary>
     public static readonly LocalImageModel SdxlLightningQ8 = new("sdxl-lightning-q8", "SDXL Lightning (Q8)",
     [
@@ -213,6 +253,18 @@ public static class LocalImageModels
         Family = "flux2", Steps = 4, Tier = VramTier.Gb12,
     };
 
+    /// <summary>Qwen-Image 2.1 Turbo at Q8_0 with Qwen3-VL 8B Q8_0: NON-COMMERCIAL license; asked before the download.</summary>
+    public static readonly LocalImageModel QwenImage21TurboQ8 = new("qwen-image-2.1-turbo-q8", "Qwen-Image 2.1 Turbo (Q8)",
+    [
+        new(ImageFileRole.Diffusion, HuggingFaceFile.Pinned("AtomicChat/Qwen-Image-2.1-Turbo-GGUF", QwenImage21TurboGguf, "Qwen-Image-2.1-Turbo-Q8_0.gguf",
+            "8d74ae0be534df394ea2d29f04b77f879318c9e0df20a3e208e6bedbf89b4159", 7_591_577_312)), // SHA-256 (HF LFS)
+        Qwen3Vl8Q8, QwenImage21Vae,
+    ])
+    {
+        Family = "qwen-image-2.1", Steps = 8, ExtraArguments = QwenImage21TurboSigmas, Tier = VramTier.Gb12, MinSdCppBuild = QwenImage21Build,
+        License = "qwen-research", LicenseUse = LicenseUse.NonCommercial, LicenseUrl = QwenResearchUrl,
+    };
+
     /// <summary>Stable Diffusion 3.5 Medium at Q8_0 with T5-XXL Q8_0.</summary>
     public static readonly LocalImageModel Sd35MediumQ8 = new("sd35-medium-q8", "Stable Diffusion 3.5 Medium (Q8)",
     [
@@ -236,6 +288,21 @@ public static class LocalImageModels
     ])
     {
         Family = "qwen-image", Steps = 20, CfgScale = 2.5, FlowShift = 3, NegativePrompt = DefaultNegativePrompt, Tier = VramTier.Gb16,
+    };
+
+    /// <summary>
+    /// Qwen-Image 2.1, the undistilled model (leejet's Q8_0, Qwen3-VL 8B Q8_0): guided (cfg 6 as in sd.cpp's docs, 40 steps as on Qwen's card),
+    /// about ten times the work of the Turbo one for the finest pictures. NON-COMMERCIAL license; asked before the download.
+    /// </summary>
+    public static readonly LocalImageModel QwenImage21 = new("qwen-image-2.1", "Qwen-Image 2.1",
+    [
+        new(ImageFileRole.Diffusion, HuggingFaceFile.Pinned("leejet/Qwen-Image-2.1-GGUF", QwenImage21Gguf, "qwen_image_2.1-Q8_0.gguf",
+            "f8b244b00937f0e444a40dbf7866460871b89b30142594973b6012d1b471dc0a", 7_687_155_744)), // SHA-256 (HF LFS)
+        Qwen3Vl8Q8, QwenImage21Vae,
+    ])
+    {
+        Family = "qwen-image-2.1", Steps = 40, CfgScale = 6, NegativePrompt = DefaultNegativePrompt, Tier = VramTier.Gb16, MinSdCppBuild = QwenImage21Build,
+        License = "qwen-research", LicenseUse = LicenseUse.NonCommercial, LicenseUrl = QwenResearchUrl,
     };
 
     /// <summary>FLUX.3 Image Klein at Q8_0 with Qwen3-VL 4B Q8_0.</summary>
@@ -304,10 +371,10 @@ public static class LocalImageModels
     public static readonly IReadOnlyList<LocalImageModel> All =
     [
         ZImageTurboSmall, Flux2Klein, SdxlLightning,
-        ZImageTurbo, Flux3Klein, Sd35Medium, SdxlLightningQ8,
+        ZImageTurbo, Flux3Klein, Sd35Medium, SdxlLightningQ8, QwenImage21Turbo,
         Flux2Klein9,
-        ZImageTurboQ8, Flux2KleinQ8, Sd35MediumQ8,
-        QwenImage, Flux3KleinQ8,
+        ZImageTurboQ8, Flux2KleinQ8, Sd35MediumQ8, QwenImage21TurboQ8,
+        QwenImage, Flux3KleinQ8, QwenImage21,
         ZImageTurboFull, Flux2Klein9Q8, QwenImageQ6,
         QwenImageQ8,
     ];

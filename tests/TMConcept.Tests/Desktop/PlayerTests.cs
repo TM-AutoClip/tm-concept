@@ -173,5 +173,8 @@ public sealed class PlayerTests
             await File.WriteAllBytesAsync(jpeg, [0xFF, 0xD8, 0xFF], cancellationToken);
             return true;
         }
+
+        public Task<IReadOnlyList<FramePixels?>> SampleAsync(string file, IReadOnlyList<long> atMs, FrameRegion region, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<FramePixels?>>(atMs.Select(_ => (FramePixels?)null).ToList());
     }
 }

@@ -11,7 +11,7 @@ namespace TMConcept.Storage.Database
     public partial class ConceptDbContextModel
     {
         private ConceptDbContextModel()
-            : base(skipDetectChanges: false, modelId: new Guid("6d275656-db60-4777-be54-5465f07048bb"), entityTypeCount: 22)
+            : base(skipDetectChanges: false, modelId: new Guid("3ef9e2bc-a615-4105-99ee-7d94f4bb40c1"), entityTypeCount: 22)
         {
         }
 

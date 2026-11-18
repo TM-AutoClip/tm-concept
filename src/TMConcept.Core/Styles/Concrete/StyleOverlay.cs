@@ -23,9 +23,11 @@ public static class StyleOverlay
     /// The overlay of a video: <paramref name="cues"/> are its subtitles (drawn only when the template has them on), <paramref name="closing"/>
     /// its closing in its language (<see cref="VideoStyleRules.Closing"/>; the card only when <see cref="ClosingText.Screen"/>),
     /// <paramref name="channel"/> the channel's name on the card, <paramref name="photo"/> whether the channel photo is laid over it.
+    /// <paramref name="needs"/> (0.1.25, readable text only): what each subtitle needs over the video behind it (<see cref="TextBackdrop"/>),
+    /// by cue; a stronger edge or a subtle backdrop where the contrast is low. Missing = the normal readable edge.
     /// </summary>
     public static StyleOverlayResult Build(int width, int height, double durationSeconds, IReadOnlyList<SubtitleCue> cues, VideoStyle style, string language,
-        ClosingText? closing, string channel, bool photo)
+        ClosingText? closing, string channel, bool photo, IReadOnlyList<TextBackdropNeed>? needs = null)
     {
         ArgumentNullException.ThrowIfNull(cues);
         ArgumentNullException.ThrowIfNull(style);
@@ -57,6 +59,7 @@ public static class StyleOverlay
             .Append("[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ")
             .Append("ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n")
             .Append(c, $"Style: Default,{font.Family},{size},{text},&H000000FF,{edge.Outline},{edge.Back},{subtitleBold},{italic},0,0,100,100,0,0,1,{edge.Width},{edge.Shadow},2,{side},{side},{(int)Math.Round(height * 0.12)},1\n")
+            .Append(c, $"Style: TmBoxed,{font.Family},{size},{text},&H000000FF,{Backdrop(edge)},{Backdrop(edge)},{subtitleBold},{italic},0,0,100,100,0,0,3,{Math.Max(2, size / 5)},0,2,{side},{side},{(int)Math.Round(height * 0.12)},1\n")
             .Append(c, $"Style: TmShape,{font.Family},10,{text},&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1\n")
             .Append(c, $"Style: TmName,{font.Family},{Name(unit)},{text},&H000000FF,{background},&H00000000,{bold},0,0,0,100,100,0,0,1,{Math.Max(1, Name(unit) / 20)},0,8,{side},{side},0,1\n")
             .Append(c, $"Style: TmPhrase,{font.Family},{Phrase(unit)},{text},&H000000FF,{background},&H00000000,0,0,0,0,100,100,0,0,1,{Math.Max(1, Phrase(unit) / 24)},0,8,{side},{side},0,1\n")
@@ -66,9 +69,18 @@ public static class StyleOverlay
         {
             // Nothing is said under the card (it covers the hold after the narration); a cue that would still run then ends where it starts.
             var stop = card is null ? long.MaxValue : (long)Math.Round(card.StartSeconds * 1000);
-            foreach (var cue in cues.Where(c => c.StartMs < stop))
+            for (var i = 0; i < cues.Count; i++)
             {
-                Event(ass, 0, cue.StartMs, Math.Min(cue.EndMs, stop), "Default", string.Join("\\N", cue.Lines.Select(Plain)));
+                var cue = cues[i];
+                if (cue.StartMs >= stop)
+                {
+                    continue;
+                }
+
+                var need = style.ReadableText && needs is not null && i < needs.Count ? needs[i] : TextBackdropNeed.Plain;
+                var line = string.Join("\\N", cue.Lines.Select(Plain));
+                Event(ass, 0, cue.StartMs, Math.Min(cue.EndMs, stop), need == TextBackdropNeed.Backdrop ? "TmBoxed" : "Default",
+                    need == TextBackdropNeed.Stronger ? Stronger(edge) + line : line);
             }
         }
 
@@ -108,6 +120,28 @@ public static class StyleOverlay
 
         // The shadow: the same colour, about 40 % see-through (ASS alpha &H66).
         return new SubtitleEdge(opposite, "&H66" + opposite[4..], Math.Max(3, (int)Math.Round(size / 8.0)), Math.Max(2, (int)Math.Round(size / 22.0)));
+    }
+
+    /// <summary>
+    /// The override of a subtitle over a background with too little contrast (<see cref="TextBackdropNeed.Stronger"/>): the outline half as
+    /// thick again, a longer shadow, and the shadow only about 20 % see-through (ASS alpha &amp;H33).
+    /// </summary>
+    public static string Stronger(SubtitleEdge edge)
+    {
+        ArgumentNullException.ThrowIfNull(edge);
+        var width = (int)Math.Round(edge.Width * 1.5, MidpointRounding.AwayFromZero);
+        var shadow = Math.Max(2, (int)Math.Round(edge.Shadow * 1.5, MidpointRounding.AwayFromZero));
+        return string.Create(CultureInfo.InvariantCulture, $@"{{\bord{width}\shad{shadow}\4a&H33&}}");
+    }
+
+    /// <summary>
+    /// The box colour of a subtitle over a busy or same-brightness background (<see cref="TextBackdropNeed.Backdrop"/>): the outline's colour,
+    /// about 35 % see-through (ASS alpha &amp;H59), so the picture still shows through: a subtle backdrop, not a solid bar.
+    /// </summary>
+    public static string Backdrop(SubtitleEdge edge)
+    {
+        ArgumentNullException.ThrowIfNull(edge);
+        return "&H59" + edge.Outline[4..];
     }
 
     /// <summary>

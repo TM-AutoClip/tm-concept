@@ -69,6 +69,11 @@ public sealed class VideoCostDetailsTests
         var orphan = new VideoRecord { ProfileId = profile.Id, Title = "Lost", Folder = "Byzantium/b/v1", FileName = "video.mp4", TotalUsd = 0.05m,
             CreatedAtUtc = DateTimeOffset.UtcNow.AddMinutes(-5) };
         await h.Get<IVideoStore>().AddAsync(orphan, [Cost(orphan.Id, PipelineSteps.Speech, 0.05m)], CancellationToken.None);
+        // 0.1.25: a video whose concept was edited by AI twice before it was made (lines of their own, outside the video's total).
+        var edited = new VideoRecord { ConceptId = concept.Id, ProfileId = profile.Id, Title = "Greek fire", Folder = "Byzantium/c/v1", FileName = "video.mp4",
+            TotalUsd = 0.10m, CreatedAtUtc = DateTimeOffset.UtcNow.AddMinutes(-10) };
+        await h.Get<IVideoStore>().AddAsync(edited, [Cost(edited.Id, PipelineSteps.VideoCode, 0.10m), Cost(edited.Id, VideoCostBreakdown.ConceptEdits, 0.03m),
+            Cost(edited.Id, VideoCostBreakdown.ConceptEdits, 0.01m)], CancellationToken.None);
         Directory.CreateDirectory(Path.Combine(library, "Byzantium"));
 
         var page = h.Get<ProducedViewModel>();
@@ -94,5 +99,13 @@ public sealed class VideoCostDetailsTests
         second.ShouldContain(text["produced.cost.concepts"] + ": " + text["produced.share.unknown"]);
         second.ShouldContain(text.Format("produced.detail.total_unknown", text.Usd(0.05m)));
         second.ShouldContain(text["produced.cost.speech"]);
+        second.ShouldNotContain(text["produced.cost.concept-edits"], Case.Sensitive, "a video without recorded edits shows none (never guessed)");
+        first.ShouldNotContain(text["produced.cost.concept-edits"]);
+
+        var third = await DetailsOf(edited.Id);
+        third.ShouldContain(text.Format("produced.detail.cost", text["produced.cost.concept-edits"] + " ×2", text.Usd(0.04m), text["produced.exact"]));
+        third.ShouldContain(text.Format("produced.detail.total_edits", text.Usd(0.16m), text.Usd(0.02m), text.Usd(0.04m), text.Usd(0.10m)));
+        third.IndexOf(text["produced.cost.concept-edits"], StringComparison.Ordinal)
+            .ShouldBeLessThan(third.IndexOf(text["produced.cost.video-code"], StringComparison.Ordinal), "in the order of the work");
     }
 }

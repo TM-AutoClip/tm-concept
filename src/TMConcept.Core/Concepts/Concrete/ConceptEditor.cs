@@ -16,7 +16,7 @@ namespace TMConcept.Core.Concepts;
 /// user's wish), streamed and cancelable. The answer has the format of concept generation, so <see cref="ConceptResponseParser"/> reads
 /// it; the first complete concept is the result. Nothing is saved here: the page shows the result in the editor and the user saves it.
 /// The call is a run of its own (<see cref="RunKind.ConceptEdit"/>), so the month's spending counts it, also when it fails after being
-/// billed. A cut-off answer (max_tokens) or one without a readable concept changes nothing: a half concept is no edit. The instruction is
+/// billed; the run names the concept (0.1.25), so the video made from it lists what its edits cost. A cut-off answer (max_tokens) or one without a readable concept changes nothing: a half concept is no edit. The instruction is
 /// kept as one of the profile's wishes (<see cref="KeepWishAsync"/>; <see cref="IConceptWishStore"/>, the newest
 /// <see cref="PromptMemoryLimits.WishesKept"/>) only when the page saves the edited text: new concepts apply it from the start (the
 /// developer, 10 Nov 2026), and an edit the user cancels or throws away leaves no wish behind.
@@ -47,6 +47,7 @@ public sealed class ConceptEditor(IProfileStore profiles, IRunStore runs, IConce
         var run = new Run
         {
             ProfileId = profile.Id,
+            ConceptId = concept.Id,
             Kind = RunKind.ConceptEdit,
             Provider = model.Model.Provider,
             Model = model.Model.Id,
