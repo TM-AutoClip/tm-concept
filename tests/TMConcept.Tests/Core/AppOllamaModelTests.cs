@@ -100,6 +100,7 @@ public sealed class AppOllamaModelTests : IDisposable
         gemma.Family.ShouldBe("gemma3");
         gemma.Vision.ShouldBeTrue();
         gemma.CanThink.ShouldBeFalse();
+        gemma.Bytes.ShouldBe(3_350_272_259, "the sum of the layers of the gemma3:4b registry manifest");
         gemma.License.ShouldBe("gemma");
         gemma.LicenseUrl.ShouldBe("https://ai.google.dev/gemma/terms");
         AppModelAdvisor.Fit(gemma, 4 * GiB).ShouldBe(AppModelFit.Fits);
