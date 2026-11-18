@@ -44,6 +44,8 @@ public static class StyleOverlay
         var size = SubtitleBuilder.FontSize(width, height);
         var side = SubtitleBuilder.SideMargin(width);
         var bold = font.BoldFile is null ? 0 : 1;
+        var subtitleBold = VideoStyleRules.SubtitlesBold(style, font) ? 1 : 0;
+        var italic = VideoStyleRules.Italic(style) ? 1 : 0;
         var unit = Math.Min(width, height);
         var text = SubtitleBuilder.AssColour(palette.Text);
         var background = SubtitleBuilder.AssColour(palette.Background);
@@ -54,7 +56,7 @@ public static class StyleOverlay
             .Append(c, $"PlayResX: {width}\nPlayResY: {height}\n\n")
             .Append("[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ")
             .Append("ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n")
-            .Append(c, $"Style: Default,{font.Family},{size},{text},&H000000FF,{edge.Outline},{edge.Back},{bold},0,0,0,100,100,0,0,1,{edge.Width},{edge.Shadow},2,{side},{side},{(int)Math.Round(height * 0.12)},1\n")
+            .Append(c, $"Style: Default,{font.Family},{size},{text},&H000000FF,{edge.Outline},{edge.Back},{subtitleBold},{italic},0,0,100,100,0,0,1,{edge.Width},{edge.Shadow},2,{side},{side},{(int)Math.Round(height * 0.12)},1\n")
             .Append(c, $"Style: TmShape,{font.Family},10,{text},&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1\n")
             .Append(c, $"Style: TmName,{font.Family},{Name(unit)},{text},&H000000FF,{background},&H00000000,{bold},0,0,0,100,100,0,0,1,{Math.Max(1, Name(unit) / 20)},0,8,{side},{side},0,1\n")
             .Append(c, $"Style: TmPhrase,{font.Family},{Phrase(unit)},{text},&H000000FF,{background},&H00000000,0,0,0,0,100,100,0,0,1,{Math.Max(1, Phrase(unit) / 24)},0,8,{side},{side},0,1\n")

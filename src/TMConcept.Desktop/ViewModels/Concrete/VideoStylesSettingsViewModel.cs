@@ -21,6 +21,7 @@ public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store,
     ILogger<VideoStylesSettingsViewModel> logger) : SettingsSectionBase
 {
     private bool _loading;
+    private bool _fontsLogged;
 
     /// <inheritdoc />
     public override string TitleKey => "settings.styles";
@@ -235,6 +236,14 @@ public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store,
 
     private async Task LoadAsync(Guid? select)
     {
+        // The fonts installed on this computer are read once, off the interface thread (the editor lists them after the shipped ones).
+        var installed = await Task.Run(() => SystemFonts.Installed).ConfigureAwait(true);
+        if (!_fontsLogged)
+        {
+            _fontsLogged = true;
+            logger.LogInformation("{Count} installed font families can be used in templates", installed.Count);
+        }
+
         var all = await store.ListAsync(CancellationToken.None).ConfigureAwait(true);
         _loading = true;
         try

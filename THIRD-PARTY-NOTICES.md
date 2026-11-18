@@ -8,12 +8,12 @@ TM Concept is MIT licensed. It includes or uses the following third-party materi
 |---|---|---|
 | Manrope font | SIL Open Font License 1.1 | `src/TMConcept.Desktop/Assets/Fonts`, license text in `src/TMConcept.Desktop/Assets/Licenses/font-manrope.txt` |
 | Space Grotesk font | SIL Open Font License 1.1 | `src/TMConcept.Desktop/Assets/Fonts`, license text in `src/TMConcept.Desktop/Assets/Licenses/font-space-grotesk.txt` |
-| Video fonts of the templates: Fira Sans, Poppins, Bebas Neue, Anton, Crimson Text, Patrick Hand (static TrueType files from github.com/google/fonts, `ofl/<name>`) | SIL Open Font License 1.1 | `src/TMConcept.Core/Styles/Files/Fonts` (embedded in the program; copied into a video's work folder while it is made), license texts in `src/TMConcept.Desktop/Assets/Licenses/font-<name>.txt` |
+| Video fonts of the templates: Fira Sans, Poppins, Bebas Neue, Anton, Crimson Text, Patrick Hand, Tinos (static TrueType files from github.com/google/fonts, `ofl/<name>`; Fira Sans, Poppins, Crimson Text and Tinos with their italic and bold italic files; Tinos is a serif with the widths of Times New Roman, by Steve Matteson, github.com/googlefonts/tinos) | SIL Open Font License 1.1 | `src/TMConcept.Core/Styles/Files/Fonts` (embedded in the program; copied into a video's work folder while it is made), license texts in `src/TMConcept.Desktop/Assets/Licenses/font-<name>.txt` |
 | Engine package lists (`package.json`, `package-lock.json`) | — (lists of versions, not the packages) | `src/TMConcept.Engines/Packages` |
 | Ahenk Cep text front end and sampling loop, ported to C# (from `site/js/front-native.js`, `site/js/engine.js` and `site/js/randn.js` of github.com/ozguradmin/ahenk-turkish-tts, which follow EMA Lightning's `frontend.py`, `chunker.py` and engine) | Apache-2.0 (Ahenk; EMA Lightning) | `src/TMConcept.Speech/AhenkCep`. Changed: rewritten in C#; the text arrives already normalized by TM Concept's own Turkish rules, so trnorm itself is not included. |
 | Some entries of the built-in Turkish pronunciation list and the Turkish letter names of abbreviations, cross-checked with the word lists of trnorm (`site/js/trnorm/lexicon.js` of the same repository) | Apache-2.0 (trnorm) | `src/TMConcept.Core/Pronunciation/Files/tr.txt`, `src/TMConcept.Core/Pronunciation/Constant` |
 
-The font license texts are shipped as files next to the program and in the Linux archive (`licenses/`).
+The font license texts are shipped as files next to the program and in the Linux archive (`licenses/`). Fonts installed on the user's computer (for example Times New Roman) are never shipped: a template may use one, and a video made on that computer copies its files into the video's work folder only.
 
 ## Libraries bundled into the program
 

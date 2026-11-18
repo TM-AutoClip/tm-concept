@@ -29,8 +29,14 @@ public sealed class VideoStyle
     /// </summary>
     public bool ReadableText { get; set; } = true;
 
-    /// <summary>Font id from <see cref="VideoFonts"/> (titles, on-screen text and subtitles).</summary>
+    /// <summary>
+    /// Font id from <see cref="VideoFonts"/>, or an installed font's (<see cref="SystemFonts"/>, "system:Times New Roman") for titles,
+    /// on-screen text and subtitles.
+    /// </summary>
     public string FontId { get; set; } = VideoFonts.DefaultId;
+
+    /// <summary>Weight and slant of the text (0.1.24; <see cref="FontEmphasis.Auto"/> = the look before).</summary>
+    public FontEmphasis FontEmphasis { get; set; } = FontEmphasis.Auto;
 
     /// <summary>How titles are drawn.</summary>
     public TitleStyle TitleStyle { get; set; } = TitleStyle.Plain;

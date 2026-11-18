@@ -94,10 +94,11 @@ public sealed class TemplateEngineTests
     {
         var fonts = RemotionEngine.FontsTs(Styled());
 
-        fonts.ShouldContain("['Crimson Text', 'fonts/CrimsonText-Regular.ttf', '400'], ['Crimson Text', 'fonts/CrimsonText-Bold.ttf', '700']");
+        fonts.ShouldContain("['Crimson Text', 'fonts/CrimsonText-Regular.ttf', '400', 'normal', 'truetype'], ['Crimson Text', 'fonts/CrimsonText-Bold.ttf', '700', 'normal', 'truetype']");
+        fonts.ShouldContain("['Crimson Text', 'fonts/CrimsonText-Italic.ttf', '400', 'italic', 'truetype'], ['Crimson Text', 'fonts/CrimsonText-BoldItalic.ttf', '700', 'italic', 'truetype']");
         fonts.ShouldContain("delayRender(");
         fonts.ShouldContain("cancelRender(", customMessage: "a font that cannot load stops the render instead of drawing another font");
-        RemotionEngine.FontsTs(SampleRender.Input()).ShouldContain("const faces: [string, string, string][] = [];");
+        RemotionEngine.FontsTs(SampleRender.Input()).ShouldContain("const faces: [string, string, string, string, string][] = [];");
         RevideoEngine.FontLoader(SampleRender.Input()).ShouldBeEmpty();
         var revideo = RevideoEngine.FontLoader(Styled());
         revideo.ShouldContain("await Promise.all(", customMessage: "the project waits for the font before any frame is drawn");

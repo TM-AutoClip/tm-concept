@@ -60,9 +60,9 @@
                                 HorizontalAlignment="{Binding PreviewTitleBoxAlignment}" VerticalAlignment="{Binding PreviewTitleVertical}">
                           <StackPanel Spacing="2" HorizontalAlignment="{Binding PreviewTitleHorizontal}">
                             <Panel>
-                              <TextBlock Text="{DynamicResource styles.preview.title}" FontFamily="{Binding Font.Preview}" FontSize="18" FontWeight="Bold"
+                              <TextBlock Text="{DynamicResource styles.preview.title}" FontFamily="{Binding Font.Preview}" FontSize="18" FontWeight="{Binding PreviewTitleWeight}" FontStyle="{Binding PreviewFontStyle}"
                                          Foreground="{Binding PreviewTitleText}" IsVisible="{Binding !PreviewOutlined}" />
-                              <TextBlock Text="{DynamicResource styles.preview.title}" FontFamily="{Binding Font.Preview}" FontSize="18" FontWeight="Bold"
+                              <TextBlock Text="{DynamicResource styles.preview.title}" FontFamily="{Binding Font.Preview}" FontSize="18" FontWeight="{Binding PreviewTitleWeight}" FontStyle="{Binding PreviewFontStyle}"
                                          Foreground="{Binding PreviewTitleText}" IsVisible="{Binding PreviewOutlined}">
                                 <TextBlock.Effect>
                                   <DropShadowEffect OffsetX="0" OffsetY="0" BlurRadius="3" Opacity="1" Color="{Binding PreviewOutline}" />
@@ -73,6 +73,7 @@
                           </StackPanel>
                         </Border>
                         <TextBlock Text="{DynamicResource styles.preview.subtitle}" FontFamily="{Binding Font.Preview}" FontSize="11" Margin="0,0,0,8"
+                                   FontWeight="{Binding PreviewTextWeight}" FontStyle="{Binding PreviewFontStyle}"
                                    HorizontalAlignment="Center" VerticalAlignment="Bottom" Foreground="{Binding PreviewText}" IsVisible="{Binding Subtitles}">
                           <TextBlock.Effect>
                             <DropShadowEffect OffsetX="0" OffsetY="1" BlurRadius="3" Opacity="1" Color="{Binding PreviewReadableOutline}" />
@@ -122,13 +123,27 @@
                         <TextBlock Text="{DynamicResource styles.font}" VerticalAlignment="Center" />
                         <views:HelpTip Text="{DynamicResource styles.font.tip}" />
                       </StackPanel>
-                      <ComboBox Name="StyleFonts" Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Fonts}" SelectedItem="{Binding Font}" MinWidth="240">
-                        <ComboBox.ItemTemplate>
-                          <DataTemplate x:DataType="vm:FontOption">
-                            <TextBlock Text="{Binding Font.Family}" FontFamily="{Binding Preview}" FontSize="16" />
-                          </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                      </ComboBox>
+                      <WrapPanel Grid.Row="1" Grid.Column="1" ItemSpacing="12" LineSpacing="6">
+                        <ComboBox Name="StyleFonts" ItemsSource="{Binding Fonts}" SelectedItem="{Binding Font}" MinWidth="240" MaxDropDownHeight="420">
+                          <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:FontOption">
+                              <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="{Binding Font.Family}" FontFamily="{Binding Preview}" FontSize="16" VerticalAlignment="Center" />
+                                <TextBlock Text="{DynamicResource styles.font.installed}" Classes="small muted" VerticalAlignment="Center"
+                                           IsVisible="{Binding Font.Installed}" />
+                              </StackPanel>
+                            </DataTemplate>
+                          </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <ComboBox Name="StyleEmphasis" ItemsSource="{Binding Emphases}" SelectedItem="{Binding Emphasis}" MinWidth="160"
+                                  ToolTip.Tip="{DynamicResource styles.emphasis.tip}">
+                          <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:NumberChoice">
+                              <TextBlock Text="{Binding Label}" />
+                            </DataTemplate>
+                          </ComboBox.ItemTemplate>
+                        </ComboBox>
+                      </WrapPanel>
 
                       <TextBlock Grid.Row="2" Text="{DynamicResource styles.title_style}" VerticalAlignment="Center" />
                       <ComboBox Name="StyleTitleStyles" Grid.Row="2" Grid.Column="1" ItemsSource="{Binding TitleStyles}" SelectedItem="{Binding TitleStyle}"

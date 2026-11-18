@@ -30,7 +30,8 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         IsNew = isNew;
         Palettes = VideoPalettes.All.Select(p => new PaletteOption(p, Label("style.palette." + p.Id, p.Id),
             [Brush(p.Background), Brush(p.Surface), Brush(p.Accent), Brush(p.Accent2), Brush(p.Text), Brush(p.Muted)])).ToList();
-        Fonts = VideoFonts.All.Select(f => new FontOption(f, VideoFontPreview.For(f))).ToList();
+        Fonts = VideoFonts.All.Concat(SystemFonts.Installed).Select(f => new FontOption(f, VideoFontPreview.For(f))).ToList();
+        Emphases = Choices<FontEmphasis>("style.emphasis.");
         TitleStyles = Choices<TitleStyle>("style.title.");
         DrawStyles = Choices<DrawStyle>("style.draw.");
         Motions = Choices<MotionIntensity>("style.motion.");
@@ -48,6 +49,7 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         ProgressBar = _source.ProgressBar;
         ReadableText = _source.ReadableText;
         Font = Fonts.FirstOrDefault(f => f.Font.Id == _source.FontId) ?? Fonts[0];
+        Emphasis = Pick(Emphases, (int)_source.FontEmphasis);
         Palette = Palettes.FirstOrDefault(p => p.Palette.Id == _source.PaletteId) ?? Palettes[0];
         TitleStyle = Pick(TitleStyles, (int)_source.TitleStyle);
         DrawStyle = Pick(DrawStyles, (int)_source.DrawStyle);
@@ -75,6 +77,9 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
 
     /// <summary>The video fonts, each named in its own font.</summary>
     public IReadOnlyList<FontOption> Fonts { get; }
+
+    /// <summary>Weight and slant of the text (automatic, regular, bold, italic, bold italic).</summary>
+    public IReadOnlyList<NumberChoice> Emphases { get; }
 
     /// <summary>Title styles.</summary>
     public IReadOnlyList<NumberChoice> TitleStyles { get; }
@@ -125,6 +130,22 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
     /// <summary>Colour palette.</summary>
     [ObservableProperty]
     public partial PaletteOption Palette { get; set; }
+
+    /// <summary>Weight and slant of the text.</summary>
+    [ObservableProperty]
+    public partial NumberChoice Emphasis { get; set; }
+
+    /// <summary>Preview: the weight of the title.</summary>
+    [ObservableProperty]
+    public partial FontWeight PreviewTitleWeight { get; set; } = FontWeight.Bold;
+
+    /// <summary>Preview: the weight of the subtitle.</summary>
+    [ObservableProperty]
+    public partial FontWeight PreviewTextWeight { get; set; } = FontWeight.Bold;
+
+    /// <summary>Preview: the slant of every text.</summary>
+    [ObservableProperty]
+    public partial FontStyle PreviewFontStyle { get; set; } = FontStyle.Normal;
 
     /// <summary>Title style.</summary>
     [ObservableProperty]
@@ -215,6 +236,7 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         style.ProgressBar = ProgressBar;
         style.ReadableText = ReadableText;
         style.FontId = Font.Font.Id;
+        style.FontEmphasis = (FontEmphasis)Emphasis.Value;
         style.PaletteId = Palette.Palette.Id;
         style.TitleStyle = (TitleStyle)TitleStyle.Value;
         style.TitlePosition = Position;
@@ -273,6 +295,10 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         _filling = wasFilling;
         var palette = Palette.Palette;
         var style = (TitleStyle)TitleStyle.Value;
+        var chosen = ToStyle();
+        PreviewTitleWeight = VideoStyleRules.TitleWeight(chosen) == 700 ? FontWeight.Bold : FontWeight.Normal;
+        PreviewTextWeight = VideoStyleRules.SubtitlesBold(chosen, Font.Font) ? FontWeight.Bold : FontWeight.Normal;
+        PreviewFontStyle = VideoStyleRules.Italic(chosen) ? FontStyle.Italic : FontStyle.Normal;
         PreviewBackground = Brush(palette.Background);
         PreviewAccent = Brush(palette.Accent);
         PreviewText = Brush(palette.Text);

@@ -109,7 +109,7 @@ public sealed class StyledVideoTests
         style.Colors.Accent.ShouldBe("#E5383B");
         engine.Input.Theme.Accent.ShouldBe("#E5383B", "kept code that reads only theme follows the palette");
         style.EndCardSeconds.ShouldBe(StyleLayout.EndCardSeconds);
-        engine.Fonts.ShouldBe(["Poppins-Regular.ttf", "Poppins-Bold.ttf"], ignoreOrder: true);
+        engine.Fonts.ShouldBe(["Poppins-Regular.ttf", "Poppins-Bold.ttf", "Poppins-Italic.ttf", "Poppins-BoldItalic.ttf"], ignoreOrder: true);
 
         // The green outside the palette was replaced without a repair (one call).
         var folder = Folder(h, video);

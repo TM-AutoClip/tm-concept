@@ -25,7 +25,7 @@ public static class VideoStylePrompt
             .Append("- Colours: ONLY input.style.colors (background, surface, accent, accent2, text, muted)")
             .Append(engine == EngineKind.HyperFrames ? " or CSS var(--tm-<name>)" : string.Empty)
             .Append(". Write no other colour value: any other is replaced by the nearest of these.\n")
-            .Append(c, $"- Font: ONLY input.style.font (\"{tokens.Font}\"); it is already loaded")
+            .Append(c, $"- Font: ONLY input.style.font (\"{tokens.Font}\"), weight {tokens.TextWeight} (titles {tokens.TitleWeight}), {tokens.TextStyle}; it is already loaded")
             .Append(engine == EngineKind.HyperFrames ? " and is the page's font (var(--tm-font))" : string.Empty)
             .Append(". Never name another font family.\n")
             .Append(Readable(engine, tokens))

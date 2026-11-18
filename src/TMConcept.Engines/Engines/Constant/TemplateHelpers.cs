@@ -150,7 +150,8 @@ public static class TemplateHelpers
               ? {WebkitTextStroke: `${unit * 0.005}px ${tmColor(input, 'background')}`, paintOrder: 'stroke fill'}
               : {};
           return (
-            <div style={{position: 'absolute', top: margin + y * (input.height - margin - bottom), fontFamily: tmFont(input), fontWeight: 700,
+            <div style={{position: 'absolute', top: margin + y * (input.height - margin - bottom), fontFamily: tmFont(input), fontWeight: s?.titleWeight ?? 700,
+              fontStyle: s?.textStyle ?? 'normal',
               fontSize: unit * 0.075, lineHeight: 1.15, color: tmColor(input, 'text'), textAlign: align, ...place, ...look, ...style}}>
               {text}
               {kind === 'underline' ? (

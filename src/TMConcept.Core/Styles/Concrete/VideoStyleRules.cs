@@ -28,8 +28,46 @@ public static class VideoStyleRules
         return !font.Cyrillic && language == ContentLanguages.Russian ? FindFont(VideoFonts.CyrillicFallbackId)! : font;
     }
 
-    /// <summary>A font by id; <c>null</c> when unknown.</summary>
-    public static VideoFont? FindFont(string? id) => VideoFonts.All.FirstOrDefault(f => f.Id == id);
+    /// <summary>A font by id (a shipped one, or one installed on this computer); <c>null</c> when unknown or not installed here.</summary>
+    public static VideoFont? FindFont(string? id) => VideoFonts.All.FirstOrDefault(f => f.Id == id) ?? SystemFonts.Find(id);
+
+    /// <summary>
+    /// The template names an installed font that is not on this computer (moved to another computer, or uninstalled): the video uses the
+    /// default font and the caller logs a warning.
+    /// </summary>
+    public static bool FontMissing(VideoStyle? style) =>
+        style?.FontId is { } id && id.StartsWith(SystemFonts.IdPrefix, StringComparison.Ordinal) && SystemFonts.Find(id) is null;
+
+    /// <summary>The weight of on-screen text (CSS: 400 or 700; <see cref="FontEmphasis.Auto"/> is regular).</summary>
+    public static int TextWeight(VideoStyle style)
+    {
+        ArgumentNullException.ThrowIfNull(style);
+        return style.FontEmphasis is FontEmphasis.Bold or FontEmphasis.BoldItalic ? 700 : 400;
+    }
+
+    /// <summary>The weight of titles (<see cref="FontEmphasis.Auto"/> keeps them bold, any other choice is used as it is).</summary>
+    public static int TitleWeight(VideoStyle style)
+    {
+        ArgumentNullException.ThrowIfNull(style);
+        return style.FontEmphasis == FontEmphasis.Auto ? 700 : TextWeight(style);
+    }
+
+    /// <summary>The text is italic.</summary>
+    public static bool Italic(VideoStyle style)
+    {
+        ArgumentNullException.ThrowIfNull(style);
+        return style.FontEmphasis is FontEmphasis.Italic or FontEmphasis.BoldItalic;
+    }
+
+    /// <summary>
+    /// The subtitles are bold: <see cref="FontEmphasis.Auto"/> when the font has a bold weight (the look before), else the chosen weight.
+    /// </summary>
+    public static bool SubtitlesBold(VideoStyle style, VideoFont font)
+    {
+        ArgumentNullException.ThrowIfNull(style);
+        ArgumentNullException.ThrowIfNull(font);
+        return style.FontEmphasis == FontEmphasis.Auto ? font.BoldFile is not null : TextWeight(style) == 700;
+    }
 
     /// <summary>The verb a platform uses: YouTube subscribe, Instagram and TikTok follow.</summary>
     public static ClosingWording Wording(ClosingPlatform platform) =>
@@ -135,7 +173,7 @@ public static class VideoStyleRules
 
         if (!Enum.IsDefined(style.TitleStyle) || !Enum.IsDefined(style.TitlePosition) || !Enum.IsDefined(style.DrawStyle) ||
             !Enum.IsDefined(style.Motion) || !Enum.IsDefined(style.Closing) || !Enum.IsDefined(style.ClosingPhrase) ||
-            !Enum.IsDefined(style.ClosingPlatform))
+            !Enum.IsDefined(style.ClosingPlatform) || !Enum.IsDefined(style.FontEmphasis))
         {
             problems.Add(VideoStyleProblem.UnknownValue);
         }

@@ -47,7 +47,8 @@ public sealed class StyleSettingsTests
         editor.TitleCells.Single(c => c.IsChecked).Position.ShouldBe(TitlePosition.TopCenter);
         editor.Palettes.Select(p => p.Palette.Id).ShouldBe(VideoPalettes.All.Select(p => p.Id));
         editor.Palettes.ShouldAllBe(p => p.Swatches.Count == PaletteTokens.All.Count);
-        editor.Fonts.Count.ShouldBe(VideoFonts.All.Count);
+        editor.Fonts.Count(f => !f.Font.Installed).ShouldBe(VideoFonts.All.Count);
+        editor.Fonts.Take(VideoFonts.All.Count).Select(f => f.Font.Id).ShouldBe(VideoFonts.All.Select(f => f.Id), "the shipped fonts come first");
 
         // The form and its preview follow the choices.
         editor.Name = "Shorts";
