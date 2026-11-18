@@ -78,7 +78,7 @@ public sealed partial class RemoteCatalogReader(EmbeddedModelCatalog catalog)
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var entry in providers)
         {
-            var model = Provider(entry);
+            var model = Provider(entry ?? throw new RemoteCatalogException("a provider model is empty (null)"));
             Unique(seen, model.Provider + "/" + model.Id);
             if (catalog.FileModels.Any(m => m.Provider == model.Provider && m.Id == model.Id))
             {
@@ -92,9 +92,10 @@ public sealed partial class RemoteCatalogReader(EmbeddedModelCatalog catalog)
         var localImages = new List<LocalImageModel>();
         foreach (var entry in images)
         {
-            var image = Image(entry);
+            var image = Image(entry ?? throw new RemoteCatalogException("an image model is empty (null)"));
             Unique(seen, ModelProviders.Local + "/" + image.Id);
-            if (LocalImageModels.All.Any(m => m.Id == image.Id) || catalog.FileModels.Any(m => m.Provider == ModelProviders.Local && m.Id == image.Id))
+            if (LocalImageModels.All.Any(m => SameName(m.Id, image.Id))
+                || catalog.FileModels.Any(m => m.Provider == ModelProviders.Local && SameName(m.Id, image.Id)))
             {
                 ignored++;
                 continue;
@@ -125,9 +126,9 @@ public sealed partial class RemoteCatalogReader(EmbeddedModelCatalog catalog)
         var digests = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var entry in ollama)
         {
-            var (model, digest) = Ollama(entry);
+            var (model, digest) = Ollama(entry ?? throw new RemoteCatalogException("an Ollama model is empty (null)"));
             Unique(seen, ModelProviders.AppOllama + "/" + model.Tag);
-            if (AppModelCatalog.Models.Any(m => string.Equals(m.Tag, model.Tag, StringComparison.Ordinal)))
+            if (AppModelCatalog.Models.Any(m => SameName(m.Tag, model.Tag)))
             {
                 ignored++;
                 continue;
@@ -149,7 +150,9 @@ public sealed partial class RemoteCatalogReader(EmbeddedModelCatalog catalog)
             throw new RemoteCatalogException(where + ": the provider is not one the app knows");
         }
 
-        Require(ModelId().IsMatch(entry.Id), where, "the id");
+        // The id goes into request addresses (fal: queue.fal.run/<id>): never an address of its own, a scheme, an empty or dot segment, a query
+        // or an escape, so it can only name a model under the provider's own address.
+        Require(SafeModelId(entry.Id), where, "the id");
         Require(Text(entry.Name, 120), where, "the name");
         var capabilities = ModelCapability.None;
         Require(CapabilityList().IsMatch(entry.Capabilities) && Enum.TryParse(entry.Capabilities, out capabilities)
@@ -157,7 +160,7 @@ public sealed partial class RemoteCatalogReader(EmbeddedModelCatalog catalog)
         var known = builtIn.Aggregate(ModelCapability.None, (all, m) => all | m.Capabilities);
         Require((capabilities & ~known) == ModelCapability.None, where, "a capability this provider's models do not have");
         var efforts = entry.Efforts ?? [];
-        Require(efforts.All(e => builtIn.Any(m => m.Efforts.Contains(e, StringComparer.Ordinal))), where, "an effort this provider's models do not use");
+        Require(efforts.All(e => e is not null && builtIn.Any(m => m.Efforts.Contains(e, StringComparer.Ordinal))), where, "an effort this provider's models do not use");
         Require(entry.ContextTokens is >= 0 and <= 100_000_000 && entry.MaxOutputTokens is >= 0 and <= 10_000_000, where, "the token limits");
         Require(new[] { entry.InputUsd, entry.OutputUsd, entry.CacheReadUsd, entry.ImageUsd, entry.SpeechUsdPerMillionCharacters }.All(p => p is >= 0 and <= 10_000),
             where, "a price");
@@ -207,7 +210,7 @@ public sealed partial class RemoteCatalogReader(EmbeddedModelCatalog catalog)
         var (license, use, url) = License(entry.License, entry.LicenseUse, entry.LicenseUrl, where);
         var files = entry.Files ?? [];
         Require(files.Count is >= 1 and <= 8, where, "the number of files");
-        var weights = files.Select(f => File(f, where)).ToList();
+        var weights = files.Select(f => File(f ?? throw new RemoteCatalogException(where + ": a file is empty (null)"), where)).ToList();
         Require(weights.Count(w => w.Role is ImageFileRole.Diffusion or ImageFileRole.Full) == 1, where, "exactly one diffusion model or whole checkpoint");
         Require(weights.Select(w => w.File.ExecutablePath).Distinct(StringComparer.OrdinalIgnoreCase).Count() == weights.Count, where, "two files with one name");
         return new LocalImageModel(entry.Id, entry.Name, weights)
@@ -293,7 +296,32 @@ public sealed partial class RemoteCatalogReader(EmbeddedModelCatalog catalog)
         }
     }
 
-    private static bool Text(string value, int max) => value.Trim().Length > 0 && value.Length <= max && !value.Any(char.IsControl);
+    /// <summary>
+    /// A display name: not blank, not too long, and only characters that show as themselves (no control, no format characters such as the
+    /// right-to-left override or a zero-width space, no private-use, unpaired surrogate or unassigned code points), so a name cannot pose as
+    /// another one in the pickers.
+    /// </summary>
+    private static bool Text(string value, int max) => value.Trim().Length > 0 && value.Length <= max && value.All(Visible);
+
+    private static bool Visible(char c) => !char.IsControl(c) && CharUnicodeInfo.GetUnicodeCategory(c) is not (UnicodeCategory.Format or UnicodeCategory.Surrogate
+        or UnicodeCategory.PrivateUse or UnicodeCategory.OtherNotAssigned);
+
+    /// <summary>
+    /// A cloud model id: the id pattern, no address of its own (<c>https://…</c>, <c>x:y</c>), no empty, <c>.</c> or <c>..</c> segment; a colon
+    /// only as OpenRouter's <c>:free</c> suffix.
+    /// </summary>
+    internal static bool SafeModelId(string id)
+    {
+        if (!ModelId().IsMatch(id) || Uri.TryCreate(id, UriKind.Absolute, out _) || id.Split('/').Any(s => s is "" or "." or ".."))
+        {
+            return false;
+        }
+
+        return !id.Contains(':', StringComparison.Ordinal) || OpenRouterSuffix().IsMatch(id);
+    }
+
+    /// <summary>One name on disk: Windows ignores letter case and trailing dots and spaces.</summary>
+    private static bool SameName(string a, string b) => string.Equals(a.TrimEnd('.', ' '), b.TrimEnd('.', ' '), StringComparison.OrdinalIgnoreCase);
 
     private static void Require(bool ok, string where, string what)
     {
@@ -306,7 +334,12 @@ public sealed partial class RemoteCatalogReader(EmbeddedModelCatalog catalog)
     [GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,127}$")]
     private static partial Regex ModelId();
 
-    [GeneratedRegex(@"^[a-z0-9][a-z0-9.-]{1,63}$")]
+    [GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9._/@-]*:free$")]
+    private static partial Regex OpenRouterSuffix();
+
+    // The id is a folder name (tools/images/<id>): it ends in a letter or digit (Windows drops a trailing dot, so "z-image-turbo." would be
+    // the built-in model's folder) and has no "..".
+    [GeneratedRegex(@"^(?!.*\.\.)[a-z0-9][a-z0-9.-]{0,62}[a-z0-9]$")]
     private static partial Regex ImageId();
 
     [GeneratedRegex(@"^[A-Za-z]+(, ?[A-Za-z]+)*$")]
@@ -321,7 +354,8 @@ public sealed partial class RemoteCatalogReader(EmbeddedModelCatalog catalog)
     [GeneratedRegex(@"^[0-9a-f]{40}$")]
     private static partial Regex Commit();
 
-    [GeneratedRegex(@"^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+){0,7}$")]
+    // Every segment ends in a letter, digit, '_' or '-' (a trailing dot is dropped on Windows: "a.gguf." would be "a.gguf").
+    [GeneratedRegex(@"^[A-Za-z0-9._-]*[A-Za-z0-9_-](/[A-Za-z0-9._-]*[A-Za-z0-9_-]){0,7}$")]
     private static partial Regex RepositoryPath();
 
     [GeneratedRegex(@"^[0-9a-f]{64}$")]
@@ -330,7 +364,8 @@ public sealed partial class RemoteCatalogReader(EmbeddedModelCatalog catalog)
     [GeneratedRegex(@"^sha256:[0-9a-f]{64}$")]
     private static partial Regex Digest();
 
-    [GeneratedRegex(@"^[a-z0-9][a-z0-9._-]{0,63}:[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")]
+    // The tag is a manifest path (manifests/…/<name>/<tag>): both parts end in a letter or digit, like the folder names above.
+    [GeneratedRegex(@"^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?:[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,62}[A-Za-z0-9])?$")]
     private static partial Regex OllamaTag();
 
     [GeneratedRegex(@"^[a-z0-9][a-z0-9._-]{0,63}$")]

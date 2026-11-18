@@ -12,7 +12,7 @@ namespace TMConcept.Desktop.Updates;
 /// same data folder. The portable file stays where it is. Windows only: Linux keeps the portable archive.
 /// </summary>
 public sealed class EditionInstaller(ReleaseFeed feed, Engines.Tools.ToolDownloader downloader, SelfReplacer replacer, IAppEdition edition,
-    ISetupLauncher launcher, IAppRestarter restarter, AppSession session, ILogger<EditionInstaller> logger)
+    ISetupLauncher launcher, IAppRestarter restarter, AppSession session, InstalledCopy installed, ILogger<EditionInstaller> logger)
 {
     /// <summary>The running version (whose release's Setup is installed).</summary>
     public string Current { get; init; } = AppIdentity.ShortVersion;
@@ -23,10 +23,14 @@ public sealed class EditionInstaller(ReleaseFeed feed, Engines.Tools.ToolDownloa
     /// <summary>Whether this copy can install the installed edition: the published portable program on Windows.</summary>
     public bool Available => edition.Kind == AppEditionKind.Portable && Rid.StartsWith("win-", StringComparison.Ordinal) && replacer.IsPackaged;
 
+    /// <summary>The version of the installed edition already on this computer; null when it is not installed.</summary>
+    public string? InstalledVersion => installed.Version();
+
     /// <summary>
     /// Downloads, checks and starts Setup, then closes the app. <see cref="AppUpdateException"/> ("not_installable": this copy cannot;
-    /// "no_release" / "no_asset" / "no_hash": the release, its Setup or Setup's SHA-256 is missing; "not_writable": no folder to download it
-    /// into; "busy": work runs) or
+    /// "already_installed": the installed edition of this version or a newer one (or of an unknown one) is on this computer, and Setup would
+    /// repair or downgrade it; "no_release" / "no_asset" / "no_hash": the release, its Setup or Setup's SHA-256 is missing; "not_writable": no
+    /// folder to download it into; "busy": work runs) or
     /// <see cref="ToolInstallException"/> (the download) when nothing was started.
     /// </summary>
     public async Task InstallAsync(IProgress<ToolProgress>? progress, CancellationToken cancellationToken)
@@ -34,6 +38,13 @@ public sealed class EditionInstaller(ReleaseFeed feed, Engines.Tools.ToolDownloa
         if (!Available)
         {
             throw new AppUpdateException("Only the portable Windows program installs TM Concept.") { Code = "not_installable" };
+        }
+
+        if (InstalledVersion is { } there && !(AppVersion.TryParse(there, out var installedVersion) && AppVersion.TryParse(Current, out var running)
+            && running.IsNewerThan(installedVersion)))
+        {
+            logger.LogInformation("TM Concept {Installed} is already installed on this computer; Setup of {Version} is not run", there, Current);
+            throw new AppUpdateException("TM Concept " + there + " is already installed.") { Code = "already_installed" };
         }
 
         if (session.WorkRunning)

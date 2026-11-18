@@ -14,7 +14,8 @@ namespace TMConcept.Desktop.DiskSpace;
 /// <c>home</c>: written again at the next install or narration);</item>
 /// <item>the files of the app's own Ollama models folder that no model uses (<see cref="AppModelStore.UnreferencedBlobs"/>: the received
 /// part of a cancelled pull, layers of a removed model);</item>
-/// <item>folders inside <c>tools/</c> that no component owns (an older pinned version, a build for another graphics setting);</item>
+/// <item>folders inside <c>tools/</c> that no component owns (an older pinned version, a build for another graphics setting); image model
+/// folders (<c>tools/images/&lt;id&gt;</c>) this copy does not know are a row of their own that only the full delete takes;</item>
 /// <item>old components folders next to <c>tools/</c> left by "Reinstall from scratch" (<c>tools.old-*</c>, <c>tools.failed-*</c>,
 /// <c>tools.aside-*</c>);</item>
 /// <item>the work caches: voice sample files, and cached narration, run folders and scene images older than the work keep time (the clean-up
@@ -47,7 +48,13 @@ public sealed class LeftoverDiskSource(AppPaths paths, PythonLayout python, Comp
 
         var owned = planner.All.SelectMany(c => c.Folders()).Concat(helpers).Append(downloads).Select(Full).ToList();
         var unowned = Unowned(tools, owned).ToList();
-        yield return Folder("tools:unowned", "storage.item.unowned", DiskArea.Tools, unowned, true);
+        // An image model folder this process has no catalog entry for is not a leftover: a newer version or a remote catalog entry this copy
+        // refused (newer minApp, newer stable-diffusion.cpp, a damaged kept copy) installed it, and it is gigabytes to download again. It is
+        // listed on its own and goes only with the full delete, never with the one-click clean-up.
+        var imageRoot = Full(Path.Combine(tools, "images"));
+        var unknownImages = unowned.Where(f => Same(f, imageRoot) || FolderDiscardBase.Inside(f, imageRoot)).ToList();
+        yield return Folder("tools:unowned", "storage.item.unowned", DiskArea.Tools, unowned.Except(unknownImages).ToList(), true);
+        yield return Folder("tools:unknown-image-models", "storage.item.unknown_image_models", DiskArea.Models, unknownImages, false);
 
         var parent = Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(tools));
         var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(tools));

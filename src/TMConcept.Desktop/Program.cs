@@ -51,10 +51,9 @@ internal static class Program
         }
 
         var paths = new AppPaths(options.DataDirectory, DesktopServices.CurrentOs);
-        using var instance = SingleInstance.Acquire(paths.DataDirectory);
+        using var instance = AcquireInstance(paths);
         if (!instance.IsFirst)
         {
-            SignalFirst(instance, paths);
             return 0;
         }
 
@@ -94,6 +93,11 @@ internal static class Program
             // children end through ProcessExit, the services are disposed by the using above.
             logger.LogCritical(ex, "The app stopped with an unhandled exception");
             return 1;
+        }
+        finally
+        {
+            // Closing: a start from now on (the installed copy Setup opens, a new version) waits for the lock instead of asking this window.
+            instance.StopListening();
         }
 
         FreeGraphicsCard(services, logger);
@@ -168,14 +172,44 @@ internal static class Program
         }
     }
 
-    /// <summary>A second start with the same data folder: asks the running app to show its window; one entry in the shared app log says so.</summary>
-    private static void SignalFirst(SingleInstance instance, AppPaths paths)
+    /// <summary>
+    /// The data folder's instance lock. A second start asks the running app to show its window (one entry in the shared app log says so) and
+    /// gets a non-first instance back. When nobody answers, the running copy is closing (it started this one: "Install TM Concept" runs
+    /// Setup, which opens the installed copy while the portable one still frees the graphics card): the lock is waited for, at most
+    /// <see cref="SingleInstance.ClosingWait"/>, so the new copy opens instead of ending unseen.
+    /// </summary>
+    private static SingleInstance AcquireInstance(AppPaths paths)
     {
+        var instance = SingleInstance.Acquire(paths.DataDirectory);
+        if (instance.IsFirst)
+        {
+            return instance;
+        }
+
         using var provider = new FileLoggerProvider(paths.LogDirectory, LogRules.AppKind, TimeProvider.System, LogScrubber.For(paths));
-        instance.Logger = provider.CreateLogger(typeof(SingleInstance).FullName!);
-        instance.Logger.LogInformation("TM Concept {Version} is already running for this data folder; asking it to show its window", AppIdentity.Version);
-        instance.SignalFirst();
+        var logger = provider.CreateLogger(typeof(SingleInstance).FullName!);
+        instance.Logger = logger;
+        logger.LogInformation("TM Concept {Version} is already running for this data folder; asking it to show its window", AppIdentity.Version);
+        var shown = instance.SignalFirst();
         instance.Logger = NullLogger.Instance;
+        if (shown)
+        {
+            return instance;
+        }
+
+        instance.Dispose();
+        logger.LogInformation("The running copy did not answer (it is closing); waiting for it to end");
+        var next = SingleInstance.WaitForClosing(paths.DataDirectory, SingleInstance.ClosingWait);
+        if (next.IsFirst)
+        {
+            logger.LogInformation("The closing copy has ended; this one opens");
+        }
+        else
+        {
+            logger.LogWarning("The other copy still holds the data folder after {Seconds} s; this start ends", SingleInstance.ClosingWait.TotalSeconds);
+        }
+
+        return next;
     }
 
     /// <summary>Ends processes an earlier run left in this app's tools folder (it was killed); a failure is logged, the start goes on.</summary>

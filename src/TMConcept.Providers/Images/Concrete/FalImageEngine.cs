@@ -39,7 +39,7 @@ public sealed class FalImageEngine(FalProvider provider, ProviderHttp http, Prov
             ["num_images"] = 1,
             ["enable_safety_checker"] = true,
         }.ToJsonString();
-        var submitted = JsonNode.Parse((await SendAsync(HttpMethod.Post, new Uri(provider.Address, request.Model.Model.Id), body, key, poll: false, cancellationToken)
+        var submitted = JsonNode.Parse((await SendAsync(HttpMethod.Post, ModelAddress(request.Model.Model.Id), body, key, poll: false, cancellationToken)
             .ConfigureAwait(false)).Text);
         var status = Own(submitted?["status_url"]?.ToString());
         var result = Own(submitted?["response_url"]?.ToString());
@@ -78,6 +78,29 @@ public sealed class FalImageEngine(FalProvider provider, ProviderHttp http, Prov
         logger.LogInformation("fal image {Model} done in {Seconds:0} s ({Polls} status checks)", request.Model.Model.Id,
             (DateTimeOffset.UtcNow - started).TotalSeconds, polls);
         return new ImageResult(request.Output, request.Model.Model.ImageUsd);
+    }
+
+    /// <summary>
+    /// The submit address of <paramref name="modelId"/> under queue.fal.run; the key is attached only to that host, so an id that would lead
+    /// elsewhere (an address of its own, <c>..</c> segments, a query) is refused before anything is sent.
+    /// </summary>
+    internal Uri ModelAddress(string modelId)
+    {
+        ArgumentNullException.ThrowIfNull(modelId);
+        if (!Uri.TryCreate(modelId, UriKind.Relative, out _) || modelId.StartsWith('/') || modelId.IndexOfAny(['?', '#', '\\', '%', ':']) >= 0
+            || modelId.Split('/').Any(s => s is "" or "." or ".."))
+        {
+            throw new ProviderException("fal: the model id '" + modelId + "' is not a model path.") { Code = "model" };
+        }
+
+        var address = new Uri(provider.Address, modelId);
+        if (address.Scheme != Uri.UriSchemeHttps || address.Host != provider.Address.Host
+            || !address.AbsolutePath.StartsWith(provider.Address.AbsolutePath, StringComparison.Ordinal))
+        {
+            throw new ProviderException("fal: the model id '" + modelId + "' leads outside queue.fal.run.") { Code = "model" };
+        }
+
+        return address;
     }
 
     private Uri Own(string? address)

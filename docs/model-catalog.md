@@ -43,9 +43,16 @@ network, and the start never fails because of the file.
   the download allow-list), a 40-hex commit (never a branch), a path inside the repository, its SHA-256 and size; the download is checked
   against them like every built-in model. A model whose `minSdCppBuild` is newer than the oldest stable-diffusion.cpp build the apps pin
   (1043) is left out until an app update.
-- **ollama**: models for the app's own Ollama copy, an exact tag (never `latest`) and `manifestDigest`: `sha256:` followed by the digest
-  `/api/tags` lists for the tag after a pull (the SHA-256 of the tag's manifest file in the models folder). Ollama checks every layer's SHA-256 itself; after the pull the app checks
-  the manifest and removes the model when it differs.
+- **ollama**: models for the app's own Ollama copy, an exact tag (never `latest`) and `manifestDigest`: `sha256:` followed by the
+  SHA-256 of the manifest Ollama's registry sends for the tag (`GET https://registry.ollama.ai/v2/library/<name>/manifests/<tag>` with
+  `Accept: application/vnd.docker.distribution.manifest.v2+json`; the hash of that answer's body). Before the pull the app reads that
+  manifest (a few kilobytes) and downloads nothing when its hash differs (the tag moved); Ollama checks every layer's SHA-256 itself, and
+  after the pull the app checks that the model uses exactly the layers the pinned manifest names (Ollama writes its own copy of the
+  manifest, so the local file's hash is not compared) and removes it when not.
+- Ids are folder and path names: a cloud model id is never an address of its own (`https://…`, `x:y`; a colon only as OpenRouter's
+  `:free`) and has no empty, `.` or `..` part; an image id, every file path part and both parts of an Ollama tag end in a letter or digit
+  (Windows drops a trailing dot, so `z-image-turbo.` would be the built-in model's folder). Names show only visible characters (no control,
+  direction or zero-width characters).
 - Voices and the OCR model are code in the app (each voice is its own engine), so they are not in this file.
 - Licences are required; a model whose licence is not free for commercial use needs `licenseUrl` and is asked about before its download,
   like a built-in one.
@@ -55,7 +62,7 @@ network, and the start never fails because of the file.
 The whole file is refused (one line in the log; the built-in catalog and the last good copy stay) when it is not valid JSON, has a field
 the app does not know, a `schema` other than 1, a `minApp` newer than the app, a bad date, an entry that is listed twice, or any entry that
 breaks a rule above (an unknown provider, engine, family, sampler, capability or effort; a file without SHA-256 or size, on another host,
-at a branch or with `..` in its path; an Ollama tag without a manifest digest). Entries whose id the app has built in are ignored: the
+at a branch or with `..` in its path; an Ollama tag without a manifest digest; an id or name against the rules above; a null value). Entries whose id the app has built in are ignored: the
 built-in catalog is the floor, the file can only add.
 
 A model the file no longer lists stays in the kept copy while it is installed on that computer, so it keeps working and can be removed
@@ -65,4 +72,5 @@ from Settings → Storage.
 
 Edit `catalog/models.json`, raise `date`, and run the tests: `RemoteCatalogTests.TheRepositorysOwnCatalogFileIsValid` reads the file with
 the app's own checks. Read the SHA-256 and size of each Hugging Face file at its commit (the API's LFS values) and the Ollama manifest
-digest from `ollama list` / `/api/tags` after a test pull.
+digest from the registry (above; its `Docker-Content-Digest` header gives the same value), not from `ollama list`: that is the hash of
+Ollama's local copy of the manifest.

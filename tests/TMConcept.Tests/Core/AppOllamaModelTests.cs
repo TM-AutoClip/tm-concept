@@ -337,6 +337,47 @@ public sealed class AppOllamaModelTests : IDisposable
     }
 
     [Fact]
+    public async Task APinnedModelChecksTheRegistrysManifestBeforePullingAndItsLayersAfter()
+    {
+        // A model of the repository's catalog: the digest is that of the manifest the registry sends, not of Ollama's own copy of it.
+        var info = AppModelAdvisor.Find("qwen3.5:2b-q4_K_M")!;
+        static string Digest(string text) => "sha256:" + Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(text)));
+        var registryManifest = System.Text.Encoding.UTF8.GetBytes(
+            "{\"schemaVersion\":2,\"config\":{\"digest\":\"" + Digest("config of " + info.Tag) + "\"},\"layers\":[{\"digest\":\"" + Digest("weights") + "\"}]}");
+        var pinned = "sha256:" + Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(registryManifest));
+        var api = new FakeAppOllamaApi();
+        using var server = new AppOllamaServer(new FakeAppOllamaRuntime(), new FakeAppOllamaLauncher(), api,
+            new AppOllamaLayout(Path.Combine(_folder, "m"), Path.Combine(_folder, "h")), TimeProvider.System, NullLogger<AppOllamaServer>.Instance);
+        AppModelComponent Component(string digest) => new(info, Store, new AppModelRegistry(Store, NullLogger<AppModelRegistry>.Instance), new FakeAppOllamaRuntime(),
+            server, api, NullLogger<AppModelComponent>.Instance) { ManifestDigest = digest };
+
+        // The tag moved on the registry: refused before a byte of the model is downloaded.
+        api.RegistryManifests[info.Tag] = registryManifest;
+        (await Should.ThrowAsync<ToolInstallException>(() => Component("sha256:" + new string('0', 64)).InstallAsync(null, CancellationToken.None))).Code
+            .ShouldBe("hash");
+        api.Pulls.ShouldBeEmpty("nothing is pulled for a moved tag");
+
+        // The registry cannot be read: nothing is pulled either.
+        api.RegistryManifests.Clear();
+        (await Should.ThrowAsync<ToolInstallException>(() => Component(pinned).InstallAsync(null, CancellationToken.None))).Code.ShouldBe("connection");
+        api.Pulls.ShouldBeEmpty();
+
+        // The pinned manifest: the pull brings its layers (Ollama's own manifest file differs in bytes, which does not matter).
+        api.RegistryManifests[info.Tag] = registryManifest;
+        api.OnPull = tag => AppModelFiles.Write(Store, tag, "weights");
+        var component = Component(pinned);
+        await component.InstallAsync(null, CancellationToken.None);
+        component.Ready.ShouldBeTrue();
+
+        // The tag moved between the check and the pull: other layers arrive, and the model is removed.
+        File.Delete(Store.ManifestPath(info.Tag));
+        api.OnPull = tag => AppModelFiles.Write(Store, tag, "other weights");
+        (await Should.ThrowAsync<ToolInstallException>(() => Component(pinned).InstallAsync(null, CancellationToken.None))).Code.ShouldBe("hash");
+        Store.HasManifest(info.Tag).ShouldBeFalse();
+        AppModelComponent.Layers("not json"u8.ToArray()).ShouldBeNull();
+    }
+
+    [Fact]
     public void ThePullTrackerSumsTheLayers()
     {
         var tracker = new AppModelPullTracker(4_000_000_000);

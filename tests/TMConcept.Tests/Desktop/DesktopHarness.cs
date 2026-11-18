@@ -42,6 +42,12 @@ internal sealed class DesktopHarness : IDisposable
 
             // The app's own Ollama server is never started for real in a test (tests that start it look at the fake launcher).
             s.AddSingleton<TMConcept.Core.AppOllama.IAppOllamaLauncher>(new Core.FakeAppOllamaLauncher());
+
+            // The installed edition is looked for in a folder of the test, never in the test machine's own %LOCALAPPDATA%\TMConcept.
+            s.AddSingleton(new TMConcept.Desktop.Updates.InstalledCopy(Microsoft.Extensions.Logging.Abstractions.NullLogger<TMConcept.Desktop.Updates.InstalledCopy>.Instance)
+            {
+                Root = Path.Combine(folder, "installed-edition"),
+            });
             overrides?.Invoke(s);
         });
     }

@@ -157,6 +157,23 @@ public sealed class StorageManagerTests
     }
 
     [AvaloniaFact]
+    public async Task AnImageModelFolderThisCopyDoesNotKnowIsNeverTakenByTheCleanUp()
+    {
+        var setup = await SetupAsync();
+        using var h = setup.H;
+        // Installed by a newer version or a remote catalog entry this copy refused: gigabytes, not a leftover.
+        var unknown = Path.Combine(h.Paths.ToolsDirectory, "images", "remote-only-model");
+        Put(unknown, 900, "model.gguf");
+
+        var report = await h.Get<IDiskCleaner>().ReportAsync(None);
+
+        report.Items.Single(i => i.Key == "tools:unknown-image-models").Paths.ShouldBe([unknown]);
+        report.Items.Single(i => i.Key == "tools:unowned").Paths.ShouldNotContain(unknown);
+        DiskSelection.Unused(report.Items).Select(i => i.Key).ShouldNotContain("tools:unknown-image-models");
+        DiskSelection.Full(report.Items).Select(i => i.Key).ShouldContain("tools:unknown-image-models", "the full delete still takes it");
+    }
+
+    [AvaloniaFact]
     public async Task RemovedItemsGoToTheRecycleBinAndTheInstallRecordForgetsThem()
     {
         var setup = await SetupAsync();

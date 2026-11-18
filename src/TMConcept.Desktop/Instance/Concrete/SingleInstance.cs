@@ -11,12 +11,20 @@ namespace TMConcept.Desktop.Instance;
 /// (Windows: no second open; Linux: .NET takes an exclusive flock). A file lock is used, not a named mutex: on Linux .NET scopes a named
 /// mutex to the login session, so a start from a terminal and one from the menu both counted as first, and the second one's start-up
 /// clean-up then ended the first one's render processes and emptied its work folder. A named pipe (a Unix socket on Linux) carries "show
-/// your window" from a second start to the first.
+/// your window" from a second start to the first. A closing instance stops listening first (<see cref="StopListening"/>); a second start
+/// that finds the lock held but nobody listening (the copy that started it, through an update or Setup, is still closing) waits for the lock
+/// instead of ending unseen (<see cref="WaitForClosing"/>).
 /// </summary>
 public sealed class SingleInstance : IDisposable
 {
     /// <summary>The lock file's name in the data folder.</summary>
     public const string LockFileName = "instance.lock";
+
+    /// <summary>
+    /// How long a second start waits for a closing instance's lock (its exit frees the graphics card and stops the app's own Ollama, at
+    /// most some 20 seconds).
+    /// </summary>
+    public static readonly TimeSpan ClosingWait = TimeSpan.FromSeconds(60);
 
     private readonly FileStream? _lock;
     private readonly string _name;
@@ -62,20 +70,49 @@ public sealed class SingleInstance : IDisposable
         return new SingleInstance(lockFile, name);
     }
 
-    /// <summary>Asks the first instance to show its window.</summary>
-    public void SignalFirst()
+    /// <summary>
+    /// Asks the first instance to show its window; false when nobody answered (it is closing and stopped listening, or not listening yet).
+    /// </summary>
+    public bool SignalFirst()
     {
         try
         {
             using var client = new NamedPipeClientStream(".", _name, PipeDirection.Out);
             client.Connect(2000);
             client.Write("show\n"u8);
+            return true;
         }
         catch (Exception ex) when (ex is IOException or TimeoutException)
         {
-            // The first instance is closing or not listening yet; nothing else to do for a second start.
             Console.Error.WriteLine("TM Concept is already running: " + ex.Message);
             Logger.LogWarning(ex, "The running app could not be asked to show its window");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// The app is closing: a second start is no longer asked to wait for this window but waits for the lock (it is held until
+    /// <see cref="Dispose"/>, after the exit work).
+    /// </summary>
+    public void StopListening() => _stop.Cancel();
+
+    /// <summary>
+    /// Takes the lock once the instance holding it has ended, trying every half second for at most <paramref name="wait"/>; the result is
+    /// first when it was freed in time.
+    /// </summary>
+    public static SingleInstance WaitForClosing(string dataDirectory, TimeSpan wait)
+    {
+        var until = DateTime.UtcNow + wait;
+        while (true)
+        {
+            var instance = Acquire(dataDirectory);
+            if (instance.IsFirst || DateTime.UtcNow >= until)
+            {
+                return instance;
+            }
+
+            instance.Dispose();
+            Thread.Sleep(500);
         }
     }
 

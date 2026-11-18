@@ -158,14 +158,17 @@ Sürümdeki `.nupkg` ve `releases.win-x64.json` dosyaları kurulu türün günce
    yukarıdaki gibi; Windows genelde yalnız ilk seferde sorar).
 3. İlk açılışta bir kez **"TM Concept kurulsun mu?"** diye sorar: *Kur* aynı sürümün kurulum dosyasını indirir, sürüm notlarındaki
    SHA-256 ile karşılaştırır, çalıştırır ve taşınabilir kopyayı kapatır (dosya olduğu yerde kalır, istersen sil). *Taşınabilir kalsın*
-   cevabı hatırlanır; Ayarlar → Genel sonra da **TM Concept'i kur** düğmesini sunar. `--data-dir` ile açıldığında bu soru sorulmaz.
+   cevabı hatırlanır; Ayarlar → Genel sonra da **TM Concept'i kur** düğmesini sunar. `--data-dir` ile açıldığında ya da TM Concept bilgisayarda
+   zaten kuruluysa bu soru sorulmaz (düğme de onun üstüne aynı ya da daha eski bir kurulum çalıştırmaz).
 
 İki türde de yönetici yetkisi gerekmez; sisteme bir şey kurulmaz, sistem PATH'i değişmez. Ayarlar → Genel → *Sürüm türü* hangisinin
 çalıştığını, sürümünü ve (kuruluysa) klasörünü gösterir; kurulu türde **Kısayolları yeniden oluştur** düğmesi de var.
 
-**0.1.25 ya da daha eskisinden geliyorsan:** onun güncelleyicisi yeni sürümdeki taşınabilir programı bulur, kurar ve adını
-`TMConcept-Portable-win-x64.exe` yapar (içinde sürüm geçen bir ad her güncellemeden sonra yanlış kalırdı). Eski dosya adına kendin
-yaptığın bir kısayol artık çalışmaz: yeni dosyayı kullan ya da düzgün kısayollar için *Kur*'u seç.
+**0.1.25 ya da daha eskisinden geliyorsan:** onun güncelleyicisi yeni sürümdeki taşınabilir programı bulur ve eski dosyanın yerine,
+eski dosyanın adıyla koyar (yani `TMConcept-0.1.25-win-x64.exe` artık 0.1.26'yı çalıştırır: ad bir süre yanlış sürümü gösterir). Ondan
+sonraki güncelleme (0.1.27 ya da sonrası) yeni güncelleyiciyle yapılır ve dosyanın adını `TMConcept-Portable-win-x64.exe` yapar, çünkü
+içinde sürüm geçen bir ad her güncellemeden sonra yanlış kalırdı; eski ada kendin yaptığın bir kısayol o zaman çalışmaz olur. Hiç
+bozulmayan kısayollar için *Kur*'u seç ya da dosyanın adını kendin değiştir.
 
 **OneDrive notu:** videolar `Belgeler\TM Concept` altına kaydedilir. OneDrive Belgeler klasörünü yedekliyorsa her video buluta da
 yüklenir. İstemiyorsan klasörü OneDrive ayarlarından hariç tut.
@@ -344,7 +347,8 @@ programlar, modeller, iş önbellekleri, yedekler ve günlükler için toplamlar
 mi geçtin? Eskisi *kullanılmıyor* görünür. **Seçilenleri kaldır** işaretli satırları kaldırır, **Kullanılmayanları temizle** hiçbir profilin
 kullanmadığı bileşenleri ve kendiliğinden yeniden oluşan artıkları (yarım indirmeler, eski bileşen sürümleri ve klasörleri, 7 günden eski
 önbellekteki seslendirmeler ve iş klasörleri; yeni seslendirmeler ve sahne görselleri kalır, yeniden denemede yeniden ödemek yerine
-kullanılır; HyperFrames ve Revideo'nun tarayıcısı bir profil onlarla video yaptıkça kullanılıyor sayılır) kaldırır, **Kapsamlı silme** bütün bileşenleri ve önbellekleri kaldırır. Her şey geri dönüşüm
+kullanılır; HyperFrames ve Revideo'nun tarayıcısı bir profil onlarla video yaptıkça kullanılıyor sayılır) kaldırır; bu kopyanın
+tanımadığı, daha yeni bir sürümün ya da model kataloğunun kurduğu bir görsel model klasörü ayrı satırda durur ve temizlik onu hiç almaz, **Kapsamlı silme** bütün bileşenleri ve önbellekleri kaldırır. Her şey geri dönüşüm
 kutusuna gider (kutu alamazsa kalıcı silme ancak ayrı bir onayla); video, üretim, seslendirme, kurulum ya da bir motorun örnek videosu sürerken hiçbir şey kaldırılmaz.
 Veritabanın, profillerin, konseptlerin, videoların, yedeklerin ve günlüklerin orada asla silinmez.
 
@@ -583,8 +587,9 @@ seviye süzgeci (tümü, uyarılar ve hatalar, yalnız hatalar), arama, *Yalnız
 
 .NET 10 SDK. `dotnet build TMConcept.slnx` ve `dotnet test TMConcept.slnx`. Yayın dosyaları: Windows'ta `tools/publish.ps1` bir sürümün
 bütün dosyalarını `artifacts/release-<sürüm>` altına üretir (taşınabilir dosyalar; `.config/dotnet-tools.json`'daki `vpk` ile kurulu türün
-Setup'ı, tam ve delta paketleri ve `releases.win-x64.json`; Linux AppImage'ları) ve SHA-256 satırlarını yazdırır; o klasörü sakla, bir
-sonraki sürümün delta paketi ondan yapılır. `tools/publish.sh` yalnız taşınabilir dosyaları üretir. İlk commit'ten önce `tools/install-hooks.ps1` (ya da `.sh`) çalıştır: pre-commit kancası anahtarları, jetonları ve
+Setup'ı, tam ve delta paketleri ve `releases.win-x64.json`; Linux AppImage'ları) ve SHA-256 satırlarını yazdırır. Delta paketi bir önceki sürümün
+GitHub'da yayımlanmış tam paketinden yapılır (o sürümün SHA-256 bloğuyla denetlenir; saklanan yerel kopya yalnız aynı dosyaysa kullanılır,
+değilse yayımlanan indirilir), bu yüzden sürüm üretmek GitHub'a erişim ister; `-NoDelta` deltasız üretir. `tools/publish.sh` yalnız taşınabilir dosyaları üretir. İlk commit'ten önce `tools/install-hooks.ps1` (ya da `.sh`) çalıştır: pre-commit kancası anahtarları, jetonları ve
 kişisel verileri durdurur.
 
 **Veritabanını değiştirmek:** `ConceptDbContext` içindeki eşlemeyi değiştir, sonra sürüm başına bir kez `tools/database-step.ps1 -Name

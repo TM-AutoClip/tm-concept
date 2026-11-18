@@ -17,6 +17,12 @@ namespace TMConcept.Providers.AppOllama;
 /// </summary>
 public sealed class AppOllamaApi : IAppOllamaApi, IDisposable
 {
+    /// <summary>The largest manifest read from the registry (real ones are a few kilobytes).</summary>
+    private const int MaxManifestBytes = 1 << 20;
+
+    /// <summary>The longest wait for the registry's manifest.</summary>
+    private static readonly TimeSpan RegistryTimeout = TimeSpan.FromSeconds(30);
+
     private readonly ProviderHttp _http;
     private readonly HttpClient _pull;
     private readonly ILogger _logger;
@@ -115,6 +121,77 @@ public sealed class AppOllamaApi : IAppOllamaApi, IDisposable
             _logger.LogError(ex, "{Server}: the pull of {Model} broke off", AppOllamaDefaults.Name, tag);
             throw new ToolInstallException($"The download of {tag} broke off: {ex.Message}", ex) { Code = "connection", Detail = ex.Message };
         }
+    }
+
+    /// <inheritdoc />
+    public async Task<byte[]> RegistryManifestAsync(string tag, CancellationToken cancellationToken)
+    {
+        var address = RegistryManifestAddress(tag);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(RegistryTimeout);
+        using var request = new HttpRequestMessage(HttpMethod.Get, address);
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.docker.distribution.manifest.v2+json"));
+        try
+        {
+            using var response = await _pull.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("The registry did not give the manifest of {Model} (HTTP {Status})", tag, (int)response.StatusCode);
+                throw new ToolInstallException($"Ollama's registry did not give the manifest of {tag} (HTTP {(int)response.StatusCode}).")
+                {
+                    Code = "pull",
+                    Detail = "HTTP " + (int)response.StatusCode,
+                };
+            }
+
+            var stream = await response.Content.ReadAsStreamAsync(timeout.Token).ConfigureAwait(false);
+            await using (stream.ConfigureAwait(false))
+            {
+                using var memory = new MemoryStream();
+                var buffer = new byte[16_384];
+                int read;
+                while ((read = await stream.ReadAsync(buffer, timeout.Token).ConfigureAwait(false)) > 0)
+                {
+                    memory.Write(buffer, 0, read);
+                    if (memory.Length > MaxManifestBytes)
+                    {
+                        throw new ToolInstallException($"The registry's manifest of {tag} is larger than a manifest can be.") { Code = "hash" };
+                    }
+                }
+
+                return memory.ToArray();
+            }
+        }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogError("The registry did not answer for the manifest of {Model} within {Seconds} s", tag, RegistryTimeout.TotalSeconds);
+            throw new ToolInstallException($"Ollama's registry did not answer for {tag}.", ex) { Code = "connection", Detail = ex.Message };
+        }
+        catch (Exception ex) when (ex is HttpRequestException or IOException)
+        {
+            _logger.LogError(ex, "The manifest of {Model} could not be read from the registry", tag);
+            throw new ToolInstallException($"Ollama's registry could not be reached for {tag}: {ex.Message}", ex) { Code = "connection", Detail = ex.Message };
+        }
+    }
+
+    /// <summary>
+    /// The registry address of <paramref name="tag"/>'s manifest, laid out as Ollama lays it out (<c>qwen3.5:4b</c> →
+    /// <c>https://registry.ollama.ai/v2/library/qwen3.5/manifests/4b</c>).
+    /// </summary>
+    public static Uri RegistryManifestAddress(string tag)
+    {
+        if (!AppModelStore.IsValidTag(tag))
+        {
+            throw new ArgumentException("Not an Ollama model tag.", nameof(tag));
+        }
+
+        var colon = tag.LastIndexOf(':');
+        var name = colon > 0 ? tag[..colon] : tag;
+        var version = colon > 0 ? tag[(colon + 1)..] : "latest";
+        var parts = name.Split('/');
+        var space = parts.Length > 1 ? parts[0] : "library";
+        return new Uri("https://" + AppOllamaDefaults.RegistryHost + "/v2/" + Uri.EscapeDataString(space) + "/" + Uri.EscapeDataString(parts[^1]) + "/manifests/"
+            + Uri.EscapeDataString(version));
     }
 
     /// <inheritdoc />

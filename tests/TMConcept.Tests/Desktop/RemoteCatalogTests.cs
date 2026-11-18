@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
@@ -136,6 +137,92 @@ public sealed class RemoteCatalogTests
         using var h = new DesktopHarness();
 
         Should.Throw<RemoteCatalogException>(() => Reader(h).Read(json, "0.1.26"));
+    }
+
+    [Theory]
+    [InlineData("https://evil.example/collect")]
+    [InlineData("fal-ai/../x")]
+    [InlineData("fal-ai//x")]
+    [InlineData("evil:collect")]
+    [InlineData("fal-ai/./x")]
+    public void ACloudModelIdThatIsAnAddressOrLeavesItsPathRefusesTheWholeFile(string id)
+    {
+        using var h = new DesktopHarness();
+
+        Refused(h, Sample(f =>
+        {
+            f.Providers![0].Provider = "fal";
+            f.Providers[0].Id = id;
+            f.Providers[0].Capabilities = "Image";
+        })).ShouldContain("the id");
+        RemoteCatalogReader.SafeModelId("fal-ai/flux-3/dev").ShouldBeTrue();
+        RemoteCatalogReader.SafeModelId("meta-llama/llama-5:free").ShouldBeTrue("OpenRouter's free variants keep their suffix");
+    }
+
+    [Theory]
+    [InlineData("\"id\": null")]
+    [InlineData("\"name\": null")]
+    [InlineData("\"negativePrompt\": null")]
+    [InlineData("\"files\": [null]")]
+    [InlineData("\"providers\": [null]")]
+    [InlineData("\"images\": [null]")]
+    [InlineData("\"ollama\": [null]")]
+    [InlineData("\"efforts\": [null]")]
+    public void ANullValueOrNullItemRefusesTheWholeFileWithAReason(string field)
+    {
+        using var h = new DesktopHarness();
+        var name = field[..field.IndexOf(':', StringComparison.Ordinal)];
+        var json = JsonNode.Parse(Json(Sample()))!.AsObject();
+        var value = JsonNode.Parse(field[(field.IndexOf(':', StringComparison.Ordinal) + 1)..]);
+        var key = name.Trim('"');
+        JsonObject target = key switch
+        {
+            "providers" or "images" or "ollama" => json,
+            "efforts" => json["providers"]![0]!.AsObject(),
+            _ => json["images"]![0]!.AsObject(),
+        };
+        target[key] = value;
+
+        Should.Throw<RemoteCatalogException>(() => Reader(h).Read(json.ToJsonString(), "0.1.26"));
+    }
+
+    [Fact]
+    public void AKeptCopyThisVersionCannotCheckNeverStopsTheStart()
+    {
+        using var h = new DesktopHarness();
+        var updater = h.Get<RemoteCatalogUpdater>();
+        Directory.CreateDirectory(updater.Folder);
+
+        File.WriteAllText(Path.Combine(updater.Folder, "repository.json"), Json(Sample()).Replace("\"name\": \"GPT test\"", "\"name\": null", StringComparison.Ordinal));
+
+        updater.ApplySaved().ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData("z-image-turbo.")]
+    [InlineData("z-image-turbo-")]
+    [InlineData("a..b")]
+    public void AnImageIdMustEndInALetterOrDigitSoItIsNeverABuiltInFolder(string id)
+    {
+        using var h = new DesktopHarness();
+
+        Refused(h, Sample(f => f.Images![0].Id = id)).ShouldContain("the id");
+        Refused(h, Sample(f => f.Images![0].Files![0].Path = "z.gguf.")).ShouldContain("file path", Case.Sensitive, "Windows drops the dot: two names, one file");
+        Refused(h, Sample(f => f.Images![0].Files![1].Path = "vae./ae.safetensors")).ShouldContain("file path");
+        Refused(h, Sample(f => f.Ollama![0].Tag = "qwen9.9:4b.")).ShouldContain("exact tag");
+    }
+
+    [Theory]
+    [InlineData("FLUX 3 ‮(eerf)")]
+    [InlineData("Free​ model")]
+    [InlineData("Model ")]
+    public void ANameWithInvisibleOrDirectionCharactersRefusesTheWholeFile(string name)
+    {
+        using var h = new DesktopHarness();
+
+        Refused(h, Sample(f => f.Providers![0].Name = name)).ShouldContain("the name");
+        Refused(h, Sample(f => f.Ollama![0].Name = name)).ShouldContain("the name");
+        Reader(h).Read(Json(Sample(f => f.Providers![0].Name = "GPT ünlü — test")), "0.1.26").Models.ShouldContain(m => m.Name == "GPT ünlü — test");
     }
 
     [Fact]

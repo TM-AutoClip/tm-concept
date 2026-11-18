@@ -188,7 +188,7 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
             {
                 await remoteCatalog.UpdateAsync(force: false, CancellationToken.None).ConfigureAwait(false);
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 logger.LogWarning(ex, "The daily model catalog check failed; the kept copy stays");
             }

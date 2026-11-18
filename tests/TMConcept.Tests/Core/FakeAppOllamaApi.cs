@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using TMConcept.Core.AppOllama;
+using TMConcept.Core.Tools;
 
 namespace TMConcept.Tests.Core;
 
@@ -22,6 +23,19 @@ internal sealed class FakeAppOllamaApi : IAppOllamaApi
     public List<AppModelPullProgress> PullLines { get; } = [];
 
     public Action<string>? OnPull { get; set; }
+
+    /// <summary>What the registry gives for a tag's manifest (a tag not here: the registry cannot be reached).</summary>
+    public Dictionary<string, byte[]> RegistryManifests { get; } = [];
+
+    public ConcurrentQueue<string> ManifestReads { get; } = new();
+
+    public Task<byte[]> RegistryManifestAsync(string tag, CancellationToken cancellationToken)
+    {
+        ManifestReads.Enqueue(tag);
+        return RegistryManifests.TryGetValue(tag, out var manifest)
+            ? Task.FromResult(manifest)
+            : Task.FromException<byte[]>(new ToolInstallException("offline") { Code = "connection" });
+    }
 
     public Task<bool> IsUpAsync(Uri root, CancellationToken cancellationToken) => Task.FromResult(Up);
 

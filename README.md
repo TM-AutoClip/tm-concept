@@ -160,14 +160,17 @@ The `.nupkg` and `releases.win-x64.json` files of a release are for the installe
    (SmartScreen as above; Windows usually asks only the first time).
 3. At its first start it asks once **"Install TM Concept?"**: *Install* downloads this version's Setup from the same release, checks it
    against the release notes' SHA-256, runs it and closes the portable copy (the file stays where it is; delete it if you like). *Keep using
-   it portable* is remembered; Settings → General still offers **Install TM Concept** later. The question is not asked with `--data-dir`.
+   it portable* is remembered; Settings → General still offers **Install TM Concept** later. The question is not asked with `--data-dir`, nor when TM Concept is already installed on the
+   computer (then neither does the button run an older or the same Setup over it).
 
 No administrator rights are needed in either edition; nothing is installed system-wide and the system PATH is never changed. Settings →
 General → *Edition* shows which one runs, its version and (installed) its folder, with **Recreate shortcuts** for the installed one.
 
-**Coming from 0.1.25 or older:** its updater finds the portable program in the new release, installs it and gives it the name
-`TMConcept-Portable-win-x64.exe` (a name with a version would be wrong after every update). A shortcut you made yourself to the old file
-name stops working: use the new file, or answer *Install* to get proper shortcuts.
+**Coming from 0.1.25 or older:** its updater finds the portable program in the new release and puts it in place of the old file, under
+the old file's name (so `TMConcept-0.1.25-win-x64.exe` then runs 0.1.26: the name shows the wrong version for a while). The update after
+that (0.1.27 or later), made by the new updater, renames the file to `TMConcept-Portable-win-x64.exe`, because a name with a version would
+be wrong after every update; a shortcut you made yourself to the old name stops working then. Answer *Install* to get proper shortcuts
+that never break, or rename the file yourself.
 
 **OneDrive note:** videos are saved in `Documents\TM Concept`. If OneDrive backs up your Documents folder, every video is uploaded to the
 cloud too. If you do not want that, exclude the folder in OneDrive's settings.
@@ -350,7 +353,8 @@ which profile and step use it (from every profile's saved model choices). Switch
 *unused*. **Remove selected** removes the ticked rows, **Clean up unused** removes every component no profile uses plus leftovers that come
 back by themselves (unfinished downloads, old component versions and folders, cached narration and work folders older than 7 days; recent
 narration and scene images stay, a retry uses them instead of paying again; the browser of HyperFrames and Revideo counts as used while
-a profile renders with them), and
+a profile renders with them; an image model folder this copy does not know, installed by a newer version or model catalog, is listed
+on its own and is never taken by the clean-up), and
 **Full delete** removes every component and cache. Everything goes to the recycle bin (a permanent delete only after its own confirmation,
 when the bin cannot take it); nothing is removed while a video, a generation, a narration, an install or an engine's sample render runs. Your database, profiles,
 concepts, videos, backups and logs are never removed there.
@@ -590,8 +594,9 @@ Today's lines are followed live while the page is open.
 
 .NET 10 SDK. `dotnet build TMConcept.slnx` and `dotnet test TMConcept.slnx`. Release files: `tools/publish.ps1` on Windows builds every
 file of a release into `artifacts/release-<version>` (the portable files, the installed edition's Setup, full and delta packages and
-`releases.win-x64.json` with `vpk` from `.config/dotnet-tools.json`, the Linux AppImages) and prints the SHA-256 lines; keep that folder,
-it is where the next version's delta package is made from. `tools/publish.sh` builds the portable files only. Before the first commit run `tools/install-hooks.ps1` (or `.sh`): the pre-commit hook blocks keys, tokens and
+`releases.win-x64.json` with `vpk` from `.config/dotnet-tools.json`, the Linux AppImages) and prints the SHA-256 lines. The delta package is cut from the
+previous release's full package as published on GitHub (checked against that release's SHA-256 block; a kept local copy is used only when
+it is that same file, otherwise the published one is downloaded), so building a release needs GitHub; `-NoDelta` builds without one. `tools/publish.sh` builds the portable files only. Before the first commit run `tools/install-hooks.ps1` (or `.sh`): the pre-commit hook blocks keys, tokens and
 personal data.
 
 **Changing the database:** change the mapping in `ConceptDbContext`, then run `tools/database-step.ps1 -Name Version0118` (or

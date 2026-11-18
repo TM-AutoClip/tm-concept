@@ -60,6 +60,11 @@ public sealed class RemoteCatalogUpdater(RemoteCatalogReader reader, EmbeddedMod
         {
             logger.LogWarning(ex, "The kept model catalog could not be read; the built-in catalog stays");
         }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // A copy this version's checks did not foresee (another version wrote it into the shared data folder) never stops the start.
+            logger.LogError(ex, "The kept model catalog could not be checked; it is not used and the built-in catalog stays");
+        }
 
         return null;
     }
@@ -127,6 +132,11 @@ public sealed class RemoteCatalogUpdater(RemoteCatalogReader reader, EmbeddedMod
             logger.LogWarning("The model catalog from the repository was refused ({Reason}); the kept copy stays", ex.Message);
             return;
         }
+        catch (Exception ex) when (ex is not (OutOfMemoryException or IOException or UnauthorizedAccessException))
+        {
+            logger.LogError(ex, "The model catalog from the repository could not be checked; it is refused and the kept copy stays");
+            return;
+        }
 
         var target = Path.Combine(Folder, SavedName);
         var kept = KeepInstalled(json, target);
@@ -176,7 +186,7 @@ public sealed class RemoteCatalogUpdater(RemoteCatalogReader reader, EmbeddedMod
                 string.Join(", ", keptImages.Select(m => m.Id).Concat(keptOllama.Select(m => m.Tag))));
             return combined;
         }
-        catch (Exception ex) when (ex is RemoteCatalogException or JsonException or IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             logger.LogWarning("The installed models of the previous model catalog could not be carried over ({Reason}); the new file is kept as it is", ex.Message);
             return json;

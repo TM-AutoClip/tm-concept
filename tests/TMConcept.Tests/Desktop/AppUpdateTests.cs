@@ -571,7 +571,7 @@ public sealed class AppUpdateTests
 
     private static EditionInstaller Installer(DesktopHarness h) =>
         new(h.Get<ReleaseFeed>(), h.Get<ToolDownloader>(), h.Get<SelfReplacer>(), h.Get<IAppEdition>(), h.Get<ISetupLauncher>(), h.Get<IAppRestarter>(),
-            h.Get<TMConcept.Desktop.Startup.AppSession>(), NullLogger<EditionInstaller>.Instance)
+            h.Get<TMConcept.Desktop.Startup.AppSession>(), h.Get<InstalledCopy>(), NullLogger<EditionInstaller>.Instance)
         {
             Current = "0.1.17",
             Rid = "win-x64",

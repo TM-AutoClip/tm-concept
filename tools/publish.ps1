@@ -1,6 +1,6 @@
 # Builds every file of a release into artifacts/release-<version>, ready for upload. Usage:
 #   tools/publish.ps1 [-Rids win-x64,linux-x64,linux-arm64] [-ReleaseDir artifacts/release-0.1.26] [-PublishDir artifacts/publish-0.1.26]
-#                     [-PreviousReleaseDir artifacts/release-0.1.25] [-NoInstaller] [-NoAppImage]
+#                     [-PreviousReleaseDir artifacts/release-0.1.25] [-NoDelta] [-NoInstaller] [-NoAppImage]
 # -ReleaseDir / -PublishDir (relative to the repository, or absolute) default to artifacts/release-<version> and artifacts/publish-<version>.
 #
 # Two editions (0.1.26), the same features and the same data folder:
@@ -9,10 +9,15 @@
 #   with -win-x64.exe / -linux-x64.tar.gz / -linux-arm64.tar.gz, which the updaters of 0.1.25 and older look for (checked below).
 # - Installed (Velopack, vpk from .config/dotnet-tools.json): the trimmed program as a folder (not single-file: Velopack's delta packages
 #   patch file by file, and a compressed single file changes almost entirely with every build), packed by `vpk pack` into
-#   TMConcept-win-x64-Setup.exe, TMConcept-<version>-win-x64-full.nupkg, a delta package from the previous version when its full package is
-#   found (-PreviousReleaseDir, otherwise the newest artifacts/release-<older version> or release-<older version> next to -ReleaseDir), and
+#   TMConcept-win-x64-Setup.exe, TMConcept-<version>-win-x64-full.nupkg, a delta package from the previous PUBLISHED version, and
 #   releases.win-x64.json listing only this release's packages (Velopack's GitHub source downloads each package from the release that lists
 #   it). Velopack's own portable zip, RELEASES and assets.*.json are not part of a release. -NoInstaller skips this edition.
+#   The delta is cut against the full package installed computers really have: the newest older release on GitHub that has a full package
+#   of the channel, checked against that release's "## SHA-256" block (and GitHub's digest). A local copy (-PreviousReleaseDir, otherwise
+#   artifacts/release-<that version> or release-<that version> next to -ReleaseDir) is used only when its SHA-256 is the published one;
+#   otherwise the published package is downloaded. Rebuilds are not bit-identical, so a delta from a package that was never uploaded would
+#   fail on every client. No reachable GitHub, or a published package that does not match its notes, stops the build; -NoDelta builds
+#   without a delta package.
 # - Linux AppImage (vpk [linux] pack, built on this Windows machine with vpk's own tools): TMConcept-linux-<arch>.AppImage, its full package
 #   and releases.linux-<arch>.json. Not tried on Linux yet, so the README does not offer it; -NoAppImage skips it.
 # The end prints the SHA-256 lines of every file for the release notes' "## SHA-256" block (the app checks its downloads against them).
@@ -25,6 +30,7 @@ param(
     [string]$ReleaseDir = '',
     [string]$PublishDir = '',
     [string]$PreviousReleaseDir = '',
+    [switch]$NoDelta,
     [switch]$NoInstaller,
     [switch]$NoAppImage
 )
@@ -44,10 +50,13 @@ $releaseFolder = if ([IO.Path]::IsPathRooted($ReleaseDir)) { $ReleaseDir } else 
 $publishFolder = if ([IO.Path]::IsPathRooted($PublishDir)) { $PublishDir } else { Join-Path $root $PublishDir }
 $project = Join-Path $root 'src/TMConcept.Desktop/TMConcept.Desktop.csproj'
 $packId = 'TMConcept'
+# The GitHub repository the releases are published to (the delta package's base is read from there).
+$repository = 'TM-AutoClip/tm-concept'
 # The taskbar id the app gives its windows (TaskbarIcon.AppId): the shortcuts Setup makes carry the same one, so a pinned button groups.
 $aumid = 'TMAutoClip.TMConcept'
 Write-Output "Building $version from commit $commit into $releaseFolder"
 New-Item -ItemType Directory -Force -Path $releaseFolder | Out-Null
+New-Item -ItemType Directory -Force -Path $publishFolder | Out-Null
 
 function Invoke-Checked([string]$what, [scriptblock]$command) {
     & $command
@@ -74,26 +83,75 @@ function Publish-Program([string]$rid, [bool]$singleFile, [string]$out) {
     }
 }
 
-# The newest full package of this channel with a lower version: vpk makes the delta package from it.
-function Find-PreviousFull([string]$channel) {
+# The project's releases on GitHub (public API, no key), newest first; read once.
+$script:publishedReleases = $null
+function Get-PublishedReleases {
+    if ($null -eq $script:publishedReleases) {
+        try {
+            $script:publishedReleases = @(Invoke-RestMethod -Uri "https://api.github.com/repos/$repository/releases?per_page=50" `
+                -Headers @{ 'User-Agent' = 'tm-concept-publish'; 'Accept' = 'application/vnd.github+json' })
+        } catch {
+            throw "The published releases could not be read from GitHub ($($_.Exception.Message)); the delta package must be cut from the published full package. Use -NoDelta to build without one."
+        }
+    }
+    return $script:publishedReleases
+}
+
+# The full package of this channel that the newest older PUBLISHED release carries, checked against that release's SHA-256 block: a local
+# copy when it is that file, otherwise the published one downloaded into $work. $null when that release has none (the first installed
+# release, or one without this channel), so there is no delta.
+function Find-PreviousFull([string]$channel, [string]$work) {
+    if ($NoDelta) { return $null }
+    $current = [version]$version
+    $previous = Get-PublishedReleases | Where-Object { -not $_.draft -and -not $_.prerelease -and $_.tag_name -match '^v(\d+\.\d+\.\d+)$' -and [version]$Matches[1] -lt $current } |
+        Sort-Object { [version]($_.tag_name.Substring(1)) } -Descending | Select-Object -First 1
+    if (-not $previous) { return $null }
+    $previousVersion = $previous.tag_name.Substring(1)
+    $name = "$packId-$previousVersion-$channel-full.nupkg"
+    $asset = @($previous.assets | Where-Object { $_.name -eq $name }) | Select-Object -First 1
+    if (-not $asset) {
+        Write-Host "Release $($previous.tag_name) has no $($name): no delta package for $($channel)."
+        return $null
+    }
+
+    $line = [regex]::Match([string]$previous.body, "(?m)^([0-9a-f]{64})\s+$([regex]::Escape($name))(\s|$)")
+    if (-not $line.Success) { throw "Release $($previous.tag_name) carries $name, but its notes give no SHA-256 for it." }
+    $published = $line.Groups[1].Value
+    if ($asset.digest -and $asset.digest -ne "sha256:$published") {
+        throw "Release $($previous.tag_name): GitHub's digest of $name ($($asset.digest)) is not the one in its notes ($published)."
+    }
+
     $folders = @()
     if ($PreviousReleaseDir) {
         $folders += if ([IO.Path]::IsPathRooted($PreviousReleaseDir)) { $PreviousReleaseDir } else { Join-Path $root $PreviousReleaseDir }
-    } else {
-        $folders += Get-ChildItem -Directory -Path (Join-Path $root 'artifacts') -Filter 'release-*' -ErrorAction SilentlyContinue | ForEach-Object FullName
-        $folders += Get-ChildItem -Directory -Path (Split-Path $releaseFolder -Parent) -Filter 'release-*' -ErrorAction SilentlyContinue | ForEach-Object FullName
     }
-    $current = [version]$version
-    $best = $null
-    foreach ($folder in ($folders | Where-Object { $_ } | Select-Object -Unique)) {
-        foreach ($file in Get-ChildItem -File -Path $folder -Filter "$packId-*-$channel-full.nupkg" -ErrorAction SilentlyContinue) {
-            if ($file.Name -match "^$packId-(\d+\.\d+\.\d+)-$([regex]::Escape($channel))-full\.nupkg$") {
-                $found = [version]$Matches[1]
-                if ($found -lt $current -and ($null -eq $best -or $found -gt $best.Version)) { $best = [pscustomobject]@{ Version = $found; File = $file.FullName } }
-            }
+    $folders += Join-Path $root "artifacts/release-$previousVersion"
+    $folders += Join-Path (Split-Path $releaseFolder -Parent) "release-$previousVersion"
+    foreach ($folder in ($folders | Select-Object -Unique)) {
+        $candidate = Join-Path $folder $name
+        if (-not (Test-Path $candidate)) { continue }
+        if ((Get-FileHash -Algorithm SHA256 $candidate).Hash.ToLowerInvariant() -eq $published) {
+            return [pscustomobject]@{ Version = $previousVersion; File = $candidate }
         }
+        Write-Warning "$candidate is not the published $name (a rebuild that was never uploaded?); the published one is downloaded."
     }
-    return $best
+
+    $download = Join-Path $publishFolder "previous-$name"
+    $progress = $ProgressPreference
+    $ProgressPreference = 'SilentlyContinue'
+    try {
+        Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $download -Headers @{ 'User-Agent' = 'tm-concept-publish' }
+    } catch {
+        throw "The published $name could not be downloaded ($($_.Exception.Message)). Use -NoDelta to build without a delta package."
+    } finally {
+        $ProgressPreference = $progress
+    }
+    $hash = (Get-FileHash -Algorithm SHA256 $download).Hash.ToLowerInvariant()
+    if ($hash -ne $published) {
+        Remove-Item $download -Force
+        throw "The downloaded $name has SHA-256 $hash, not the $published of the release notes."
+    }
+    return [pscustomobject]@{ Version = $previousVersion; File = $download }
 }
 
 # vpk pack into a fresh work folder; the release gets the installer / AppImage, this version's packages and an index of them only.
@@ -102,12 +160,15 @@ function Pack-Installed([string]$rid, [string]$folder, [string[]]$extra) {
     $work = Join-Path $publishFolder "velopack-$rid"
     if (Test-Path $work) { Remove-Item -Recurse -Force $work }
     New-Item -ItemType Directory -Force -Path $work | Out-Null
-    $previous = Find-PreviousFull $channel
+    $previous = Find-PreviousFull $channel $work
     if ($previous) {
-        Copy-Item $previous.File $work
-        Write-Output "Delta package for $($rid): from $($previous.Version) ($($previous.File))"
+        # vpk finds the base by its file name in the output folder.
+        Copy-Item $previous.File (Join-Path $work "$packId-$($previous.Version)-$channel-full.nupkg")
+        Write-Output "Delta package for $($rid): from the published $($previous.Version) ($($previous.File))"
+    } elseif ($NoDelta) {
+        Write-Output "No delta package for $($rid) (-NoDelta)."
     } else {
-        Write-Output "No delta package for $($rid): no full package of an older version was found (the first installed release has none)."
+        Write-Output "No delta package for $($rid): the previous published release has no full package of it."
     }
 
     $notes = Join-Path $root "docs/release-notes/v$version.md"

@@ -343,6 +343,7 @@ public static class DesktopServices
         services.AddSingleton<Updates.IAppEdition>(_ => Updates.VelopackEdition.Current());
         services.AddSingleton<Updates.IInstalledUpdates, Updates.VelopackUpdates>();
         services.AddSingleton<Updates.ISetupLauncher, Updates.SetupLauncher>();
+        services.AddSingleton<Updates.InstalledCopy>();
         services.AddSingleton<Updates.EditionInstaller>();
         services.AddSingleton<Updates.InstallOffer>();
 

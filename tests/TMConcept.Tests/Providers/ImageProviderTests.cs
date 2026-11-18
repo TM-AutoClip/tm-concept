@@ -67,6 +67,30 @@ public sealed class ImageProviderTests
         fake.Requests.Count.ShouldBe(3);
     }
 
+    [Theory]
+    [InlineData("https://evil.example/collect")]
+    [InlineData("//evil.example/collect")]
+    [InlineData("fal-ai/../../x")]
+    [InlineData("fal-ai/x?to=evil")]
+    [InlineData("evil:collect")]
+    [InlineData("fal-ai\\x")]
+    public async Task FalNeverSendsTheKeyForAModelIdThatLeadsElsewhere(string id)
+    {
+        var fake = new FakeHttp();
+        var http = new ProviderHttp(fake.Transport, NullLogger<ProviderHttp>.Instance);
+        var engine = new FalImageEngine(new FalProvider(http, NullLogger<FalProvider>.Instance), http, fake.Transport, NullLogger<FalImageEngine>.Instance);
+        using var paths = new TempPaths();
+        var remote = new CatalogModel { Provider = "fal", Id = id, Name = "FLUX 3 (fal)", Capabilities = ModelCapability.Image, ImageUsd = 0.01m };
+        var model = new ResolvedModel(remote, new ApiKey { Provider = "fal", Secret = Key }, string.Empty);
+
+        var error = await Should.ThrowAsync<ProviderException>(() =>
+            engine.GenerateAsync(new ImageRequest("x", 512, 512, Path.Combine(paths.WorkDirectory, "x.png"), model), CancellationToken.None));
+
+        error.Code.ShouldBe("model");
+        fake.Requests.ShouldBeEmpty("nothing is sent, so the key goes nowhere");
+        engine.ModelAddress("fal-ai/flux-2/flash").ShouldBe(new Uri("https://queue.fal.run/fal-ai/flux-2/flash"));
+    }
+
     [Fact]
     public async Task OpenAIImagesDecodeTheBase64Answer()
     {

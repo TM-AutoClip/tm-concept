@@ -74,6 +74,11 @@ public sealed class EditionTests
         publish.ShouldContain("$aumid = '" + TMConcept.Desktop.Os.TaskbarIcon.AppId + "'");
         publish.ShouldContain("TMConcept-Portable-$rid.exe");
         publish.ShouldContain("tm-concept-portable-$rid.tar.gz");
+
+        // The delta package's base is the full package the previous release really published (its SHA-256 block), never any local build.
+        publish.ShouldContain("$repository = '" + UpdateRules.Repository["https://github.com/".Length..] + "'");
+        publish.ShouldContain("its notes give no SHA-256 for it");
+        publish.ShouldNotContain("-Filter 'release-*'", Case.Sensitive, "no newest-older-package search over local folders");
     }
 
     [Theory]
@@ -255,6 +260,59 @@ public sealed class EditionTests
         Installer(installed).Available.ShouldBeFalse("the installed edition is already installed");
     }
 
+    [Fact]
+    public async Task AnInstalledEditionAlreadyOnThisComputerIsNeverOfferedNorInstalledOver()
+    {
+        var program = Path.Combine(Folder(), ReleaseAssetNames.PortableWindows);
+        File.WriteAllText(program, "the portable program");
+        var confirm = new FakeConfirm { Answer = true };
+        using var h = new DesktopHarness(s =>
+        {
+            s.AddSingleton<TMConcept.Desktop.Dialogs.IConfirmDialog>(confirm);
+            s.AddSingleton(new SelfReplacer(NullLogger<SelfReplacer>.Instance) { ProgramPath = program });
+        });
+        var root = h.Get<InstalledCopy>().Root;
+        h.Get<InstalledCopy>().Version().ShouldBeNull("nothing installed yet");
+
+        // Installed with Setup from the browser (0.1.27); later this portable 0.1.26 is started.
+        Directory.CreateDirectory(Path.Combine(root, "current"));
+        File.WriteAllText(Path.Combine(root, "Update.exe"), "Velopack");
+        File.WriteAllText(Path.Combine(root, "current", "sq.version"),
+            "<?xml version=\"1.0\"?><package xmlns=\"http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd\"><metadata><id>TMConcept</id><version>0.1.27</version></metadata></package>");
+        var installer = Installer(h, current: "0.1.26");
+
+        installer.InstalledVersion.ShouldBe("0.1.27");
+        Offer(h, customDataFolder: false).Due.ShouldBeFalse("already installed: not asked");
+        (await Offer(h, customDataFolder: false).AskAsync()).ShouldBeFalse();
+        confirm.Asked.ShouldBeEmpty();
+        (await Should.ThrowAsync<AppUpdateException>(() => installer.InstallAsync(null, CancellationToken.None))).Code.ShouldBe("already_installed",
+            "an older Setup is never run over a newer install");
+
+        // The same version: nothing to install either; an unreadable record counts as installed.
+        File.WriteAllText(Path.Combine(root, "current", "sq.version"), "<package><metadata><version>0.1.26</version></metadata></package>");
+        (await Should.ThrowAsync<AppUpdateException>(() => installer.InstallAsync(null, CancellationToken.None))).Code.ShouldBe("already_installed");
+        File.WriteAllText(Path.Combine(root, "current", "sq.version"), "<damaged");
+        installer.InstalledVersion.ShouldBe("unknown");
+
+        // An older install is updated by this version's Setup (the check goes on to the release: offline in the test).
+        File.WriteAllText(Path.Combine(root, "current", "sq.version"), "<package><metadata><version>0.1.25</version></metadata></package>");
+        string? code = null;
+        try
+        {
+            await installer.InstallAsync(null, CancellationToken.None);
+        }
+        catch (AppUpdateException ex)
+        {
+            code = ex.Code;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or IOException or TMConcept.Core.Tools.ToolInstallException)
+        {
+            code = "offline";
+        }
+
+        code.ShouldNotBeNull().ShouldNotBe("already_installed");
+    }
+
     private static InstallOffer Offer(DesktopHarness h, bool customDataFolder) =>
         new(Installer(h), h.Get<UiPreferencesFile>(), h.Get<AppPaths>(), h.Get<TMConcept.Desktop.Dialogs.IConfirmDialog>(),
             h.Get<TMConcept.Desktop.Localization.Localizer>(), NullLogger<InstallOffer>.Instance)
@@ -262,11 +320,12 @@ public sealed class EditionTests
             CustomDataFolder = customDataFolder,
         };
 
-    private static EditionInstaller Installer(DesktopHarness h) =>
+    private static EditionInstaller Installer(DesktopHarness h, string? current = null) =>
         new(h.Get<ReleaseFeed>(), h.Get<TMConcept.Engines.Tools.ToolDownloader>(), h.Get<SelfReplacer>(), h.Get<IAppEdition>(), h.Get<ISetupLauncher>(),
-            h.Get<IAppRestarter>(), h.Get<TMConcept.Desktop.Startup.AppSession>(), NullLogger<EditionInstaller>.Instance)
+            h.Get<IAppRestarter>(), h.Get<TMConcept.Desktop.Startup.AppSession>(), h.Get<InstalledCopy>(), NullLogger<EditionInstaller>.Instance)
         {
             Rid = "win-x64",
+            Current = current ?? TMConcept.Desktop.Logging.AppIdentity.ShortVersion,
         };
 
     private static string Folder()
