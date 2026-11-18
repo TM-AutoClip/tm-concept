@@ -1,4 +1,7 @@
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using TMConcept.Core.Documents;
+using TMConcept.Documents.Pdf;
 using UglyToad.PdfPig;
 using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.DocumentLayoutAnalysis.TextExtractor;
@@ -18,9 +21,37 @@ namespace TMConcept.Documents.Extractors;
 /// page read now is kept: its text layer, or the engine's reading at once (also an empty one), so a cancel or a stop loses nothing that was
 /// paid for or waited for. A scanned page whose images are all JPEG 2000, JBIG2 or CCITT fax is counted apart
 /// (<see cref="ExtractedDocument.PagesUnsupported"/>).
+/// 0.1.27: a text layer counts only when it is usable (<see cref="PageTextQuality"/>: a broken font map gives replacement or private-use
+/// characters instead of letters); a page without one is drawn whole by the PDF renderer (<see cref="IPdfPageRenderer"/>, PDFium, when it is
+/// installed) at <see cref="RenderDpi"/> and handed to the engine as one JPEG, so JPEG 2000, JBIG2 and CCITT fax scans, 1-bit masks, tiled
+/// scans, text drawn as shapes and turned pages are read too. Without the renderer (or when it cannot draw a page) the page's images go as
+/// before. The renderer opens the file once per reading and closes it at the end, also on a cancel.
 /// </summary>
 public sealed class PdfExtractor : DocumentExtractorBase
 {
+    /// <summary>The resolution a page is drawn at for the OCR or a vision model.</summary>
+    public const int RenderDpi = 200;
+
+    /// <summary>Most pixels of a drawn page (16 million: an A3 page at 200 dpi fits; larger pages are drawn smaller).</summary>
+    public const long RenderPixelsMax = 16_000_000;
+
+    private readonly IPdfPageRenderer? _renderer;
+    private readonly IPageImageEncoder? _encoder;
+    private readonly ILogger _logger;
+
+    /// <summary>Reads with PdfPig only (no page renderer).</summary>
+    public PdfExtractor()
+        : this(null, null, NullLogger<PdfExtractor>.Instance)
+    {
+    }
+
+    /// <summary>Reads with PdfPig and draws pages without a usable text layer with <paramref name="renderer"/> (0.1.27).</summary>
+    public PdfExtractor(IPdfPageRenderer? renderer, IPageImageEncoder? encoder, ILogger<PdfExtractor> logger)
+    {
+        _renderer = renderer;
+        _encoder = encoder;
+        _logger = logger ?? NullLogger<PdfExtractor>.Instance;
+    }
     /// <inheritdoc />
     public override DocumentKind Kind => DocumentKind.Pdf;
 
@@ -84,6 +115,8 @@ public sealed class PdfExtractor : DocumentExtractorBase
         var halted = string.Empty;
         FileStream? stream = null;
         PdfDocument? pdf = null;
+        IPdfRenderDocument? drawn = null;
+        var drawing = options.Recognizer is not null && _renderer is { Ready: true } && _encoder is not null;
         try
         {
             for (var number = range.From; number <= to; number++)
@@ -123,13 +156,35 @@ public sealed class PdfExtractor : DocumentExtractorBase
                 }
 
                 var current = pdf;
+                var drawNow = drawing;
                 var (text, images, cannot) = Pdf(() =>
                 {
                     var page = current.GetPage(number);
                     var read = PageText(page);
-                    var (parts, unsupportedImages) = read.Length == 0 && options.Recognizer is not null ? PdfPageImages.Read(page) : ([], false);
+                    var (parts, unsupportedImages) = read.Length == 0 && options.Recognizer is not null && !drawNow ? PdfPageImages.Read(page) : ([], false);
                     return (read, parts, unsupportedImages);
                 });
+                if (text.Length == 0 && options.Recognizer is not null && drawNow && halted.Length == 0)
+                {
+                    // The whole page as the reader sees it; when it cannot be drawn, its images as PdfPig hands them on.
+                    try
+                    {
+                        drawn ??= _renderer!.Open(file);
+                        images = [_encoder!.Encode(drawn.Render(number, RenderDpi, RenderPixelsMax))];
+                    }
+                    catch (Exception ex) when (ex is InvalidDataException or InvalidOperationException)
+                    {
+                        _logger.LogWarning("Page {Page} could not be drawn by the PDF renderer ({Reason}); its images are used instead", number, ex.Message);
+                        if (drawn is null)
+                        {
+                            // The renderer cannot open this file at all: the rest of the pages go the old way.
+                            drawing = false;
+                        }
+
+                        (images, cannot) = Pdf(() => PdfPageImages.Read(current.GetPage(number)));
+                    }
+                }
+
                 if (text.Length > 0 && options.Memory is { } layer)
                 {
                     await layer.KeepAsync(number, text, PageTextSources.Layer, cancellationToken).ConfigureAwait(false);
@@ -184,6 +239,7 @@ public sealed class PdfExtractor : DocumentExtractorBase
         }
         finally
         {
+            drawn?.Dispose();
             pdf?.Dispose();
             stream?.Dispose();
             if (options.Memory is { } memory)
@@ -225,7 +281,7 @@ public sealed class PdfExtractor : DocumentExtractorBase
         return new DocumentProbe(pages, pdf.Information.Title ?? string.Empty, sample.Count, without);
     });
 
-    /// <summary>The page's text layer in reading order (empty when it has none).</summary>
+    /// <summary>The page's text layer in reading order (empty when it has none, or none that can be used: <see cref="PageTextQuality"/>).</summary>
     private static string PageText(Page page)
     {
         var text = ContentOrderTextExtractor.GetText(page);
@@ -234,7 +290,7 @@ public sealed class PdfExtractor : DocumentExtractorBase
             text = page.Text;
         }
 
-        return string.IsNullOrWhiteSpace(text) ? string.Empty : text;
+        return PageTextQuality.Usable(text) ? text : string.Empty;
     }
 
     /// <summary>A read-only stream of the file: PdfPig reads what it needs from it instead of taking the whole file into memory.</summary>
