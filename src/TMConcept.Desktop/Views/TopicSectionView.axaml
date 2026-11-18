@@ -9,21 +9,13 @@
        the topics that get their concept leave it. -->
   <Border Classes="card" Padding="12,10">
     <DockPanel>
-      <!-- The title gives way first (it trims, its help stays) when the section is narrow. -->
-      <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="8" Margin="0,0,0,6">
-        <DockPanel VerticalAlignment="Center">
-          <views:HelpTip DockPanel.Dock="Right" Text="{DynamicResource concepts.topics.tip}" />
-          <TextBlock Name="TopicTitle" Text="{DynamicResource concepts.topics.title}" Classes="h2" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
-                     ToolTip.Tip="{DynamicResource concepts.topics.title}" />
-        </DockPanel>
-        <TextBlock Grid.Column="1" Text="{DynamicResource concepts.topics.count}" Classes="small" VerticalAlignment="Center" />
-        <NumericUpDown Name="TopicCountBox" Grid.Column="2" Value="{Binding TopicCount}" Minimum="5" Maximum="100" Increment="5" FormatString="0" Width="110"
-                       ToolTip.Tip="{DynamicResource topics.count.hint}" IsEnabled="{Binding CanSuggest}" />
-        <Button Name="SuggestButton" Grid.Column="3" Content="{DynamicResource topics.button}" Command="{Binding SuggestCommand}"
-                IsEnabled="{Binding CanSuggest}" VerticalAlignment="Center" ToolTip.Tip="{DynamicResource topics.hint}" />
-        <TextBlock Name="SuggestEstimateLine" Grid.Column="4" Text="{Binding SuggestEstimate}" Classes="tiny" VerticalAlignment="Center"
-                   ToolTip.Tip="{Binding SuggestEstimateDetail}" />
-      </Grid>
+      <!-- The title has the row to itself (it still trims, its help stays, in a very narrow section): 0.1.23 put the topic count, the button
+           and the estimate next to it and at 1280 px the title shrank to "K…". They stand in their own row under the tick row. -->
+      <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+        <views:HelpTip DockPanel.Dock="Right" Text="{DynamicResource concepts.topics.tip}" />
+        <TextBlock Name="TopicTitle" Text="{DynamicResource concepts.topics.title}" Classes="h2" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                   ToolTip.Tip="{DynamicResource concepts.topics.title}" />
+      </DockPanel>
       <views:ConceptSectionFooter Name="TopicFooter" DockPanel.Dock="Bottom" Margin="0,6,0,0" />
       <DockPanel>
         <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Margin="0,0,0,4" IsVisible="{Binding Suggesting}">
@@ -42,6 +34,16 @@
           <TextBlock Name="SuggestStatusLine" Grid.Column="3" Text="{Binding SuggestStatus}" Classes="small" Classes.error="{Binding SuggestFailed}"
                      TextTrimming="CharacterEllipsis" TextAlignment="Right" VerticalAlignment="Center" ToolTip.Tip="{Binding SuggestStatus}" />
         </Grid>
+        <!-- How many topics to suggest, the button and its estimate; in a narrow section the button and the estimate go to the next line. -->
+        <WrapPanel Name="TopicCountRow" DockPanel.Dock="Top" Orientation="Horizontal">
+          <TextBlock Text="{DynamicResource concepts.topics.count}" Classes="small" VerticalAlignment="Center" Margin="0,0,8,4" />
+          <NumericUpDown Name="TopicCountBox" Value="{Binding TopicCount}" Minimum="5" Maximum="100" Increment="5" FormatString="0" Width="110" Margin="0,0,8,4"
+                         ToolTip.Tip="{DynamicResource topics.count.hint}" IsEnabled="{Binding CanSuggest}" />
+          <Button Name="SuggestButton" Content="{DynamicResource topics.button}" Command="{Binding SuggestCommand}" Margin="0,0,8,4"
+                  IsEnabled="{Binding CanSuggest}" VerticalAlignment="Center" ToolTip.Tip="{DynamicResource topics.hint}" />
+          <TextBlock Name="SuggestEstimateLine" Text="{Binding SuggestEstimate}" Classes="tiny" VerticalAlignment="Center" Margin="0,0,0,4"
+                     ToolTip.Tip="{Binding SuggestEstimateDetail}" />
+        </WrapPanel>
         <Border Classes="inset" MinHeight="60">
           <Panel>
             <TextBlock Text="{DynamicResource concepts.topics.empty}" Classes="small" TextWrapping="Wrap" VerticalAlignment="Center" HorizontalAlignment="Center"
