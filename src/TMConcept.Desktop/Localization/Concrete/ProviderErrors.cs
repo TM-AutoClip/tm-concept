@@ -6,7 +6,7 @@ public static class ProviderErrors
     private static readonly HashSet<string> Known = new(StringComparer.Ordinal)
     {
         "auth", "billing", "forbidden", "rate", "busy", "model", "bad_request", "too_large", "network", "timeout", "truncated", "refusal", "incomplete", "parse",
-        "context", "documents",
+        "context", "documents", "pages",
     };
 
     /// <summary>The text of a code (a generic text for unknown codes).</summary>

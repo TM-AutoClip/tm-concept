@@ -28,6 +28,12 @@ public static class PipelineSteps
     /// <summary>"Suggest topics" on the concept page: a cheap chat model writes 5-100 topics to pick from, one concept each (optional).</summary>
     public const string Topics = "topics";
 
+    /// <summary>
+    /// Text extraction of scanned PDF pages while a document is added (optional, 0.1.24): a model that reads images, online (paid per page)
+    /// or local.
+    /// </summary>
+    public const string DocumentText = "document-text";
+
     /// <summary>Sample image description (optional).</summary>
     public const string DescribeImage = "describe-image";
 
@@ -47,10 +53,11 @@ public static class PipelineSteps
         new(Embedding, ModelCapability.Embedding, ["local/paraphrase-multilingual-minilm", "openai/text-embedding-3-small"], Optional: true),
         new(DescribeImage, ModelCapability.Vision, ["anthropic/claude-haiku-5-5"], Optional: true),
         new(Topics, ModelCapability.Chat, ["anthropic/claude-haiku-5-5", "zai/glm-5.3-flash", "deepseek/deepseek-flash"], Optional: true),
+        new(DocumentText, ModelCapability.Vision, ["anthropic/claude-haiku-5-5"], Optional: true),
     ];
 
     /// <summary>The steps chosen on the Generate concepts page.</summary>
-    public static readonly IReadOnlyList<string> ConceptPage = [Concepts, Embedding, Topics];
+    public static readonly IReadOnlyList<string> ConceptPage = [Concepts, Embedding, Topics, DocumentText];
 
     /// <summary>
     /// The steps chosen on the Concept → video page: the video's own (code with its engine, images, narration) and the concept step, which

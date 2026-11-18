@@ -52,6 +52,15 @@ public sealed record DocumentBrief : ConceptBrief
     /// <summary>Where a run without a subject starts reading each document (0–1).</summary>
     public double Phase { get; init; }
 
+    /// <summary>Only the passages on these pages of the chosen PDFs are used (0.1.24; null = every page; passages without a page always count).</summary>
+    public DocumentPageRange? Pages { get; init; }
+
+    /// <summary>
+    /// The notes of "read everything" (0.1.24, <see cref="DocumentDigester"/>): the concepts are grounded in them instead of the stored
+    /// passages (null = the passages, as before).
+    /// </summary>
+    public IReadOnlyList<DocumentChunk>? Digest { get; init; }
+
     /// <inheritdoc />
     public override int Count => TopicList is { Count: > 0 } topics ? topics.Count : Math.Clamp(Requested, ConceptLimits.CountMin, DocumentLimits.ConceptCountMax);
 

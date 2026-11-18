@@ -218,6 +218,8 @@ public static class DesktopServices
         services.AddSingleton<Core.Documents.DocumentGrounder>();
         services.AddSingleton<Core.Documents.DocumentLibrary>();
         services.AddSingleton<Core.Documents.DocumentTopicFinder>();
+        services.AddSingleton<Core.Documents.DocumentTextReader>();
+        services.AddSingleton<Core.Documents.DocumentDigester>();
         AddResearch(services);
     }
 

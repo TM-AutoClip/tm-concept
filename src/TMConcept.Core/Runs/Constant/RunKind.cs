@@ -38,4 +38,10 @@ public enum RunKind
 
     /// <summary>"Find topics" in the profile's documents on the concept page (one chat call with the topics step's model, 0.1.21).</summary>
     DocumentTopics = 10,
+
+    /// <summary>Reading the text of scanned PDF pages with a model that reads images, while a document is added (0.1.24).</summary>
+    DocumentText = 11,
+
+    /// <summary>Summarising the chosen pages of the documents before a "read everything" concept run (0.1.24).</summary>
+    DocumentDigest = 12,
 }

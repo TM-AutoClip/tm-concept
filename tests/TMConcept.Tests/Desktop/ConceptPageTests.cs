@@ -175,7 +175,7 @@ public sealed class ConceptPageTests
 
         // A new profile has no concept model: the models unfold by themselves, so the first thing to do is in sight.
         page.Settings.ModelsOpen.ShouldBeTrue();
-        page.Settings.Picker.Rows.Select(r => r.Step.Code).ShouldBe([PipelineSteps.Concepts, PipelineSteps.Embedding, PipelineSteps.Topics]);
+        page.Settings.Picker.Rows.Select(r => r.Step.Code).ShouldBe([PipelineSteps.Concepts, PipelineSteps.Embedding, PipelineSteps.Topics, PipelineSteps.DocumentText]);
         page.Settings.Picker.Compact.ShouldBeTrue();
         page.Settings.Picker.Columns.ShouldBe(3);
 

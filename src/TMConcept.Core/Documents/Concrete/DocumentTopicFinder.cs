@@ -41,23 +41,23 @@ public sealed class DocumentTopicFinder(DocumentGrounder grounder, IPromptMemory
 
     /// <summary>The estimate of one press (no network, no model of this computer).</summary>
     public async Task<CostEstimate> EstimateAsync(Profile profile, CatalogModel model, string subject, IReadOnlyList<Guid> documents, int count, string language,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, DocumentPageRange? pages = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(model);
         count = Clamp(count);
-        var (prompt, _, maxOutput, passages) = await PromptAsync(profile, model, subject, documents, count, language, true, cancellationToken).ConfigureAwait(false);
+        var (prompt, _, maxOutput, passages) = await PromptAsync(profile, model, subject, documents, count, language, true, cancellationToken, pages).ConfigureAwait(false);
         return costs.EstimateChat(model, costs.Tokens(prompt.System + prompt.User, language) + passages, 0, Math.Min(12 * count, maxOutput), Math.Min(OutputFor(count), maxOutput));
     }
 
     /// <summary>Finds <paramref name="count"/> topics; <paramref name="progress"/> gets the call's steps.</summary>
     public async Task<DocumentTopics> FindAsync(Profile profile, ResolvedModel model, string subject, IReadOnlyList<Guid> documents, int count, string language,
-        IProgress<ChatProgress>? progress, CancellationToken cancellationToken)
+        IProgress<ChatProgress>? progress, CancellationToken cancellationToken, DocumentPageRange? pages = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(model);
         count = Clamp(count);
-        var (prompt, grounding, maxOutput, _) = await PromptAsync(profile, model.Model, subject, documents, count, language, false, cancellationToken).ConfigureAwait(false);
+        var (prompt, grounding, maxOutput, _) = await PromptAsync(profile, model.Model, subject, documents, count, language, false, cancellationToken, pages).ConfigureAwait(false);
         var run = new Run
         {
             ProfileId = profile.Id,
@@ -135,7 +135,7 @@ public sealed class DocumentTopicFinder(DocumentGrounder grounder, IPromptMemory
     }
 
     private async Task<(ConceptPrompt Prompt, DocumentGrounding Grounding, int MaxOutput, long EstimatedPassages)> PromptAsync(Profile profile, CatalogModel model, string subject,
-        IReadOnlyList<Guid> documents, int count, string language, bool estimate, CancellationToken cancellationToken)
+        IReadOnlyList<Guid> documents, int count, string language, bool estimate, CancellationToken cancellationToken, DocumentPageRange? pages)
     {
         var past = await memory.ReadAsync(profile, cancellationToken).ConfigureAwait(false);
         var input = new DocumentTopicPromptInput(profile, past, subject ?? string.Empty, DocumentGrounding.Empty, count, language);
@@ -152,13 +152,13 @@ public sealed class DocumentTopicFinder(DocumentGrounder grounder, IPromptMemory
         if (estimate)
         {
             // The price line reads no passage: the budget (or the whole of shorter documents) is charged as extra prompt tokens.
-            var passages = await grounder.EstimateTokensAsync(profile, documents, budget, cancellationToken).ConfigureAwait(false);
+            var passages = await grounder.EstimateTokensAsync(profile, documents, budget, cancellationToken, pages).ConfigureAwait(false);
             return (bare, DocumentGrounding.Empty, lowered ?? maxOutput, passages);
         }
 
         // Passages are counted for the documents' script, not the interface language (a Japanese article is not English text).
         var grounding = await grounder.GroundAsync(profile, documents, subject ?? string.Empty, budget, false, PassageTokens.For(costs, profile.ContentLanguage),
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken, pages: pages).ConfigureAwait(false);
         return (ConceptPromptBuilder.BuildDocumentTopics(input with { Grounding = grounding }), grounding, lowered ?? maxOutput, 0);
     }
 

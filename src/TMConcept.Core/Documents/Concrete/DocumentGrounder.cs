@@ -25,12 +25,15 @@ public sealed class DocumentGrounder(IDocumentStore store, IDocumentEmbedder emb
     /// chosen ready documents when they are shorter (counted from their stored length, nothing is decrypted). Throws like
     /// <see cref="GroundAsync"/> when no chosen document is ready.
     /// </summary>
-    public async Task<long> EstimateTokensAsync(Profile profile, IReadOnlyCollection<Guid> chosen, int budget, CancellationToken cancellationToken)
+    public async Task<long> EstimateTokensAsync(Profile profile, IReadOnlyCollection<Guid> chosen, int budget, CancellationToken cancellationToken,
+        DocumentPageRange? pages = null, IReadOnlyList<DocumentChunk>? digest = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
         var documents = await RequireReadyAsync(profile.Id, chosen, cancellationToken).ConfigureAwait(false);
         var perToken = OutputLanguages.Of(profile.ContentLanguage).CharactersPerToken;
-        var whole = documents.Sum(d => (long)Math.Ceiling(d.Characters / perToken) + (d.Chunks * (long)PassageTokens.LineOverhead));
+        var whole = digest is not null
+            ? digest.Sum(n => (long)Math.Ceiling(n.Text.Length / perToken) + PassageTokens.LineOverhead)
+            : documents.Sum(d => (long)Math.Ceiling(((d.Characters / perToken) + (d.Chunks * (double)PassageTokens.LineOverhead)) * DocumentDigester.Fraction(d, pages)));
         return Math.Min(budget, whole);
     }
 
@@ -40,15 +43,26 @@ public sealed class DocumentGrounder(IDocumentStore store, IDocumentEmbedder emb
     /// <see cref="Providers.ProviderException"/> with the code <c>documents</c> when no chosen document is ready.
     /// </summary>
     public async Task<DocumentGrounding> GroundAsync(Profile profile, IReadOnlyCollection<Guid> chosen, string query, int budget, bool estimate,
-        Func<string, long> tokens, CancellationToken cancellationToken, IReadOnlySet<Guid>? used = null, double phase = 0)
+        Func<string, long> tokens, CancellationToken cancellationToken, IReadOnlySet<Guid>? used = null, double phase = 0, DocumentPageRange? pages = null,
+        IReadOnlyList<DocumentChunk>? digest = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
         var documents = await RequireReadyAsync(profile.Id, chosen, cancellationToken).ConfigureAwait(false);
 
-        var chunks = await store.ChunksAsync(profile.Id, documents.Select(d => d.Id).ToList(), cancellationToken).ConfigureAwait(false);
+        // "Read everything" (0.1.24) grounds in its notes of the chosen documents; a page range keeps the passages on its pages (and every
+        // passage without a page: a Word or text file, a web page).
+        var ids = documents.Select(d => d.Id).ToHashSet();
+        var chunks = digest is not null
+            ? digest.Where(n => ids.Contains(n.DocumentId)).ToList()
+            : (await store.ChunksAsync(profile.Id, ids, cancellationToken).ConfigureAwait(false)).Where(c => pages is null || c.Page <= 0 || pages.Contains(c.Page)).ToList();
+        if (chunks.Count == 0 && pages is not null)
+        {
+            throw new Providers.ProviderException("No passage of the chosen documents is on the chosen pages.") { Code = "pages" };
+        }
+
         var vectors = new Dictionary<Guid, float[]>();
         float[]? queryVector = null;
-        if (!estimate && embedder.Ready && query.Trim().Length > 0)
+        if (!estimate && digest is null && embedder.Ready && query.Trim().Length > 0)
         {
             try
             {

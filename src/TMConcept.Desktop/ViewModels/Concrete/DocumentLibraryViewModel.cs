@@ -5,12 +5,17 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using TMConcept.Core.Activity;
 using TMConcept.Core.Documents;
+using TMConcept.Core.Hardware;
+using TMConcept.Core.Models;
+using TMConcept.Core.Pipeline;
 using TMConcept.Core.Profiles;
+using TMConcept.Core.Runs;
 using TMConcept.Desktop.Components;
 using TMConcept.Desktop.Dialogs;
 using TMConcept.Desktop.DiskSpace;
 using TMConcept.Desktop.Localization;
 using TMConcept.Desktop.Startup;
+using TMConcept.Desktop.Work;
 
 namespace TMConcept.Desktop.ViewModels;
 
@@ -19,11 +24,29 @@ namespace TMConcept.Desktop.ViewModels;
 /// a Wikipedia article (by address, or by title in a chosen language), deleting one (its copy to the recycle bin, through the storage
 /// manager, so nothing is removed while work runs), and installing the meaning model (only after the confirmation with the download list).
 /// Every failure is shown on the panel in the user's language and logged. One add at a time.
+/// 0.1.24: a picked PDF first waits in <see cref="Pending"/> with its page count, how much of it looks scanned, a page range to add and
+/// whether its image pages are read by the page's text extraction model (<see cref="PipelineSteps.DocumentText"/>), each with its estimate
+/// (pages, price, rough time); "Add" then reads it page by page, the progress also in the activity line.
 /// </summary>
 public sealed partial class DocumentLibraryViewModel(AppSession session, DocumentLibrary library, IDiskCleaner cleaner, IConfirmDialog confirm,
-    ComponentInstallFlow installs, FileDialogs dialogs, IActivityLog activity, Localizer text, ILogger<DocumentLibraryViewModel> logger) : ObservableObject
+    ComponentInstallFlow installs, FileDialogs dialogs, IActivityLog activity, Localizer text, ILogger<DocumentLibraryViewModel> logger,
+    DocumentTextReader reader, StepModelResolver resolver, IVramProbe vram, WorkStatus work, SpendingMeter spending) : ObservableObject
 {
+    /// <summary>Seconds a text page takes to read on this computer, at least and at most (an estimate).</summary>
+    private const double PageSecondsMin = 0.02;
+
+    private const double PageSecondsMax = 0.15;
+
+    private readonly List<string> _notes = [];
     private CancellationTokenSource? _cancel;
+    private Func<StepPickerViewModel?>? _picker;
+    private long? _card;
+
+    /// <summary>PDFs picked and waiting for the user's choice of pages and text extraction (0.1.24).</summary>
+    public ObservableCollection<DocumentImportViewModel> Pending { get; } = [];
+
+    /// <summary>Whether a PDF waits to be added.</summary>
+    public bool HasPending => Pending.Count > 0;
 
     /// <summary>The profile's documents, the newest first.</summary>
     public ObservableCollection<DocumentRowViewModel> Documents { get; } = [];
@@ -81,6 +104,9 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
     /// <summary>The ticked ready documents (empty = none ticked: every ready one is used).</summary>
     public IReadOnlyList<Guid> Chosen => Documents.Where(d => d.Checked && d.Ready).Select(d => d.Id).ToList();
 
+    /// <summary>The model choice of the page (the text extraction step is read from it).</summary>
+    public void UsePicker(Func<StepPickerViewModel?> picker) => _picker = picker;
+
     /// <summary>Opens or closes the panel.</summary>
     [RelayCommand]
     public void Toggle() => Open = !Open;
@@ -123,6 +149,7 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
         Status = string.Empty;
         StatusIsError = false;
         Address = string.Empty;
+        DiscardPending();
         WikipediaLanguage = session.Profile?.ContentLanguage is { Length: 2 } language ? language : text.Language;
         foreach (var row in Documents)
         {
@@ -137,13 +164,117 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
     [RelayCommand]
     public void Cancel() => _cancel?.Cancel();
 
-    /// <summary>Picks files and adds them.</summary>
+    /// <summary>Picks files: Word, text and Markdown files are added at once, PDFs wait in <see cref="Pending"/> for their pages and text extraction.</summary>
     [RelayCommand]
     public async Task PickFilesAsync()
     {
         var patterns = library.Extensions.Select(e => "*" + e).ToList();
         var files = await dialogs.OpenManyAsync("documents.pick", "documents.filter", patterns, multiple: true).ConfigureAwait(true);
-        await AddFilesAsync(files).ConfigureAwait(true);
+        var pdfs = files.Where(f => string.Equals(Path.GetExtension(f), ".pdf", StringComparison.OrdinalIgnoreCase)).ToList();
+        await AddFilesAsync(files.Except(pdfs).ToList()).ConfigureAwait(true);
+        await StageAsync(pdfs).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Takes a quick look at each PDF (its pages, how much of it looks scanned) and lets it wait in <see cref="Pending"/> with its estimate; a
+    /// file that cannot be added is told at once.
+    /// </summary>
+    public async Task StageAsync(IReadOnlyList<string> files)
+    {
+        ArgumentNullException.ThrowIfNull(files);
+        if (files.Count == 0)
+        {
+            return;
+        }
+
+        var failures = new List<string>();
+        foreach (var file in files.Where(f => Pending.All(p => p.File != f)))
+        {
+            try
+            {
+                var probe = await library.ProbeAsync(file, CancellationToken.None).ConfigureAwait(true);
+                var row = new DocumentImportViewModel(file, probe, new FileInfo(file).Length);
+                row.Info = text.Format("documents.import.info", probe.Pages, Megabytes(row.Bytes));
+                row.Scanned = probe.HasImagePages ? text.Format("documents.import.scanned", probe.ImagePagesAbout(probe.Pages), probe.Pages) : string.Empty;
+                row.Extract = probe.HasImagePages && TextModel is not null;
+                row.PropertyChanged += OnPending;
+                Pending.Add(row);
+                logger.LogInformation("A PDF waits to be added: {Pages} pages, {Without} of {Sampled} sampled pages without text", probe.Pages,
+                    probe.SampledWithoutText, probe.Sampled);
+            }
+            catch (DocumentRejectedException ex)
+            {
+                logger.LogWarning("A document was not added ({Code})", ex.Code);
+                failures.Add(Path.GetFileName(file) + ": " + Reason(ex));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                logger.LogError(ex, "A PDF could not be looked at");
+                failures.Add(Path.GetFileName(file) + ": " + ex.Message);
+            }
+        }
+
+        if (failures.Count > 0)
+        {
+            Say(string.Join("\n", failures), error: true);
+        }
+
+        if (Pending.Count > 0 && _card is null)
+        {
+            _card = (await vram.MeasureAsync(null, CancellationToken.None).ConfigureAwait(true)).TotalBytes;
+        }
+
+        RefreshPending();
+        OnPropertyChanged(nameof(HasPending));
+    }
+
+    /// <summary>The estimates of the waiting PDFs again (the text extraction model may have changed).</summary>
+    public void RefreshPending()
+    {
+        foreach (var row in Pending)
+        {
+            Estimate(row);
+        }
+    }
+
+    /// <summary>Adds the waiting PDFs as chosen (a page range that is not one of its file stops it with the reason).</summary>
+    [RelayCommand]
+    public Task AddPendingAsync()
+    {
+        if (Pending.FirstOrDefault(p => !p.RangeValid) is { } wrong)
+        {
+            Say(text.Format("documents.import.fix_pages", wrong.Name), error: true);
+            return Task.CompletedTask;
+        }
+
+        var rows = Pending.ToList();
+        DiscardPending();
+        return RunAsync(rows.Select(row => (row.Name, (Func<Guid, IProgress<DocumentProgress>, CancellationToken, Task<DocumentAddResult>>)(
+            (profile, progress, token) => AddPendingAsync(profile, row, progress, token)))).ToList());
+    }
+
+    /// <summary>Lets go of the waiting PDFs.</summary>
+    [RelayCommand]
+    public void DiscardPending()
+    {
+        foreach (var row in Pending)
+        {
+            row.PropertyChanged -= OnPending;
+        }
+
+        Pending.Clear();
+        OnPropertyChanged(nameof(HasPending));
+    }
+
+    /// <summary>Lets go of one waiting PDF.</summary>
+    [RelayCommand]
+    public void RemovePending(DocumentImportViewModel? row)
+    {
+        if (row is not null && Pending.Remove(row))
+        {
+            row.PropertyChanged -= OnPending;
+            OnPropertyChanged(nameof(HasPending));
+        }
     }
 
     /// <summary>Adds <paramref name="files"/> one after the other; each one's failure is told and the others go on.</summary>
@@ -300,6 +431,7 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
             _cancel = null;
             Busy = false;
             Progress = string.Empty;
+            work.Clear(this);
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -310,6 +442,111 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
         ArgumentNullException.ThrowIfNull(error);
         var key = "documents.fail." + error.Code;
         return text.Has(key) ? text.Format(key, error.Detail) : text.Format("documents.fail.unreadable", error.Detail.Length > 0 ? error.Detail : error.Message);
+    }
+
+    private CatalogModel? TextModel => _picker?.Invoke()?.Model(PipelineSteps.DocumentText);
+
+    /// <summary>
+    /// Adds one waiting PDF: its page range, and, when its image pages are to be read, the text extraction model made ready (a local one is
+    /// installed after its question) and its run started; the run is ended with the add's outcome, so its cost is counted whatever happens.
+    /// </summary>
+    private async Task<DocumentAddResult> AddPendingAsync(Guid profile, DocumentImportViewModel row, IProgress<DocumentProgress> progress, CancellationToken token)
+    {
+        VisionPageRecognizer? recognizer = null;
+        var modelName = string.Empty;
+        if (row.Extract && row.HasImagePages && _picker?.Invoke() is { } picker && picker.Model(PipelineSteps.DocumentText) is not null)
+        {
+            if (!await picker.PrepareAsync([PipelineSteps.DocumentText], "install.purpose.document_text", token).ConfigureAwait(true))
+            {
+                _notes.Add(picker.Status.Length > 0 ? picker.Status : text["install.cancelled"]);
+            }
+            else
+            {
+                var model = await resolver.ResolveAsync(PipelineSteps.DocumentText, picker.Choice(PipelineSteps.DocumentText), token).ConfigureAwait(true);
+                modelName = model.Model.Name;
+                recognizer = await reader.StartAsync(profile, model, row.Name, row.ImagePages, token).ConfigureAwait(true);
+            }
+        }
+
+        var status = RunStatus.Failed;
+        var error = string.Empty;
+        try
+        {
+            var result = await library.AddFileAsync(profile, row.File, new DocumentReadOptions(row.Pages, recognizer), progress, token).ConfigureAwait(true);
+            status = RunStatus.Succeeded;
+            var title = result.Document.Title;
+            if (result.PagesRecognized > 0)
+            {
+                _notes.Add(text.Format("documents.added_pages_read", title, result.PagesRecognized, modelName, text.Usd(recognizer?.Run.ActualUsd ?? 0)));
+            }
+
+            if (result.RecognitionStopped.Length > 0)
+            {
+                _notes.Add(text.Format("documents.extract_stopped", title, ProviderErrors.Text(text, result.RecognitionStopped)));
+            }
+            else if (result.PagesUnread > 0)
+            {
+                _notes.Add(text.Format("documents.added_pages_unread", title, result.PagesUnread));
+            }
+
+            return result;
+        }
+        catch (OperationCanceledException)
+        {
+            status = RunStatus.Canceled;
+            error = "canceled";
+            throw;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            throw;
+        }
+        finally
+        {
+            if (recognizer is not null)
+            {
+                await reader.FinishAsync(recognizer, status, error).ConfigureAwait(true);
+                await spending.RefreshAsync().ConfigureAwait(true);
+            }
+        }
+    }
+
+    private void Estimate(DocumentImportViewModel row)
+    {
+        var model = TextModel;
+        row.CanExtract = model is not null;
+        if (!row.RangeValid)
+        {
+            row.Estimate = text.Format("documents.import.pages.invalid", row.Probe.Pages);
+            row.EstimateIsError = true;
+            return;
+        }
+
+        var pages = row.PagesChosen;
+        var lines = new List<string>
+        {
+            text.Format("documents.import.reading", pages, EstimateText.Time(text, TimeSpan.FromSeconds(pages * PageSecondsMin), TimeSpan.FromSeconds(pages * PageSecondsMax))),
+        };
+        if (row.HasImagePages)
+        {
+            lines.Add(model is null
+                ? text["documents.import.extract.none"]
+                : row.Extract
+                    ? text.Format("documents.import.extract.estimate", row.ImagePages, model.Name, EstimateText.Line(text, reader.Estimate(model, row.ImagePages, _card ?? 0)))
+                    : string.Empty);
+        }
+
+        row.Estimate = string.Join("\n", lines.Where(l => l.Length > 0));
+        row.EstimateIsError = false;
+    }
+
+    private void OnPending(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (sender is DocumentImportViewModel row && e.PropertyName is nameof(DocumentImportViewModel.Range) or nameof(DocumentImportViewModel.Extract))
+        {
+            Estimate(row);
+        }
     }
 
     private Task AddAddressAsync(DocumentKind kind)
@@ -325,10 +562,10 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
         return RunAsync([(address, (profile, progress, token) => library.AddWebAsync(profile, kind, address, language, progress, token))], clearAddress: true);
     }
 
-    private async Task RunAsync(IReadOnlyList<(string Name, Func<Guid, IProgress<DocumentProgress>, CancellationToken, Task<DocumentAddResult>> Add)> work,
+    private async Task RunAsync(IReadOnlyList<(string Name, Func<Guid, IProgress<DocumentProgress>, CancellationToken, Task<DocumentAddResult>> Add)> adds,
         bool clearAddress = false)
     {
-        if (work.Count == 0)
+        if (adds.Count == 0)
         {
             return;
         }
@@ -348,12 +585,13 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
         using var cancel = new CancellationTokenSource();
         _cancel = cancel;
         Busy = true;
+        _notes.Clear();
         var added = 0;
         var failures = new List<string>();
         var notes = new List<string>();
         try
         {
-            foreach (var (name, add) in work)
+            foreach (var (name, add) in adds)
             {
                 try
                 {
@@ -379,6 +617,11 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
                     logger.LogError(ex, "A document could not be added");
                     failures.Add(name + ": " + ex.Message);
                 }
+                catch (ModelNotReadyException ex)
+                {
+                    logger.LogWarning("The text extraction model is not ready: {Missing}", ex.Missing);
+                    failures.Add(name + ": " + text["documents.import.extract.none"]);
+                }
             }
         }
         catch (OperationCanceledException)
@@ -390,7 +633,11 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
             _cancel = null;
             Busy = false;
             Progress = string.Empty;
+            work.Clear(this);
         }
+
+        notes.AddRange(_notes);
+        _notes.Clear();
 
         if (clearAddress && added > 0)
         {
@@ -405,9 +652,16 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
 
     private void Show(DocumentProgress progress)
     {
-        Progress = progress.Stage == DocumentStage.Embedding && progress.Total > 0
-            ? text.Format("documents.stage.embedding_count", progress.Name, progress.Done, progress.Total)
-            : text.Format("documents.stage." + progress.Stage.ToString().ToLowerInvariant(), progress.Name);
+        Progress = progress.Stage switch
+        {
+            DocumentStage.Embedding when progress.Total > 0 => text.Format("documents.stage.embedding_count", progress.Name, progress.Done, progress.Total),
+            DocumentStage.Extracting when progress.Total > 0 => text.Format("documents.stage.extracting_count", progress.Name, Math.Min(progress.Done + 1, progress.Total),
+                progress.Total),
+            _ => text.Format("documents.stage." + progress.Stage.ToString().ToLowerInvariant(), progress.Name),
+        };
+
+        // The activity line shows it too: a 700-page volume takes a while, and the panel may be closed.
+        work.Show(this, Progress);
     }
 
     private void Say(string line, bool error)
@@ -440,7 +694,9 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
 
     private string Problem(SourceDocument document) => document.Status == DocumentStatus.NoText
         ? text[document.Kind == DocumentKind.Pdf ? "documents.problem.scan" : "documents.problem.empty"]
-        : document.StatusDetail == "cut" ? text["documents.problem.cut"] : string.Empty;
+        : document.StatusDetail == "cut" ? text["documents.problem.cut"]
+        : document.Kind == DocumentKind.Pdf && document.PagesWithoutText > 0 ? text.Format("documents.problem.image_pages", document.PagesWithoutText)
+        : string.Empty;
 
     private static string Megabytes(long bytes) => bytes < 1_000_000
         ? Math.Max(1, (int)Math.Round(bytes / 1000.0)).ToString(CultureInfo.InvariantCulture) + " KB"

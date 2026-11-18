@@ -7,6 +7,7 @@ using TMConcept.Core.Activity;
 using TMConcept.Core.Concepts;
 using TMConcept.Core.Costs;
 using TMConcept.Core.Documents;
+using TMConcept.Core.Hardware;
 using TMConcept.Core.Models;
 using TMConcept.Core.Pipeline;
 using TMConcept.Desktop.Concepts;
@@ -23,10 +24,13 @@ namespace TMConcept.Desktop.ViewModels;
 /// passages about it); without, it writes the chosen number. The ticked documents are used (none ticked = every ready one). Like the other
 /// two sections it only ADDS to the page's concept list and shares the page's one paid call at a time; it never sends what the other
 /// sections hold. The model may be online or local: the passages are fitted into its context either way.
+/// 0.1.24: <see cref="Pages"/> keeps a run (and "Find topics") to a page range of the ticked PDFs; <see cref="ReadAll"/> reads every
+/// passage of the chosen pages first (<see cref="DocumentDigester"/>, map-reduce with the concept model) and writes the concepts from the
+/// notes; <see cref="Plan"/> says before a press what that is: pages, tokens, calls, price and a rough time, as an estimate.
 /// </summary>
 public sealed partial class DocumentSectionViewModel(AppSession session, DocumentTopicFinder finder, StepModelResolver resolver, IActivityLog activity,
     ICostCalculator costs, WorkStatus work, SpendingMeter spending, DocumentLibraryViewModel library, Localizer text, ILogger<DocumentSectionViewModel> logger,
-    TimeProvider clock)
+    TimeProvider clock, DocumentDigester digester, IVramProbe vram)
     : ConceptSectionBase(text, logger)
 {
     /// <summary>
@@ -40,6 +44,9 @@ public sealed partial class DocumentSectionViewModel(AppSession session, Documen
     private CancellationTokenSource? _findCancel;
     private bool _attached;
     private int _findEstimate;
+    private int _plan;
+    private long? _card;
+    private string _planKey = string.Empty;
 
     /// <summary>"Belgelerim" of the open profile.</summary>
     public DocumentLibraryViewModel Library { get; } = library;
@@ -51,6 +58,22 @@ public sealed partial class DocumentSectionViewModel(AppSession session, Documen
     /// <summary>How many concepts a press writes, or how many topics "Find topics" looks for (1–30).</summary>
     [ObservableProperty]
     public partial decimal? Count { get; set; } = 3;
+
+    /// <summary>The pages of the ticked PDFs a press uses, as typed ("120-180"; empty = every page).</summary>
+    [ObservableProperty]
+    public partial string Pages { get; set; } = string.Empty;
+
+    /// <summary>Read every passage of the chosen pages first and write the concepts from the notes (map-reduce).</summary>
+    [ObservableProperty]
+    public partial bool ReadAll { get; set; }
+
+    /// <summary>What a press reads and, with <see cref="ReadAll"/>, its calls, price and rough time (an estimate).</summary>
+    [ObservableProperty]
+    public partial string Plan { get; set; } = string.Empty;
+
+    /// <summary>The plan line is a problem (an invalid page range, no room in the model's context).</summary>
+    [ObservableProperty]
+    public partial bool PlanIsError { get; set; }
 
     /// <summary>The topics found in the documents.</summary>
     public ObservableCollection<DocumentTopicItemViewModel> Topics { get; } = [];
@@ -104,6 +127,7 @@ public sealed partial class DocumentSectionViewModel(AppSession session, Documen
         }
 
         _attached = true;
+        Library.UsePicker(() => Runner.Settings.Picker);
         Library.Changed += (_, _) => Refresh();
         Library.PropertyChanged += (_, e) =>
         {
@@ -168,7 +192,7 @@ public sealed partial class DocumentSectionViewModel(AppSession session, Documen
             paid = model.Model;
             FindCall.Begin(model.Model.Name);
             var result = await finder.FindAsync(profile, model, Subject, Library.Chosen, Asked(), Text.Language,
-                new Progress<Core.Chat.ChatProgress>(FindCall.Report), cancel.Token).ConfigureAwait(true);
+                new Progress<Core.Chat.ChatProgress>(FindCall.Report), cancel.Token, PageRange()).ConfigureAwait(true);
             spending.Live(FindCall, result.CostUsd);
             if (session.Profile?.Id != profile.Id)
             {
@@ -264,9 +288,67 @@ public sealed partial class DocumentSectionViewModel(AppSession session, Documen
         // A found topic goes with its documents and search words; a run without a subject starts reading the documents at another place
         // at every press (the phase), so pressing again reaches other parts of a long document.
         var ticked = Topics.Where(t => t.Checked).Select(t => t.Topic).ToList();
+        var pages = PageRange();
         return ticked.Count > 0
-            ? new DocumentBrief(Subject, ticked.Count, Library.Chosen, ticked.Take(DocumentLimits.ConceptCountMax).ToList())
-            : Count is >= 1 ? new DocumentBrief(Subject, Asked(), Library.Chosen) { Phase = System.Security.Cryptography.RandomNumberGenerator.GetInt32(1_000) / 1_000.0 } : null;
+            ? new DocumentBrief(Subject, ticked.Count, Library.Chosen, ticked.Take(DocumentLimits.ConceptCountMax).ToList()) { Pages = pages }
+            : Count is >= 1
+                ? new DocumentBrief(Subject, Asked(), Library.Chosen) { Phase = System.Security.Cryptography.RandomNumberGenerator.GetInt32(1_000) / 1_000.0, Pages = pages }
+                : null;
+    }
+
+    /// <summary>
+    /// "Read everything" (0.1.24): before the concepts, every passage of the chosen pages is read with the concept model (made ready like for
+    /// the run) and the brief then carries the notes. A failure or a cancel is shown and no concept is written; what the calls cost is counted.
+    /// </summary>
+    protected override async Task<ConceptBrief?> PrepareRunAsync(ConceptBrief brief, CancellationToken cancellationToken)
+    {
+        if (!ReadAll || brief is not DocumentBrief documents || session.Profile is not { } profile)
+        {
+            return brief;
+        }
+
+        var picker = Runner.Settings.Picker;
+        if (!await picker.PrepareAsync([PipelineSteps.Concepts], "install.purpose.concepts", cancellationToken).ConfigureAwait(true))
+        {
+            ShowStatus(picker.Status.Length > 0 ? picker.Status : Text["install.cancelled"], error: true);
+            return null;
+        }
+
+        try
+        {
+            var model = await resolver.ResolveAsync(PipelineSteps.Concepts, picker.Choice(PipelineSteps.Concepts), cancellationToken).ConfigureAwait(true);
+            var digest = await digester.RunAsync(profile, model, documents.DocumentIds, documents.Pages, documents.Subject, new Progress<DocumentDigestProgress>(p =>
+            {
+                Progress = Text.Format("documents.digest.progress", p.Done, p.Total);
+                work.Show(this, Progress);
+            }), cancellationToken).ConfigureAwait(true);
+            activity.Add(ActivityLevel.Info, Text.Format("documents.digest.done", digest.Notes.Count, digest.Calls, Text.Usd(digest.CostUsd)));
+            return documents with { Digest = digest.Notes };
+        }
+        catch (Core.Providers.ProviderException ex)
+        {
+            ShowStatus(Text.Format("documents.digest.failed", ProviderErrors.Text(Text, ex.Code)), error: true);
+            activity.Add(ActivityLevel.Error, Status);
+            return null;
+        }
+        catch (ModelNotReadyException ex)
+        {
+            logger.LogWarning("Read everything not started: the {Step} step has no {Missing}", ex.Step, ex.Missing);
+            ShowStatus(Text["concepts.no_model"], error: true);
+            return null;
+        }
+        catch (OperationCanceledException)
+        {
+            ShowStatus(Text["documents.digest.canceled"], error: false, warning: true);
+            activity.Add(ActivityLevel.Warning, Status);
+            return null;
+        }
+        finally
+        {
+            work.Clear(this);
+            Progress = string.Empty;
+            await spending.RefreshAsync().ConfigureAwait(true);
+        }
     }
 
     /// <inheritdoc />
@@ -280,6 +362,11 @@ public sealed partial class DocumentSectionViewModel(AppSession session, Documen
         if (Library.Busy)
         {
             return Text["documents.busy"];
+        }
+
+        if (!DocumentPageRange.TryParse(Pages, 0, out _))
+        {
+            return Text["documents.plan.pages_invalid"];
         }
 
         return CheckedCount == 0 && Count is null or < 1 ? Text["concepts.idea.count_empty"] : string.Empty;
@@ -307,8 +394,14 @@ public sealed partial class DocumentSectionViewModel(AppSession session, Documen
     {
         OnPropertyChanged(nameof(CanFind));
         OnPropertyChanged(nameof(GenerateText));
+        Library.RefreshPending();
         _ = SafeAsync(FindEstimateAsync);
+        _ = SafeAsync(PlanAsync);
     }
+
+    partial void OnPagesChanged(string value) => Refresh();
+
+    partial void OnReadAllChanged(bool value) => Refresh();
 
     partial void OnSubjectChanged(string value) => RefreshAfterTyping();
 
@@ -347,6 +440,59 @@ public sealed partial class DocumentSectionViewModel(AppSession session, Documen
     partial void OnCountChanged(decimal? value) => Refresh();
 
     private int Asked() => DocumentTopicFinder.Clamp((int)(Count ?? 1));
+
+    /// <summary>The typed page range (null = every page, or one that is not a range: the button then says why).</summary>
+    private DocumentPageRange? PageRange() => DocumentPageRange.TryParse(Pages, 0, out var range) ? range : null;
+
+    /// <summary>The plan line (the newest wins): what a press reads, and with "read everything" its calls, price and rough time.</summary>
+    private async Task PlanAsync()
+    {
+        var mine = ++_plan;
+        if (session.Profile is not { } profile || !_attached || Runner.Settings.Picker.Model(PipelineSteps.Concepts) is not { } model || !Library.HasReady)
+        {
+            (Plan, PlanIsError, _planKey) = (string.Empty, false, string.Empty);
+            return;
+        }
+
+        if (!DocumentPageRange.TryParse(Pages, 0, out var pages))
+        {
+            (Plan, PlanIsError, _planKey) = (Text["documents.plan.pages_invalid"], true, string.Empty);
+            return;
+        }
+
+        // Typing a subject changes nothing here: the plan is read again only when what it counts changed (no database read per key).
+        var key = string.Join('|', profile.Id, model.Provider, model.Id, pages, ReadAll, Library.Documents.Count, string.Join(',', Library.Chosen));
+        if (key == _planKey)
+        {
+            return;
+        }
+
+        _planKey = key;
+        try
+        {
+            _card ??= (await vram.MeasureAsync(null, CancellationToken.None).ConfigureAwait(true)).TotalBytes;
+            var plan = await digester.PlanAsync(profile, model, Library.Chosen, pages, _card.Value, CancellationToken.None).ConfigureAwait(true);
+            if (mine != _plan)
+            {
+                return;
+            }
+
+            Plan = ReadAll
+                ? Text.Format("documents.plan.read_all", EstimateText.Tokens(Text, plan.PassageTokens), plan.Calls, plan.MapCalls, plan.ReduceCalls, model.Name,
+                    EstimateText.Line(Text, plan.Estimate))
+                : Text.Format("documents.plan.best", plan.Documents, plan.Pages, EstimateText.Tokens(Text, plan.PassageTokens));
+            PlanIsError = false;
+        }
+        catch (Core.Providers.ProviderException ex)
+        {
+            if (mine == _plan)
+            {
+                (Plan, PlanIsError) = (ProviderErrors.Text(Text, ex.Code), true);
+            }
+
+            _planKey = string.Empty;
+        }
+    }
 
     private void Refuse(string reason)
     {
@@ -413,8 +559,9 @@ public sealed partial class DocumentSectionViewModel(AppSession session, Documen
         try
         {
             // Off the UI thread: it reads and fits the documents' passages.
-            var (subject, chosen, asked, language) = (Subject, Library.Chosen, Asked(), Text.Language);
-            var estimate = await Task.Run(() => finder.EstimateAsync(profile, model, subject, chosen, asked, language, CancellationToken.None)).ConfigureAwait(true);
+            var (subject, chosen, asked, language, pages) = (Subject, Library.Chosen, Asked(), Text.Language, PageRange());
+            var estimate = await Task.Run(() => finder.EstimateAsync(profile, model, subject, chosen, asked, language, CancellationToken.None, pages))
+                .ConfigureAwait(true);
             if (mine == _findEstimate)
             {
                 FindEstimate = Text.Format("concepts.estimate.tiny", Text.Usd(estimate.MinUsd), Text.Usd(estimate.MaxUsd));
