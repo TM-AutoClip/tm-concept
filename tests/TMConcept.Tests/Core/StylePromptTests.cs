@@ -37,7 +37,7 @@ public sealed class StylePromptTests
 
         var text = VideoCodePrompt.System(engine, subtitles: true, Style(progressBar: true, closing: ClosingPlacement.Screen), ContentLanguages.English);
 
-        VideoCodePrompt.Version.ShouldBe("9", "9: the template block");
+        VideoCodePrompt.Version.ShouldBe("10", "9: the template block; 10: the checklist for local models");
         text.ShouldContain("Template (the user's choice");
         text.ShouldContain("ONLY input.style.font (\"Anton\")");
         text.ShouldContain("Titles: band (on a full-width band in the surface colour), at the middle left of the safe area");
