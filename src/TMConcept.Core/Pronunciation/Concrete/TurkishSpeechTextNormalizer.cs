@@ -28,6 +28,8 @@ namespace TMConcept.Core.Pronunciation;
 /// "te be me mede"). Abbreviations read in their own way ("NATO", "!IT") are in the dictionary, which runs first.</item>
 /// </list>
 /// A suffix after an apostrophe is joined to the reading and agreed with it (<see cref="TurkishHarmony"/>); the apostrophe goes.
+/// Before every step the text is put in composed form and the circumflex vowels lose their mark (<see cref="PlainVowels"/>: "hikâye" →
+/// "hikaye", 0.1.24: the voices misread them), and dashes and typographic quotes become what every voice knows (<see cref="Typography"/>).
 /// </summary>
 public sealed partial class TurkishSpeechTextNormalizer : SpeechTextNormalizerBase
 {
@@ -74,7 +76,7 @@ public sealed partial class TurkishSpeechTextNormalizer : SpeechTextNormalizerBa
     /// <inheritdoc />
     protected override string Steps(string text)
     {
-        text = text.Replace('’', '\'');
+        text = Typography(PlainVowels(text)).Replace('’', '\'');
         text = Replace(text, EraBefore(), (m, t) => SpaceAfter(t, m.Index + m.Length, "milattan önce"));
         text = Replace(text, EraAfter(), (m, t) => SpaceAfter(t, m.Index + m.Length, "milattan sonra"));
         text = Replace(text, NumericDate(), Date);
@@ -107,6 +109,50 @@ public sealed partial class TurkishSpeechTextNormalizer : SpeechTextNormalizerBa
         text = Replace(text, Digits(), (m, t) => Around(t, m, TurkishNumbers.Cardinal(m.Value)));
         text = Replace(text, Capitals(), ReadCapitals);
         return Spaces().Replace(text, " ").Trim();
+    }
+
+    /// <summary>
+    /// The text in composed form with the circumflex vowels plain (â → a, î → i, û → u; Â → A, Î → İ, Û → U). The voices read them badly:
+    /// Supertonic splits every letter into its base and mark (its vocabulary has the combining circumflex, which Turkish training text
+    /// hardly ever holds, so "hâlâ" and "hikâye" come out wrong), Ahenk Cep drops the mark itself. The plain vowel is what a listener
+    /// expects; the subtitles keep the written spelling.
+    /// </summary>
+    public static string PlainVowels(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        var composed = text.Normalize(System.Text.NormalizationForm.FormC);
+        if (composed.AsSpan().IndexOfAny("âîûÂÎÛ") < 0)
+        {
+            return composed;
+        }
+
+        return string.Create(composed.Length, composed, static (span, source) =>
+        {
+            for (var i = 0; i < source.Length; i++)
+            {
+                span[i] = source[i] switch
+                {
+                    'â' => 'a',
+                    'î' => 'i',
+                    'û' => 'u',
+                    'Â' => 'A',
+                    'Î' => 'İ',
+                    'Û' => 'U',
+                    var c => c,
+                };
+            }
+        });
+    }
+
+    /// <summary>
+    /// Dashes and typographic marks every voice knows: a dash between words (em or en dash, not a range of numbers) is a short pause (a
+    /// comma), the ellipsis character is three dots, curly double quotes are plain ones. Supertonic has none of them in its vocabulary.
+    /// </summary>
+    public static string Typography(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        text = WordDash().Replace(text, ", ");
+        return text.Replace("…", "...", StringComparison.Ordinal).Replace('“', '"').Replace('”', '"').Replace('„', '"');
     }
 
     /// <summary>
@@ -368,4 +414,8 @@ public sealed partial class TurkishSpeechTextNormalizer : SpeechTextNormalizerBa
 
     [GeneratedRegex(@"[ \t]{2,}", RegexOptions.CultureInvariant)]
     private static partial Regex Spaces();
+
+    // An em dash, or an en dash with a space on a side, that does not stand between two numbers ("1914 – 1918" is a range).
+    [GeneratedRegex(@"(?<!\d[ ]*)[ ]*(?:—|(?<=[ ])–|–(?=[ ]))[ ]*(?![ ]*\d)", RegexOptions.CultureInvariant)]
+    private static partial Regex WordDash();
 }
