@@ -26,6 +26,12 @@ public sealed class UiPreferences
     public Core.Hardware.ImageAcceleration ImageAcceleration { get; set; }
 
     /// <summary>
+    /// Where the local OCR reads scanned pages on this computer (0.1.27, per machine): Automatic (the graphics card when it is free, Windows)
+    /// or the processor only. Stored as a number.
+    /// </summary>
+    public Core.Hardware.OcrAcceleration OcrAcceleration { get; set; }
+
+    /// <summary>
     /// The app version that last opened the main window (<c>0.1.16</c>), written after the version check (<c>VersionCheck</c>): another
     /// version at start asks what to do with the installed components. Empty = not recorded (0.1.15 and earlier).
     /// </summary>

@@ -88,8 +88,8 @@ public sealed class LargeDocumentPageTests
         await library.StageAsync([file]);
         var waiting = library.Pending.ShouldHaveSingleItem();
         waiting.HasImagePages.ShouldBeTrue();
-        (waiting.CanExtract, waiting.Extract).ShouldBe((false, false), "no text extraction model is chosen yet");
-        waiting.Estimate.ShouldContain(text["documents.import.extract.none"]);
+        (waiting.CanExtract, waiting.Extract).ShouldBe((true, true), "0.1.27: with no engine chosen the local OCR reads the scanned pages");
+        waiting.Estimate.ShouldContain("PaddleOCR");
         var step = page.Settings.Picker.Row(PipelineSteps.DocumentText)!;
         step.Selected = step.Options.First(o => o.Model?.Id == "claude-haiku-5-5");
         var haiku = step.Selected.Model!;

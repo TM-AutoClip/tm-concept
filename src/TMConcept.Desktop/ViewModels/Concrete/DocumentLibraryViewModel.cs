@@ -30,10 +30,16 @@ namespace TMConcept.Desktop.ViewModels;
 /// 0.1.25: the engine of "Text from scanned pages" may be the local OCR (free, on this computer) or a vision model (local or online), chosen
 /// apart from the model that writes the concepts; a PDF's row says which of its pages are read and kept and offers to read only the missing
 /// ones (<see cref="ReadMissingAsync"/>); pages read before (another range of the file, a canceled add) are reused and said.
+/// 0.1.27: fully automatic. With no engine chosen for "Text from scanned pages" the local OCR reads them (free, on this computer); PDFium is
+/// installed with the engine (one confirmation) and draws every page that has no usable text; the local OCR's graphics card runtime is
+/// offered once after it (Windows, "Text recognition" Automatic; declining keeps the processor). Before concepts are written or topics found,
+/// the missing pages of the documents used are read first (<see cref="ReadMissingBeforeUseAsync"/>); pages read before are never read again.
 /// </summary>
 public sealed partial class DocumentLibraryViewModel(AppSession session, DocumentLibrary library, IDiskCleaner cleaner, IConfirmDialog confirm,
     ComponentInstallFlow installs, FileDialogs dialogs, IActivityLog activity, Localizer text, ILogger<DocumentLibraryViewModel> logger,
-    DocumentTextReader reader, StepModelResolver resolver, IVramProbe vram, WorkStatus work, SpendingMeter spending, TMConcept.Documents.Ocr.LocalOcrEngine ocr)
+    DocumentTextReader reader, StepModelResolver resolver, IVramProbe vram, WorkStatus work, SpendingMeter spending, TMConcept.Documents.Ocr.LocalOcrEngine ocr,
+    IModelCatalog catalog, TMConcept.Documents.Pdf.PdfiumStore pdfium, TMConcept.Documents.Ocr.DirectMlRuntimeStore cardRuntime,
+    TMConcept.Documents.Ocr.OcrGpuModel ocrCard, IOcrAccelerationSetting ocrSetting)
     : ObservableObject
 {
     /// <summary>Seconds a text page takes to read on this computer, at least and at most (an estimate).</summary>
@@ -45,6 +51,7 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
     private CancellationTokenSource? _cancel;
     private Func<StepPickerViewModel?>? _picker;
     private long? _card;
+    private bool _extrasOffered;
 
     /// <summary>PDFs picked and waiting for the user's choice of pages and text extraction (0.1.24).</summary>
     public ObservableCollection<DocumentImportViewModel> Pending { get; } = [];
@@ -105,8 +112,36 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
     /// <summary>The documents changed (added, deleted, another profile, the meaning model installed).</summary>
     public event EventHandler? Changed;
 
-    /// <summary>The ticked ready documents (empty = none ticked: every ready one is used).</summary>
-    public IReadOnlyList<Guid> Chosen => Documents.Where(d => d.Checked && d.Ready).Select(d => d.Id).ToList();
+    /// <summary>
+    /// The ticked documents that are ready or have pages still to read (0.1.27: those are read before the run; empty = none ticked: every
+    /// ready one is used).
+    /// </summary>
+    public IReadOnlyList<Guid> Chosen => Documents.Where(d => d.Checked && (d.Ready || d.HasMissing)).Select(d => d.Id).ToList();
+
+    /// <summary>Whether a document is ready or can become ready by reading its missing pages (0.1.27).</summary>
+    public bool HasUsable => Documents.Any(d => d.Ready || d.HasMissing);
+
+    /// <summary>
+    /// Reads the missing pages of the documents a run uses (the ticked ones, or every one when none is ticked) before concepts are written or
+    /// topics found (0.1.27), with the engine of "Text from scanned pages" (the local OCR when none is chosen); the progress is in the panel
+    /// and the activity line, the outcome in the panel's notes. Pages read before are never read again. False only when
+    /// <paramref name="cancellationToken"/> was cancelled; a declined install, a stop or a failure lets the run go on with the pages there are.
+    /// </summary>
+    public async Task<bool> ReadMissingBeforeUseAsync(CancellationToken cancellationToken)
+    {
+        var used = Documents.Where(d => d.Checked).ToList();
+        var rows = (used.Count > 0 ? used : Documents.ToList()).Where(r => r.HasMissing && r.Document.Kind == DocumentKind.Pdf).ToList();
+        if (rows.Count == 0 || TextModel is null || Busy)
+        {
+            return !cancellationToken.IsCancellationRequested;
+        }
+
+        logger.LogInformation("{Documents} documents have {Pages} pages still to read; they are read before the run", rows.Count, rows.Sum(r => r.MissingCount));
+        activity.Add(ActivityLevel.Info, text.Format("documents.pages.reading_before_use", rows.Sum(r => r.MissingCount), rows.Count));
+        await RunAsync(rows.Select(row => (row.Title, (Func<Guid, IProgress<DocumentProgress>, CancellationToken, Task<DocumentAddResult>>)(
+            (profile, progress, token) => ReadMissingOneAsync(profile, row, progress, token)))).ToList(), countAdded: false, outer: cancellationToken).ConfigureAwait(true);
+        return !cancellationToken.IsCancellationRequested;
+    }
 
     /// <summary>The model choice of the page (the text extraction step is read from it).</summary>
     public void UsePicker(Func<StepPickerViewModel?> picker) => _picker = picker;
@@ -484,7 +519,14 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
         return text.Has(key) ? text.Format(key, error.Detail) : text.Format("documents.fail.unreadable", error.Detail.Length > 0 ? error.Detail : error.Message);
     }
 
-    private CatalogModel? TextModel => _picker?.Invoke()?.Model(PipelineSteps.DocumentText);
+    /// <summary>The engine of "Text from scanned pages": the chosen one, or the local OCR when none is chosen (0.1.27).</summary>
+    private CatalogModel? TextModel => _picker?.Invoke() is { } picker ? picker.Model(PipelineSteps.DocumentText) ?? LocalOcr : null;
+
+    /// <summary>The local OCR's catalog entry.</summary>
+    private CatalogModel? LocalOcr => catalog.Find(ModelProviders.Local, PageTextEngines.LocalOcrId);
+
+    /// <summary>The PDF renderer, when this computer has a build of it (installed with the engine of scanned pages).</summary>
+    private IReadOnlyList<string> Renderer => pdfium.Supported ? [PageTextEngines.PdfRendererComponent] : [];
 
     /// <summary>Reads the missing pages of one document with the chosen engine (its run ended with the outcome, like an add).</summary>
     private async Task<DocumentAddResult> ReadMissingOneAsync(Guid profile, DocumentRowViewModel row, IProgress<DocumentProgress> progress, CancellationToken token)
@@ -591,9 +633,30 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
     /// </summary>
     private async Task<PageEngine?> StartRecognizerAsync(Guid profile, string name, int pages, CancellationToken token)
     {
-        if (_picker?.Invoke() is not { } picker || picker.Model(PipelineSteps.DocumentText) is null)
+        if (_picker?.Invoke() is not { } picker)
         {
             return null;
+        }
+
+        if (picker.Model(PipelineSteps.DocumentText) is null)
+        {
+            // 0.1.27: nothing chosen: the local OCR reads the pages (free, on this computer), installed with the PDF renderer after one question.
+            if (LocalOcr is not { } fallback)
+            {
+                return null;
+            }
+
+            // The PDF renderer comes in the same question; if only it fails, the OCR still reads what PdfPig hands on.
+            var outcome = await installs.EnsureAsync([PageTextEngines.LocalOcrComponent, .. Renderer], "install.purpose.document_text", null, token)
+                .ConfigureAwait(true);
+            if (!ocr.Ready)
+            {
+                _notes.Add(outcome.Reason.Length > 0 ? outcome.Reason : text["install.cancelled"]);
+                return null;
+            }
+
+            logger.LogInformation("No engine is chosen for scanned pages; the local OCR reads them");
+            return await StartLocalOcrAsync(fallback.Name, token).ConfigureAwait(true);
         }
 
         if (!await picker.PrepareAsync([PipelineSteps.DocumentText], "install.purpose.document_text", token).ConfigureAwait(true))
@@ -605,13 +668,60 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
         var model = await resolver.ResolveAsync(PipelineSteps.DocumentText, picker.Choice(PipelineSteps.DocumentText), token).ConfigureAwait(true);
         if (PageTextEngines.IsLocalOcr(model.Model))
         {
-            // Loading the two models reads files: off the interface thread.
-            var local = await Task.Run(ocr.Create, token).ConfigureAwait(true);
-            return new PageEngine(local, null, model.Model.Name);
+            return await StartLocalOcrAsync(model.Model.Name, token).ConfigureAwait(true);
         }
 
+        await OfferExtrasAsync(card: false, token).ConfigureAwait(true);
         var vision = await reader.StartAsync(profile, model, name, pages, token).ConfigureAwait(true);
         return new PageEngine(vision, vision, model.Model.Name);
+    }
+
+    /// <summary>The local OCR made ready: the optional parts are offered first (<see cref="OfferExtrasAsync"/>), then its models are loaded.</summary>
+    private async Task<PageEngine> StartLocalOcrAsync(string name, CancellationToken token)
+    {
+        await OfferExtrasAsync(card: true, token).ConfigureAwait(true);
+
+        // Loading the two models reads files: off the interface thread.
+        var local = await Task.Run(ocr.Create, token).ConfigureAwait(true);
+        return new PageEngine(local, null, name);
+    }
+
+    /// <summary>
+    /// The optional parts of reading scanned pages, in one question, once per run (0.1.27): the PDF renderer when this computer has a build and
+    /// it is not installed, and for the local OCR (<paramref name="card"/>) its graphics card runtime (Windows with a card, "Text recognition"
+    /// Automatic). Declining, or a failed download, keeps the reading going without them (PdfPig's images, the processor); it is not asked
+    /// again until the app starts again.
+    /// </summary>
+    private async Task OfferExtrasAsync(bool card, CancellationToken token)
+    {
+        if (_extrasOffered)
+        {
+            return;
+        }
+
+        var codes = new List<string>();
+        if (pdfium.Supported && !pdfium.Ready)
+        {
+            codes.Add(PageTextEngines.PdfRendererComponent);
+        }
+
+        if (card && ocrSetting.Value == OcrAcceleration.Automatic && !cardRuntime.Ready && await Task.Run(() => cardRuntime.Supported, token).ConfigureAwait(true))
+        {
+            codes.Add(PageTextEngines.OcrGpuComponent);
+        }
+
+        if (codes.Count == 0)
+        {
+            return;
+        }
+
+        _extrasOffered = true;
+        var outcome = await installs.EnsureAsync(codes, codes.Contains(PageTextEngines.OcrGpuComponent) ? "install.purpose.ocr_card" : "install.purpose.pdf_renderer",
+            null, token).ConfigureAwait(true);
+        if (!outcome.Ready)
+        {
+            logger.LogInformation("Not installed for reading scanned pages: {Components}; the reading goes on without them", string.Join(", ", codes));
+        }
     }
 
     /// <summary>Ends the engine's run (its pages, outcome and cost are saved) and lets the local OCR's models go.</summary>
@@ -656,6 +766,12 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
         if (result.PagesUnsupported > 0)
         {
             _notes.Add(text.Format("documents.pages.unsupported", title, result.PagesUnsupported));
+        }
+
+        if (ocrCard.TakeFailureNotice())
+        {
+            // Once per run: the graphics card failed and the processor read the pages (the reason is in the log).
+            _notes.Add(text["documents.ocr.gpu_fallback"]);
         }
     }
 
@@ -711,7 +827,7 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
     }
 
     private async Task RunAsync(IReadOnlyList<(string Name, Func<Guid, IProgress<DocumentProgress>, CancellationToken, Task<DocumentAddResult>> Add)> adds,
-        bool clearAddress = false, bool countAdded = true)
+        bool clearAddress = false, bool countAdded = true, CancellationToken outer = default)
     {
         if (adds.Count == 0)
         {
@@ -730,7 +846,7 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
             return;
         }
 
-        using var cancel = new CancellationTokenSource();
+        using var cancel = CancellationTokenSource.CreateLinkedTokenSource(outer);
         _cancel = cancel;
         Busy = true;
         _notes.Clear();
@@ -866,6 +982,7 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
     private void Raise()
     {
         OnPropertyChanged(nameof(HasReady));
+        OnPropertyChanged(nameof(HasUsable));
         OnPropertyChanged(nameof(Header));
         OnPropertyChanged(nameof(IsEmpty));
         OnPropertyChanged(nameof(EmbedderReady));

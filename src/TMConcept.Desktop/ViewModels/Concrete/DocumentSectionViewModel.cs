@@ -29,6 +29,8 @@ namespace TMConcept.Desktop.ViewModels;
 /// notes; <see cref="Plan"/> says before a press what that is: pages, tokens, calls, price and a rough time, as an estimate.
 /// 0.1.25: "Find topics" reads everything too when <see cref="ReadAll"/> is ticked: the topics step's model summarises every passage of the
 /// chosen pages first and the topics are found in the notes; its price line adds the summaries.
+/// 0.1.27: a press first reads the pages of the chosen documents that are still to read (<see cref="DocumentLibraryViewModel.ReadMissingBeforeUseAsync"/>),
+/// so a scanned document added without its pages read is used whole; pages read before are not read again.
 /// </summary>
 public sealed partial class DocumentSectionViewModel(AppSession session, DocumentTopicFinder finder, StepModelResolver resolver, IActivityLog activity,
     ICostCalculator costs, WorkStatus work, SpendingMeter spending, DocumentLibraryViewModel library, Localizer text, ILogger<DocumentSectionViewModel> logger,
@@ -100,7 +102,7 @@ public sealed partial class DocumentSectionViewModel(AppSession session, Documen
     public partial bool Finding { get; set; }
 
     /// <summary>Whether "Find topics" can be pressed.</summary>
-    public bool CanFind => !Finding && !Running && !Runner.Busy && Library.HasReady;
+    public bool CanFind => !Finding && !Running && !Runner.Busy && Library.HasUsable;
 
     /// <summary>The steps of the running "Find topics" call.</summary>
     public CallStatusViewModel FindCall { get; } = new(text);
@@ -154,7 +156,7 @@ public sealed partial class DocumentSectionViewModel(AppSession session, Documen
             return;
         }
 
-        if (!Library.HasReady)
+        if (!Library.HasUsable)
         {
             Refuse(Text["documents.none_ready"]);
             return;
@@ -184,6 +186,18 @@ public sealed partial class DocumentSectionViewModel(AppSession session, Documen
         CatalogModel? paid = null;
         try
         {
+            // 0.1.27: the chosen documents' pages that are still to read are read first.
+            if (!await Library.ReadMissingBeforeUseAsync(cancel.Token).ConfigureAwait(true))
+            {
+                throw new OperationCanceledException(cancel.Token);
+            }
+
+            if (!Library.HasReady)
+            {
+                Refuse(Text["documents.none_ready"]);
+                return;
+            }
+
             if (!await picker.PrepareAsync([PipelineSteps.Topics], "install.purpose.topics", cancel.Token).ConfigureAwait(true))
             {
                 Refuse(picker.Status.Length > 0 ? picker.Status : Text["install.cancelled"]);
@@ -307,7 +321,7 @@ public sealed partial class DocumentSectionViewModel(AppSession session, Documen
     /// <inheritdoc />
     protected override ConceptBrief? Brief()
     {
-        if (!Library.HasReady)
+        if (!Library.HasUsable)
         {
             return null;
         }
@@ -329,6 +343,22 @@ public sealed partial class DocumentSectionViewModel(AppSession session, Documen
     /// </summary>
     protected override async Task<ConceptBrief?> PrepareRunAsync(ConceptBrief brief, CancellationToken cancellationToken)
     {
+        if (brief is DocumentBrief)
+        {
+            // 0.1.27: the chosen documents' pages that are still to read are read first.
+            if (!await Library.ReadMissingBeforeUseAsync(cancellationToken).ConfigureAwait(true))
+            {
+                ShowStatus(Text["documents.pages.reading_canceled"], error: false, warning: true);
+                return null;
+            }
+
+            if (!Library.HasReady)
+            {
+                ShowStatus(Text["documents.none_ready"], error: true);
+                return null;
+            }
+        }
+
         if (!ReadAll || brief is not DocumentBrief documents || session.Profile is not { } profile)
         {
             return brief;
@@ -381,7 +411,7 @@ public sealed partial class DocumentSectionViewModel(AppSession session, Documen
     /// <inheritdoc />
     protected override string OwnBlockReason()
     {
-        if (!Library.HasReady)
+        if (!Library.HasUsable)
         {
             return Text["documents.none_ready"];
         }

@@ -69,8 +69,8 @@ public sealed class ScannedPagesPageTests
 
         var row = library.Documents.ShouldHaveSingleItem();
         row.PagesLine.ShouldBe(text.Format("documents.pages.state_missing", 2, 4, 2));
-        (row.HasMissing, row.CanReadMissing).ShouldBe((true, false));
-        row.ReadMissingEstimate.ShouldBe(text["documents.pages.read_missing.none"]);
+        (row.HasMissing, row.CanReadMissing).ShouldBe((true, true), "0.1.27: with no engine chosen the local OCR reads them");
+        row.ReadMissingEstimate.ShouldContain("PaddleOCR");
         row.ReadMissingText.ShouldBe(text.Format("documents.pages.read_missing", 2));
 
         var step = page.Settings.Picker.Row(PipelineSteps.DocumentText)!;
@@ -88,6 +88,60 @@ public sealed class ScannedPagesPageTests
         (now.HasMissing, now.Pages.Recognized).ShouldBe((false, 2));
         now.PagesLine.ShouldBe(text.Format("documents.pages.state", 4, 4) + text.Format("documents.pages.state_recognized", 2));
         (await h.Get<IRunStore>().ListAsync(DateTimeOffset.UtcNow.AddHours(-1), None)).ShouldContain(r => r.Kind == RunKind.DocumentText && r.Accepted == 2);
+    }
+
+    [AvaloniaFact]
+    public async Task FindTopicsReadsTheMissingPagesFirstAndNeverAgain()
+    {
+        var topicsAnswer = new ChatResponse("{\"topics\":[{\"topic\":\"The land walls\",\"documents\":[1]}]}", new ChatUsage(900, 0, 0, 100), null, "end_turn", "r");
+        var fake = new FakeChat()
+            .Answer(r => Answer("Konstantinopolis surları " + r.User)).Answer(r => Answer("Konstantinopolis surları " + r.User))
+            .Answer(_ => topicsAnswer).Answer(_ => topicsAnswer);
+        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
+        var page = await PageAsync(h);
+        var section = page.Documents;
+        var library = section.Library;
+        await library.AddFilesAsync([LargePdfTests.WritePdf(h.Paths, "scan.pdf", 4, p => p % 2 == 1)]);
+        library.Documents.ShouldHaveSingleItem().MissingCount.ShouldBe(2, "added without reading its scanned pages");
+        var step = page.Settings.Picker.Row(PipelineSteps.DocumentText)!;
+        step.Selected = step.Options.First(o => o.Model?.Id == "claude-haiku-5-5");
+        var topics = page.Settings.Picker.Row(PipelineSteps.Topics)!;
+        topics.Selected = topics.Options.First(o => o.Model?.Id == "claude-haiku-5-5");
+        section.Count = 1;
+
+        await section.FindTopicsAsync();
+
+        fake.Requests.Select(r => r.User).Take(2).ShouldBe(["Page 2.", "Page 4."], "the missing pages were read before the topics call");
+        fake.Requests.Count.ShouldBe(3);
+        section.Topics.Select(t => t.Text).ShouldBe(["The land walls"]);
+        library.Documents.ShouldHaveSingleItem().HasMissing.ShouldBeFalse();
+
+        await section.FindTopicsAsync();
+
+        fake.Requests.Count.ShouldBe(4, "pages read once are never read again");
+    }
+
+    [AvaloniaFact]
+    public async Task WritingFromDocumentsReadsTheMissingPagesFirst()
+    {
+        var fake = new FakeChat()
+            .Answer(r => Answer("Konstantinopolis surları " + r.User)).Answer(r => Answer("Konstantinopolis surları " + r.User))
+            .Answer(_ => new ChatResponse("{\"konseptler\":[{\"baslik\":\"The land walls\",\"ozet\":\"" + Guid.NewGuid().ToString("N")
+                + "\",\"icerik\":\"[on screen: walls]\\nThe walls.\",\"kaynaklar\":[1]}]}", new ChatUsage(1000, 0, 0, 800), null, "end_turn", "r"));
+        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
+        var page = await PageAsync(h);
+        var section = page.Documents;
+        await section.Library.AddFilesAsync([LargePdfTests.WritePdf(h.Paths, "scan.pdf", 4, p => p % 2 == 1)]);
+        var step = page.Settings.Picker.Row(PipelineSteps.DocumentText)!;
+        step.Selected = step.Options.First(o => o.Model?.Id == "claude-haiku-5-5");
+        section.Count = 1;
+
+        await section.GenerateAsync();
+
+        fake.Requests.Count.ShouldBe(3);
+        fake.Requests.Select(r => r.User).Take(2).ShouldBe(["Page 2.", "Page 4."], "the missing pages were read before the concept call");
+        fake.Requests[2].User.ShouldContain("Konstantinopolis surları Page 2.", Case.Sensitive, "the pages just read are part of the passages");
+        section.Library.Documents.ShouldHaveSingleItem().HasMissing.ShouldBeFalse();
     }
 
     [AvaloniaFact]

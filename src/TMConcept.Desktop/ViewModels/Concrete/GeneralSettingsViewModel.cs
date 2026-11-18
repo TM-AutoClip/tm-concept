@@ -25,15 +25,26 @@ namespace TMConcept.Desktop.ViewModels;
 /// render its sample; on Linux the apt command for Chrome's missing libraries). Components are installed when a process that needs them starts (after one confirmation).
 /// Image acceleration (per computer): which stable-diffusion.cpp build runs the local image models, with what Automatic picks here (the
 /// card found and its memory); a change installs that build at once when a local image model is already on disk (one confirmation).
+/// Text recognition (0.1.27, per computer, shown on Windows): whether the local OCR of scanned pages may use the graphics card when it is free.
 /// </summary>
 public sealed partial class GeneralSettingsViewModel(AppSession session, Localizer text, UiPreferencesFile preferences, INotifier notifier,
     ComponentPlanner components, IToolPlatform platform, Engines.Engines.SampleRender sample, IConfirmDialog confirm, ShellLauncher shell,
     IActivityLog activity, PreferencesImageAcceleration acceleration, Engines.Images.ImageBackendSelector backends, ComponentInstallFlow installs,
     ILogger<GeneralSettingsViewModel> logger, ComponentReinstaller reinstaller, Updates.AppUpdater updater, IAppUpdateDialog updateDialog,
     DiskSpace.IDiskCleaner cleaner, WhatsNewCheck whatsNew, Updates.IAppEdition edition, Updates.EditionInstaller editionInstaller,
-    IShortcutWriter shortcuts)
+    IShortcutWriter shortcuts, PreferencesOcrAcceleration ocrAcceleration)
     : SettingsSectionBase
 {
+    /// <summary>The "Text recognition" choices (0.1.27).</summary>
+    public ObservableCollection<ChoiceOption> OcrAccelerationOptions { get; } = [];
+
+    /// <summary>The chosen "Text recognition" setting.</summary>
+    [ObservableProperty]
+    public partial ChoiceOption? OcrAccelerationChoice { get; set; }
+
+    /// <summary>Whether "Text recognition" is shown (the graphics card is used only on Windows).</summary>
+    public bool ShowsOcrAcceleration => OperatingSystem.IsWindows();
+
     /// <summary>"Edition: installed · 0.1.26" or "Edition: portable · 0.1.26".</summary>
     public string EditionLine => text.Format(edition.Kind == Updates.AppEditionKind.Installed ? "edition.installed" : "edition.portable", updater.Current);
 
@@ -266,6 +277,13 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
         }
 
         Acceleration = AccelerationOptions.FirstOrDefault(o => o.Value == acceleration.Value.ToString());
+        OcrAccelerationOptions.Clear();
+        foreach (var value in Enum.GetValues<OcrAcceleration>())
+        {
+            OcrAccelerationOptions.Add(new ChoiceOption(value.ToString(), text[OcrAccelerationKey(value)]));
+        }
+
+        OcrAccelerationChoice = OcrAccelerationOptions.FirstOrDefault(o => o.Value == ocrAcceleration.Value.ToString());
         _loading = false;
         // The first call looks at the graphics cards (native calls; on Linux maybe a short nvidia-smi run): off the UI thread.
         AccelerationNote = Detected(await Task.Run(backends.Automatic).ConfigureAwait(true));
@@ -473,6 +491,11 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
         _ => "settings.image_acceleration.automatic",
     };
 
+    /// <summary>The language key of a "Text recognition" value (0.1.27).</summary>
+    internal static string OcrAccelerationKey(OcrAcceleration value) => value == OcrAcceleration.Processor
+        ? "settings.ocr_acceleration.processor"
+        : "settings.ocr_acceleration.automatic";
+
     /// <summary>The language key of a build.</summary>
     internal static string BackendKey(ImageBackend backend) => backend switch
     {
@@ -491,6 +514,24 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
                 : text["settings.image_acceleration.memory_unknown"])
             : text["settings.image_acceleration.no_card"];
         return text.Format("settings.image_acceleration.detected", card, text[BackendKey(choice.Backend)]);
+    }
+
+    partial void OnOcrAccelerationChoiceChanged(ChoiceOption? value)
+    {
+        if (_loading || value is null)
+        {
+            return;
+        }
+
+        var chosen = Enum.GetValues<OcrAcceleration>().FirstOrDefault(v => v.ToString() == value.Value);
+        if (chosen == ocrAcceleration.Value)
+        {
+            return;
+        }
+
+        ocrAcceleration.Change(chosen);
+        logger.LogInformation("Setting changed: text recognition {Setting}", chosen);
+        Status = text[chosen == OcrAcceleration.Processor ? "settings.ocr_acceleration.saved.processor" : "settings.ocr_acceleration.saved.automatic"];
     }
 
     partial void OnAccelerationChanged(ChoiceOption? value)

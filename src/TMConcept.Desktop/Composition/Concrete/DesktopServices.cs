@@ -71,6 +71,7 @@ public static class DesktopServices
         services.AddSingleton(Engines.Tools.DownloadTransport.Network);
         services.AddSingleton<Engines.Tools.ToolDownloader>();
         services.AddSingleton<Core.Tools.IArchiveDownloader>(s => s.GetRequiredService<Engines.Tools.ToolDownloader>());
+        services.AddSingleton<Core.Tools.IZipEntryDownloader, Engines.Tools.ZipEntryDownloader>();
         services.AddSingleton<Engines.Media.FfmpegMuxer>();
         services.AddSingleton<Core.Media.IMediaTools, Engines.Media.FfmpegMedia>();
         services.AddSingleton<Core.Videos.VideoAssembler>();
@@ -126,6 +127,8 @@ public static class DesktopServices
         services.AddSingleton<Core.Hardware.IGpuInfo, Engines.Hardware.GpuDetector>();
         services.AddSingleton<PreferencesImageAcceleration>();
         services.AddSingleton<Core.Hardware.IImageAccelerationSetting>(s => s.GetRequiredService<PreferencesImageAcceleration>());
+        services.AddSingleton<PreferencesOcrAcceleration>();
+        services.AddSingleton<Core.Hardware.IOcrAccelerationSetting>(s => s.GetRequiredService<PreferencesOcrAcceleration>());
         services.AddSingleton<Engines.Images.ImageBackendSelector>();
 
         // 0.1.17 (one pipeline, local and online models mixed): every model is an IModel; a local one on the graphics card is used only inside
@@ -225,6 +228,17 @@ public static class DesktopServices
         services.AddSingleton<TMConcept.Documents.Ocr.IPageImageDecoder, Documents.SkiaPageImageDecoder>();
         services.AddSingleton<TMConcept.Documents.Ocr.LocalOcrEngine>();
         services.AddSingleton<Core.Components.IComponentSource, TMConcept.Documents.Ocr.LocalOcrComponentSource>();
+
+        // 0.1.27: PDF pages drawn by PDFium (a component) for the OCR and vision models; the local OCR on the graphics card (DirectML, Windows,
+        // a component) page by page when the card is free.
+        services.AddSingleton<TMConcept.Documents.Pdf.PdfiumStore>();
+        services.AddSingleton<TMConcept.Documents.Pdf.IPdfPageRenderer, TMConcept.Documents.Pdf.PdfiumRenderer>();
+        services.AddSingleton<TMConcept.Documents.Pdf.IPageImageEncoder, Documents.SkiaPageImageEncoder>();
+        services.AddSingleton<Core.Components.IComponentSource, TMConcept.Documents.Pdf.PdfiumComponentSource>();
+        services.AddSingleton<TMConcept.Documents.Ocr.DirectMlRuntimeStore>();
+        services.AddSingleton<Core.Components.IComponentSource, TMConcept.Documents.Ocr.DirectMlRuntimeComponentSource>();
+        services.AddSingleton<TMConcept.Documents.Ocr.DirectMlOcrNetworkFactory>();
+        services.AddSingleton<TMConcept.Documents.Ocr.OcrGpuModel>();
         AddResearch(services);
     }
 
