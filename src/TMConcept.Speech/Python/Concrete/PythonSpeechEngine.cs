@@ -32,6 +32,12 @@ public sealed class PythonSpeechEngine(PythonVoice voice, PythonLayout layout, P
     /// <inheritdoc />
     public bool IsLocal => true;
 
+    /// <summary>
+    /// Whether the voice takes the speed itself: the VoxCPM adapter (VoxCPM2, Trendyol-TTS, Ahenk) has no speed setting and its clip is
+    /// time-stretched afterwards; F5, XTTS and MMS take it themselves.
+    /// </summary>
+    public bool HandlesSpeed => Voice.Adapter != PythonVoices.VoxCpm2.Adapter;
+
     /// <summary>Where it runs on this computer: the NVIDIA card (CUDA) or the processor.</summary>
     public ModelDevice Device => Voice.OnCard && SpeechDevices.CudaCard(gpu.Detect()) is not null ? ModelDevice.Gpu : ModelDevice.Cpu;
 

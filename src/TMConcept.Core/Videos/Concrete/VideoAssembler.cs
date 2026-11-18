@@ -55,8 +55,10 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         var style = options.Style;
         RenderStyleBuilder.Apply(input, style);
         var chat = chats.Create(codeModel.Model, codeModel.Key.Secret);
-        var system = VideoCodePrompt.System(engine, subtitles, style, input.Language);
+        var local = IsLocal(codeModel.Model);
+        var system = VideoCodePrompt.System(engine, subtitles, style, input.Language, local);
         var repaired = false;
+        var appCode = false;
         steps.Report(VideoSteps.Code, 0.1);
         var engineInput = RenderInputBuilder.ForEngine(input, subtitles);
         PlaceFonts(Path.Combine(work, "project"), style, input.Language);
@@ -70,7 +72,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         {
             await File.WriteAllTextAsync(Path.Combine(work, Rejected + "1.txt"), code, cancellationToken).ConfigureAwait(false);
             logger.LogWarning("The video code was rejected; asking for one repair: {Findings}", string.Join(" · ", ex.Findings.Take(4)));
-            code = await CodeAsync(chat, codeModel, system, VideoCodePrompt.Repair(code, string.Join("\n", ex.Findings)), steps, id, cancellationToken)
+            code = await CodeAsync(chat, codeModel, system, VideoCodePrompt.Repair(engine, code, ex.Findings), steps, id, cancellationToken)
                 .ConfigureAwait(false);
             request = request with { Code = code };
             repaired = true;
@@ -81,11 +83,22 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
             catch (EngineException again) when (again.Code == "check")
             {
                 await File.WriteAllTextAsync(Path.Combine(work, Rejected + "2.txt"), code, cancellationToken).ConfigureAwait(false);
-                // Named after what is left: the first answer may have broken the safety rules only, and the repair the template only.
-                var what = again.Message.StartsWith(TemplateRejection, StringComparison.Ordinal)
-                    ? "The video code still did not follow the template after the repair and was not run: "
-                    : "The video code still did not pass the safety check after the repair and was not run: ";
-                throw new VideoException(what + string.Join(" · ", again.Findings.Take(4))) { Code = "code" };
+                if (local && AppCode(engine, request, style) is { } own)
+                {
+                    // A free model on this computer: rather than no video, the app's own simple animation (the same checks, nothing is weakened).
+                    logger.LogWarning("The local model's video code failed the check again ({Findings}); the app's own animation is used",
+                        string.Join(" · ", again.Findings.Take(4)));
+                    request = own;
+                    appCode = true;
+                }
+                else
+                {
+                    // Named after what is left: the first answer may have broken the safety rules only, and the repair the template only.
+                    var what = again.Message.StartsWith(TemplateRejection, StringComparison.Ordinal)
+                        ? "The video code still did not follow the template after the repair and was not run: "
+                        : "The video code still did not pass the safety check after the repair and was not run: ";
+                    throw new VideoException(what + string.Join(" · ", again.Findings.Take(4))) { Code = "code" };
+                }
             }
         }
 
@@ -96,6 +109,11 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         try
         {
             await engine.RenderAsync(request, engineProgress, cancellationToken).ConfigureAwait(false);
+        }
+        catch (EngineException ex) when (ex.Code == "render" && appCode)
+        {
+            // The app's own code is not sent to the model for a repair.
+            throw new VideoException("Render failed: " + ex.Message, ex) { Code = "render" };
         }
         catch (EngineException ex) when (ex.Code == "render" && !repaired)
         {
@@ -119,7 +137,28 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         }
 
         steps.Finish(VideoSteps.Render);
-        return new RenderOutcome(request, repaired, input);
+        return new RenderOutcome(request, repaired, input) { AppCode = appCode };
+    }
+
+    /// <summary>A model that runs on this computer (free; small ones often fail the video code check): the app's own, its Ollama copy or a local server.</summary>
+    public static bool IsLocal(CatalogModel model)
+    {
+        ArgumentNullException.ThrowIfNull(model);
+        return model.Provider is ModelProviders.Local or ModelProviders.AppOllama || Endpoints.EndpointCodes.IsEndpoint(model.Provider);
+    }
+
+    /// <summary>The project written with the engine's own code (<see cref="IVideoEngine.FallbackCode"/>); null when even that does not pass.</summary>
+    private EngineRenderRequest? AppCode(IVideoEngine engine, EngineRenderRequest request, VideoStyle? style)
+    {
+        try
+        {
+            return Write(engine, request with { Code = engine.FallbackCode }, style);
+        }
+        catch (EngineException ex) when (ex.Code == "check")
+        {
+            logger.LogError("The app's own video code did not pass the check either: {Findings}", string.Join(" · ", ex.Findings.Take(4)));
+            return null;
+        }
     }
 
     /// <summary>

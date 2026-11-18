@@ -243,6 +243,11 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
             warnings.Add(VideoWarnings.Repaired);
         }
 
+        if (rendered.AppCode)
+        {
+            warnings.Add(VideoWarnings.AppCode);
+        }
+
         // H + I. mux into the work folder, then the version folder gets only finished files; the record.
         var folder = Path.Combine(LibraryFolder(profile, job.Concept), VideoFolders.FirstVersion);
         var record = await assembler.SaveAsync(new VersionSave(id, profile, job.Concept.Id, job.Concept.Title, work, rendered, clips, target, folder, options,

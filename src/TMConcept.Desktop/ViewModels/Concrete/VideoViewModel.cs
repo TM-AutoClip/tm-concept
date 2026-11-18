@@ -911,6 +911,9 @@ public sealed partial class VideoViewModel : PageViewModelBase
             Memory.MemoryRelease.Now(_logger, "a video job");
         }
 
+        // The page's lists follow each video at once: a made one leaves the queue and stands under Produced, a failed one keeps its row
+        // (0.1.23: they changed only after leaving the page and coming back, because the page skips its own change event while it runs).
+        await SafeAsync(ReloadAsync).ConfigureAwait(true);
         return outcome;
     }
 

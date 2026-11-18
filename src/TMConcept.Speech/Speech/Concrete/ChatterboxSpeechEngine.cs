@@ -28,6 +28,9 @@ public sealed class ChatterboxSpeechEngine(IAppPaths paths, IArchiveDownloader d
     /// <inheritdoc />
     public override string Name => DisplayName;
 
+    /// <summary>Chatterbox has no speed setting: its clip is time-stretched afterwards.</summary>
+    public override bool HandlesSpeed => false;
+
     /// <inheritdoc />
     public override string InstallFolder => Path.Combine(paths.ToolsDirectory, "speech", nameof(ToolKind.ChatterboxVoice).ToLowerInvariant());
 

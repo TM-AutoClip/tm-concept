@@ -3,6 +3,9 @@ using System.IO.Compression;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
+using Avalonia.Controls;
+using Avalonia.Headless.XUnit;
+using Avalonia.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -452,6 +455,35 @@ public sealed class AppUpdateTests
         model.Title.ShouldBe("Yeni güncelleme var");
         model.Subtitle.ShouldContain("0.1.17");
         model.Versions.Select(v => (v.Header, v.Notes)).ShouldBe([("0.1.19", "• On dokuz."), ("0.1.20", "• Yirmi.")]);
+    }
+
+    [AvaloniaFact]
+    public void TheRestartClosesTheWindowsOnTheUiThreadEvenWhenTheInstallEndsOnAPoolThread()
+    {
+        // 0.1.23 (the developer's log, 18 Nov 2026): the install continued on a pool thread after its awaits and the restarter closed the app
+        // there; Avalonia threw "a different thread owns it" and the update was reported as not started although the new version ran. The
+        // headless test dispatcher lets every thread in, so the thread check and the post are the test's: off the UI thread the close waits
+        // for the UI thread's queue.
+        var window = new Window();
+        window.Show();
+        var dialog = new Window();
+        dialog.Show(window);
+        Dispatcher.UIThread.RunJobs();
+        var queue = new List<Action>();
+
+        AppRestarter.OnUiThread(window.Close, () => false, queue.Add);
+
+        window.IsVisible.ShouldBeTrue("not closed on the calling thread");
+        queue.ShouldHaveSingleItem().ShouldBe(window.Close);
+        Dispatcher.UIThread.Invoke(queue[0]);
+        window.IsVisible.ShouldBeFalse();
+        dialog.IsVisible.ShouldBeFalse();
+
+        // On the UI thread: at once, nothing posted.
+        var now = false;
+        AppRestarter.OnUiThread(() => now = true, () => true, queue.Add);
+        now.ShouldBeTrue();
+        queue.Count.ShouldBe(1);
     }
 
     private static AppUpdater Updater(DesktopHarness h) => new(h.Get<ReleaseFeed>(), h.Get<SelfReplacer>(), h.Get<ToolDownloader>(), h.Get<UiPreferencesFile>(),

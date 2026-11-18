@@ -4,6 +4,7 @@ using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using TMConcept.Core.Activity;
 using TMConcept.Desktop.Localization;
 using TMConcept.Desktop.Logging;
 using TMConcept.Desktop.Os;
@@ -16,7 +17,8 @@ namespace TMConcept.Desktop.ViewModels;
 /// speech worker's, <see cref="LogRules.KeepDays"/> days), one day at a time, filtered by level (all, warnings and errors, errors), by text
 /// (message, category, the exception below it) and to this session; Copy puts the shown entries on the clipboard as they stand in the file,
 /// Open folder opens the logs folder. Today's files are followed live (<see cref="TailAsync"/>, about every second while the window is
-/// open): new entries appear at the bottom. At most <see cref="MaxShown"/> entries are shown (the newest).
+/// open): new entries appear at the bottom. At most <see cref="MaxShown"/> entries are shown (the newest). An activity line of this session
+/// shows the titles and names the file leaves out (<see cref="ActivityNames"/>); an older one says that they are not kept.
 /// </summary>
 public sealed partial class LogViewerViewModel : ObservableObject
 {
@@ -29,6 +31,7 @@ public sealed partial class LogViewerViewModel : ObservableObject
     private readonly Localizer _text;
     private readonly TimeProvider _clock;
     private readonly ILogger<LogViewerViewModel> _logger;
+    private readonly IActivityFeed? _feed;
     private readonly List<LogEntry> _all = [];
     private readonly Dictionary<string, long> _read = new(StringComparer.Ordinal);
     private readonly DateTimeOffset _sessionStart;
@@ -36,7 +39,8 @@ public sealed partial class LogViewerViewModel : ObservableObject
     private int _shown;
 
     /// <summary>Creates.</summary>
-    public LogViewerViewModel(AppPaths paths, IShellLauncher shell, Localizer text, TimeProvider clock, ILogger<LogViewerViewModel> logger)
+    public LogViewerViewModel(AppPaths paths, IShellLauncher shell, Localizer text, TimeProvider clock, ILogger<LogViewerViewModel> logger,
+        IActivityFeed? feed = null)
     {
         ArgumentNullException.ThrowIfNull(paths);
         ArgumentNullException.ThrowIfNull(text);
@@ -45,6 +49,7 @@ public sealed partial class LogViewerViewModel : ObservableObject
         _text = text;
         _clock = clock;
         _logger = logger;
+        _feed = feed;
         _reader = new LogFileReader(paths.LogDirectory);
         using var process = Process.GetCurrentProcess();
         _sessionStart = new DateTimeOffset(process.StartTime).AddSeconds(-1);
@@ -134,6 +139,8 @@ public sealed partial class LogViewerViewModel : ObservableObject
 
         if (added.Count > 0)
         {
+            added = Named(added);
+
             // Appended, not rebuilt: the window keeps its scroll position and stays light while new lines come in.
             foreach (var entry in added.OrderBy(e => e.At))
             {
@@ -201,7 +208,7 @@ public sealed partial class LogViewerViewModel : ObservableObject
         if (DateOnly.TryParseExact(Day, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var day))
         {
             var (entries, read) = _reader.ReadDay(day);
-            _all.AddRange(entries);
+            _all.AddRange(Named(entries));
             foreach (var (file, length) in read)
             {
                 _read[file] = length;
@@ -238,6 +245,15 @@ public sealed partial class LogViewerViewModel : ObservableObject
         return entry.Rank >= minimum && (!SessionOnly || entry.At >= _sessionStart)
             && (search.Length == 0 || entry.Message.Contains(search, StringComparison.OrdinalIgnoreCase)
                 || entry.Category.Contains(search, StringComparison.OrdinalIgnoreCase) || entry.Detail.Contains(search, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>The entries with the names of this session's activity lines (<see cref="ActivityNames"/>).</summary>
+    private List<LogEntry> Named(IReadOnlyList<LogEntry> entries)
+    {
+        var recent = _feed?.Recent() ?? [];
+        var title = _text["logs.hidden.title"];
+        var name = _text["logs.hidden.name"];
+        return entries.Select(e => ActivityNames.Fill(e, recent, title, name)).ToList();
     }
 
     private void ShowSummary() => Summary = _shown > MaxShown

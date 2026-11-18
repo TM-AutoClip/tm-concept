@@ -25,9 +25,18 @@ namespace TMConcept.Desktop.ViewModels;
 /// sections hold. The model may be online or local: the passages are fitted into its context either way.
 /// </summary>
 public sealed partial class DocumentSectionViewModel(AppSession session, DocumentTopicFinder finder, StepModelResolver resolver, IActivityLog activity,
-    ICostCalculator costs, WorkStatus work, SpendingMeter spending, DocumentLibraryViewModel library, Localizer text, ILogger<DocumentSectionViewModel> logger)
+    ICostCalculator costs, WorkStatus work, SpendingMeter spending, DocumentLibraryViewModel library, Localizer text, ILogger<DocumentSectionViewModel> logger,
+    TimeProvider clock)
     : ConceptSectionBase(text, logger)
 {
+    /// <summary>
+    /// How long typing in the subject pauses before the two estimates are worked out again. 0.1.23 worked them out on every key press: each
+    /// one reads the chosen documents' passages and fits them into the model's context (the concept estimate also turns the subject into a
+    /// vector), so typing lagged badly (the developer, 18 Nov 2026).
+    /// </summary>
+    public static readonly TimeSpan TypingPause = TimeSpan.FromMilliseconds(400);
+
+    private CancellationTokenSource? _typing;
     private CancellationTokenSource? _findCancel;
     private bool _attached;
     private int _findEstimate;
@@ -301,7 +310,39 @@ public sealed partial class DocumentSectionViewModel(AppSession session, Documen
         _ = SafeAsync(FindEstimateAsync);
     }
 
-    partial void OnSubjectChanged(string value) => Refresh();
+    partial void OnSubjectChanged(string value) => RefreshAfterTyping();
+
+    /// <summary>The refresh waiting for the typing pause (a test awaits it); done when none waits.</summary>
+    internal Task TypingRefresh { get; private set; } = Task.CompletedTask;
+
+    /// <summary>How many refreshes typing caused (one per pause, not one per key).</summary>
+    internal int TypingRefreshes { get; private set; }
+
+    /// <summary>One refresh after the typing pauses for <see cref="TypingPause"/>; a newer key press starts the wait again.</summary>
+    private void RefreshAfterTyping()
+    {
+        _typing?.Cancel();
+        _typing?.Dispose();
+        var typing = new CancellationTokenSource();
+        _typing = typing;
+        TypingRefresh = WaitThenRefreshAsync(typing.Token);
+    }
+
+    private async Task WaitThenRefreshAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(TypingPause, clock, cancellationToken).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            // A newer key press: its own wait refreshes.
+            return;
+        }
+
+        TypingRefreshes++;
+        Refresh();
+    }
 
     partial void OnCountChanged(decimal? value) => Refresh();
 
@@ -371,7 +412,9 @@ public sealed partial class DocumentSectionViewModel(AppSession session, Documen
 
         try
         {
-            var estimate = await finder.EstimateAsync(profile, model, Subject, Library.Chosen, Asked(), Text.Language, CancellationToken.None).ConfigureAwait(true);
+            // Off the UI thread: it reads and fits the documents' passages.
+            var (subject, chosen, asked, language) = (Subject, Library.Chosen, Asked(), Text.Language);
+            var estimate = await Task.Run(() => finder.EstimateAsync(profile, model, subject, chosen, asked, language, CancellationToken.None)).ConfigureAwait(true);
             if (mine == _findEstimate)
             {
                 FindEstimate = Text.Format("concepts.estimate.tiny", Text.Usd(estimate.MinUsd), Text.Usd(estimate.MaxUsd));

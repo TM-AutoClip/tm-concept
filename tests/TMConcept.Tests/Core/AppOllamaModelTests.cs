@@ -76,11 +76,13 @@ public sealed class AppOllamaModelTests : IDisposable
             AppModelStore.IsValidTag(model.Tag).ShouldBeTrue(model.Tag);
             model.Tag.ShouldNotEndWith(":latest");
             model.Tag.ShouldContain(':');
-            model.Family.ShouldBeOneOf("qwen3.5", "gemma4", "gpt-oss");
+            model.Family.ShouldBeOneOf("qwen3.5", "gemma4", "gpt-oss", "gemma3");
             model.Bytes.ShouldBeGreaterThan(1_000_000_000);
             model.ContextTokens.ShouldBeLessThanOrEqualTo(model.TrainedContextTokens);
             model.SourceUrl.ShouldStartWith("https://ollama.com/library/" + model.Family);
-            model.LicenseUse.ShouldBe(LicenseUse.Commercial);
+
+            // Gemma 3's own terms allow commercial use with a use policy: a license with conditions (asked before the first download).
+            model.LicenseUse.ShouldBe(model.Family == "gemma3" ? LicenseUse.Limited : LicenseUse.Commercial, model.Tag);
         }
 
         foreach (var tier in VramTiers.All)
@@ -89,6 +91,22 @@ public sealed class AppOllamaModelTests : IDisposable
         }
 
         AppModelCatalog.Recommended.Values.SelectMany(t => t).All(t => AppModelAdvisor.Find(t) is not null).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Gemma3FourBIsOfferedWithItsTermsAndFitsAFourGigabyteCard()
+    {
+        var gemma = AppModelAdvisor.Find("gemma3:4b").ShouldNotBeNull();
+        gemma.Family.ShouldBe("gemma3");
+        gemma.Vision.ShouldBeTrue();
+        gemma.CanThink.ShouldBeFalse();
+        gemma.License.ShouldBe("gemma");
+        gemma.LicenseUrl.ShouldBe("https://ai.google.dev/gemma/terms");
+        AppModelAdvisor.Fit(gemma, 4 * GiB).ShouldBe(AppModelFit.Fits);
+        AppModelAdvisor.Fit(gemma, 3 * GiB).ShouldBe(AppModelFit.TooLarge);
+        var entry = AppModelRegistry.Entry(gemma);
+        entry.LicenseUse.ShouldBe(LicenseUse.Limited);
+        entry.Capabilities.HasFlag(ModelCapability.Vision).ShouldBeTrue();
     }
 
     [Fact]

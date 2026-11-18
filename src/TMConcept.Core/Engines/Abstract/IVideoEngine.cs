@@ -32,6 +32,12 @@ public interface IVideoEngine
     /// <summary>Hand-written sample code (install check without a model). Like the model's code it never draws the caption.</summary>
     string SampleCode { get; }
 
+    /// <summary>
+    /// The app's own code for a video whose local code model failed the check after its repair (0.1.24): it shows each scene's image (or its
+    /// visual idea) with gentle motion, in the template's colours when there is one. It passes the same checks as a model's code.
+    /// </summary>
+    string FallbackCode => SampleCode;
+
     /// <summary>Install state (files only; starts no process, uses no network).</summary>
     EngineStatus Status();
 

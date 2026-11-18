@@ -15,6 +15,7 @@ public sealed class AppModelRegistry(AppModelStore store, ILogger<AppModelRegist
 {
     private readonly Lock _gate = new();
     private IReadOnlyList<CatalogModel> _catalog = [];
+    private IReadOnlyList<CatalogModel> _offered = [];
     private IReadOnlyList<AppModelInfo> _installed = [];
     private bool _loaded;
 
@@ -28,6 +29,21 @@ public sealed class AppModelRegistry(AppModelStore store, ILogger<AppModelRegist
         {
             EnsureLoaded();
             return _catalog;
+        }
+    }
+
+    /// <summary>
+    /// What the pickers offer (0.1.24, the developer: "allow choosing a model that is not installed yet"): the installed models, then every
+    /// model of <see cref="AppModelCatalog"/> that is not. A model that is not installed (nor the app's Ollama itself) is installed when a
+    /// run that uses it starts, after the same confirmation as every download: its <see cref="CatalogModel.Requires"/> are the app's Ollama
+    /// and the model.
+    /// </summary>
+    public IReadOnlyList<CatalogModel> Offered
+    {
+        get
+        {
+            EnsureLoaded();
+            return _offered;
         }
     }
 
@@ -57,6 +73,7 @@ public sealed class AppModelRegistry(AppModelStore store, ILogger<AppModelRegist
             changed = !_loaded || !models.Select(m => m.Tag).SequenceEqual(_installed.Select(m => m.Tag), StringComparer.Ordinal);
             _installed = models;
             _catalog = models.Select(Entry).ToList();
+            _offered = [.. _catalog, .. AppModelCatalog.Models.Where(m => !models.Any(i => string.Equals(i.Tag, m.Tag, StringComparison.Ordinal))).Select(Entry)];
             _loaded = true;
         }
 

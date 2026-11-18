@@ -71,6 +71,59 @@ public sealed class HyperFramesEngine(IAppPaths paths, ToolInstaller tools, Chro
         })();
         """;
 
+    /// <summary>
+    /// The app's own scene code: each scene on its own full-frame layer, set at the scene's start (no transition of its own: the program fades
+    /// where the input says so), its image slowly zooming; the title over the first scene, the visual idea over a scene without an image. The
+    /// template's colours and title style through <c>window.TM</c> when the video has a template, the input's theme otherwise.
+    /// </summary>
+    public override string FallbackCode => """
+        (function () {
+          const input = window.INPUT;
+          const root = document.getElementById("root");
+          const tm = window.TM;
+          const unit = Math.min(input.width, input.height);
+          function paint(name) {
+            if (tm) return tm.color(name);
+            if (name === "text") return input.theme.text;
+            if (name === "accent") return input.theme.accent;
+            return input.theme.background;
+          }
+          function heading(words) {
+            if (tm) return tm.title(words);
+            const el = document.createElement("div");
+            el.textContent = words;
+            el.style.cssText = "position:absolute;left:8%;right:8%;top:12%;text-align:center;font-weight:700;line-height:1.15";
+            el.style.color = paint("text");
+            el.style.fontSize = Math.round(unit * 0.07) + "px";
+            return el;
+          }
+          root.style.background = paint("background");
+          const tl = gsap.timeline({ paused: true });
+          input.scenes.forEach(function (scene, index) {
+            const layer = document.createElement("div");
+            layer.style.cssText = "position:absolute;left:0;top:0;width:100%;height:100%;overflow:hidden;opacity:0";
+            layer.style.background = paint("background");
+            root.appendChild(layer);
+            tl.set(layer, { opacity: 1 }, scene.startSeconds);
+            if (scene.image) {
+              const picture = document.createElement("img");
+              picture.src = scene.image;
+              picture.style.cssText = "position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover";
+              layer.appendChild(picture);
+              tl.fromTo(picture, { scale: 1 }, { scale: 1.1, duration: scene.durationSeconds, ease: "none" }, scene.startSeconds);
+            }
+            const words = index === 0 ? input.title : (scene.image ? "" : scene.visual);
+            if (words) {
+              const title = heading(words);
+              layer.appendChild(title);
+              tl.fromTo(title, { opacity: 0, y: unit * 0.03 }, { opacity: 1, y: 0, duration: 0.5 }, scene.startSeconds + 0.2);
+            }
+          });
+          window.__timelines = window.__timelines || {};
+          window.__timelines["concept"] = tl;
+        })();
+        """;
+
     /// <summary>The template helper file (<see cref="TemplateHelpers.HyperFramesScript"/>), written when the video has a template.</summary>
     public const string HelperFile = "tm.js";
 

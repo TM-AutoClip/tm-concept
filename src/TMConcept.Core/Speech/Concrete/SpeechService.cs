@@ -108,10 +108,31 @@ public sealed class SpeechService(IEnumerable<ISpeechEngine> engines, StepModelR
                 .ConfigureAwait(false);
         }
 
+        if (!setup.Engine.HandlesSpeed && Math.Abs(setup.Speed - 1) >= WaveTempo.Tolerance)
+        {
+            // A voice without a speed of its own: the clip is stretched to the chosen speed (before 0.1.24 the speed was dropped for it).
+            clip = clip with { DurationMs = await Task.Run(() => Stretch(outputWav, setup), cancellationToken).ConfigureAwait(false) };
+        }
+
         Directory.CreateDirectory(Path.GetDirectoryName(cache)!);
         File.Copy(outputWav, cache, overwrite: true);
-        logger.LogInformation("Spoke {Characters} characters with {Engine} ({Ms} ms)", clip.Characters, setup.Engine.Code, clip.DurationMs);
+        logger.LogInformation("Spoke {Characters} characters with {Engine} at speed {Speed:0.00} ({Ms} ms)", clip.Characters, setup.Engine.Code, setup.Speed,
+            clip.DurationMs);
         return clip;
+    }
+
+    /// <summary>The clip's new length after stretching it to the setup's speed; a clip that is not mono 16-bit PCM stays as the voice made it.</summary>
+    private long Stretch(string wav, SpeechSetup setup)
+    {
+        try
+        {
+            return WaveTempo.Apply(wav, setup.Speed);
+        }
+        catch (InvalidDataException ex)
+        {
+            logger.LogWarning(ex, "{Engine}: the clip could not be brought to speed {Speed:0.00}; it keeps the voice's own speed", setup.Engine.Code, setup.Speed);
+            return WaveFile.DurationMs(wav);
+        }
     }
 
     /// <summary>

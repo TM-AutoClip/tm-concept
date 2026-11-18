@@ -98,7 +98,7 @@ public sealed class EngineCodeCheckTests
         text.ShouldContain("createElementNS(\"" + EngineCodeCheck.SvgNamespace + "\"");
         text.ShouldContain("DOMParser");
         text.ShouldContain("comments included");
-        VideoCodePrompt.Version.ShouldBe("9", "9: the template block");
+        VideoCodePrompt.Version.ShouldBe("10", "10: the checklist of a local code model");
     }
 
     [Theory]
@@ -108,6 +108,55 @@ public sealed class EngineCodeCheckTests
     public void RefusedNamesAndAddressesInCommentsAreStillFound(string line) =>
         // Strict on purpose: comments are not skipped (telling them from strings needs a parser); the prompt asks for clean comments instead.
         EngineCodeCheck.Check(EngineKind.HyperFrames, HyperFramesOk + line + "\n").ShouldNotBeEmpty();
+
+    [Fact]
+    public void ALocalCodeModelGetsTheChecklistAndItsRepairNamesTheFixAndAFileThatPasses()
+    {
+        // 0.1.23, the developer's full local run (Qwen 3.5 4B): the whole file on one line with innerHTML, then a repair without the timeline.
+        using var paths = new TempPaths();
+        var engine = HyperFrames(paths);
+
+        VideoCodePrompt.System(engine, true, null, "en", local: false).ShouldNotContain("Checklist");
+        var local = VideoCodePrompt.System(engine, true, null, "en", local: true);
+        local.ShouldContain("Checklist before you answer");
+        local.ShouldContain("One statement per line");
+        local.ShouldContain(EngineCodeCheck.RequiredExport(EngineKind.HyperFrames).Description);
+
+        var findings = EngineCodeCheck.Check(EngineKind.HyperFrames, "(function(){const t={};document.body.innerHTML=\"<b>x</b>\";})();");
+        findings.ShouldContain(f => f.Contains("HTML injection", StringComparison.Ordinal));
+        findings.ShouldContain(f => f.StartsWith("Required structure missing", StringComparison.Ordinal));
+        var repair = VideoCodePrompt.Repair(engine, "x", findings);
+        repair.ShouldContain("Fix: create every element with document.createElement and set its text with element.textContent");
+        repair.ShouldContain("Fix: write exactly that structure into the file");
+        repair.ShouldContain(engine.SampleCode.Trim());
+        EngineCodeCheck.Check(EngineKind.HyperFrames, engine.SampleCode).ShouldBeEmpty("the file the repair shows passes");
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void TheAppsOwnHyperFramesCodePassesTheSafetyAndTemplateChecks(bool subtitles)
+    {
+        using var paths = new TempPaths();
+        var engine = HyperFrames(paths);
+
+        EngineCodeCheck.Check(EngineKind.HyperFrames, engine.FallbackCode).ShouldBeEmpty();
+        var style = new TMConcept.Core.Styles.VideoStyle { Name = "t", Subtitles = subtitles };
+        var result = TMConcept.Core.Styles.VideoStyleCheck.Check(engine.FallbackCode, style, "en");
+        result.Findings.ShouldBeEmpty();
+        result.Fixes.ShouldBeEmpty("no colour of its own: the template's or the theme's");
+        engine.FallbackCode.ShouldNotBe(engine.SampleCode);
+    }
+
+    private static HyperFramesEngine HyperFrames(TempPaths paths)
+    {
+        IProcessRunner runner = new ProcessRunner(ChildProcessTests.Guard(), NullLogger<ProcessRunner>.Instance);
+        var platform = new WindowsToolPlatform(runner);
+        var tools = new ToolInstaller(paths, platform, new ToolDownloader(DownloadTransport.Network, NullLogger<ToolDownloader>.Instance),
+            NullLogger<ToolInstaller>.Instance);
+        var chrome = new ChromeLocator(paths, platform, NullLogger<ChromeLocator>.Instance);
+        return new HyperFramesEngine(paths, tools, chrome, runner, NullLogger<HyperFramesEngine>.Instance);
+    }
 
     [Fact]
     public void SystemPromptKeepsTheCodeSmallAndTheImageFirst()

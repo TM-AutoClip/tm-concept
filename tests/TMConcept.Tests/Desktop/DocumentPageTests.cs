@@ -117,6 +117,33 @@ public sealed class DocumentPageTests
     }
 
     [AvaloniaFact]
+    public async Task TypingTheSubjectWorksOutTheEstimatesOnceAfterAPauseNotOnEveryKey()
+    {
+        // The developer (18 Nov 2026): typing on the documents section lagged badly; every key press read the documents for two estimates.
+        var clock = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(DateTimeOffset.UtcNow);
+        using var h = new DesktopHarness(s => s.AddSingleton<TimeProvider>(clock));
+        await PrepareAsync(h);
+        var page = await PageAsync(h);
+        await page.Documents.Library.AddFilesAsync([Write(h, "walls.txt", "The Theodosian walls had three lines.")]);
+        var section = page.Documents;
+        var before = section.TypingRefreshes;
+
+        foreach (var typed in new[] { "w", "wa", "wal", "wall", "walls" })
+        {
+            section.Subject = typed;
+            clock.Advance(TimeSpan.FromMilliseconds(100));
+        }
+
+        section.TypingRefreshes.ShouldBe(before, "nothing is worked out while the keys come");
+        clock.Advance(TMConcept.Desktop.ViewModels.DocumentSectionViewModel.TypingPause);
+        await section.TypingRefresh;
+
+        section.TypingRefreshes.ShouldBe(before + 1, "one refresh for the whole word");
+        await Until(() => section.Estimate.Length > 0);
+        section.Estimate.ShouldNotBeEmpty("the estimate follows the subject after the pause");
+    }
+
+    [AvaloniaFact]
     public async Task FoundTopicsMakeOneGroundedConceptEachAndLeaveTheList()
     {
         var fake = new FakeChat()

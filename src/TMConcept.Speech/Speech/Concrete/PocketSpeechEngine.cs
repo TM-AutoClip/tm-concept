@@ -25,6 +25,9 @@ public sealed class PocketSpeechEngine(SpeechModelInstaller installer, IToolLoca
     /// <inheritdoc />
     public override string Name => "Pocket TTS";
 
+    /// <summary>Pocket TTS has no speed setting: its clip is time-stretched afterwards.</summary>
+    public override bool HandlesSpeed => false;
+
     /// <inheritdoc />
     public override bool Supports(string language) => language == ContentLanguages.English;
 

@@ -78,7 +78,7 @@ public sealed class LocalAiTests
         confirm.Messages[0].ShouldContain(AppOllamaDefaults.Name, customMessage: "the program comes first in the same list");
         api.Pulls.ShouldBeEmpty();
         launcher.Started.ShouldBeEmpty();
-        h.Get<IModelCatalog>().All.ShouldNotContain(m => m.Provider == ModelProviders.AppOllama);
+        h.Get<AppModelRegistry>().Installed.ShouldBeEmpty();
         row.Installed.ShouldBeFalse();
     }
 
@@ -110,12 +110,13 @@ public sealed class LocalAiTests
         await h.Get<IProfileStore>().SaveAsync(profile, None);
         var picker = h.Get<StepPickerViewModel>();
         await picker.LoadAsync(profile.Id, ContentLanguages.English, PipelineSteps.ConceptPage);
-        var option = picker.Row(PipelineSteps.Topics)!.Options.Where(o => o.Model?.Provider == ModelProviders.AppOllama).ShouldHaveSingleItem();
-        option.Model!.Id.ShouldBe(row.Tag);
+        var option = picker.Row(PipelineSteps.Topics)!.Options.Where(o => o.Model?.Provider == ModelProviders.AppOllama && o.Model.Id == row.Tag)
+            .ShouldHaveSingleItem();
+        option.Label.ShouldNotContain(h.Get<TMConcept.Desktop.Localization.Localizer>()["models.not_installed"], Case.Sensitive, "it is installed");
         picker.Row(PipelineSteps.Concepts)!.Options.ShouldContain(o => o.Model != null && o.Model.Id == row.Tag);
         await picker.LoadAsync(profile.Id, ContentLanguages.English, PipelineSteps.VideoPage);
         picker.Row(PipelineSteps.VideoCode)!.Options.ShouldContain(o => o.Model != null && o.Model.Id == row.Tag);
-        (await h.Get<StepModelResolver>().ProvidersWithoutKeyAsync([option.Model], None)).ShouldBeEmpty();
+        (await h.Get<StepModelResolver>().ProvidersWithoutKeyAsync([option.Model!], None)).ShouldBeEmpty();
     }
 
     [AvaloniaFact]
@@ -162,7 +163,8 @@ public sealed class LocalAiTests
         File.Exists(store.BlobPath(shared[2])!).ShouldBeTrue("the layer the other model uses stays");
         store.IsInstalled("gemma4:e4b-it-qat").ShouldBeTrue();
         await h.Get<ComponentPlanner>().RefreshAllAsync(None);
-        h.Get<IModelCatalog>().Find(ModelProviders.AppOllama, "qwen3.5:4b-q4_K_M").ShouldBeNull();
+        h.Get<AppModelRegistry>().Installed.ShouldNotContain(m => m.Tag == "qwen3.5:4b-q4_K_M");
+        h.Get<ComponentPlanner>().Find(ComponentCodes.AppOllamaModelPrefix + "qwen3.5:4b-q4_K_M")!.Ready.ShouldBeFalse("still offered, not installed");
     }
 
     [AvaloniaFact]

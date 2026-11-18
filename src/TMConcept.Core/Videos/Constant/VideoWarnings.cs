@@ -20,6 +20,9 @@ public static class VideoWarnings
     /// <summary>The code needed its one repair.</summary>
     public const string Repaired = "repaired";
 
+    /// <summary>The local code model's code failed the check after its repair: the app's own simple animation was rendered.</summary>
+    public const string AppCode = "app_code";
+
     /// <summary>The sample images were chosen but the profile has none: the video was made without images.</summary>
     public const string SamplesNone = "samples_none";
 

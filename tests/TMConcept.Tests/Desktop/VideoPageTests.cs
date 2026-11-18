@@ -562,6 +562,50 @@ public sealed class VideoPageTests
         page.Status.ShouldBe(text["video.queue.stopped.error"]);
     }
 
+    [AvaloniaFact]
+    public async Task EachMadeVideoAppearsUnderProducedWhileTheQueueStillRuns()
+    {
+        // The developer (18 Nov 2026): the made videos showed only after a page switch; the page skipped its own change event while busy.
+        var engine = new FakeEngine();
+        var watch = new ListWatchingRunner();
+        using var h = Harness(new FakeChat().Answer(_ => Code(engine.SampleCode)).Answer(_ => Code(engine.SampleCode)), engine,
+            s => s.AddSingleton<IVideoQueueRunner>(watch));
+        var (page, concept) = await OpenAsync(h);
+        await h.Get<IConceptStore>().AddAsync([new Concept
+        {
+            ProfileId = concept.ProfileId, Title = "Iron chain", Summary = "s", Content = Content, Language = "en", Status = ConceptStatus.Approved,
+        }], CancellationToken.None);
+        await page.ActivateAsync();
+        foreach (var card in page.Approved.ToList())
+        {
+            await page.EnqueueAsync(card);
+        }
+
+        watch.Lists = () => (page.Produced.Count, page.Queue.Count);
+        await page.ProduceAllAsync();
+
+        watch.Seen.ShouldBe([(1, 1), (2, 0)], "after each video: one more made, one less queued, before the next one starts");
+    }
+
+    /// <summary>The real runner; after each item it notes how many videos the page lists as made and queued.</summary>
+    private sealed class ListWatchingRunner : IVideoQueueRunner
+    {
+        public Func<(int Produced, int Queued)>? Lists { get; set; }
+
+        public List<(int Produced, int Queued)> Seen { get; } = [];
+
+        public Task<QueueRunResult> RunAsync<T>(Func<CancellationToken, Task<T?>> next, Func<T, CancellationToken, Task<QueueItemOutcome>> produce,
+            Func<bool> nightMode, CancellationToken cancellationToken)
+            where T : class =>
+            new VideoQueueRunner(TimeProvider.System, Microsoft.Extensions.Logging.Abstractions.NullLogger<VideoQueueRunner>.Instance).RunAsync(next,
+                async (item, token) =>
+                {
+                    var outcome = await produce(item, token);
+                    Seen.Add(Lists!());
+                    return outcome;
+                }, nightMode, cancellationToken);
+    }
+
     /// <summary>The real runner, after removing every API key (as if the user deleted the key while the queue was being prepared).</summary>
     private sealed class KeyGoneRunner(IApiKeyStore keys) : IVideoQueueRunner
     {
@@ -748,6 +792,56 @@ public sealed class VideoPageTests
     }
 
     [AvaloniaFact]
+    public async Task TheSpeedChosenOnThePageReachesEveryVoiceRequest()
+    {
+        // The developer (18 Nov 2026): the chosen speed did not seem to reach the video. Picker -> saved choice -> narration -> the voice's request.
+        var engine = new FakeEngine();
+        var voice = new FakeVoice();
+        using var h = Harness(new FakeChat().Answer(_ => Code(engine.SampleCode)), engine, s =>
+        {
+            s.RemoveAll<TMConcept.Core.Speech.ISpeechEngine>();
+            s.AddSingleton<TMConcept.Core.Speech.ISpeechEngine>(voice);
+        });
+        var (page, concept) = await PrepareAsync(h);
+        var row = page.Picker.Row(PipelineSteps.Speech)!;
+        row.Selected = row.Options.First(o => o.Model?.Id == voice.Code);
+        row.Speed = 1.3m;
+        await page.Picker.SaveAsync();
+
+        var saved = await h.Get<IStepModelStore>().GetAsync(PipelineSteps.Speech, concept.ProfileId, CancellationToken.None);
+        StepModelResolver.Options(saved).Speed.ShouldBe(1.3, 1e-9);
+        await RunAsync(h, concept, new VideoOptions { Engine = engine.Kind, Speech = true });
+
+        voice.Requests.Count.ShouldBe(2, "one request per scene");
+        voice.Requests.ShouldAllBe(r => Math.Abs(r.Speed - 1.3) < 1e-9);
+    }
+
+    [AvaloniaFact]
+    public async Task AVoiceWithoutASpeedOfItsOwnIsStretchedToTheChosenSpeed()
+    {
+        var engine = new FakeEngine();
+        var voice = new FakeVoice { HandlesSpeed = false, Samples = 24_000 };
+        using var h = Harness(new FakeChat().Answer(_ => Code(engine.SampleCode)), engine, s =>
+        {
+            s.RemoveAll<TMConcept.Core.Speech.ISpeechEngine>();
+            s.AddSingleton<TMConcept.Core.Speech.ISpeechEngine>(voice);
+        });
+        var (_, concept) = await PrepareAsync(h);
+        var options = StepModelResolver.OptionsJson(new StepOptions { Speed = 1.5 });
+        await h.Get<IStepModelStore>().SaveAsync(new StepModelChoice { Step = PipelineSteps.Speech, ProfileId = concept.ProfileId, Provider = ModelProviders.Local,
+            Model = voice.Code, OptionsJson = options }, CancellationToken.None);
+
+        var record = await RunAsync(h, concept, new VideoOptions { Engine = engine.Kind, Speech = true });
+
+        var folder = LibraryPaths.Resolve(h.Get<IAppPaths>().LibraryDirectory, record.Folder);
+        foreach (var clip in Directory.GetFiles(Path.Combine(folder, VideoFolders.Audio), "*.wav"))
+        {
+            // One second spoken at 1.5 times its speed: about 667 ms.
+            TMConcept.Core.Speech.WaveFile.DurationMs(clip).ShouldBeInRange(640, 690, Path.GetFileName(clip));
+        }
+    }
+
+    [AvaloniaFact]
     public async Task AFailedVideoLeavesNoVersionFolderBehind()
     {
         var engine = new FakeEngine();
@@ -777,6 +871,39 @@ public sealed class VideoPageTests
         chat.Requests.Count.ShouldBe(2);
         chat.Requests[1].User.ShouldContain("network request");
         (await h.Get<IVideoStore>().ListAsync(concept.ProfileId, CancellationToken.None)).Single().Warnings.ShouldContain(VideoWarnings.Repaired);
+    }
+
+    [AvaloniaFact]
+    public async Task ALocalCodeModelWhoseCodeFailsTwiceGetsTheAppsOwnAnimationAndAnOnlineOneStillFails()
+    {
+        // 0.1.23, the developer's full local run: a small local model failed the check twice and no video was made. Now its prompt has the
+        // checklist, its repair the fix and a file that passes, and after a second failure the engine's own code is rendered. The check is
+        // the same: an online model's code that fails twice still stops the video.
+        var engine = new FakeEngine();
+        const string Bad = "(function(){const t={};document.body.innerHTML=\"<b>x</b>\";})();";
+        var chat = new FakeChat().Answer(_ => Code(Bad)).Answer(_ => Code(Bad));
+        using var h = Harness(chat, engine);
+        var (_, concept) = await PrepareAsync(h);
+        var local = new ResolvedModel(TMConcept.Core.AppOllama.AppModelRegistry.Entry(TMConcept.Core.AppOllama.AppModelAdvisor.Find("qwen3.5:4b-q8_0")!),
+            new ApiKey { Provider = ModelProviders.AppOllama, Label = string.Empty, Secret = string.Empty }, string.Empty);
+
+        var record = await RunAsync(h, concept, new VideoOptions { Engine = engine.Kind, Speech = false }, local);
+
+        chat.Requests.Count.ShouldBe(2);
+        chat.Requests[0].System.ShouldContain("Checklist before you answer");
+        chat.Requests[1].User.ShouldContain("Fix: create every element with document.createElement");
+        chat.Requests[1].User.ShouldContain(engine.SampleCode);
+        record.Warnings.ShouldContain(VideoWarnings.AppCode);
+        var folder = LibraryPaths.Resolve(h.Get<IAppPaths>().LibraryDirectory, record.Folder);
+        File.ReadAllText(Path.Combine(folder, VideoFolders.Source, engine.CodeFile)).Trim().ShouldBe(((IVideoEngine)engine).FallbackCode);
+        h.Get<TMConcept.Desktop.Localization.Localizer>()["produced.note." + VideoWarnings.AppCode].ShouldNotStartWith("produced.note.");
+
+        var second = new Concept { ProfileId = concept.ProfileId, Title = "Iron chain", Summary = "s", Content = Content, Language = "en", Status = ConceptStatus.Approved };
+        await h.Get<IConceptStore>().AddAsync([second], CancellationToken.None);
+        chat.Answer(_ => Code(Bad)).Answer(_ => Code(Bad));
+        var online = await Should.ThrowAsync<VideoException>(() => RunAsync(h, second, new VideoOptions { Engine = engine.Kind, Speech = false }));
+        online.Code.ShouldBe("code");
+        chat.Requests[2].System.ShouldNotContain("Checklist");
     }
 
     [AvaloniaFact]
@@ -1124,11 +1251,14 @@ public sealed class VideoPageTests
         text["produced.note." + VideoWarnings.SamplesNone].ShouldNotStartWith("produced.note.");
     }
 
-    private static async Task<VideoRecord> RunAsync(DesktopHarness h, Concept concept, VideoOptions options, IProgress<VideoProgress>? progress = null)
+    private static Task<VideoRecord> RunAsync(DesktopHarness h, Concept concept, VideoOptions options, IProgress<VideoProgress>? progress = null) =>
+        RunAsync(h, concept, options, new ResolvedModel(h.Get<IModelCatalog>().Find("anthropic", "claude-sonnet-5-5")!,
+            new ApiKey { Provider = "anthropic", Label = "k", Secret = "fake-test-key-video-0123" }, string.Empty), progress);
+
+    private static async Task<VideoRecord> RunAsync(DesktopHarness h, Concept concept, VideoOptions options, ResolvedModel model,
+        IProgress<VideoProgress>? progress = null)
     {
         var profile = (await h.Get<IProfileStore>().GetAsync(concept.ProfileId, CancellationToken.None))!;
-        var model = new ResolvedModel(h.Get<IModelCatalog>().Find("anthropic", "claude-sonnet-5-5")!,
-            new ApiKey { Provider = "anthropic", Label = "k", Secret = "fake-test-key-video-0123" }, string.Empty);
         var stored = (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!;
         return await h.Get<VideoPipeline>().RunAsync(new VideoJob(stored, profile, options, model), progress, CancellationToken.None);
     }
@@ -1524,6 +1654,12 @@ public sealed class VideoPageTests
 
         public bool Fail { get; init; }
 
+        /// <summary>Whether it speaks at the requested speed itself (false: like Pocket TTS, Chatterbox and the VoxCPM voices).</summary>
+        public bool HandlesSpeed { get; init; } = true;
+
+        /// <summary>A clip of this many samples at 24 kHz (a 220 Hz tone when longer than the default silence).</summary>
+        public int Samples { get; init; } = 2400;
+
         public Task<TMConcept.Core.Speech.SpeechClip> SynthesizeAsync(TMConcept.Core.Speech.SpeechRequest request, CancellationToken cancellationToken)
         {
             if (Fail)
@@ -1532,8 +1668,17 @@ public sealed class VideoPageTests
             }
 
             Requests.Add(request);
-            TMConcept.Core.Speech.WaveFile.WritePcm16(request.OutputWav, new float[2400], 24_000);
-            return Task.FromResult(new TMConcept.Core.Speech.SpeechClip(request.OutputWav, 100, request.Text.Length, 0, Code));
+            var samples = new float[Samples];
+            if (Samples > 2400)
+            {
+                for (var i = 0; i < samples.Length; i++)
+                {
+                    samples[i] = 0.5f * MathF.Sin(2 * MathF.PI * 220 * i / 24_000);
+                }
+            }
+
+            TMConcept.Core.Speech.WaveFile.WritePcm16(request.OutputWav, samples, 24_000);
+            return Task.FromResult(new TMConcept.Core.Speech.SpeechClip(request.OutputWav, Samples * 1000L / 24_000, request.Text.Length, 0, Code));
         }
     }
 }

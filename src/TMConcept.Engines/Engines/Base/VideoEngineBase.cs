@@ -38,6 +38,9 @@ public abstract class VideoEngineBase(EnginePackage package, ChromeLocator chrom
     /// <inheritdoc />
     public abstract string SampleCode { get; }
 
+    /// <inheritdoc />
+    public virtual string FallbackCode => SampleCode;
+
     /// <summary>The packages.</summary>
     protected EnginePackage Package { get; } = package;
 

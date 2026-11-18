@@ -8,8 +8,9 @@ namespace TMConcept.Providers.Catalog;
 /// The app's <see cref="IModelCatalog"/>: the embedded catalogs (<see cref="EmbeddedModelCatalog"/>, with their price updates) plus the
 /// models of the user's local servers (<see cref="EndpointRegistry"/>: free, chat, no key). The endpoint part is rebuilt in one step whenever
 /// the saved servers change, so a picker that loads after a change offers the new models, and a step choice of a deleted server's model is
-/// not found (shown as no longer offered). The installed models of the app's own Ollama copy (<see cref="AppModelRegistry"/>, provider
-/// <see cref="ModelProviders.AppOllama"/>) are added the same way and follow their registry's changes. Prices and built-in prices concern
+/// not found (shown as no longer offered). The models of the app's own Ollama copy (<see cref="AppModelRegistry.Offered"/>, provider
+/// <see cref="ModelProviders.AppOllama"/>: the installed ones and the catalogue's others, installed when a run starts) are added the same
+/// way and follow their registry's changes. Prices and built-in prices concern
 /// only the embedded models.
 /// </summary>
 public sealed class MergedModelCatalog : IModelCatalog
@@ -57,5 +58,5 @@ public sealed class MergedModelCatalog : IModelCatalog
     /// <inheritdoc />
     public void ApplyPrices(IReadOnlyList<PriceTable> tables) => _embedded.ApplyPrices(tables);
 
-    private void Rebuild() => _local = [.. _appModels?.Catalog ?? [], .. _endpoints.All.SelectMany(EndpointCodes.Catalog)];
+    private void Rebuild() => _local = [.. _appModels?.Offered ?? [], .. _endpoints.All.SelectMany(EndpointCodes.Catalog)];
 }

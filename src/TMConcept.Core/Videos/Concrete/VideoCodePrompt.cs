@@ -21,9 +21,10 @@ public static class VideoCodePrompt
     /// few shapes, relative positions, shared helpers, a length target, and no refused name or address in comments either; 8: without
     /// subtitles the narration is never drawn and the captions are left out; 9: the template block, see <see cref="VideoStylePrompt"/>:
     /// palette colours and the template font only, title style and place, drawing style, motion, ready helpers, and the app draws the
-    /// progress bar, the subtitles and the closing card, so the code never draws a progress bar, timer or scene counter).
+    /// progress bar, the subtitles and the closing card, so the code never draws a progress bar, timer or scene counter; 10: a model on this
+    /// computer gets a short checklist of the rules small models break most and the lines the file must end with, see <see cref="SmallModelChecklist"/>).
     /// </summary>
-    public const string Version = "9";
+    public const string Version = "10";
 
     /// <summary>
     /// SVG: the check allows exactly the SVG (and xlink) namespace written as one whole literal; a model that only read "no web addresses"
@@ -101,6 +102,28 @@ public static class VideoCodePrompt
             """;
     }
 
+    /// <summary>
+    /// The system text for a code model on this computer (<paramref name="local"/>): the same text with <see cref="SmallModelChecklist"/> at its
+    /// end. A small local model (0.1.23, the developer's full local run with Qwen 3.5 4B) wrote the whole file on one line with innerHTML and
+    /// without the timeline registration, twice.
+    /// </summary>
+    public static string System(IVideoEngine engine, bool subtitles, Styles.VideoStyle? style, string language, bool local) =>
+        local ? System(engine, subtitles, style, language) + "\n" + SmallModelChecklist(engine) : System(engine, subtitles, style, language);
+
+    /// <summary>The short checklist of a local code model: the rules small models break most, then the file's required last lines.</summary>
+    public static string SmallModelChecklist(IVideoEngine engine)
+    {
+        ArgumentNullException.ThrowIfNull(engine);
+        var (_, required) = Engines.EngineCodeCheck.RequiredExport(engine.Kind);
+        return $"""
+            Checklist before you answer (the check refuses the whole file for any one of these):
+            1. One statement per line; never put the whole file on one line.
+            2. Text only with element.textContent; never innerHTML or any other markup string.
+            3. No fetch, no addresses, no import of anything not named above.
+            4. The file must contain: {required}.
+            """;
+    }
+
     /// <summary>The template block with its line end (nothing for a video without a template).</summary>
     private static string Template(IVideoEngine engine, Styles.VideoStyle? style, string language) =>
         style is null ? string.Empty : VideoStylePrompt.Block(engine.Kind, style, language) + "\n";
@@ -138,6 +161,57 @@ public static class VideoCodePrompt
         }
 
         return text.Append("Write the file now.").ToString();
+    }
+
+    /// <summary>
+    /// The repair request after a rejected safety or template check: every finding with what to do instead, and a minimal file of the engine
+    /// that passes (<see cref="IVideoEngine.SampleCode"/>) to keep the structure from. A small model that only read "HTML injection (use
+    /// textContent)" broke the required structure in its repair (0.1.23).
+    /// </summary>
+    public static string Repair(IVideoEngine engine, string code, IReadOnlyList<string> findings)
+    {
+        ArgumentNullException.ThrowIfNull(engine);
+        ArgumentNullException.ThrowIfNull(findings);
+        var problem = new StringBuilder();
+        foreach (var finding in findings)
+        {
+            problem.Append("- ").Append(finding);
+            if (Fix(finding) is { Length: > 0 } fix)
+            {
+                problem.Append("\n  Fix: ").Append(fix);
+            }
+
+            problem.Append('\n');
+        }
+
+        var (_, required) = Engines.EngineCodeCheck.RequiredExport(engine.Kind);
+        problem.Append(CultureInfo.InvariantCulture, $"The file must keep this structure: {required}. A minimal file of this engine that passes the check (keep its ")
+            .Append("structure, add your design):\n```\n").Append(engine.SampleCode.Trim()).Append("\n```");
+        return Repair(code, problem.ToString());
+    }
+
+    /// <summary>What to do instead of what a finding names (empty when the finding says it already).</summary>
+    internal static string Fix(string finding)
+    {
+        ArgumentNullException.ThrowIfNull(finding);
+        return finding switch
+        {
+            _ when finding.Contains("HTML injection", StringComparison.Ordinal) =>
+                "create every element with document.createElement and set its text with element.textContent; remove every innerHTML, outerHTML, insertAdjacentHTML, DOMParser and document.write, also from comments.",
+            _ when finding.StartsWith("Required structure missing", StringComparison.Ordinal) =>
+                "write exactly that structure into the file (see the minimal file below).",
+            _ when finding.Contains("Module syntax", StringComparison.Ordinal) || finding.StartsWith("Import not allowed", StringComparison.Ordinal) =>
+                "remove the import / export lines; use only what the engine contract names.",
+            _ when finding.Contains("hidden text", StringComparison.Ordinal) =>
+                "write the characters themselves, never as escape sequences or character codes.",
+            _ when finding.Contains("address", StringComparison.Ordinal) || finding.Contains("network", StringComparison.Ordinal) =>
+                "remove it: the code draws only from the input, with no address and no request.",
+            _ when finding.Contains("another page or window", StringComparison.Ordinal) =>
+                "rename the variable or property (no location, top, parent, opener) and never touch the page's location.",
+            _ when finding.Contains("progress bar", StringComparison.Ordinal) =>
+                "remove it: the app draws the progress bar itself.",
+            _ => string.Empty,
+        };
     }
 
     /// <summary>The repair request after a rejected check or a failed render (one repair only).</summary>

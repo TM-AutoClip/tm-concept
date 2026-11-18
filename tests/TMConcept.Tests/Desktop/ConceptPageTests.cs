@@ -135,6 +135,35 @@ public sealed class ConceptPageTests
         window.Close();
     }
 
+    [AvaloniaTheory]
+    [InlineData(1280, 646)]
+    [InlineData(1024, 526)]
+    public async Task TheTopicSectionTitleIsWholeAndTheCountStandsUnderTheTickRow(int width, int height)
+    {
+        // The developer (18 Nov 2026): "Konu öner" shrank to "K…" next to the count, the button and the estimate. 1280×720 and 1024×600 main
+        // windows (their page areas).
+        using var h = new DesktopHarness();
+        await PrepareAsync(h);
+        h.Get<Localizer>().Use("tr");
+        var page = await PageAsync(h);
+        var (window, view) = Show(h, page, width, height);
+        var section = Named<Control>(view, "TopicSection");
+
+        var title = Named<TextBlock>(section, "TopicTitle");
+        var natural = new TextBlock { Text = title.Text, FontSize = title.FontSize, FontWeight = title.FontWeight, FontFamily = title.FontFamily };
+        natural.Measure(Size.Infinity);
+        title.Bounds.Width.ShouldBeGreaterThanOrEqualTo(natural.DesiredSize.Width - 0.5,
+            $"the title is not cut: {title.Bounds.Width:0} of {natural.DesiredSize.Width:0} px in a section of {section.Bounds.Width:0} px");
+        var count = BoundsIn(Named<Control>(section, "TopicCountBox"), view);
+        var tickRow = BoundsIn(Named<Control>(section, "TickAll").Parent as Control ?? throw new InvalidOperationException("tick row"), view);
+        count.Top.ShouldBeGreaterThanOrEqualTo(tickRow.Bottom, "the count stands under the tick row");
+        BoundsIn(section, view).Contains(count).ShouldBeTrue("inside the section");
+        var button = BoundsIn(Named<Button>(section, "SuggestButton"), view);
+        button.Top.ShouldBeGreaterThanOrEqualTo(tickRow.Bottom, "the button stands with the count");
+        BoundsIn(section, view).Contains(button).ShouldBeTrue("the button is whole inside the section");
+        window.Close();
+    }
+
     [AvaloniaFact]
     public async Task ModelBarIsFoldedAndShowsTheSummaryLine()
     {
