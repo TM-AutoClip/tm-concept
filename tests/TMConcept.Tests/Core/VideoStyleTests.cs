@@ -34,7 +34,7 @@ public sealed class VideoStyleTests
     public void FontsAreOflWithAStaticFileAndRussianFallsBackToACyrillicFont()
     {
         VideoFonts.All.Select(f => f.Id).ShouldBeUnique();
-        VideoFonts.All.Count.ShouldBeInRange(4, 6);
+        VideoFonts.All.Count.ShouldBeInRange(4, 8);
         VideoFonts.All.ShouldAllBe(f => f.Licence == "OFL-1.1" && f.RegularFile.EndsWith(".ttf") && !f.RegularFile.Contains('['));
         VideoStyleRules.FindFont(VideoFonts.CyrillicFallbackId)!.Cyrillic.ShouldBeTrue();
 

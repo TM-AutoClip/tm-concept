@@ -45,9 +45,11 @@ public sealed class StyleSettingsTests
         (editor.Subtitles, editor.ProgressBar).ShouldBe((true, false), "subtitles on, progress bar off by default");
         editor.TitleCells.Count.ShouldBe(9);
         editor.TitleCells.Single(c => c.IsChecked).Position.ShouldBe(TitlePosition.TopCenter);
-        editor.Palettes.Select(p => p.Palette.Id).ShouldBe(VideoPalettes.All.Select(p => p.Id));
+        editor.Palettes.Where(p => !p.Editable).Select(p => p.Palette.Id).ShouldBe(VideoPalettes.All.Select(p => p.Id));
+        editor.Palettes[^1].Own.ShouldBeTrue("the template's own colours come last");
         editor.Palettes.ShouldAllBe(p => p.Swatches.Count == PaletteTokens.All.Count);
-        editor.Fonts.Count.ShouldBe(VideoFonts.All.Count);
+        editor.Fonts.Count(f => !f.Font.Installed).ShouldBe(VideoFonts.All.Count);
+        editor.Fonts.Take(VideoFonts.All.Count).Select(f => f.Font.Id).ShouldBe(VideoFonts.All.Select(f => f.Id), "the shipped fonts come first");
 
         // The form and its preview follow the choices.
         editor.Name = "Shorts";

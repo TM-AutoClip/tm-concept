@@ -22,6 +22,39 @@ public static class VideoCostBreakdown
     /// </summary>
     public static decimal ConceptShare(decimal runUsd, int conceptsKept) => conceptsKept <= 0 ? 0 : Math.Round(runUsd / conceptsKept, 6);
 
+    /// <summary>
+    /// The concept share of a video for its cost details: the stored line when there is one; for a later version, counted with the first
+    /// one; else worked out from the concept's generation run while it is still there (a run that cost nothing stores no line); a concept
+    /// written by hand has none; anything else is unknown (never guessed). <paramref name="concept"/> and <paramref name="run"/> are the video's
+    /// concept and that concept's run when they still exist.
+    /// </summary>
+    public static ConceptShareLine Share(IReadOnlyList<VideoCost> costs, Concepts.Concept? concept, Runs.Run? run, bool firstVersion)
+    {
+        ArgumentNullException.ThrowIfNull(costs);
+        var known = run is not null && concept?.RunId == run.Id;
+        decimal? runUsd = known ? run!.ActualUsd : null;
+        int? kept = known ? run!.Accepted : null;
+        var stored = costs.Where(c => c.Step == PipelineSteps.Concepts).ToList();
+        if (stored.Count > 0)
+        {
+            return new ConceptShareLine(ConceptShareKind.Recorded, stored.Sum(c => c.Usd), stored.All(c => c.Exact), runUsd, kept);
+        }
+
+        if (!firstVersion)
+        {
+            return new ConceptShareLine(ConceptShareKind.FirstVersion, 0, true, runUsd, kept);
+        }
+
+        if (concept is { RunId: null })
+        {
+            return new ConceptShareLine(ConceptShareKind.Handwritten, 0, true, null, null);
+        }
+
+        return known
+            ? new ConceptShareLine(ConceptShareKind.FromRun, ConceptShare(run!.ActualUsd, run.Accepted), run.CostExact, runUsd, kept)
+            : new ConceptShareLine(ConceptShareKind.Unknown, 0, false, null, null);
+    }
+
     /// <summary>The lines in <see cref="Order"/> (steps the video did not use are left out; the free narration line is always there).</summary>
     public static IReadOnlyList<VideoCostLine> Lines(IReadOnlyList<VideoCost> costs)
     {

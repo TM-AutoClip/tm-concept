@@ -22,8 +22,21 @@ public sealed class VideoStyle
     /// <summary>Progress bar drawn by the app (off by default; when off, the code may not draw a progress bar, timer or scene counter).</summary>
     public bool ProgressBar { get; set; }
 
-    /// <summary>Font id from <see cref="VideoFonts"/> (titles, on-screen text and subtitles).</summary>
+    /// <summary>
+    /// Readable text (0.1.24, on by default; a template saved before has it on too): subtitles and on-screen text get an outline and a soft
+    /// shadow in the colour opposite to the text colour (<see cref="PaletteColors.Opposite"/>), so text stays readable over an image or a
+    /// scene of its own colour.
+    /// </summary>
+    public bool ReadableText { get; set; } = true;
+
+    /// <summary>
+    /// Font id from <see cref="VideoFonts"/>, or an installed font's (<see cref="SystemFonts"/>, "system:Times New Roman") for titles,
+    /// on-screen text and subtitles.
+    /// </summary>
     public string FontId { get; set; } = VideoFonts.DefaultId;
+
+    /// <summary>Weight and slant of the text (0.1.24; <see cref="FontEmphasis.Auto"/> = the look before).</summary>
+    public FontEmphasis FontEmphasis { get; set; } = FontEmphasis.Auto;
 
     /// <summary>How titles are drawn.</summary>
     public TitleStyle TitleStyle { get; set; } = TitleStyle.Plain;
@@ -31,8 +44,17 @@ public sealed class VideoStyle
     /// <summary>Where titles sit (3×3 grid).</summary>
     public TitlePosition TitlePosition { get; set; } = TitlePosition.TopCenter;
 
-    /// <summary>Colour palette id from <see cref="VideoPalettes"/>.</summary>
+    /// <summary>Colour palette id from <see cref="VideoPalettes"/>, or <see cref="VideoPalettes.CustomId"/> for the template's own colours.</summary>
     public string PaletteId { get; set; } = VideoPalettes.DefaultId;
+
+    /// <summary>
+    /// The template's own colours when <see cref="PaletteId"/> is <see cref="VideoPalettes.CustomId"/> (0.1.24); <c>null</c> otherwise. A
+    /// copy, also when they came from a saved palette.
+    /// </summary>
+    public VideoPalette? CustomPalette { get; set; }
+
+    /// <summary>The name of the saved palette the own colours came from (shown in the editor; empty when they were made here).</summary>
+    public string CustomPaletteName { get; set; } = string.Empty;
 
     /// <summary>Drawing style when there are no images (also steers the image prompt).</summary>
     public DrawStyle DrawStyle { get; set; } = DrawStyle.Flat;

@@ -19,6 +19,24 @@ public sealed class RenderStyle
     /// <summary>The bold font file, relative to the project; empty for a single-weight font.</summary>
     public string FontBold { get; set; } = string.Empty;
 
+    /// <summary>Every file of the font with its weight and style (regular, bold, italic, bold italic: the ones it has).</summary>
+    public List<RenderFontFace> Faces { get; set; } = [];
+
+    /// <summary>CSS weight of on-screen text (400 or 700).</summary>
+    public int TextWeight { get; set; } = 400;
+
+    /// <summary>CSS weight of titles (700 unless the template chose another weight).</summary>
+    public int TitleWeight { get; set; } = 700;
+
+    /// <summary>CSS style of every text: "normal" or "italic".</summary>
+    public string TextStyle { get; set; } = "normal";
+
+    /// <summary>
+    /// The outline and shadow colour of readable text (opposite to the text colour, <see cref="Styles.VideoStyle.ReadableText"/>); empty
+    /// when the template has it off. The app's page style and helpers put it on every text.
+    /// </summary>
+    public string Outline { get; set; } = string.Empty;
+
     /// <summary>How titles look: plain, band, outline, underline or boxed.</summary>
     public string TitleStyle { get; set; } = string.Empty;
 

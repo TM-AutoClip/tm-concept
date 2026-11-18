@@ -41,9 +41,14 @@ public static class RenderStyleBuilder
                 Text = palette.Text,
                 Muted = palette.Muted,
             },
+            Outline = style.ReadableText ? PaletteColors.Opposite(palette.Text) : string.Empty,
             Font = font.Family,
-            FontRegular = VideoFontFiles.Folder + "/" + font.RegularFile,
-            FontBold = font.BoldFile is { } bold ? VideoFontFiles.Folder + "/" + bold : string.Empty,
+            FontRegular = FilePath(font.RegularFile),
+            FontBold = font.BoldFile is { } bold ? FilePath(bold) : string.Empty,
+            Faces = Faces(font),
+            TextWeight = VideoStyleRules.TextWeight(style),
+            TitleWeight = VideoStyleRules.TitleWeight(style),
+            TextStyle = VideoStyleRules.Italic(style) ? "italic" : "normal",
             TitleStyle = Name(style.TitleStyle),
             TitleX = anchor.X,
             TitleY = anchor.Y,
@@ -56,6 +61,61 @@ public static class RenderStyleBuilder
             EndCardSeconds = VideoStyleRules.Closing(style, language) is { Screen: true } ? StyleLayout.EndCardSeconds : 0,
         };
     }
+
+    /// <summary>
+    /// The faces of a font for the page: regular and bold (a single-weight font claims every weight, so no fake bold is drawn), italic and
+    /// bold italic when the font has them (without them the browser slants the upright face).
+    /// </summary>
+    public static List<RenderFontFace> Faces(VideoFont font)
+    {
+        ArgumentNullException.ThrowIfNull(font);
+        var single = font.BoldFile is null;
+        var faces = new List<RenderFontFace> { Face(font.RegularFile, single ? "100 900" : "400", "normal") };
+        if (font.BoldFile is { } bold)
+        {
+            faces.Add(Face(bold, "700", "normal"));
+        }
+
+        if (font.ItalicFile is { } italic)
+        {
+            faces.Add(Face(italic, single || font.BoldItalicFile is null ? "100 900" : "400", "italic"));
+        }
+
+        if (font.BoldItalicFile is { } boldItalic)
+        {
+            faces.Add(Face(boldItalic, "700", "italic"));
+        }
+
+        return faces;
+    }
+
+    /// <summary>
+    /// The faces the page loads: <see cref="RenderStyle.Faces"/>, or for a style written before 0.1.24 (kept code rendered again) its regular
+    /// and bold files as they were loaded then.
+    /// </summary>
+    public static IReadOnlyList<RenderFontFace> FacesOf(RenderStyle style)
+    {
+        ArgumentNullException.ThrowIfNull(style);
+        if (style.Faces.Count > 0)
+        {
+            return style.Faces;
+        }
+
+        var single = style.FontBold.Length == 0;
+        var faces = new List<RenderFontFace> { new() { File = style.FontRegular, Weight = single ? "100 900" : "400", Style = "normal", Format = "truetype" } };
+        if (!single)
+        {
+            faces.Add(new RenderFontFace { File = style.FontBold, Weight = "700", Style = "normal", Format = "truetype" });
+        }
+
+        return faces;
+    }
+
+    private static RenderFontFace Face(string file, string weight, string style) =>
+        new() { File = FilePath(file), Weight = weight, Style = style, Format = VideoFontFiles.Format(file) };
+
+    /// <summary>A font file's path inside the project (an installed font's full path loses its folder).</summary>
+    private static string FilePath(string file) => VideoFontFiles.Folder + "/" + VideoFontFiles.Name(file);
 
     /// <summary>The token name of a title style (an unknown value reads as plain).</summary>
     public static string Name(TitleStyle value) => value switch

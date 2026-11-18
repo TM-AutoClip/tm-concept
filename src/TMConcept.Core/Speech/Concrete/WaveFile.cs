@@ -76,25 +76,27 @@ public static class WaveFile
         // A silence at the end stays (a pause after the last sentence of a scene); a scene made only of pauses is silence.
         format ??= Pcm16Format(DefaultRate);
         Silence(data, format, pendingSilence);
-        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(output))!);
-        using (var stream = File.Create(output))
-        {
-            Span<byte> number = stackalloc byte[4];
-            stream.Write("RIFF"u8);
-            BinaryPrimitives.WriteInt32LittleEndian(number, (int)(4 + 8 + format.Length + 8 + data.Length));
-            stream.Write(number);
-            stream.Write("WAVEfmt "u8);
-            BinaryPrimitives.WriteInt32LittleEndian(number, format.Length);
-            stream.Write(number);
-            stream.Write(format);
-            stream.Write("data"u8);
-            BinaryPrimitives.WriteInt32LittleEndian(number, (int)data.Length);
-            stream.Write(number);
-            data.Position = 0;
-            data.CopyTo(stream);
-        }
-
+        Write(output, format, data.GetBuffer().AsSpan(0, (int)data.Length));
         return DurationMs(output);
+    }
+
+    /// <summary>Writes a WAV file of <paramref name="format"/> (an fmt chunk) and its sample bytes (the folder is created).</summary>
+    internal static void Write(string output, byte[] format, ReadOnlySpan<byte> data)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(output))!);
+        using var stream = File.Create(output);
+        Span<byte> number = stackalloc byte[4];
+        stream.Write("RIFF"u8);
+        BinaryPrimitives.WriteInt32LittleEndian(number, 4 + 8 + format.Length + 8 + data.Length);
+        stream.Write(number);
+        stream.Write("WAVEfmt "u8);
+        BinaryPrimitives.WriteInt32LittleEndian(number, format.Length);
+        stream.Write(number);
+        stream.Write(format);
+        stream.Write("data"u8);
+        BinaryPrimitives.WriteInt32LittleEndian(number, data.Length);
+        stream.Write(number);
+        stream.Write(data);
     }
 
     /// <summary>Sample rate of a silent file made without any part.</summary>
@@ -148,7 +150,7 @@ public static class WaveFile
     }
 
     /// <summary>The fmt chunk and the sample bytes of a WAV file.</summary>
-    private static (byte[] Format, byte[] Samples) Read(string path)
+    internal static (byte[] Format, byte[] Samples) Read(string path)
     {
         using var stream = File.OpenRead(path);
         Span<byte> header = stackalloc byte[12];

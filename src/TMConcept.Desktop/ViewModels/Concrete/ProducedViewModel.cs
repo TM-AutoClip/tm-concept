@@ -28,7 +28,7 @@ namespace TMConcept.Desktop.ViewModels;
 /// </summary>
 public sealed partial class ProducedViewModel(AppSession session, IVideoStore videos, IConceptStore concepts, Videos.VideoRows rows, Videos.VideoFiles files,
     IRecycleBin recycleBin, IConfirmDialog confirm, ConceptEvents events, Concepts.ConceptActions actions, IActivityLog activity, PlayerViewModel player,
-    IMediaTools media, Localizer text, VersionEditorViewModel editor, ILogger<ProducedViewModel> logger)
+    IMediaTools media, Localizer text, VersionEditorViewModel editor, Core.Runs.IRunStore runs, ILogger<ProducedViewModel> logger)
     : PageViewModelBase
 {
     private readonly List<VideoRowViewModel> _all = [];
@@ -344,27 +344,31 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
                 .Append(text.Format("produced.detail.images", v.ImageModel.Length == 0 ? text["produced.detail.images_none"]
                     : v.ImageModel == Core.Images.ImageSources.Samples ? text["step.images.samples"] : v.ImageModel)).Append('\n')
                 .Append(text.Format("produced.detail.elapsed", (v.ElapsedMs / 1000.0).ToString("0", CultureInfo.InvariantCulture))).Append('\n');
-            // In the order of the work: concept share, narration text, image prompts, images, narration audio, video code, total.
-            decimal share = 0;
-            foreach (var line in VideoCostBreakdown.Lines(costs))
+            // In the order of the work: concept share (with its run's numbers), narration text, image prompts, images, narration audio,
+            // video code, total. The share is stored with the video; a missing one is worked out from the concept's run, or said unknown.
+            var concept = v.ConceptId is { } conceptId ? await concepts.GetAsync(conceptId, CancellationToken.None).ConfigureAwait(true) : null;
+            var run = concept?.RunId is { } runId ? await runs.GetAsync(runId, CancellationToken.None).ConfigureAwait(true) : null;
+            var share = VideoCostBreakdown.Share(costs, concept, run, row.Version is null or 1);
+            details.Append(ShareText(share)).Append('\n');
+            foreach (var line in VideoCostBreakdown.Lines(costs).Where(l => l.Step != Core.Pipeline.PipelineSteps.Concepts))
             {
                 var label = text["produced.cost." + line.Step] + (line.Count > 1 ? " ×" + line.Count.ToString(CultureInfo.InvariantCulture) : string.Empty);
                 var kind = line.Step == VideoCostBreakdown.NarrationText ? text["produced.cost.free"] : line.Exact ? text["produced.exact"] : text["produced.estimated"];
                 details.Append(text.Format("produced.detail.cost", label, text.Usd(line.Usd), kind)).Append('\n');
-                share += line.Step == Core.Pipeline.PipelineSteps.Concepts ? line.Usd : 0;
             }
 
             // The video's own total excludes the concept share (that run is counted once, with the concept runs).
-            details.Append(share > 0
-                ? text.Format("produced.detail.total_share", text.Usd(v.TotalUsd + share), text.Usd(share), text.Usd(v.TotalUsd))
-                : text.Format("produced.detail.total", text.Usd(v.TotalUsd))).Append('\n');
+            details.Append(share is { Known: true, Usd: > 0 }
+                ? text.Format("produced.detail.total_share", text.Usd(v.TotalUsd + share.Usd), text.Usd(share.Usd), text.Usd(v.TotalUsd))
+                : share.Kind == ConceptShareKind.Unknown
+                    ? text.Format("produced.detail.total_unknown", text.Usd(v.TotalUsd))
+                    : text.Format("produced.detail.total", text.Usd(v.TotalUsd))).Append('\n');
             foreach (var warning in v.Warnings.Split(',', StringSplitOptions.RemoveEmptyEntries))
             {
                 details.Append("• ").Append(text["produced.note." + warning]).Append('\n');
             }
 
             details.Append(text.Format("produced.detail.folder", row.Folder));
-            var concept = v.ConceptId is { } conceptId ? await concepts.GetAsync(conceptId, CancellationToken.None).ConfigureAwait(true) : null;
             var prompt = concept is null
                 ? text["produced.prompt.gone"]
                 : text.Format("produced.prompt", concept.Title, concept.Summary, v.PromptVersion.Length > 0 ? v.PromptVersion : "1", concept.Content);
@@ -387,6 +391,23 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
             logger.LogError(ex, "Video details could not be read");
             Status = text.Format("error.generic", ex.Message);
         }
+    }
+
+    /// <summary>The concept share line of the cost details, with the run's numbers when the run is known.</summary>
+    private string ShareText(ConceptShareLine share)
+    {
+        var amount = share.Kind switch
+        {
+            ConceptShareKind.Handwritten => text["produced.share.handwritten"],
+            ConceptShareKind.FirstVersion => text["produced.share.first_version"],
+            ConceptShareKind.Unknown => text["produced.share.unknown"],
+            _ => text.Format("produced.share.amount", text.Usd(share.Usd), share.Usd == 0 ? text["produced.cost.free"]
+                : share.Exact ? text["produced.exact"] : text["produced.estimated"]),
+        };
+        var math = share is { RunUsd: { } runUsd, Kept: > 0 } && share.Kind != ConceptShareKind.Handwritten
+            ? " — " + text.Format("produced.share.math", share.Kept.Value, text.Usd(runUsd), text.Usd(VideoCostBreakdown.ConceptShare(runUsd, share.Kept.Value)))
+            : string.Empty;
+        return text["produced.cost.concepts"] + ": " + amount + math;
     }
 
     /// <summary>

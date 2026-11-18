@@ -19,6 +19,7 @@ namespace TMConcept.Core.Speech;
 /// abbreviations, units; <see cref="TurkishSpeechTextNormalizer"/>) for every voice, local and online. Subtitles never see the spoken text.
 /// Every spoken clip is made inside a graphics card lease (<see cref="IGpuCoordinator"/>): the sherpa-onnx voices (Ahenk Cep included) run
 /// on the processor and never wait; a Python voice on an NVIDIA card takes the card (the model that was on it is unloaded first).
+/// Every clip loses its dead air before it is used or cached (<see cref="NarrationSilence"/>, 0.1.24).
 /// <see cref="ReleaseAsync"/> frees a local voice when the narration step ends, so the card (and the main memory) is free for the next step.
 /// </summary>
 public sealed class SpeechService(IEnumerable<ISpeechEngine> engines, StepModelResolver resolver, IAppPaths paths, PronunciationService pronunciations,
@@ -96,8 +97,9 @@ public sealed class SpeechService(IEnumerable<ISpeechEngine> engines, StepModelR
         Directory.CreateDirectory(Path.GetDirectoryName(outputWav)!);
         if (File.Exists(cache))
         {
+            // A clip cached before 0.1.24 was not trimmed yet: trimming again changes nothing in a trimmed one.
             File.Copy(cache, outputWav, overwrite: true);
-            return new SpeechClip(outputWav, WaveFile.DurationMs(outputWav), spoken.Length, 0, setup.Engine.Code);
+            return new SpeechClip(outputWav, Trimmed(outputWav, setup.Engine.Code), spoken.Length, 0, setup.Engine.Code);
         }
 
         SpeechClip clip;
@@ -114,10 +116,12 @@ public sealed class SpeechService(IEnumerable<ISpeechEngine> engines, StepModelR
             clip = clip with { DurationMs = await Task.Run(() => Stretch(outputWav, setup), cancellationToken).ConfigureAwait(false) };
         }
 
+        var spokenMs = clip.DurationMs;
+        clip = clip with { DurationMs = Trimmed(outputWav, setup.Engine.Code) };
         Directory.CreateDirectory(Path.GetDirectoryName(cache)!);
         File.Copy(outputWav, cache, overwrite: true);
-        logger.LogInformation("Spoke {Characters} characters with {Engine} at speed {Speed:0.00} ({Ms} ms)", clip.Characters, setup.Engine.Code, setup.Speed,
-            clip.DurationMs);
+        logger.LogInformation("Spoke {Characters} characters with {Engine} at speed {Speed:0.00} ({Ms} ms, {Cut} ms of silence cut)", clip.Characters,
+            setup.Engine.Code, setup.Speed, clip.DurationMs, Math.Max(0, spokenMs - clip.DurationMs));
         return clip;
     }
 
@@ -133,6 +137,21 @@ public sealed class SpeechService(IEnumerable<ISpeechEngine> engines, StepModelR
             logger.LogWarning(ex, "{Engine}: the clip could not be brought to speed {Speed:0.00}; it keeps the voice's own speed", setup.Engine.Code, setup.Speed);
             return WaveFile.DurationMs(wav);
         }
+    }
+
+    /// <summary>
+    /// The clip without dead air (<see cref="NarrationSilence"/>: the scenes follow the narration, so a voice's long silences were empty
+    /// stretches of video); its new length. A format the trim does not read is kept as it is, with a note in the log.
+    /// </summary>
+    private long Trimmed(string wav, string engine)
+    {
+        if (NarrationSilence.Trim(wav) is { } ms)
+        {
+            return ms;
+        }
+
+        logger.LogWarning("The clip of {Engine} is in a WAV format the silence trim does not read; its silences are kept", engine);
+        return WaveFile.DurationMs(wav);
     }
 
     /// <summary>

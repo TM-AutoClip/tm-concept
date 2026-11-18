@@ -562,6 +562,12 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
             return new MuxOverlay(AssFile);
         }
 
+        if (VideoStyleRules.FontMissing(style))
+        {
+            logger.LogWarning("The template's font is not installed on this computer; the video uses the default font ({Font})",
+                VideoStyleRules.Font(style, input.Language).Family);
+        }
+
         if (VideoStyleRules.ClosingMissing(style, input.Language))
         {
             logger.LogWarning("The template's closing has no sentences in the video's language ({Language}); the video ends without it", input.Language);

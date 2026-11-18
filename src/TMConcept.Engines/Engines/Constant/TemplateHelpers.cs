@@ -150,7 +150,8 @@ public static class TemplateHelpers
               ? {WebkitTextStroke: `${unit * 0.005}px ${tmColor(input, 'background')}`, paintOrder: 'stroke fill'}
               : {};
           return (
-            <div style={{position: 'absolute', top: margin + y * (input.height - margin - bottom), fontFamily: tmFont(input), fontWeight: 700,
+            <div style={{position: 'absolute', top: margin + y * (input.height - margin - bottom), fontFamily: tmFont(input), fontWeight: s?.titleWeight ?? 700,
+              fontStyle: s?.textStyle ?? 'normal',
               fontSize: unit * 0.075, lineHeight: 1.15, color: tmColor(input, 'text'), textAlign: align, ...place, ...look, ...style}}>
               {text}
               {kind === 'underline' ? (
@@ -179,5 +180,9 @@ public static class TemplateHelpers
         };
 
         export const tmFont = (input: ConceptInput): string => (input.style ? input.style.font : 'sans-serif');
+
+        // Readable text: give every Txt these props (an outline in the colour opposite to the text); empty when the template has it off.
+        export const tmOutline = (input: ConceptInput): {stroke?: string; lineWidth?: number; strokeFirst?: boolean} =>
+          input.style?.outline ? {stroke: input.style.outline, lineWidth: Math.min(input.width, input.height) * 0.006, strokeFirst: true} : {};
         """;
 }

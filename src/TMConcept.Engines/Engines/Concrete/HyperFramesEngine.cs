@@ -216,31 +216,51 @@ public sealed class HyperFramesEngine(IAppPaths paths, ToolInstaller tools, Chro
         var c = CultureInfo.InvariantCulture;
         var family = Css(style.Font);
         var text = new System.Text.StringBuilder();
-        var single = style.FontBold.Length == 0;
-        text.Append(c, $"@font-face {{ font-family: \"{family}\"; src: url(\"{Css(style.FontRegular)}\") format(\"truetype\"); font-weight: {(single ? "100 900" : "400")}; font-display: block; }}\n");
-        if (!single)
+        var faces = RenderStyleBuilder.FacesOf(style);
+        foreach (var face in faces)
         {
-            text.Append(c, $"@font-face {{ font-family: \"{family}\"; src: url(\"{Css(style.FontBold)}\") format(\"truetype\"); font-weight: 700; font-display: block; }}\n");
+            text.Append(c, $"@font-face {{ font-family: \"{family}\"; src: url(\"{Css(face.File)}\") format(\"{Css(face.Format)}\"); font-weight: {Css(face.Weight)}; ")
+                .Append(c, $"font-style: {Css(face.Style)}; font-display: block; }}\n");
         }
+
+        var slant = style.TextStyle == "italic" ? "italic" : "normal";
 
         var colors = style.Colors;
         text.Append(c, $":root {{ --tm-background: {Css(colors.Background)}; --tm-surface: {Css(colors.Surface)}; --tm-accent: {Css(colors.Accent)}; ")
             .Append(c, $"--tm-accent2: {Css(colors.Accent2)}; --tm-text: {Css(colors.Text)}; --tm-muted: {Css(colors.Muted)}; ")
             .Append(c, $"--tm-font: \"{family}\", sans-serif; --tm-unit: {Math.Min(input.Width, input.Height)}px; }}\n")
-            .Append("#root { color: var(--tm-text); background: var(--tm-background); }\n")
-            .Append(".tm-title { font-family: var(--tm-font); font-weight: 700; color: var(--tm-text); font-size: calc(var(--tm-unit) * 0.075); line-height: 1.15; }\n")
+            .Append(c, $"#root {{ color: var(--tm-text); background: var(--tm-background); font-weight: {style.TextWeight}; font-style: {slant}; }}\n")
+            .Append(Readable(style.Outline))
+            .Append(c, $".tm-title {{ font-family: var(--tm-font); font-weight: {style.TitleWeight}; font-style: {slant}; color: var(--tm-text); font-size: calc(var(--tm-unit) * 0.075); line-height: 1.15; }}\n")
             .Append(".tm-title-band { background: var(--tm-surface); padding-top: 0.35em; padding-bottom: 0.35em; }\n")
             .Append(".tm-title-outline { -webkit-text-stroke: 0.06em var(--tm-background); paint-order: stroke fill; }\n")
             .Append(".tm-title-underline::after { content: \"\"; display: block; width: 2.2em; height: 0.12em; margin-top: 0.25em; background: var(--tm-accent); }\n")
             .Append(".tm-title-underline.tm-align-center::after { margin-left: auto; margin-right: auto; }\n")
             .Append(".tm-title-underline.tm-align-right::after { margin-left: auto; }\n")
             .Append(".tm-title-boxed { background: var(--tm-accent); color: var(--tm-background); padding: 0.3em 0.6em; border-radius: 0.35em; }\n");
-        foreach (var file in new[] { style.FontRegular, style.FontBold }.Where(f => f.Length > 0))
+        foreach (var face in faces)
         {
-            text.Append(c, $"</style>\n<link rel=\"preload\" href=\"{Css(file)}\" as=\"font\" type=\"font/ttf\" crossorigin />\n<style>\n");
+            var type = face.Format == "opentype" ? "font/otf" : "font/ttf";
+            text.Append(c, $"</style>\n<link rel=\"preload\" href=\"{Css(face.File)}\" as=\"font\" type=\"{type}\" crossorigin />\n<style>\n");
         }
 
         return text.ToString();
+    }
+
+    /// <summary>
+    /// Readable text (the template's default since 0.1.24): every text on the page inherits an outline and a soft shadow in the colour
+    /// opposite to the text colour (text-shadow is inherited, so the code's own text gets it too); nothing when the template has it off.
+    /// </summary>
+    public static string Readable(string outline)
+    {
+        ArgumentNullException.ThrowIfNull(outline);
+        if (outline.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        var o = Css(outline);
+        return $"#root {{ --tm-outline: {o}; text-shadow: 0 0 0.05em {o}, 0 0 0.05em {o}, 0 0 0.1em {o}, 0 0.04em 0.14em {o}99; }}\n";
     }
 
     /// <summary>A value for the page's style: only characters a font name, file name or colour needs (the app's own values pass unchanged).</summary>

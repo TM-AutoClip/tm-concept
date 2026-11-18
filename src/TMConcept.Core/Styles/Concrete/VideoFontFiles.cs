@@ -14,12 +14,23 @@ public static class VideoFontFiles
 
     private const string Prefix = "TMConcept.Fonts.";
 
-    /// <summary>The files of a font: the regular weight, then the bold one when it has one.</summary>
+    /// <summary>The files of a font: the regular weight, then the bold, italic and bold italic ones it has.</summary>
     public static IReadOnlyList<string> Files(VideoFont font)
     {
         ArgumentNullException.ThrowIfNull(font);
-        return font.BoldFile is { } bold ? [font.RegularFile, bold] : [font.RegularFile];
+        return new[] { font.RegularFile, font.BoldFile, font.ItalicFile, font.BoldItalicFile }.OfType<string>().ToList();
     }
+
+    /// <summary>The name a file has in the copied folder (an installed font's full path loses its folder).</summary>
+    public static string Name(string file)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(file);
+        return Path.GetFileName(file);
+    }
+
+    /// <summary>The CSS <c>format()</c> of a font file: "opentype" for .otf, else "truetype".</summary>
+    public static string Format(string file) =>
+        string.Equals(Path.GetExtension(file), ".otf", StringComparison.OrdinalIgnoreCase) ? "opentype" : "truetype";
 
     /// <summary>Opens a font file; <see cref="InvalidOperationException"/> when the program does not carry it (a broken build).</summary>
     public static Stream Open(string fileName)
@@ -33,15 +44,18 @@ public static class VideoFontFiles
     public static bool Exists(string fileName) =>
         typeof(VideoFontFiles).Assembly.GetManifestResourceInfo(Prefix + fileName) is not null;
 
-    /// <summary>Writes the font's files into <paramref name="folder"/> (created when missing; a file of the same size is left as it is).</summary>
+    /// <summary>
+    /// Writes the font's files into <paramref name="folder"/> (created when missing; a file of the same size is left as it is). A shipped font
+    /// comes from the program, an installed one from its own file on this computer (<see cref="FileNotFoundException"/> when it is gone).
+    /// </summary>
     public static void CopyTo(VideoFont font, string folder)
     {
         ArgumentNullException.ThrowIfNull(font);
         Directory.CreateDirectory(folder);
         foreach (var name in Files(font))
         {
-            var target = Path.Combine(folder, name);
-            using var source = Open(name);
+            var target = Path.Combine(folder, Name(name));
+            using var source = font.Installed ? File.OpenRead(name) : Open(name);
             if (File.Exists(target) && new FileInfo(target).Length == source.Length)
             {
                 continue;

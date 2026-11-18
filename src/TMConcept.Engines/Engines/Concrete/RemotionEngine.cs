@@ -100,6 +100,11 @@ public sealed class RemotionEngine(IAppPaths paths, ToolInstaller tools, ChromeL
           font: string;
           fontRegular: string;
           fontBold: string;
+          outline?: string;
+          faces?: {file: string; weight: string; style: string; format: string}[];
+          textWeight?: number;
+          titleWeight?: number;
+          textStyle?: string;
           titleStyle: string;
           titleX: number;
           titleY: number;
@@ -137,22 +142,19 @@ public sealed class RemotionEngine(IAppPaths paths, ToolInstaller tools, ChromeL
         if (input.Style is { } style)
         {
             var family = Quote(style.Font);
-            faces.Add($"[{family}, {Quote(style.FontRegular)}, '{(style.FontBold.Length == 0 ? "100 900" : "400")}']");
-            if (style.FontBold.Length > 0)
-            {
-                faces.Add($"[{family}, {Quote(style.FontBold)}, '700']");
-            }
+            faces.AddRange(RenderStyleBuilder.FacesOf(style).Select(f =>
+                $"[{family}, {Quote(f.File)}, {Quote(f.Weight)}, {Quote(f.Style)}, {Quote(f.Format)}]"));
         }
 
         return $$"""
             // The app's file (TM Concept): loads the template's font before the frames are drawn; not changed by the model.
             import {cancelRender, continueRender, delayRender, staticFile} from 'remotion';
 
-            const faces: [string, string, string][] = [{{string.Join(", ", faces)}}];
+            const faces: [string, string, string, string, string][] = [{{string.Join(", ", faces)}}];
 
             if (typeof document !== 'undefined' && faces.length > 0) {
               const handle = delayRender('Loading the template font');
-              Promise.all(faces.map(([family, file, weight]) => new FontFace(family, `url('${staticFile(file)}') format('truetype')`, {weight}).load()
+              Promise.all(faces.map(([family, file, weight, style, format]) => new FontFace(family, `url('${staticFile(file)}') format('${format}')`, {weight, style}).load()
                 .then((face) => {
                   document.fonts.add(face);
                 })))
@@ -175,15 +177,30 @@ public sealed class RemotionEngine(IAppPaths paths, ToolInstaller tools, ChromeL
     private const string RootTsx = """
         // The app's file (TM Concept); length, fps and size come from input.json (calculated in C#).
         import React from 'react';
-        import {Composition} from 'remotion';
+        import {AbsoluteFill, Composition} from 'remotion';
         import './fonts';
         import {Scene} from './Scene';
         import type {ConceptInput} from './input';
 
+        const SceneView = Scene as unknown as React.FC<Record<string, unknown>>;
+
+        // The template's text weight and slant, and readable text (its default: every text inherits an outline and a soft shadow in the
+        // colour opposite to the text).
+        const Framed: React.FC<Record<string, unknown>> = (props) => {
+          const s = (props as unknown as ConceptInput).style;
+          const o = s?.outline;
+          return s ? (
+            <AbsoluteFill style={{fontWeight: s.textWeight ?? 400, fontStyle: s.textStyle ?? 'normal',
+              textShadow: o ? `0 0 0.05em ${o}, 0 0 0.05em ${o}, 0 0 0.1em ${o}, 0 0.04em 0.14em ${o}99` : undefined}}>
+              <SceneView {...props} />
+            </AbsoluteFill>
+          ) : <SceneView {...props} />;
+        };
+
         export const Root: React.FC = () => (
           <Composition
             id="Concept"
-            component={Scene as unknown as React.FC<Record<string, unknown>>}
+            component={Framed}
             durationInFrames={1}
             fps={30}
             width={1080}

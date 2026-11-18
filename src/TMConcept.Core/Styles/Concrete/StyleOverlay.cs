@@ -44,16 +44,19 @@ public static class StyleOverlay
         var size = SubtitleBuilder.FontSize(width, height);
         var side = SubtitleBuilder.SideMargin(width);
         var bold = font.BoldFile is null ? 0 : 1;
+        var subtitleBold = VideoStyleRules.SubtitlesBold(style, font) ? 1 : 0;
+        var italic = VideoStyleRules.Italic(style) ? 1 : 0;
         var unit = Math.Min(width, height);
         var text = SubtitleBuilder.AssColour(palette.Text);
         var background = SubtitleBuilder.AssColour(palette.Background);
         var accent = SubtitleBuilder.AssColour(palette.Accent);
+        var edge = Edge(style, palette, size);
         var ass = new StringBuilder();
         ass.Append("[Script Info]\nScriptType: v4.00+\nWrapStyle: 0\nScaledBorderAndShadow: yes\n")
             .Append(c, $"PlayResX: {width}\nPlayResY: {height}\n\n")
             .Append("[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ")
             .Append("ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n")
-            .Append(c, $"Style: Default,{font.Family},{size},{text},&H000000FF,{background},&H64000000,{bold},0,0,0,100,100,0,0,1,{Math.Max(2, size / 12)},0,2,{side},{side},{(int)Math.Round(height * 0.12)},1\n")
+            .Append(c, $"Style: Default,{font.Family},{size},{text},&H000000FF,{edge.Outline},{edge.Back},{subtitleBold},{italic},0,0,100,100,0,0,1,{edge.Width},{edge.Shadow},2,{side},{side},{(int)Math.Round(height * 0.12)},1\n")
             .Append(c, $"Style: TmShape,{font.Family},10,{text},&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1\n")
             .Append(c, $"Style: TmName,{font.Family},{Name(unit)},{text},&H000000FF,{background},&H00000000,{bold},0,0,0,100,100,0,0,1,{Math.Max(1, Name(unit) / 20)},0,8,{side},{side},0,1\n")
             .Append(c, $"Style: TmPhrase,{font.Family},{Phrase(unit)},{text},&H000000FF,{background},&H00000000,0,0,0,0,100,100,0,0,1,{Math.Max(1, Phrase(unit) / 24)},0,8,{side},{side},0,1\n")
@@ -85,6 +88,26 @@ public static class StyleOverlay
         }
 
         return new StyleOverlayResult(ass.ToString(), card);
+    }
+
+    /// <summary>
+    /// The edge of the subtitles. Readable text (<see cref="VideoStyle.ReadableText"/>, the default): a thicker outline in the colour opposite
+    /// to the text (black under light text, white under dark text) and a soft shadow of it, so a subtitle reads over an image of its own
+    /// colour. Off: the look before 0.1.24 (a thin outline in the background colour, no shadow).
+    /// </summary>
+    public static SubtitleEdge Edge(VideoStyle style, VideoPalette palette, int size)
+    {
+        ArgumentNullException.ThrowIfNull(style);
+        ArgumentNullException.ThrowIfNull(palette);
+        if (!style.ReadableText)
+        {
+            return new SubtitleEdge(SubtitleBuilder.AssColour(palette.Background), "&H64000000", Math.Max(2, size / 12), 0);
+        }
+
+        var opposite = SubtitleBuilder.AssColour(PaletteColors.Opposite(palette.Text));
+
+        // The shadow: the same colour, about 40 % see-through (ASS alpha &H66).
+        return new SubtitleEdge(opposite, "&H66" + opposite[4..], Math.Max(3, (int)Math.Round(size / 8.0)), Math.Max(2, (int)Math.Round(size / 22.0)));
     }
 
     /// <summary>

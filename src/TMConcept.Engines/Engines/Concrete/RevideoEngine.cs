@@ -121,20 +121,16 @@ public sealed class RevideoEngine(IAppPaths paths, ToolInstaller tools, ChromeLo
         }
 
         static string Quote(string value) => "'" + new string(value.Where(ch => ch is not ('\'' or '\\' or '\n' or '\r')).ToArray()) + "'";
-        var faces = new List<string> { $"[{Quote(style.FontRegular)}, '{(style.FontBold.Length == 0 ? "100 900" : "400")}']" };
-        if (style.FontBold.Length > 0)
-        {
-            faces.Add($"[{Quote(style.FontBold)}, '700']");
-        }
+        var faces = RenderStyleBuilder.FacesOf(style).Select(f => $"[{Quote(f.File)}, {Quote(f.Weight)}, {Quote(f.Style)}, {Quote(f.Format)}]").ToList();
 
         return $$"""
 
             // The template's font (served from public/fonts): loaded before the project starts, so every frame uses it.
             if (typeof document !== 'undefined') {
-              const faces: [string, string][] = [{{string.Join(", ", faces)}}];
-              await Promise.all(faces.map(async ([file, weight]) => {
+              const faces: [string, string, string, string][] = [{{string.Join(", ", faces)}}];
+              await Promise.all(faces.map(async ([file, weight, style, format]) => {
                 try {
-                  document.fonts.add(await new FontFace({{Quote(style.Font)}}, `url('/${file}') format('truetype')`, {weight}).load());
+                  document.fonts.add(await new FontFace({{Quote(style.Font)}}, `url('/${file}') format('${format}')`, {weight, style}).load());
                 } catch (error: unknown) {
                   throw new Error(`TM Concept: the template font ${file} could not be loaded: ${String(error)}`);
                 }

@@ -1,4 +1,4 @@
-@version=2
+@version=3
 @vertical=dikey kısa video
 @horizontal=yatay video
 @none=(yok)
@@ -9,7 +9,7 @@ KURALLAR
 2. Her konsept: "baslik" (en çok 90 karakter, merak uyandıran ama abartısız), "ozet" (tam iki cümle: video ne anlatıyor, izleyici ne öğreniyor), "icerik", "kaynaklar" (konseptin kullandığı BELGELERİN numaraları, en az bir tane, ör. [1, 3]).
 3. "icerik" izleyiciye doğrudan konuşan seslendirme metnidir. Ekranda görüneni ayrı satırda yaz: [ekranda: …]. Her böyle satır yeni bir sahne başlatır; ilk satır da böyle olmalı. Köşeli parantezi başka yerde kullanma. "icerik"e belge numarası, belge adı ya da "belgeye göre" yazma: bu metin sesli okunur.
 4. Sahneler çizilebilir olsun: harita, zaman çizelgesi, sayı, kısa yazı, şema, siluet, yapı çizimi ya da verilen örnek görseller. Gerçek kişilerin yüzünü ya da fotoğrafını isteme.
-5. Seslendirme hedef süreye uysun (köşeli parantezler sayılmaz). İlk cümle güçlü bir kanca olsun; her konseptin kendi açısı olsun, kalıp tekrarlanmasın.
+5. Hedef süre yaklaşıktır, kesin değil (köşeli parantezler sayılmaz): kısa ve dolu bir metin, uzatılmış bir metinden iyidir. Süreyi doldurmak için tekrar, dolgu cümle, boş sahne ya da sessizlik ekleme; anlatacağın erken biterse daha kısa bitir (hedefin beşte dördü de olur). Metin hedefi çok aşacaksa sıkılaştır, hedefin en çok %20 fazlasına in. Şapkalı harf (â, î, û) kullanma: "hala", "hikaye", "kar" diye yaz. İlk cümle güçlü bir kanca olsun; her konseptin kendi açısı olsun, kalıp tekrarlanmasın.
 6. YALNIZ BELGE PARÇALARINDAKİ bilgileri kullan: onlarda olmayan tarih, sayı, ad, alıntı ya da olay yok; emin olduğun bir bilgi bile olsa. Parçaların anlatmadığı yeri boş bırak, uydurarak doldurma. Parçaların tartışmalı dediğini tartışmalı diye anlat. Parçalar bütün bir videoya yetmiyorsa uydurmak yerine daha kısa bir konsept yaz.
 7. Gerçek kişilere yapmadıklarını yaptırma, söylemediklerini söyletme; kanal, yayıncı, kişi ya da marka taklidi yok. Nefret söylemi, şiddet övgüsü, duygu sömürüsü, tehlikeli talimat ve tıbbi, hukuki ya da finansal tavsiye yok.
 8. Konuyu BELGELER verir. KANALIN İÇERİĞİ tonu, izleyiciyi ve biçimi belirler. KONU verildiyse her konsept, parçaların anlattığı kadarıyla onu işler. KONULAR verildiyse her konu için sırasıyla tam bir konsept yaz, her birini o konuyu anlatan parçalardan.

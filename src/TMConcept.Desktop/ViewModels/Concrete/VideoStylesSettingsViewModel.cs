@@ -17,10 +17,12 @@ namespace TMConcept.Desktop.ViewModels;
 /// video page picks one; each queued video reads it when it starts. Unsaved changes survive a page switch, and opening another template asks
 /// before they are dropped. A database error is logged and shown, never left to the dispatcher.
 /// </summary>
-public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store, Localizer text, IConfirmDialog confirm, IActivityLog activity,
-    ILogger<VideoStylesSettingsViewModel> logger) : SettingsSectionBase
+public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store, IVideoPaletteStore palettes, Localizer text, IConfirmDialog confirm,
+    IActivityLog activity, ILogger<VideoStylesSettingsViewModel> logger) : SettingsSectionBase
 {
     private bool _loading;
+    private IReadOnlyList<SavedPalette> _saved = [];
+    private bool _fontsLogged;
 
     /// <inheritdoc />
     public override string TitleKey => "settings.styles";
@@ -75,7 +77,7 @@ public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store,
         _loading = true;
         SelectedStyle = null;
         _loading = false;
-        Editor = new VideoStyleEditorViewModel(new VideoStyle { Name = NewName() }, isNew: true, text);
+        Editor = NewEditor(new VideoStyle { Name = NewName() }, true);
         Status = string.Empty;
     }
 
@@ -125,7 +127,7 @@ public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store,
     [RelayCommand]
     public void Revert()
     {
-        Editor = SelectedStyle is { } chosen ? new VideoStyleEditorViewModel(chosen, isNew: false, text) : null;
+        Editor = SelectedStyle is { } chosen ? NewEditor(chosen, false) : null;
         Status = string.Empty;
     }
 
@@ -180,7 +182,7 @@ public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store,
             return;
         }
 
-        Editor = new VideoStyleEditorViewModel(newValue, isNew: false, text);
+        Editor = NewEditor(newValue, false);
         Status = string.Empty;
     }
 
@@ -195,7 +197,7 @@ public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store,
             {
                 if (SelectedStyle?.Id == next.Id)
                 {
-                    Editor = new VideoStyleEditorViewModel(next, isNew: false, text);
+                    Editor = NewEditor(next, false);
                     Status = string.Empty;
                 }
 
@@ -235,6 +237,15 @@ public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store,
 
     private async Task LoadAsync(Guid? select)
     {
+        // The fonts installed on this computer are read once, off the interface thread (the editor lists them after the shipped ones).
+        var installed = await Task.Run(() => SystemFonts.Installed).ConfigureAwait(true);
+        if (!_fontsLogged)
+        {
+            _fontsLogged = true;
+            logger.LogInformation("{Count} installed font families can be used in templates", installed.Count);
+        }
+
+        _saved = await palettes.ListAsync(CancellationToken.None).ConfigureAwait(true);
         var all = await store.ListAsync(CancellationToken.None).ConfigureAwait(true);
         _loading = true;
         try
@@ -257,7 +268,7 @@ public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store,
             // Coming back to the page keeps unsaved changes of the same template (the form is rebuilt only when it says what is stored).
             if (Editor is not { IsNew: false } open || open.Id != chosen.Id || !open.Changed)
             {
-                Editor = new VideoStyleEditorViewModel(chosen, isNew: false, text);
+                Editor = NewEditor(chosen, false);
             }
         }
         else if (Editor is { IsNew: false })
@@ -270,6 +281,90 @@ public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store,
         CanAdd = Styles.Count < VideoStyleLimits.Max;
         Empty = Styles.Count == 0;
     }
+
+    /// <summary>
+    /// Saves the form's own colours as a named palette (refused while they cannot be read or the name is missing; at the limit). The form
+    /// then shows the saved palette in its list, chosen.
+    /// </summary>
+    [RelayCommand]
+    public async Task SavePaletteAsync()
+    {
+        if (Editor is not { } editor)
+        {
+            return;
+        }
+
+        var name = editor.PaletteName.Trim();
+        if (name.Length == 0 || name.Length > VideoStyleLimits.NameMax)
+        {
+            Status = text.Format("styles.own.name_needed", VideoStyleLimits.NameMax);
+            return;
+        }
+
+        if (editor.OwnPalette() is not { } colours || !PaletteDesigner.Check(colours).Ok)
+        {
+            Status = editor.PaletteStatus;
+            return;
+        }
+
+        var saved = new SavedPalette { Id = editor.SavedPaletteId ?? Guid.NewGuid(), Name = name, Colors = colours };
+        try
+        {
+            await palettes.SaveAsync(saved, CancellationToken.None).ConfigureAwait(true);
+            _saved = await palettes.ListAsync(CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (VideoStyleLimitException ex)
+        {
+            logger.LogWarning(ex, "Palette not saved: the limit of {Max} is reached", VideoStyleLimits.PalettesMax);
+            Status = text.Format("styles.own.limit", VideoStyleLimits.PalettesMax);
+            return;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Palette {Id} could not be saved", saved.Id);
+            Status = text.Format("error.generic", ex.Message);
+            return;
+        }
+
+        logger.LogInformation("Palette {Id} saved", saved.Id);
+        editor.SetSaved(_saved, saved.Id);
+        Status = text.Format("styles.own.saved", name);
+    }
+
+    /// <summary>Deletes the chosen saved palette after a confirmation (templates that use it keep their own copy of the colours).</summary>
+    [RelayCommand]
+    public async Task DeletePaletteAsync()
+    {
+        if (Editor is not { SavedPaletteId: { } id } editor || _saved.FirstOrDefault(p => p.Id == id) is not { } palette)
+        {
+            return;
+        }
+
+        var answer = await confirm.AskAsync(text["styles.own.delete.title"], text.Format("styles.own.delete.message", palette.Name),
+            text["styles.own.delete"], danger: true).ConfigureAwait(true);
+        if (!answer.Confirmed)
+        {
+            return;
+        }
+
+        try
+        {
+            await palettes.DeleteAsync(id, CancellationToken.None).ConfigureAwait(true);
+            _saved = await palettes.ListAsync(CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Palette {Id} could not be deleted", id);
+            Status = text.Format("error.generic", ex.Message);
+            return;
+        }
+
+        logger.LogInformation("Palette {Id} deleted", id);
+        editor.SetSaved(_saved, null);
+        Status = text.Format("styles.own.deleted", palette.Name);
+    }
+
+    private VideoStyleEditorViewModel NewEditor(VideoStyle style, bool isNew) => new(style, isNew, text, _saved);
 
     private string NewName()
     {

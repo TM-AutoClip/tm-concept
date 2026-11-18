@@ -19,6 +19,12 @@ public static class VideoFontPreview
     public static FontFamily For(VideoFont font)
     {
         ArgumentNullException.ThrowIfNull(font);
+        if (font.Installed)
+        {
+            // A font installed on this computer: the system draws it by its family name.
+            return new FontFamily(font.Family);
+        }
+
         return AssetLoader.Exists(new Uri(AssetFolder + "/" + font.RegularFile))
             ? new FontFamily(AssetFolder + "#" + font.Family)
             : new FontFamily(font.Family);
