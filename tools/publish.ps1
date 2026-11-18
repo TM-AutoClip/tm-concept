@@ -177,7 +177,7 @@ foreach ($index in $files | Where-Object { $_.Name -like 'releases.*.json' }) {
         if (-not (Test-Path (Join-Path $releaseFolder $asset.FileName))) { throw "$($index.Name) names $($asset.FileName), which is not in the release" }
     }
 }
-$unused = @($files | Where-Object { $_.Name -like '*-Portable.zip' -or $_.Name -like 'RELEASES*' -or $_.Name -like 'assets.*.json' })
+$unused = @($files | Where-Object { $_.Name -like '*-Portable.zip' -or $_.Name -clike 'RELEASES*' -or $_.Name -like 'assets.*.json' })
 if ($unused.Count -gt 0) { throw "Files the release does not use: $(($unused | ForEach-Object Name) -join ', ')" }
 
 Write-Output ''

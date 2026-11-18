@@ -26,7 +26,7 @@ public sealed class EngineComponentSource(ToolInstaller installer, IEnumerable<I
             .. engines.OrderBy(e => e.Kind).Select(e => new EngineComponent(e)),
             new BrowserComponent(chrome),
             imageRuntime,
-            .. LocalImageModels.All.Select(m => new ImageModelComponent(m, images, imageRuntime)),
+            .. LocalImageModelSet.All.Select(m => new ImageModelComponent(m, images, imageRuntime)),
         ];
     });
 

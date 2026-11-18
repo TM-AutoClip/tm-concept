@@ -62,6 +62,6 @@ public static class ModelFactLookup
             return files + (baseVoice?.Files.Sum(f => f.ApproximateBytes) ?? 0);
         }
 
-        return LocalImageModels.All.FirstOrDefault(m => m.Id == model.Id && model.Capabilities.HasFlag(ModelCapability.Image))?.TotalBytes;
+        return LocalImageModelSet.All.FirstOrDefault(m => m.Id == model.Id && model.Capabilities.HasFlag(ModelCapability.Image))?.TotalBytes;
     }
 }

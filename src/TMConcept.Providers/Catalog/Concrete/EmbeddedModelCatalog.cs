@@ -7,12 +7,15 @@ namespace TMConcept.Providers.Catalog;
 /// <see cref="IModelCatalog"/> from the embedded files <c>Catalogs/&lt;provider&gt;.json</c> (one per provider; a new provider = a new file;
 /// <c>local.json</c> holds the models that run on this computer). Their prices are the built-in table; newer price tables (the repository's
 /// prices file, OpenRouter's list) replace prices of known models. Local models are never repriced. Thread-safe reads; a new set of
-/// prices replaces the list in one step.
+/// prices replaces the list in one step. The repository's model catalog (0.1.26) may add models of the known providers and local image
+/// models at start (<see cref="AddModels"/>); a built-in model is never replaced.
 /// </summary>
 public sealed class EmbeddedModelCatalog : IModelCatalog
 {
     private const string Prefix = "TMConcept.Catalogs.";
-    private readonly IReadOnlyList<CatalogModel> _embedded;
+    private readonly Lock _gate = new();
+    private readonly IReadOnlyList<CatalogModel> _files;
+    private volatile IReadOnlyList<CatalogModel> _embedded;
     private readonly PriceTable _builtIn;
     private volatile IReadOnlyList<CatalogModel> _all;
     private volatile IReadOnlyList<PriceTable> _prices;
@@ -36,6 +39,7 @@ public sealed class EmbeddedModelCatalog : IModelCatalog
             }
         }
 
+        _files = models;
         _embedded = models;
         _all = models;
         _builtIn = new PriceTable
@@ -48,6 +52,36 @@ public sealed class EmbeddedModelCatalog : IModelCatalog
 
     /// <inheritdoc />
     public IReadOnlyList<CatalogModel> All => _all;
+
+    /// <summary>The models of the embedded files only (what the app has built in; never the added ones).</summary>
+    public IReadOnlyList<CatalogModel> FileModels => _files;
+
+    /// <summary>
+    /// Adds the models whose provider and id are new (the repository's model catalog, at start); returns how many were added. The prices
+    /// applied so far are applied to them too.
+    /// </summary>
+    public int AddModels(IReadOnlyList<CatalogModel> models)
+    {
+        ArgumentNullException.ThrowIfNull(models);
+        lock (_gate)
+        {
+            var added = models.Where(m => !_embedded.Any(e => e.Provider == m.Provider && e.Id == m.Id)).DistinctBy(m => (m.Provider, m.Id)).ToList();
+            if (added.Count == 0)
+            {
+                return 0;
+            }
+
+            foreach (var model in added)
+            {
+                model.PricedOn = model.PricedOn.Length > 0 ? model.PricedOn : _builtIn.PricedOn;
+                model.PriceSource = PriceSources.BuiltIn;
+            }
+
+            _embedded = [.. _embedded, .. added];
+            ApplyPrices([.. _prices.Where(p => !ReferenceEquals(p, _builtIn))]);
+            return added.Count;
+        }
+    }
 
     /// <inheritdoc />
     public IReadOnlyList<PriceTable> Prices => _prices;

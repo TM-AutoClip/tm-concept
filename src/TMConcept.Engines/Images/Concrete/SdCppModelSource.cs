@@ -10,7 +10,7 @@ public sealed class SdCppModelSource(ImageBackendSelector backends) : ILocalMode
     {
         ArgumentNullException.ThrowIfNull(model);
         return model.Provider == ModelProviders.Local && model.Capabilities.HasFlag(ModelCapability.Image)
-            && LocalImageModels.All.FirstOrDefault(m => m.Id == model.Id) is { } files
+            && LocalImageModelSet.All.FirstOrDefault(m => m.Id == model.Id) is { } files
             ? For(model, files, backends)
             : null;
     }

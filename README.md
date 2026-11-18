@@ -132,19 +132,42 @@ Rough numbers (prices of 5 Nov 2026; the pages show the current ones next to eac
 
 ## Install on Windows
 
-Windows 10 or 11, 64-bit.
+Windows 10 or 11, 64-bit. Since 0.1.26 there are two editions with the same features. Both use the same data folder, so models and
+settings one installed are there for the other, and only one copy runs at a time.
 
-1. Open the [latest release](../../releases/latest) and download `TMConcept-<version>-win-x64.exe`.
-2. Optional but recommended: check the file against the SHA-256 value on the release page. In PowerShell:
+| Download from the [latest release](../../releases/latest) | Edition |
+|---|---|
+| `TMConcept-win-x64-Setup.exe` | **Installed (recommended):** Start menu and desktop shortcuts, listed in Windows' *Apps*, updates download only what changed. |
+| `TMConcept-Portable-win-x64.exe` | **Portable:** a single program file, nothing installed; it replaces itself when it updates. |
+
+The `.nupkg` and `releases.win-x64.json` files of a release are for the installed edition's updates; you never download them yourself.
+
+**Installed edition**
+
+1. Download `TMConcept-win-x64-Setup.exe`. Optional but recommended: check it against the SHA-256 value in the release notes. In PowerShell:
    ```powershell
-   Get-FileHash .\TMConcept-0.1.4-win-x64.exe -Algorithm SHA256
+   Get-FileHash .\TMConcept-win-x64-Setup.exe -Algorithm SHA256
    ```
-3. Put the file where it can stay, for example `%LOCALAPPDATA%\Programs\TM Concept\TMConcept.exe`.
-4. Double-click it. The file is not code-signed, so Windows shows **"Windows protected your PC"** (SmartScreen): click **More info**, then
-   **Run anyway**. Windows usually asks only the first time.
-5. Continue with [First start](#first-start).
+2. Double-click it. Setup is not code-signed, so Windows shows **"Windows protected your PC"** (SmartScreen): click **More info**, then
+   **Run anyway**. It installs for your user only (no administrator rights) into `%LOCALAPPDATA%\TMConcept`, adds the shortcuts and opens
+   TM Concept.
+3. Continue with [First start](#first-start).
 
-No administrator rights are needed; nothing is installed system-wide and the system PATH is never changed.
+**Portable edition**
+
+1. Download `TMConcept-Portable-win-x64.exe` and check its SHA-256 the same way.
+2. Put the file where it can stay, for example `%LOCALAPPDATA%\Programs\TM Concept\TMConcept-Portable-win-x64.exe`, and double-click it
+   (SmartScreen as above; Windows usually asks only the first time).
+3. At its first start it asks once **"Install TM Concept?"**: *Install* downloads this version's Setup from the same release, checks it
+   against the release notes' SHA-256, runs it and closes the portable copy (the file stays where it is; delete it if you like). *Keep using
+   it portable* is remembered; Settings → General still offers **Install TM Concept** later. The question is not asked with `--data-dir`.
+
+No administrator rights are needed in either edition; nothing is installed system-wide and the system PATH is never changed. Settings →
+General → *Edition* shows which one runs, its version and (installed) its folder, with **Recreate shortcuts** for the installed one.
+
+**Coming from 0.1.25 or older:** its updater finds the portable program in the new release, installs it and gives it the name
+`TMConcept-Portable-win-x64.exe` (a name with a version would be wrong after every update). A shortcut you made yourself to the old file
+name stops working: use the new file, or answer *Install* to get proper shortcuts.
 
 **OneDrive note:** videos are saved in `Documents\TM Concept`. If OneDrive backs up your Documents folder, every video is uploaded to the
 cloud too. If you do not want that, exclude the folder in OneDrive's settings.
@@ -154,12 +177,13 @@ cloud too. If you do not want that, exclude the folder in OneDrive's settings.
 Use `linux-x64` on ordinary PCs and `linux-arm64` on 64-bit ARM computers (for example a Raspberry Pi 4 or 5 with a 64-bit desktop). A
 desktop session is required.
 
-1. Download `tm-concept-<version>-linux-x64.tar.gz` (or `-linux-arm64`) from the [latest release](../../releases/latest).
-2. Optional: check the SHA-256 value: `sha256sum tm-concept-0.1.4-linux-x64.tar.gz`
+1. Download `tm-concept-portable-linux-x64.tar.gz` (or `tm-concept-portable-linux-arm64.tar.gz`) from the
+   [latest release](../../releases/latest). (Until 0.1.25 the name carried the version: `tm-concept-0.1.25-linux-x64.tar.gz`.)
+2. Optional: check the SHA-256 value: `sha256sum tm-concept-portable-linux-x64.tar.gz`
 3. Unpack it where it can stay:
    ```sh
    mkdir -p ~/.local/opt
-   tar -xzf tm-concept-0.1.4-linux-x64.tar.gz -C ~/.local/opt
+   tar -xzf tm-concept-portable-linux-x64.tar.gz -C ~/.local/opt
    ~/.local/opt/tm-concept/install-desktop-entry.sh   # optional: adds TM Concept to the application menu
    ```
 4. **Keyring (recommended).** To open the database automatically, the key is stored in your desktop keyring with `secret-tool`:
@@ -444,11 +468,25 @@ upgrade fails, the unlock window says how to go back to it. Nothing is downloade
 start off and has **Check now**. A copy of TM Concept built from source, or one in a folder it cannot write (for example Program Files),
 shows the release page instead.
 
+**Installed edition:** the same window and the same confirmation, but the update comes as Velopack packages: when the previous version's
+package is on the computer only a small *delta* package with what changed is downloaded, otherwise the full package. Every package must
+have the same SHA-256 in its release notes (and in GitHub's own digest) as in the release's package list, or it is not installed. TM
+Concept then closes, the update is applied and TM Concept opens again; nothing is applied at start or while work runs.
+
+**A newer database:** if the other edition (or another copy) already upgraded the database to a newer version, this copy does not open or
+change it: the unlock window says so and offers **Update this copy**.
+
 **What's new:** at the first start after the version changed (an update from the app or a replaced program file) a window shows the
 notes of every version since the one that ran before, newest first, in the app's language. The notes are built into the app, so it works
 offline; it shows once, and never on a new install. Settings → General → **What's new** opens it at any time.
 
-**By hand:** download the new release and replace the program file (Windows: the `.exe`; Linux: unpack over the old folder).
+**By hand:** run the new Setup (installed edition), or download the new release and replace the program file (portable: the `.exe`; Linux:
+unpack over the old folder).
+
+**New models without an app update:** the app reads the repository's model catalog (`catalog/models.json`, like the prices) at most once a day
+in the background and keeps the last good copy; what it adds appears at the next start. It can only add models of providers and engines the
+app already runs, each file pinned with its SHA-256 and size on an allowed host; anything else refuses the whole file and the built-in list
+stays. Details: [docs/model-catalog.md](docs/model-catalog.md).
 
 Either way your data, tools and videos stay where they are. At the first start of a new version:
 
@@ -470,7 +508,9 @@ broken, no data for a minute).
 
 ## Uninstall
 
-1. Delete the program file (Windows) or the `tm-concept` folder (Linux; and `~/.local/share/applications/tm-concept.desktop`).
+1. Installed edition: Windows Settings → *Apps* → **TM Concept** → *Uninstall* (it removes `%LOCALAPPDATA%\TMConcept` and the shortcuts,
+   never your data folder). Portable: delete the program file (Windows) or the `tm-concept` folder (Linux; and
+   `~/.local/share/applications/tm-concept.desktop`).
 2. To remove all data too, delete the data folder (below). Videos in `Documents/TM Concept` are yours; delete them separately if you want.
 3. Linux: the database key may remain in your keyring as "tm-concept"; remove it with your keyring tool.
 
@@ -486,8 +526,12 @@ broken, no data for a minute).
 | Tools (Node, ffmpeg, engines, voices, image models) | `…\TM Concept\tools\` | `~/.local/share/tm-concept/tools/` | no |
 | Videos and sample images | `Documents\TM Concept\` | `~/Documents/TM Concept/` (XDG documents folder) | no |
 | Copies of your documents ("My documents"; their passages are in the database) | `…\TM Concept\documents\` | `~/.local/share/tm-concept/documents/` | no |
+| The kept copy of the model catalog | `…\TM Concept\catalog\` | `~/.local/share/tm-concept/catalog/` | no |
+| The installed edition's program (not data; replaced by updates, removed by uninstall) | `%LOCALAPPDATA%\TMConcept\` | — | no |
 
-Portable mode: start the program with `--data-dir <folder>`; then everything, videos included, stays under that folder.
+Custom data folder: start the program with `--data-dir <folder>`; then everything, videos included, stays under that folder. The data
+folder is never inside the installed edition's folder (`TM Concept` with a space is the data, `TMConcept` the program); the installed app
+refuses to start if Setup was pointed at the data folder.
 
 ## Licenses you should know
 
@@ -544,15 +588,18 @@ Today's lines are followed live while the page is open.
 
 ## Build from source
 
-.NET 10 SDK. `dotnet build TMConcept.slnx` and `dotnet test TMConcept.slnx`. Release files: `tools/publish.ps1` (Windows) or
-`tools/publish.sh`. Before the first commit run `tools/install-hooks.ps1` (or `.sh`): the pre-commit hook blocks keys, tokens and
+.NET 10 SDK. `dotnet build TMConcept.slnx` and `dotnet test TMConcept.slnx`. Release files: `tools/publish.ps1` on Windows builds every
+file of a release into `artifacts/release-<version>` (the portable files, the installed edition's Setup, full and delta packages and
+`releases.win-x64.json` with `vpk` from `.config/dotnet-tools.json`, the Linux AppImages) and prints the SHA-256 lines; keep that folder,
+it is where the next version's delta package is made from. `tools/publish.sh` builds the portable files only. Before the first commit run `tools/install-hooks.ps1` (or `.sh`): the pre-commit hook blocks keys, tokens and
 personal data.
 
 **Changing the database:** change the mapping in `ConceptDbContext`, then run `tools/database-step.ps1 -Name Version0118` (or
 `tools/database-step.sh Version0118`) once for the version: EF Core's tooling writes the upgrade step and the compiled model. Never edit a
 released step and never write SQL by hand. Details: [docs/database.md](docs/database.md).
 
-**Releases** must list the SHA-256 of every file in the release notes (`tools/package.py` prints the lines); the app's own updater installs
-only a file whose SHA-256 is there. Keep the notes' `## English` and `## Türkçe` sections: the update window shows only the one in the app's
+**Releases** must list the SHA-256 of every file in the release notes (`tools/publish.ps1` prints the lines) and carry every file of the
+release folder; the app's own updaters install only a file whose SHA-256 is there. Do not advertise the AppImage until it was tried on
+Linux. Keep the notes' `## English` and `## Türkçe` sections: the update window shows only the one in the app's
 language (English when it is missing) and never the SHA-256 block. Every `docs/release-notes/v*.md` is built into the app for the **What's new** window, and a
 test asks for the running version's file: write `v<version>.md` before the version number changes.

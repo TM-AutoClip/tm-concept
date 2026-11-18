@@ -73,7 +73,7 @@ public sealed class AppModelRegistry(AppModelStore store, ILogger<AppModelRegist
             changed = !_loaded || !models.Select(m => m.Tag).SequenceEqual(_installed.Select(m => m.Tag), StringComparer.Ordinal);
             _installed = models;
             _catalog = models.Select(Entry).ToList();
-            _offered = [.. _catalog, .. AppModelCatalog.Models.Where(m => !models.Any(i => string.Equals(i.Tag, m.Tag, StringComparison.Ordinal))).Select(Entry)];
+            _offered = [.. _catalog, .. AppModelSet.Models.Where(m => !models.Any(i => string.Equals(i.Tag, m.Tag, StringComparison.Ordinal))).Select(Entry)];
             _loaded = true;
         }
 

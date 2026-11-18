@@ -130,19 +130,42 @@ gösterir. Kabaca (5 Kas 2026 fiyatları; güncelleri sayfalarda her tahminin ya
 
 ## Windows'a kurulum
 
-Windows 10 ya da 11, 64 bit.
+Windows 10 ya da 11, 64 bit. 0.1.26'dan beri özellikleri aynı iki tür var. İkisi de aynı veri klasörünü kullanır: birinin kurduğu
+modeller ve ayarlar ötekinde de vardır, aynı anda tek kopya çalışır.
 
-1. [Son sürümü](../../releases/latest) aç ve `TMConcept-<sürüm>-win-x64.exe` dosyasını indir.
-2. İsteğe bağlı ama önerilir: dosyayı sürüm sayfasındaki SHA-256 değeriyle karşılaştır. PowerShell'de:
+| [Son sürümden](../../releases/latest) indir | Tür |
+|---|---|
+| `TMConcept-win-x64-Setup.exe` | **Kurulu (önerilir):** Başlat menüsü ve masaüstü kısayolu, Windows'un *Uygulamalar* listesinde görünür, güncellemede yalnız değişen kısım iner. |
+| `TMConcept-Portable-win-x64.exe` | **Taşınabilir:** tek program dosyası, hiçbir şey kurulmaz; güncellenince kendini yeniler. |
+
+Sürümdeki `.nupkg` ve `releases.win-x64.json` dosyaları kurulu türün güncellemeleri içindir; onları sen indirmezsin.
+
+**Kurulu tür**
+
+1. `TMConcept-win-x64-Setup.exe` dosyasını indir. İsteğe bağlı ama önerilir: sürüm notlarındaki SHA-256 değeriyle karşılaştır. PowerShell'de:
    ```powershell
-   Get-FileHash .\TMConcept-0.1.4-win-x64.exe -Algorithm SHA256
+   Get-FileHash .\TMConcept-win-x64-Setup.exe -Algorithm SHA256
    ```
-3. Dosyayı kalacağı yere koy, örneğin `%LOCALAPPDATA%\Programs\TM Concept\TMConcept.exe`.
-4. Çift tıkla. Dosya kod imzalı olmadığı için Windows **"Windows bilgisayarınızı korudu"** (SmartScreen) der: **Ek bilgi**'ye, sonra
-   **Yine de çalıştır**'a tıkla. Windows genelde yalnız ilk seferde sorar.
-5. [İlk açılış](#ilk-açılış) ile devam et.
+2. Çift tıkla. Kurulum dosyası kod imzalı olmadığı için Windows **"Windows bilgisayarınızı korudu"** (SmartScreen) der: **Ek bilgi**'ye,
+   sonra **Yine de çalıştır**'a tıkla. Yalnız senin kullanıcın için (yönetici yetkisi olmadan) `%LOCALAPPDATA%\TMConcept` altına kurar,
+   kısayolları ekler ve TM Concept'i açar.
+3. [İlk açılış](#ilk-açılış) ile devam et.
 
-Yönetici yetkisi gerekmez; sisteme bir şey kurulmaz, sistem PATH'i değişmez.
+**Taşınabilir tür**
+
+1. `TMConcept-Portable-win-x64.exe` dosyasını indir, SHA-256'sını aynı şekilde denetle.
+2. Dosyayı kalacağı yere koy, örneğin `%LOCALAPPDATA%\Programs\TM Concept\TMConcept-Portable-win-x64.exe`, ve çift tıkla (SmartScreen
+   yukarıdaki gibi; Windows genelde yalnız ilk seferde sorar).
+3. İlk açılışta bir kez **"TM Concept kurulsun mu?"** diye sorar: *Kur* aynı sürümün kurulum dosyasını indirir, sürüm notlarındaki
+   SHA-256 ile karşılaştırır, çalıştırır ve taşınabilir kopyayı kapatır (dosya olduğu yerde kalır, istersen sil). *Taşınabilir kalsın*
+   cevabı hatırlanır; Ayarlar → Genel sonra da **TM Concept'i kur** düğmesini sunar. `--data-dir` ile açıldığında bu soru sorulmaz.
+
+İki türde de yönetici yetkisi gerekmez; sisteme bir şey kurulmaz, sistem PATH'i değişmez. Ayarlar → Genel → *Sürüm türü* hangisinin
+çalıştığını, sürümünü ve (kuruluysa) klasörünü gösterir; kurulu türde **Kısayolları yeniden oluştur** düğmesi de var.
+
+**0.1.25 ya da daha eskisinden geliyorsan:** onun güncelleyicisi yeni sürümdeki taşınabilir programı bulur, kurar ve adını
+`TMConcept-Portable-win-x64.exe` yapar (içinde sürüm geçen bir ad her güncellemeden sonra yanlış kalırdı). Eski dosya adına kendin
+yaptığın bir kısayol artık çalışmaz: yeni dosyayı kullan ya da düzgün kısayollar için *Kur*'u seç.
 
 **OneDrive notu:** videolar `Belgeler\TM Concept` altına kaydedilir. OneDrive Belgeler klasörünü yedekliyorsa her video buluta da
 yüklenir. İstemiyorsan klasörü OneDrive ayarlarından hariç tut.
@@ -152,12 +175,13 @@ yüklenir. İstemiyorsan klasörü OneDrive ayarlarından hariç tut.
 Sıradan bilgisayarlarda `linux-x64`, 64 bit ARM bilgisayarlarda (ör. 64 bit masaüstlü Raspberry Pi 4 ya da 5) `linux-arm64` kullan.
 Masaüstü oturumu gerekir.
 
-1. [Son sürümden](../../releases/latest) `tm-concept-<sürüm>-linux-x64.tar.gz` (ya da `-linux-arm64`) indir.
-2. İsteğe bağlı: SHA-256 değerini denetle: `sha256sum tm-concept-0.1.4-linux-x64.tar.gz`
+1. [Son sürümden](../../releases/latest) `tm-concept-portable-linux-x64.tar.gz` (ya da `tm-concept-portable-linux-arm64.tar.gz`) indir.
+   (0.1.25'e kadar adda sürüm vardı: `tm-concept-0.1.25-linux-x64.tar.gz`.)
+2. İsteğe bağlı: SHA-256 değerini denetle: `sha256sum tm-concept-portable-linux-x64.tar.gz`
 3. Kalacağı yere aç:
    ```sh
    mkdir -p ~/.local/opt
-   tar -xzf tm-concept-0.1.4-linux-x64.tar.gz -C ~/.local/opt
+   tar -xzf tm-concept-portable-linux-x64.tar.gz -C ~/.local/opt
    ~/.local/opt/tm-concept/install-desktop-entry.sh   # isteğe bağlı: TM Concept'i uygulama menüsüne ekler
    ```
 4. **Anahtarlık (önerilir).** Veritabanının kendiliğinden açılması için anahtar `secret-tool` ile masaüstü anahtarlığına konur:
@@ -436,11 +460,25 @@ kilit açma penceresi ona nasıl döneceğini söyler. Sen onaylamadan hiçbir �
 kapatabilir, **Şimdi bak** ile hemen bakabilirsin. Kaynaktan derlenmiş bir kopya ya da yazılamayan bir klasördeki kopya (örneğin Program
 Files) bunun yerine sürüm sayfasını gösterir.
 
+**Kurulu tür:** aynı pencere, aynı onay; ama güncelleme Velopack paketleri olarak gelir: önceki sürümün paketi bilgisayardaysa yalnız
+değişenleri taşıyan küçük bir *delta* paketi iner, değilse tam paket. Her paketin SHA-256'sı sürüm notlarında (ve GitHub'ın kendi
+değerinde) sürümün paket listesindekiyle aynı olmalı, yoksa kurulmaz. Sonra TM Concept kapanır, güncelleme uygulanır ve TM Concept yeniden
+açılır; açılışta ya da bir iş sürerken hiçbir şey uygulanmaz.
+
+**Daha yeni bir veritabanı:** öteki tür (ya da başka bir kopya) veritabanını daha yeni bir sürüme yükselttiyse bu kopya onu açmaz,
+değiştirmez: kilit açma penceresi bunu söyler ve **Bu kopyayı güncelle** düğmesini sunar.
+
 **Yenilikler:** sürüm değiştikten sonraki ilk açılışta (programın içinden güncelleme ya da elle değiştirilen program dosyası) bir pencere,
 önceki çalışan sürümden bu yana her sürümün notlarını en yenisi üstte, programın dilinde gösterir. Notlar programın içinde gelir, yani
 internetsiz de çalışır; bir kez gösterilir, yeni kurulumda hiç gösterilmez. Ayarlar → Genel → **Yenilikler** onu istediğin zaman açar.
 
-**Elle:** yeni sürümü indir, program dosyasını değiştir (Windows: `.exe`; Linux: eski klasörün üstüne aç).
+**Elle:** yeni kurulum dosyasını çalıştır (kurulu tür) ya da yeni sürümü indirip program dosyasını değiştir (taşınabilir: `.exe`; Linux:
+eski klasörün üstüne aç).
+
+**Program güncellemeden yeni modeller:** program, deponun model kataloğunu (`catalog/models.json`, fiyatlar gibi) arka planda günde en
+çok bir kez okur ve son sağlam kopyasını saklar; eklediği modeller bir sonraki açılışta görünür. Yalnız programın zaten çalıştırdığı
+sağlayıcıların ve motorların modellerini ekleyebilir, her dosya izinli bir sunucuda SHA-256'sı ve boyutuyla sabitlenmiş olmalı; başka
+her şey dosyanın tamamını reddettirir ve yerleşik liste kalır. Ayrıntı: [docs/model-catalog.md](docs/model-catalog.md).
 
 İki yolda da verin, araçların ve videoların yerinde kalır. Yeni sürümün ilk açılışında:
 
@@ -463,7 +501,9 @@ sunucu adı bulunamadı, bağlantı koptu, bir dakika boyunca veri gelmedi).
 
 ## Kaldırma
 
-1. Program dosyasını (Windows) ya da `tm-concept` klasörünü (Linux; ve `~/.local/share/applications/tm-concept.desktop`) sil.
+1. Kurulu tür: Windows Ayarlar → *Uygulamalar* → **TM Concept** → *Kaldır* (`%LOCALAPPDATA%\TMConcept` klasörünü ve kısayolları siler,
+   veri klasörüne asla dokunmaz). Taşınabilir: program dosyasını (Windows) ya da `tm-concept` klasörünü (Linux; ve
+   `~/.local/share/applications/tm-concept.desktop`) sil.
 2. Bütün veriyi de silmek için veri klasörünü (aşağıda) sil. `Belgeler/TM Concept` altındaki videolar senindir; istersen ayrıca sil.
 3. Linux: veritabanı anahtarı anahtarlığında "tm-concept" adıyla kalabilir; anahtarlık aracınla sil.
 
@@ -479,8 +519,12 @@ sunucu adı bulunamadı, bağlantı koptu, bir dakika boyunca veri gelmedi).
 | Araçlar (Node, ffmpeg, motorlar, sesler, görsel modelleri) | `…\TM Concept\tools\` | `~/.local/share/tm-concept/tools/` | hayır |
 | Videolar ve örnek görseller | `Belgeler\TM Concept\` | `~/Documents/TM Concept/` (XDG belgeler klasörü) | hayır |
 | Belgelerinin kopyaları ("Belgelerim"; parçaları veritabanında) | `…\TM Concept\documents\` | `~/.local/share/tm-concept/documents/` | hayır |
+| Model kataloğunun saklanan kopyası | `…\TM Concept\catalog\` | `~/.local/share/tm-concept/catalog/` | hayır |
+| Kurulu türün programı (veri değil; güncellemeyle değişir, kaldırınca silinir) | `%LOCALAPPDATA%\TMConcept\` | — | hayır |
 
-Taşınabilir kip: programı `--data-dir <klasör>` ile başlat; videolar dahil her şey o klasörün altında kalır.
+Başka veri klasörü: programı `--data-dir <klasör>` ile başlat; videolar dahil her şey o klasörün altında kalır. Veri klasörü hiçbir zaman
+kurulu türün klasörünün içinde olmaz (boşluklu `TM Concept` veri, `TMConcept` program); kurulum veri klasörüne yönlendirildiyse kurulu
+program açılmayı reddeder.
 
 ## Bilmen gereken lisanslar
 
@@ -537,15 +581,17 @@ seviye süzgeci (tümü, uyarılar ve hatalar, yalnız hatalar), arama, *Yalnız
 
 ## Kaynaktan derleme
 
-.NET 10 SDK. `dotnet build TMConcept.slnx` ve `dotnet test TMConcept.slnx`. Yayın dosyaları: `tools/publish.ps1` (Windows) ya da
-`tools/publish.sh`. İlk commit'ten önce `tools/install-hooks.ps1` (ya da `.sh`) çalıştır: pre-commit kancası anahtarları, jetonları ve
+.NET 10 SDK. `dotnet build TMConcept.slnx` ve `dotnet test TMConcept.slnx`. Yayın dosyaları: Windows'ta `tools/publish.ps1` bir sürümün
+bütün dosyalarını `artifacts/release-<sürüm>` altına üretir (taşınabilir dosyalar; `.config/dotnet-tools.json`'daki `vpk` ile kurulu türün
+Setup'ı, tam ve delta paketleri ve `releases.win-x64.json`; Linux AppImage'ları) ve SHA-256 satırlarını yazdırır; o klasörü sakla, bir
+sonraki sürümün delta paketi ondan yapılır. `tools/publish.sh` yalnız taşınabilir dosyaları üretir. İlk commit'ten önce `tools/install-hooks.ps1` (ya da `.sh`) çalıştır: pre-commit kancası anahtarları, jetonları ve
 kişisel verileri durdurur.
 
 **Veritabanını değiştirmek:** `ConceptDbContext` içindeki eşlemeyi değiştir, sonra sürüm başına bir kez `tools/database-step.ps1 -Name
 Version0118` (ya da `tools/database-step.sh Version0118`) çalıştır: EF Core'un aracı yükseltme adımını ve derlenmiş modeli yazar. Yayımlanmış
 bir adımı asla değiştirme, elle SQL asla yazma. Ayrıntı: [docs/database.md](docs/database.md).
 
-**Sürümler** sürüm notlarında her dosyanın SHA-256'sını listelemelidir (`tools/package.py` satırları yazdırır); programın kendi güncelleyicisi
-yalnız SHA-256'sı orada olan dosyayı kurar. Notlardaki `## English` ve `## Türkçe` bölümleri kalmalı: güncelleme penceresi yalnız programın
+**Sürümler** sürüm notlarında her dosyanın SHA-256'sını listelemeli (`tools/publish.ps1` satırları yazdırır) ve sürüm klasöründeki her
+dosyayı taşımalıdır; programın güncelleyicileri yalnız SHA-256'sı orada olan dosyayı kurar. AppImage Linux'ta denenmeden duyurulmaz. Notlardaki `## English` ve `## Türkçe` bölümleri kalmalı: güncelleme penceresi yalnız programın
 dilindekini (yoksa İngilizcesini) gösterir, SHA-256 bloğunu asla göstermez. Her `docs/release-notes/v*.md` **Yenilikler** penceresi için programın içine
 gömülür ve bir test çalışan sürümün dosyasını arar: sürüm numarası değişmeden önce `v<sürüm>.md` dosyasını yaz.

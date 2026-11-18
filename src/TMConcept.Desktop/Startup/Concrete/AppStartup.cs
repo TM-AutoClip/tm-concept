@@ -180,6 +180,20 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
                 logger.LogWarning(ex, "The daily price check failed; the last good prices stay");
             }
         });
+        // The repository's model catalog: read at most once a day in the background; what it adds appears at the next start.
+        var remoteCatalog = services.GetRequiredService<Catalog.RemoteCatalogUpdater>();
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await remoteCatalog.UpdateAsync(force: false, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+            {
+                logger.LogWarning(ex, "The daily model catalog check failed; the kept copy stays");
+            }
+        });
+
         // What is on the computer (a Node.js on the PATH counts as installed only once it was looked at): in the background, before the
         // first page reads a status (the pages wait for the same look themselves).
         var components = services.GetRequiredService<Core.Components.ComponentPlanner>();

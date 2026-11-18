@@ -75,7 +75,7 @@ public sealed class SdCppImageEngine(ToolInstaller tools, LocalImageStore store,
             return new ImageEngineProblem(ImageEngineProblems.Images, DriverMissing(choice.Backend));
         }
 
-        if (LocalImageModels.All.FirstOrDefault(m => m.Id == model.Model.Id) is not { } local)
+        if (LocalImageModelSet.All.FirstOrDefault(m => m.Id == model.Model.Id) is not { } local)
         {
             return null;
         }
@@ -88,7 +88,7 @@ public sealed class SdCppImageEngine(ToolInstaller tools, LocalImageStore store,
     public async Task<ImageResult> GenerateAsync(ImageRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var model = LocalImageModels.All.FirstOrDefault(m => m.Id == request.Model.Model.Id)
+        var model = LocalImageModelSet.All.FirstOrDefault(m => m.Id == request.Model.Model.Id)
             ?? throw new InvalidOperationException($"There is no local image model '{request.Model.Model.Id}'.");
         if (store.Missing(model).Count > 0)
         {

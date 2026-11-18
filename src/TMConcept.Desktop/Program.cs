@@ -62,6 +62,9 @@ internal static class Program
         var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(Program));
         var children = services.GetRequiredService<Engines.Processes.ChildProcessGuardBase>();
 
+        // The models the repository's model catalog added (the kept copy, checked again; no network): before anything reads the model lists.
+        services.GetRequiredService<Catalog.RemoteCatalogUpdater>().ApplySaved();
+
         // Linux has no job object: when the process is ending on an unhandled exception, the children (ffmpeg, Node, Chrome) are ended here
         // or they would outlive the app.
         services.GetRequiredService<CrashLog>().Attach(terminating: () => children.KillAll());

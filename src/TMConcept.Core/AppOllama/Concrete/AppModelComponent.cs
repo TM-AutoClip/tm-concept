@@ -72,7 +72,45 @@ public sealed class AppModelComponent(AppModelInfo model, AppModelStore store, A
             throw new ToolInstallException($"{Model.Tag} was pulled, but its files are not complete in the app's models folder.") { Code = "pull" };
         }
 
+        CheckManifest();
+
         logger.LogInformation("{Model} is installed", Model.Tag);
+    }
+
+    /// <summary>
+    /// A model the repository's model catalog added (0.1.26) names the digest of its manifest: Ollama checks every layer itself, the app
+    /// checks that the manifest it got is that one. A different one is removed (its manifest and the layers no other model uses) and the
+    /// install fails, like a download whose SHA-256 differs.
+    /// </summary>
+    private void CheckManifest()
+    {
+        if (AppModelSet.ManifestDigest(Model.Tag) is not { } expected)
+        {
+            return;
+        }
+
+        string actual;
+        using (var file = File.OpenRead(store.ManifestPath(Model.Tag)))
+        {
+            actual = "sha256:" + Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(file));
+        }
+
+        if (string.Equals(actual, expected, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        logger.LogError("{Model}: the pulled manifest is {Actual}, the model catalog names {Expected}; the model is removed", Model.Tag, actual, expected);
+        foreach (var path in store.OwnedPaths(Model.Tag))
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+
+        registry.Refresh();
+        throw new ToolInstallException($"{Model.Tag}: the pulled manifest is not the one the model catalog names.") { Code = "hash" };
     }
 
     /// <summary>Reports on the caller's thread, in order (a pull's lines must not be reordered).</summary>

@@ -12,8 +12,8 @@ public static class AppModelAdvisor
 {
     private const double Gibibyte = 1024.0 * 1024 * 1024;
 
-    /// <summary>The model of <paramref name="tag"/> in <see cref="AppModelCatalog"/>; null when the app does not offer it.</summary>
-    public static AppModelInfo? Find(string tag) => AppModelCatalog.Models.FirstOrDefault(m => string.Equals(m.Tag, tag, StringComparison.Ordinal));
+    /// <summary>The model of <paramref name="tag"/> in <see cref="AppModelSet"/> (built in or added); null when the app does not offer it.</summary>
+    public static AppModelInfo? Find(string tag) => AppModelSet.Models.FirstOrDefault(m => string.Equals(m.Tag, tag, StringComparison.Ordinal));
 
     /// <summary>
     /// The facts of a tag the app does not offer (pulled by an older version or by hand into its folder): its size from the disk, a small
