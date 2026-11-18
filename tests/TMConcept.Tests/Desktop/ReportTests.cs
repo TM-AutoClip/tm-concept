@@ -65,6 +65,11 @@ public sealed class ReportTests
         system.ShouldContain("  Node: ");
         system.ShouldContain("Remotion: ");
         system.ShouldContain("Names masked by value: no");
+        system.ShouldContain("Scanned pages:");
+        system.ShouldContain("PDF renderer (PDFium ");
+        system.ShouldContain("OCR graphics card runtime (ONNX Runtime DirectML ");
+        system.ShouldContain("Text recognition: Automatic");
+        system.ShouldContain("Local OCR reads on: the processor", Case.Sensitive, "the DirectML runtime is not installed in a test");
     }
 
     [AvaloniaFact]

@@ -597,7 +597,10 @@ Today's lines are followed live while the page is open.
 - Revideo is experimental. On Linux ARM64 an external Chromium is needed for HyperFrames and Revideo.
 - Documents: the local OCR reads Latin-script languages only; reading on the graphics card (DirectML) has not been tried on a real
   graphics card yet (if it fails, the processor reads and the app says so once), and PDFium has not been tried on Linux yet; text layers
-  kept by 0.1.25–0.1.26 are not checked again. Web pages are read without running their scripts, so a page that builds its text with
+  kept by 0.1.25–0.1.26 are not checked again. PDFium draws pages inside the app's own process, without Chrome's sandbox: a PDF built to
+  attack it could crash the app (or worse), so add PDFs only from sources you trust; a component whose library was loaded in a session
+  (PDFium, the OCR's graphics card runtime) can be removed or reinstalled only after a restart. DirectML (the optional graphics card
+  runtime) is the one part under a licence that is not permissive open source (Microsoft's terms, linked in its question). Web pages are read without running their scripts, so a page that builds its text with
   JavaScript gives little or nothing; at most 50 MB per file and 5 MB per page. The meaning model's int8 file was made for processors with
   AVX-512 VNNI; on others (and on ARM64) it runs, but its speed was not measured.
 - Real provider requests were not part of the automated tests (they use fake HTTP); the first real use happens on your machine.

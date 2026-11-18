@@ -33,7 +33,9 @@ namespace TMConcept.Desktop.ViewModels;
 /// 0.1.27: fully automatic. With no engine chosen for "Text from scanned pages" the local OCR reads them (free, on this computer); PDFium is
 /// installed with the engine (one confirmation) and draws every page that has no usable text; the local OCR's graphics card runtime is
 /// offered once after it (Windows, "Text recognition" Automatic; declining keeps the processor). Before concepts are written or topics found,
-/// the missing pages of the documents used are read first (<see cref="ReadMissingBeforeUseAsync"/>); pages read before are never read again.
+/// the missing pages of the documents used are read first (<see cref="ReadMissingBeforeUseAsync"/>; an online engine asks first with its
+/// estimate; pages that could not be read, and a declined engine install, are not tried again before every run); pages read before are never
+/// read again. With the local OCR already installed, its optional parts get their own question (one per app run).
 /// </summary>
 public sealed partial class DocumentLibraryViewModel(AppSession session, DocumentLibrary library, IDiskCleaner cleaner, IConfirmDialog confirm,
     ComponentInstallFlow installs, FileDialogs dialogs, IActivityLog activity, Localizer text, ILogger<DocumentLibraryViewModel> logger,
@@ -50,8 +52,10 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
     private readonly List<string> _notes = [];
     private CancellationTokenSource? _cancel;
     private Func<StepPickerViewModel?>? _picker;
+    private readonly Dictionary<Guid, int> _tried = [];
     private long? _card;
     private bool _extrasOffered;
+    private bool _engineDeclined;
 
     /// <summary>PDFs picked and waiting for the user's choice of pages and text extraction (0.1.24).</summary>
     public ObservableCollection<DocumentImportViewModel> Pending { get; } = [];
@@ -122,25 +126,66 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
     public bool HasUsable => Documents.Any(d => d.Ready || d.HasMissing);
 
     /// <summary>
+    /// The documents a run uses once the missing pages were read (0.1.27): the ticked ones that are ready (empty = none ticked: every ready
+    /// one is used).
+    /// </summary>
+    public IReadOnlyList<Guid> ReadyChosen => Documents.Where(d => d.Checked && d.Ready).Select(d => d.Id).ToList();
+
+    /// <summary>Whether a run has something to read: a ticked document that is ready, or, with none ticked, any ready document (0.1.27).</summary>
+    public bool ReadyForRun => Documents.Any(d => d.Checked) ? Documents.Any(d => d.Checked && d.Ready) : HasReady;
+
+    /// <summary>
     /// Reads the missing pages of the documents a run uses (the ticked ones, or every one when none is ticked) before concepts are written or
     /// topics found (0.1.27), with the engine of "Text from scanned pages" (the local OCR when none is chosen); the progress is in the panel
-    /// and the activity line, the outcome in the panel's notes. Pages read before are never read again. False only when
-    /// <paramref name="cancellationToken"/> was cancelled; a declined install, a stop or a failure lets the run go on with the pages there are.
+    /// and the activity line, the outcome in the panel's notes. Pages read before are never read again. An online engine (it costs money and
+    /// sends the pages away) asks first with its estimate; declined, the run goes on with the pages already read. Pages this pass tried in
+    /// this app run and could not read, and an engine install the user declined, are not tried again before every run (the row's "Read
+    /// missing pages" still does). False only when <paramref name="cancellationToken"/> was cancelled; a declined install, a stop or a
+    /// failure lets the run go on with the pages there are. The caller makes sure the library is not busy (<see cref="Busy"/>).
     /// </summary>
     public async Task<bool> ReadMissingBeforeUseAsync(CancellationToken cancellationToken)
     {
         var used = Documents.Where(d => d.Checked).ToList();
-        var rows = (used.Count > 0 ? used : Documents.ToList()).Where(r => r.HasMissing && r.Document.Kind == DocumentKind.Pdf).ToList();
-        if (rows.Count == 0 || TextModel is null || Busy)
+        var rows = (used.Count > 0 ? used : Documents.ToList())
+            .Where(r => r.HasMissing && r.Document.Kind == DocumentKind.Pdf && !(_tried.TryGetValue(r.Id, out var left) && r.MissingCount <= left)).ToList();
+        if (rows.Count == 0 || TextModel is not { } model || Busy)
         {
             return !cancellationToken.IsCancellationRequested;
         }
 
-        logger.LogInformation("{Documents} documents have {Pages} pages still to read; they are read before the run", rows.Count, rows.Sum(r => r.MissingCount));
-        activity.Add(ActivityLevel.Info, text.Format("documents.pages.reading_before_use", rows.Sum(r => r.MissingCount), rows.Count));
+        if (_engineDeclined)
+        {
+            logger.LogInformation("{Pages} pages are still to read; the engine's install was declined in this run, so they are not read before the run",
+                rows.Sum(r => r.MissingCount));
+            return !cancellationToken.IsCancellationRequested;
+        }
+
+        var pages = rows.Sum(r => r.MissingCount);
+        if (model.Provider != ModelProviders.Local)
+        {
+            var estimate = EstimateText.Extraction(text, model, reader.Estimate(model, pages, _card ?? 0));
+            var answer = await confirm.AskAsync(text["documents.pages.online.title"], text.Format("documents.pages.online.message", pages, rows.Count, model.Name, estimate),
+                text["documents.pages.online.confirm"], danger: false, cancelText: text["documents.pages.online.skip"]).ConfigureAwait(true);
+            if (!answer.Confirmed)
+            {
+                logger.LogInformation("The online reading of {Pages} missing pages before the run was declined", pages);
+                Say(text.Format("documents.pages.online.declined", pages), error: false);
+                return !cancellationToken.IsCancellationRequested;
+            }
+        }
+
+        logger.LogInformation("{Documents} documents have {Pages} pages still to read; they are read before the run", rows.Count, pages);
+        activity.Add(ActivityLevel.Info, text.Format("documents.pages.reading_before_use", pages, rows.Count));
         await RunAsync(rows.Select(row => (row.Title, (Func<Guid, IProgress<DocumentProgress>, CancellationToken, Task<DocumentAddResult>>)(
-            (profile, progress, token) => ReadMissingOneAsync(profile, row, progress, token)))).ToList(), countAdded: false, outer: cancellationToken).ConfigureAwait(true);
-        return !cancellationToken.IsCancellationRequested;
+            (profile, progress, token) => ReadMissingOneAsync(profile, row, progress, token, automatic: true)))).ToList(), countAdded: false, outer: cancellationToken)
+            .ConfigureAwait(true);
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
+
+        Tried(rows.Select(r => r.Id));
+        return true;
     }
 
     /// <summary>The model choice of the page (the text extraction step is read from it).</summary>
@@ -295,21 +340,22 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
     /// are cut again.
     /// </summary>
     [RelayCommand]
-    public Task ReadMissingAsync(DocumentRowViewModel? row)
+    public async Task ReadMissingAsync(DocumentRowViewModel? row)
     {
-        if (row is null || !row.HasMissing)
+        if (row is null || !row.HasMissing || Busy)
         {
-            return Task.CompletedTask;
+            return;
         }
 
         if (TextModel is null)
         {
             Say(text["documents.pages.read_missing.none"], error: true);
-            return Task.CompletedTask;
+            return;
         }
 
-        return RunAsync([(row.Title, (Func<Guid, IProgress<DocumentProgress>, CancellationToken, Task<DocumentAddResult>>)(
-            (profile, progress, token) => ReadMissingOneAsync(profile, row, progress, token)))], countAdded: false);
+        await RunAsync([(row.Title, (Func<Guid, IProgress<DocumentProgress>, CancellationToken, Task<DocumentAddResult>>)(
+            (profile, progress, token) => ReadMissingOneAsync(profile, row, progress, token, automatic: false)))], countAdded: false).ConfigureAwait(true);
+        Tried([row.Id]);
     }
 
     /// <summary>Adds the waiting PDFs as chosen (a page range that is not one of its file stops it with the reason).</summary>
@@ -525,17 +571,40 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
     /// <summary>The local OCR's catalog entry.</summary>
     private CatalogModel? LocalOcr => catalog.Find(ModelProviders.Local, PageTextEngines.LocalOcrId);
 
-    /// <summary>The PDF renderer, when this computer has a build of it (installed with the engine of scanned pages).</summary>
-    private IReadOnlyList<string> Renderer => pdfium.Supported ? [PageTextEngines.PdfRendererComponent] : [];
+    /// <summary>
+    /// Remembers how many pages of each document were still missing after a read in this app run (0.1.27): the read before a run skips a
+    /// document until more pages are missing than then (pages that cannot be read are not tried again at every press).
+    /// </summary>
+    private void Tried(IEnumerable<Guid> ids)
+    {
+        foreach (var id in ids)
+        {
+            if (Documents.FirstOrDefault(d => d.Id == id) is { HasMissing: true } now)
+            {
+                _tried[id] = now.MissingCount;
+            }
+            else
+            {
+                _tried.Remove(id);
+            }
+        }
+    }
 
-    /// <summary>Reads the missing pages of one document with the chosen engine (its run ended with the outcome, like an add).</summary>
-    private async Task<DocumentAddResult> ReadMissingOneAsync(Guid profile, DocumentRowViewModel row, IProgress<DocumentProgress> progress, CancellationToken token)
+    /// <summary>
+    /// Reads the missing pages of one document with the chosen engine (its run ended with the outcome, like an add). A declined engine install
+    /// of the read before a run (<paramref name="automatic"/>) is remembered for the app run; one that is made ready forgets it.
+    /// </summary>
+    private async Task<DocumentAddResult> ReadMissingOneAsync(Guid profile, DocumentRowViewModel row, IProgress<DocumentProgress> progress, CancellationToken token,
+        bool automatic)
     {
         var engine = await StartRecognizerAsync(profile, row.Title, row.MissingCount, token).ConfigureAwait(true);
         if (engine is null)
         {
+            _engineDeclined |= automatic;
             throw new OperationCanceledException();
         }
+
+        _engineDeclined = false;
 
         var status = RunStatus.Failed;
         var error = string.Empty;
@@ -646,13 +715,20 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
                 return null;
             }
 
-            // The PDF renderer comes in the same question; if only it fails, the OCR still reads what PdfPig hands on.
-            var outcome = await installs.EnsureAsync([PageTextEngines.LocalOcrComponent, .. Renderer], "install.purpose.document_text", null, token)
-                .ConfigureAwait(true);
             if (!ocr.Ready)
             {
-                _notes.Add(outcome.Reason.Length > 0 ? outcome.Reason : text["install.cancelled"]);
-                return null;
+                // One question: the OCR with its optional parts (the PDF renderer, the graphics card runtime), which are then not offered
+                // again in this run. If only an optional part fails, the OCR still reads (PdfPig's images, the processor). With the OCR
+                // already installed, the optional parts get their own question with its own text (OfferExtrasAsync).
+                var extras = await ExtrasAsync(card: true, token).ConfigureAwait(true);
+                _extrasOffered = true;
+                var purpose = extras.Contains(PageTextEngines.OcrGpuComponent) ? "install.purpose.document_text_card" : "install.purpose.document_text";
+                var outcome = await installs.EnsureAsync([PageTextEngines.LocalOcrComponent, .. extras], purpose, null, token).ConfigureAwait(true);
+                if (!ocr.Ready)
+                {
+                    _notes.Add(outcome.Reason.Length > 0 ? outcome.Reason : text["install.cancelled"]);
+                    return null;
+                }
             }
 
             logger.LogInformation("No engine is chosen for scanned pages; the local OCR reads them");
@@ -699,17 +775,7 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
             return;
         }
 
-        var codes = new List<string>();
-        if (pdfium.Supported && !pdfium.Ready)
-        {
-            codes.Add(PageTextEngines.PdfRendererComponent);
-        }
-
-        if (card && ocrSetting.Value == OcrAcceleration.Automatic && !cardRuntime.Ready && await Task.Run(() => cardRuntime.Supported, token).ConfigureAwait(true))
-        {
-            codes.Add(PageTextEngines.OcrGpuComponent);
-        }
-
+        var codes = await ExtrasAsync(card, token).ConfigureAwait(true);
         if (codes.Count == 0)
         {
             return;
@@ -722,6 +788,26 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
         {
             logger.LogInformation("Not installed for reading scanned pages: {Components}; the reading goes on without them", string.Join(", ", codes));
         }
+    }
+
+    /// <summary>
+    /// The optional parts of reading scanned pages that are not installed yet: the PDF renderer when this computer has a build, and for the
+    /// local OCR (<paramref name="card"/>) its graphics card runtime (Windows with a card, "Text recognition" Automatic).
+    /// </summary>
+    private async Task<List<string>> ExtrasAsync(bool card, CancellationToken token)
+    {
+        var codes = new List<string>();
+        if (pdfium.Supported && !pdfium.Ready)
+        {
+            codes.Add(PageTextEngines.PdfRendererComponent);
+        }
+
+        if (card && ocrSetting.Value == OcrAcceleration.Automatic && !cardRuntime.Ready && await Task.Run(() => cardRuntime.Supported, token).ConfigureAwait(true))
+        {
+            codes.Add(PageTextEngines.OcrGpuComponent);
+        }
+
+        return codes;
     }
 
     /// <summary>Ends the engine's run (its pages, outcome and cost are saved) and lets the local OCR's models go.</summary>

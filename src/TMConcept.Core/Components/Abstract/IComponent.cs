@@ -38,6 +38,12 @@ public interface IComponent
     /// </summary>
     bool WasInstalled => Folders().Any(ComponentFolders.HasContent);
 
+    /// <summary>
+    /// Whether this app process has loaded a library from its folders (0.1.27: PDFium, the OCR's DirectML runtime; they are never unloaded
+    /// while the app runs): its folder cannot be moved or deleted until the app starts again. False by default.
+    /// </summary>
+    bool LoadedInProcess => false;
+
     /// <summary>Looks again at what is on the computer (a suitable Node.js on the PATH); may start a short process. No network.</summary>
     Task RefreshAsync(CancellationToken cancellationToken);
 

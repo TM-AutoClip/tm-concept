@@ -145,6 +145,74 @@ public sealed class OcrCardTests : IDisposable
     }
 
     [Fact]
+    public async Task AFailureOfTheAppsOwnCodeOnTheCardFailsThePageButKeepsTheCard()
+    {
+        var (model, store) = Card();
+        Install(store);
+        var gpu = new Factory("Ayasofya") { FailRunAfter = 0, RunError = new IndexOutOfRangeException("a box outside the picture") };
+        var cpu = new Factory("Ayasofya");
+        var coordinator = new Coordinator();
+        using var engine = Engine(model, cpu, gpu, coordinator);
+
+        var page = await engine.RecognizeAsync(Page(1), CancellationToken.None);
+
+        page.Failed.ShouldBeTrue("the page fails as it would on the processor");
+        model.Unusable.ShouldBeFalse("only a DirectML failure gives the card up");
+        model.TakeFailureNotice().ShouldBeFalse();
+        cpu.Opened.ShouldBe(0, "the page is not read again on the processor");
+        (coordinator.Asked, coordinator.Released).ShouldBe((1, 1));
+    }
+
+    [Fact]
+    public async Task AfterTheCardWasBusyThePagesOnlyTakeItWhenItIsFreeAtOnce()
+    {
+        var (model, store) = Card();
+        Install(store);
+        var clock = new ManualClock();
+        var coordinator = new Coordinator { Grant = false };
+        using var engine = Engine(model, new Factory("processor"), new Factory("card"), coordinator, clock);
+
+        (await engine.RecognizeAsync(Page(1), CancellationToken.None)).Text.ShouldBe("processor");
+        (await engine.RecognizeAsync(Page(2), CancellationToken.None)).Text.ShouldBe("processor");
+        clock.Now += HybridOcrNetworkSource.CardRetry + TimeSpan.FromSeconds(1);
+        (await engine.RecognizeAsync(Page(3), CancellationToken.None)).Text.ShouldBe("processor");
+        coordinator.Grant = true;
+        (await engine.RecognizeAsync(Page(4), CancellationToken.None)).Text.ShouldBe("card", "a card that is free at once is still taken");
+        (await engine.RecognizeAsync(Page(5), CancellationToken.None)).Text.ShouldBe("card");
+
+        coordinator.Waits.ShouldBe([HybridOcrNetworkSource.CardWait, TimeSpan.Zero, HybridOcrNetworkSource.CardWait, TimeSpan.Zero, HybridOcrNetworkSource.CardWait],
+            "after a refusal the next pages do not wait for the card");
+    }
+
+    [Fact]
+    public async Task ProcessorOnlyGivesTheCardsMemoryBack()
+    {
+        var setting = new Setting();
+        var (model, store) = Card(setting: setting);
+        Install(store);
+        var gpu = new Factory("card");
+        var coordinator = new Coordinator();
+        using var engine = Engine(model, new Factory("processor"), gpu, coordinator);
+        (await engine.RecognizeAsync(Page(1), CancellationToken.None)).Text.ShouldBe("card");
+        model.HoldsNetworks.ShouldBeTrue();
+
+        setting.Value = OcrAcceleration.Processor;
+        coordinator.Loaded = model;
+        (await engine.RecognizeAsync(Page(2), CancellationToken.None)).Text.ShouldBe("processor");
+
+        model.HoldsNetworks.ShouldBeFalse("the networks on the card are closed before the next page");
+        gpu.Pairs[0].Disposed.ShouldBeTrue();
+        coordinator.Frees.ShouldBe(1, "through the coordinator, which then knows the card is free");
+
+        // Not the model on the card: its networks are closed directly.
+        setting.Value = OcrAcceleration.Automatic;
+        (await engine.RecognizeAsync(Page(3), CancellationToken.None)).Text.ShouldBe("card");
+        await model.CloseAsync(coordinator, CancellationToken.None);
+        model.HoldsNetworks.ShouldBeFalse();
+        coordinator.Frees.ShouldBe(1);
+    }
+
+    [Fact]
     public void TheCardsRecogniserSeesWidthsInStepsAndTheSameValues()
     {
         var input = new OcrTensor([1, 2, 3, 4, 5, 6], [1, 1, 2, 3]);
@@ -154,9 +222,9 @@ public sealed class OcrCardTests : IDisposable
         DirectMlOcrNetwork.Pad(padded, 4).ShouldBeSameAs(padded);
     }
 
-    private PaddleOcrRecognizer Engine(OcrGpuModel model, Factory cpu, Factory gpu, Coordinator coordinator)
+    private PaddleOcrRecognizer Engine(OcrGpuModel model, Factory cpu, Factory gpu, Coordinator coordinator, TimeProvider? clock = null)
     {
-        var source = new HybridOcrNetworkSource(_paths.ToolsDirectory, cpu, gpu, model, coordinator, NullLogger.Instance);
+        var source = new HybridOcrNetworkSource(_paths.ToolsDirectory, cpu, gpu, model, coordinator, NullLogger.Instance, clock: clock);
         return new PaddleOcrRecognizer(new LocalOcrTests.FixedDecoder(LocalOcrTests.Page(400, 200, (20, 40, 200, 30))), source, Latin, NullLogger.Instance);
     }
 
@@ -179,6 +247,13 @@ public sealed class OcrCardTests : IDisposable
         }
 
         component.Ready.ShouldBeTrue();
+    }
+
+    private sealed class ManualClock : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; } = DateTimeOffset.UnixEpoch;
+
+        public override DateTimeOffset GetUtcNow() => Now;
     }
 
     private sealed class Setting : IOcrAccelerationSetting
@@ -211,11 +286,14 @@ public sealed class OcrCardTests : IDisposable
         private readonly LocalOcrTests.FakeDetector _detector = new();
         private int _runs;
 
+        /// <summary>What a failing run throws (null: a DirectML failure).</summary>
+        public Exception? Error { get; init; }
+
         public OcrTensor Run(OcrTensor input)
         {
             if (++_runs > failAfter)
             {
-                throw new InvalidOperationException("ONNX Runtime (DirectML): the device was removed");
+                throw Error ?? new OcrCardException("ONNX Runtime (DirectML): the device was removed");
             }
 
             return input.Shape[1] == 3 && input.Shape[2] == LocalOcrModels.RecognizerHeight ? LocalOcrTests.Output(word) : _detector.Run(input);
@@ -233,6 +311,9 @@ public sealed class OcrCardTests : IDisposable
         /// <summary>Pages after which the networks fail (each page runs the detector and the recogniser once).</summary>
         public int FailRunAfter { get; init; } = int.MaxValue;
 
+        /// <summary>What a failing run throws (null: a DirectML failure).</summary>
+        public Exception? RunError { get; init; }
+
         public int Opened => Pairs.Count;
 
         public List<OcrNetworkPair> Pairs { get; } = [];
@@ -246,22 +327,26 @@ public sealed class OcrCardTests : IDisposable
                 throw new InvalidOperationException("The DirectML runtime could not be loaded: DirectML.dll");
             }
 
-            var pair = new OcrNetworkPair(new Net(word, FailRunAfter), new Net(word));
+            var pair = new OcrNetworkPair(new Net(word, FailRunAfter) { Error = RunError }, new Net(word));
             Pairs.Add(pair);
             return pair;
         }
     }
 
-    /// <summary>Grants the card (or not) and counts the leases asked for and given back.</summary>
+    /// <summary>Grants the card (or not) and counts the leases asked for and given back, the waits asked for and the frees.</summary>
     private sealed class Coordinator : IGpuCoordinator
     {
-        public bool Grant { get; init; } = true;
+        public bool Grant { get; set; } = true;
 
         public int Asked { get; private set; }
 
         public int Released { get; private set; }
 
-        public ILocalModel? Loaded => null;
+        public List<TimeSpan> Waits { get; } = [];
+
+        public int Frees { get; private set; }
+
+        public ILocalModel? Loaded { get; set; }
 
         public event EventHandler? Changed
         {
@@ -272,7 +357,7 @@ public sealed class OcrCardTests : IDisposable
         public Task<IGpuLease?> TryAcquireAsync(IModel model, TimeSpan wait, CancellationToken cancellationToken)
         {
             Asked++;
-            wait.ShouldBe(HybridOcrNetworkSource.CardWait);
+            Waits.Add(wait);
             return Task.FromResult<IGpuLease?>(Grant ? new GpuLease(model, true, VramReading.None, _ =>
             {
                 Released++;
@@ -284,7 +369,15 @@ public sealed class OcrCardTests : IDisposable
 
         public Task<IGpuLease> AcquireAsync(CatalogModel model, CancellationToken cancellationToken) => throw new NotSupportedException();
 
-        public Task FreeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public async Task FreeAsync(CancellationToken cancellationToken)
+        {
+            Frees++;
+            if (Loaded is { } loaded)
+            {
+                await loaded.UnloadAsync(cancellationToken);
+                Loaded = null;
+            }
+        }
 
         public Task<IReadOnlyList<string>> RetryStuckAsync(IModel keep, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<string>>([]);
     }

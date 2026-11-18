@@ -43,8 +43,8 @@ public sealed record DocumentBrief : ConceptBrief
     /// <summary>How many concepts without topics.</summary>
     public int Requested { get; }
 
-    /// <summary>The chosen documents (empty = all ready ones of the profile).</summary>
-    public IReadOnlyList<Guid> DocumentIds { get; }
+    /// <summary>The chosen documents (empty = all ready ones of the profile; 0.1.27: set again after the missing pages were read).</summary>
+    public IReadOnlyList<Guid> DocumentIds { get; init; }
 
     /// <summary>The ticked topics, one concept each (null = none).</summary>
     public IReadOnlyList<string>? TopicList { get; }

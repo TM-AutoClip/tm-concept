@@ -94,6 +94,16 @@ public sealed class ComponentReinstaller(ComponentPlanner planner, ComponentInst
             return new InstallOutcome(false, text["components.reinstall.busy"]);
         }
 
+        // 0.1.27: a library this process loaded from the folder (PDFium, the OCR's DirectML runtime) stays loaded until the app ends, so the
+        // folder cannot be set aside: the user is told to restart first.
+        if (planner.All.Where(c => c.LoadedInProcess).Select(c => c.Name).ToList() is { Count: > 0 } loaded)
+        {
+            logger.LogInformation("Components reinstall: {Components} loaded by this process; nothing was changed", string.Join(", ", loaded));
+            var reason = text.Format("components.loaded_restart", string.Join(", ", loaded));
+            activity.Add(ActivityLevel.Warning, reason);
+            return new InstallOutcome(false, reason);
+        }
+
         var aside = Path.TrimEndingDirectorySeparator(tools) + AsidePrefix + Stamp();
         try
         {

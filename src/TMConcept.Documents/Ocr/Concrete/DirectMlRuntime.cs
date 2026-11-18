@@ -9,7 +9,7 @@ namespace TMConcept.Documents.Ocr;
 /// delayed import would otherwise find. The positions in the table are those of <c>onnxruntime_c_api.h</c> of 1.24.4 (API version 24; the
 /// table only grows). Loaded once per process and never unloaded; sessions are opened and closed freely (closing them frees the card's memory).
 /// A session gets the DirectML backend on the fastest graphics card (high performance, graphics cards only), memory patterns off and
-/// sequential execution, as the DirectML backend requires. Any failure is an <see cref="InvalidOperationException"/> with ONNX Runtime's reason.
+/// sequential execution, as the DirectML backend requires. Any failure is an <see cref="OcrCardException"/> with ONNX Runtime's reason.
 /// </summary>
 internal sealed unsafe class DirectMlRuntime
 {
@@ -37,7 +37,7 @@ internal sealed unsafe class DirectMlRuntime
         _api = getApi(ApiVersion);
         if (_api == null)
         {
-            throw new InvalidOperationException("The ONNX Runtime library (" + Version + ") does not offer API version " + ApiVersion + ".");
+            throw new OcrCardException("The ONNX Runtime library (" + Version + ") does not offer API version " + ApiVersion + ".");
         }
 
         var name = Marshal.StringToCoTaskMemUTF8("tm-concept-ocr");
@@ -55,11 +55,23 @@ internal sealed unsafe class DirectMlRuntime
         }
     }
 
+    /// <summary>Whether the runtime was loaded in this process (it stays loaded until the app ends).</summary>
+    public static bool Loaded
+    {
+        get
+        {
+            lock (LoadGate)
+            {
+                return _loaded is not null;
+            }
+        }
+    }
+
     /// <summary>The library's version ("1.24.4").</summary>
     public string Version { get; }
 
     /// <summary>
-    /// The runtime of <paramref name="folder"/>, loaded once (<see cref="InvalidOperationException"/> when it cannot be: a missing or broken
+    /// The runtime of <paramref name="folder"/>, loaded once (<see cref="OcrCardException"/> when it cannot be: a missing or broken
     /// file, no DirectX 12).
     /// </summary>
     public static DirectMlRuntime Load(string folder)
@@ -74,7 +86,7 @@ internal sealed unsafe class DirectMlRuntime
                 }
                 catch (Exception ex) when (ex is DllNotFoundException or BadImageFormatException or EntryPointNotFoundException)
                 {
-                    throw new InvalidOperationException("The DirectML runtime could not be loaded: " + ex.Message, ex);
+                    throw new OcrCardException("The DirectML runtime could not be loaded: " + ex.Message, ex);
                 }
             }
 
@@ -235,7 +247,7 @@ internal sealed unsafe class DirectMlRuntime
         Check(((delegate* unmanaged<IntPtr, nuint*, IntPtr>)_api[countIndex])(session, &count));
         if (count == 0)
         {
-            throw new InvalidOperationException("ONNX Runtime: the OCR model has no input or output.");
+            throw new OcrCardException("ONNX Runtime: the OCR model has no input or output.");
         }
 
         IntPtr name;
@@ -259,6 +271,6 @@ internal sealed unsafe class DirectMlRuntime
 
         var message = Marshal.PtrToStringUTF8(((delegate* unmanaged<IntPtr, IntPtr>)_api[2])(status)) ?? "unknown error";
         ((delegate* unmanaged<IntPtr, void>)_api[93])(status);
-        throw new InvalidOperationException("ONNX Runtime (DirectML): " + message);
+        throw new OcrCardException("ONNX Runtime (DirectML): " + message);
     }
 }

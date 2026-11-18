@@ -13,7 +13,7 @@ internal sealed class DirectMlOcrNetwork : IOcrNetwork
     private readonly int _widthStep;
     private IntPtr _session;
 
-    /// <summary>Opens <paramref name="file"/> on the graphics card (<see cref="InvalidOperationException"/> when it cannot be).</summary>
+    /// <summary>Opens <paramref name="file"/> on the graphics card (<see cref="OcrCardException"/> when it cannot be).</summary>
     public DirectMlOcrNetwork(DirectMlRuntime runtime, string file, int widthStep)
     {
         _runtime = runtime;

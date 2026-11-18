@@ -105,6 +105,52 @@ public sealed class PdfRenderingTests
     }
 
     [Fact]
+    public async Task APagePdfPigCannotParseIsDrawnAndTheOtherPagesAreStillRead()
+    {
+        using var paths = new TempPaths();
+        var file = WriteWithBrokenPage(paths, "broken.pdf");
+        var renderer = new FakeRenderer();
+        var reader = new LargePdfTests.FakeRecognizer(page => "Okunan " + LargePdfTests.Line(page.Page));
+
+        var read = await Extractor(renderer).ExtractAsync(file, new DocumentReadOptions(Recognizer: reader), None);
+
+        renderer.Drawn.ShouldBe([2], "only the page PdfPig could not read");
+        reader.Pages.ShouldBe([2]);
+        read.Sections.Select(s => s.Page).ShouldBe([1, 2, 3]);
+        read.Sections.Single(s => s.Page == 2).Text.ShouldBe("Okunan " + LargePdfTests.Line(2));
+        (read.PagesRecognized, read.PagesUnread).ShouldBe((1, 0));
+
+        // The renderer cannot draw it either: the page stays unread, the others are kept.
+        var failing = new FakeRenderer { FailOn = [2] };
+        var again = await Extractor(failing).ExtractAsync(file, new DocumentReadOptions(Recognizer: reader), None);
+        again.Sections.Select(s => s.Page).ShouldBe([1, 3]);
+        again.PagesUnread.ShouldBe(1);
+
+        // Without the renderer (or without an engine) the page cannot be read at all: as before 0.1.27, the document is refused.
+        await Should.ThrowAsync<InvalidDataException>(() => Extractor(new FakeRenderer { Ready = false }).ExtractAsync(file, new DocumentReadOptions(Recognizer: reader), None));
+    }
+
+    [Fact]
+    public async Task AFilePdfPigCannotOpenIsDrawnPageByPageWhenTheRendererCan()
+    {
+        using var paths = new TempPaths();
+        Directory.CreateDirectory(paths.DataDirectory);
+        var file = Path.Combine(paths.DataDirectory, "locked.pdf");
+        File.WriteAllText(file, "%PDF-1.7\nnot something PdfPig can open\n");
+        var renderer = new FakeRenderer { PageCount = 3 };
+        var reader = new LargePdfTests.FakeRecognizer(page => "Okunan " + LargePdfTests.Line(page.Page));
+
+        var read = await Extractor(renderer).ExtractAsync(file, new DocumentReadOptions(Recognizer: reader), None);
+
+        renderer.Drawn.ShouldBe([1, 2, 3]);
+        (read.PagesRecognized, read.Sections.Count).ShouldBe((3, 3));
+        renderer.Closed.ShouldBe(1);
+
+        await Should.ThrowAsync<InvalidDataException>(() => Extractor(new FakeRenderer { FailOpen = true }).ExtractAsync(file, new DocumentReadOptions(Recognizer: reader), None));
+        await Should.ThrowAsync<InvalidDataException>(() => Extractor(renderer).ExtractAsync(file, None), "without an engine nothing is drawn");
+    }
+
+    [Fact]
     public async Task KeptPagesAreNotDrawnAgain()
     {
         using var paths = new TempPaths();
@@ -223,10 +269,53 @@ public sealed class PdfRenderingTests
         return file;
     }
 
+    /// <summary>
+    /// A PDF of three pages written by hand: text, a page whose text uses a font its resources do not have (PdfPig cannot read it), text.
+    /// </summary>
+    private static string WriteWithBrokenPage(TempPaths paths, string name)
+    {
+        string Content(int page, string font) => "BT /" + font + " 12 Tf 72 712 Td (" + LargePdfTests.Line(page) + ") Tj ET";
+        var contents = new[] { Content(1, "F1"), Content(2, "F9"), Content(3, "F1") };
+        var objects = new List<string>
+        {
+            "<< /Type /Catalog /Pages 2 0 R >>",
+            "<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R] /Count 3 >>",
+        };
+        for (var i = 0; i < 3; i++)
+        {
+            objects.Add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 9 0 R >> >> /Contents " + (6 + i) + " 0 R >>");
+        }
+
+        objects.AddRange(contents.Select(c => "<< /Length " + c.Length + " >>\nstream\n" + c + "\nendstream"));
+        objects.Add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+        var pdf = new System.Text.StringBuilder("%PDF-1.4\n");
+        var offsets = new List<int>();
+        for (var i = 0; i < objects.Count; i++)
+        {
+            offsets.Add(pdf.Length);
+            pdf.Append(System.Globalization.CultureInfo.InvariantCulture, $"{i + 1} 0 obj\n{objects[i]}\nendobj\n");
+        }
+
+        var xref = pdf.Length;
+        pdf.Append(System.Globalization.CultureInfo.InvariantCulture, $"xref\n0 {objects.Count + 1}\n0000000000 65535 f \n");
+        foreach (var offset in offsets)
+        {
+            pdf.Append(System.Globalization.CultureInfo.InvariantCulture, $"{offset:D10} 00000 n \n");
+        }
+
+        pdf.Append(System.Globalization.CultureInfo.InvariantCulture, $"trailer\n<< /Size {objects.Count + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n");
+        Directory.CreateDirectory(paths.DataDirectory);
+        var file = Path.Combine(paths.DataDirectory, name);
+        File.WriteAllText(file, pdf.ToString(), System.Text.Encoding.ASCII);
+        return file;
+    }
+
     /// <summary>Draws a page as a white picture of 10 × 14 pixels; may refuse given pages, or the file.</summary>
     private sealed class FakeRenderer : IPdfPageRenderer
     {
         public bool Ready { get; init; } = true;
+
+        public int PageCount { get; init; } = 99;
 
         public bool FailOpen { get; init; }
 
@@ -254,7 +343,7 @@ public sealed class PdfRenderingTests
 
         private sealed class Document(FakeRenderer owner) : IPdfRenderDocument
         {
-            public int Pages => 99;
+            public int Pages => owner.PageCount;
 
             public RenderedPage Render(int page, int dpi, long pixelsMax)
             {

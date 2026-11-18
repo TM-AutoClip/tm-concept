@@ -31,6 +31,9 @@ public sealed class PdfiumComponent(PdfiumStore store) : IComponent
     public IReadOnlyList<string> Folders() => [store.Folder];
 
     /// <inheritdoc />
+    public bool LoadedInProcess => PdfiumLibrary.IsLoaded(store.LibraryFile);
+
+    /// <inheritdoc />
     public Task RefreshAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     /// <inheritdoc />

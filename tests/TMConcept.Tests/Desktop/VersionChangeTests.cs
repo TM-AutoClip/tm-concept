@@ -143,6 +143,35 @@ public sealed class VersionChangeTests
     }
 
     [AvaloniaFact]
+    public async Task ALibraryTheAppLoadedFromTheFolderStopsTheReinstallAndTheRemovalWithARestartHint()
+    {
+        var (h, used, _, _, bin, confirm) = Setup(UpdateChoice.Reinstall);
+        using (h)
+        {
+            var marker = Path.Combine(used.Folder!, "sd-cli.exe");
+            used.Ready = true;
+            used.LoadedInProcess = true;
+            var expected = h.Get<Localizer>().Format("components.loaded_restart", used.Name);
+
+            var outcome = await h.Get<TMConcept.Desktop.Components.ComponentReinstaller>().ReinstallAsync(CancellationToken.None);
+
+            outcome.Ready.ShouldBeFalse();
+            outcome.Reason.ShouldBe(expected);
+            File.Exists(marker).ShouldBeTrue("nothing was moved");
+            confirm.Asked.ShouldBeEmpty();
+            used.Installs.ShouldBe(0);
+
+            var cleaner = h.Get<TMConcept.Desktop.DiskSpace.IDiskCleaner>();
+            var removal = await cleaner.RemoveAsync([cleaner.ItemOf(used)], CancellationToken.None);
+            removal.Failed.ShouldHaveSingleItem().Reason.ShouldBe(expected);
+            removal.Removed.ShouldBeEmpty();
+            bin.Moved.ShouldBeEmpty();
+            confirm.Asked.ShouldBeEmpty("no offer to delete it for good either");
+            File.Exists(marker).ShouldBeTrue();
+        }
+    }
+
+    [AvaloniaFact]
     public async Task AFailedReinstallPutsTheOldFolderBackAndDiscardsWhatTheNewInstallLeft()
     {
         var (h, used, _, _, bin, _) = Setup(UpdateChoice.Reinstall);

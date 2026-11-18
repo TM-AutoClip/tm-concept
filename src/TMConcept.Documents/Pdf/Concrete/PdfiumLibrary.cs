@@ -52,6 +52,15 @@ internal sealed unsafe class PdfiumLibrary
     /// <summary>The one lock of every PDFium call in the process.</summary>
     public static Lock Gate { get; } = new();
 
+    /// <summary>Whether the library at <paramref name="file"/> was loaded in this process (it stays loaded until the app ends).</summary>
+    public static bool IsLoaded(string file)
+    {
+        lock (Gate)
+        {
+            return Libraries.ContainsKey(file);
+        }
+    }
+
     /// <summary>
     /// The library at <paramref name="file"/>, loaded and set up once (<see cref="DllNotFoundException"/> or <see cref="BadImageFormatException"/>
     /// when it cannot be loaded, <see cref="EntryPointNotFoundException"/> when it lacks a call).

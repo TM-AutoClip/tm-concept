@@ -13,9 +13,12 @@ namespace TMConcept.Desktop.Reports;
 /// <c>system.txt</c> of a problem report (also what "Copy details" copies): the program, its version and commit, the operating system,
 /// architecture and .NET, the interface language, how the window is drawn, whether the data folder is portable, which tools, local voices
 /// and engines are installed, and where the Python voices run (NVIDIA card or processor). No setting values, no keys, no paths, no names of profiles or accounts, nothing from the database.
+/// 0.1.27: how scanned pages are read: whether PDFium and the OCR's DirectML runtime are installed (or offered here at all), the "Text
+/// recognition" setting, and where the local OCR reads now (with why DirectML failed in this run, paths masked).
 /// </summary>
 public sealed class SystemReport(Localizer text, UiPreferencesFile preferences, IToolLocator tools, IEnumerable<IVideoEngine> engines,
-    IEnumerable<ISpeechEngine> voices, AppPaths paths, Core.Hardware.IGpuInfo gpu, TimeProvider clock)
+    IEnumerable<ISpeechEngine> voices, AppPaths paths, Core.Hardware.IGpuInfo gpu, TimeProvider clock, TMConcept.Documents.Pdf.PdfiumStore pdfium,
+    TMConcept.Documents.Ocr.DirectMlRuntimeStore cardRuntime, TMConcept.Documents.Ocr.OcrGpuModel ocrCard, Core.Hardware.IOcrAccelerationSetting ocrSetting, LogScrubber scrubber)
 {
     /// <summary>The text.</summary>
     public string Build()
@@ -52,6 +55,16 @@ public sealed class SystemReport(Localizer text, UiPreferencesFile preferences, 
 
         // Where the Python voices would run (the PyTorch build their environments get): the CUDA build needs an NVIDIA card and its driver.
         report.AppendLine(c, $"Python voices run on: {(SpeechDevices.CudaCard(gpu.Detect()) is null ? "the processor (PyTorch processor build)" : "the NVIDIA card (PyTorch CUDA 12.8 build)")}");
+        report.AppendLine("Scanned pages:");
+        report.AppendLine(c, $"  PDF renderer (PDFium {TMConcept.Documents.Pdf.PdfiumRelease.Version}): {(!pdfium.Supported ? "no build for this computer" : pdfium.Ready ? "installed" : "not installed")}");
+        report.AppendLine(c, $"  OCR graphics card runtime (ONNX Runtime DirectML {TMConcept.Documents.Ocr.DirectMlRuntimeRelease.Version}, DirectML {TMConcept.Documents.Ocr.DirectMlRuntimeRelease.DirectMlVersion}): {(!cardRuntime.Supported ? "not offered (Windows x64 with a graphics card only)" : cardRuntime.Ready ? "installed" : "not installed")}");
+        report.AppendLine(c, $"  Text recognition: {ocrSetting.Value}");
+        report.AppendLine(c, $"  Local OCR reads on: {(ocrCard.Device == Core.Models.ModelDevice.Gpu ? "the graphics card when it is free" : "the processor")}");
+        if (ocrCard.Unusable)
+        {
+            report.AppendLine(c, $"  DirectML failed in this run: {scrubber.Scrub(ocrCard.FailureReason)}");
+        }
+
         report.AppendLine("Engines:");
         foreach (var engine in engines.OrderBy(e => e.Name, StringComparer.Ordinal))
         {

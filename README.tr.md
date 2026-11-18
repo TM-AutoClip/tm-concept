@@ -590,7 +590,10 @@ seviye süzgeci (tümü, uyarılar ve hatalar, yalnız hatalar), arama, *Yalnız
 - Revideo deneysel. Linux ARM64'te HyperFrames ve Revideo için harici Chromium gerekir.
 - Belgeler: yerel OCR yalnız Latin alfabeli dilleri okur; ekran kartında okuma (DirectML) henüz gerçek bir ekran kartında denenmedi (olmazsa
   işlemci okur ve uygulama bunu bir kez söyler), PDFium da henüz Linux'ta denenmedi; 0.1.25–0.1.26'nın sakladığı metin katmanlarına yeniden
-  bakılmaz. Web sayfaları betikleri çalıştırılmadan okunur, metnini JavaScript ile kuran bir sayfadan
+  bakılmaz. PDFium sayfaları Chrome'un korumalı alanı olmadan uygulamanın kendi sürecinde çizer: ona saldırmak için hazırlanmış bir PDF
+  uygulamayı çökertebilir (ya da daha kötüsü), o yüzden PDF'leri yalnız güvendiğin kaynaklardan ekle; bir oturumda kitaplığı yüklenen bir
+  bileşen (PDFium, OCR'nin ekran kartı bileşeni) ancak yeniden başlattıktan sonra kaldırılabilir ya da yeniden kurulabilir. DirectML (isteğe
+  bağlı ekran kartı bileşeni), serbest bir açık kaynak lisansında olmayan tek parça (Microsoft'un koşulları; bağlantısı sorusunda). Web sayfaları betikleri çalıştırılmadan okunur, metnini JavaScript ile kuran bir sayfadan
   az şey ya da hiçbir şey gelmez; dosya başına en çok 50 MB, sayfa başına 5 MB. Anlam modelinin int8 dosyası AVX-512 VNNI'li işlemciler
   için hazırlanmış; başkalarında (ve ARM64'te) çalışır ama hızı ölçülmedi.
 - Otomatik testlerde gerçek sağlayıcı isteği yoktur (sahte HTTP); ilk gerçek kullanım senin bilgisayarında olur.

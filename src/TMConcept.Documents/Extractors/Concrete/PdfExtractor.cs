@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using TMConcept.Core.Chat;
 using TMConcept.Core.Documents;
 using TMConcept.Documents.Pdf;
 using UglyToad.PdfPig;
@@ -25,7 +26,9 @@ namespace TMConcept.Documents.Extractors;
 /// characters instead of letters); a page without one is drawn whole by the PDF renderer (<see cref="IPdfPageRenderer"/>, PDFium, when it is
 /// installed) at <see cref="RenderDpi"/> and handed to the engine as one JPEG, so JPEG 2000, JBIG2 and CCITT fax scans, 1-bit masks, tiled
 /// scans, text drawn as shapes and turned pages are read too. Without the renderer (or when it cannot draw a page) the page's images go as
-/// before. The renderer opens the file once per reading and closes it at the end, also on a cancel.
+/// before. The renderer opens the file once per reading and closes it at the end, also on a cancel. With an engine and the renderer, a page
+/// PdfPig cannot parse (a content stream or a font it cannot decode) is drawn instead of stopping the reading (unread only when the renderer
+/// fails too), and a file PdfPig cannot open at all is drawn page by page (the renderer's page count).
 /// </summary>
 public sealed class PdfExtractor : DocumentExtractorBase
 {
@@ -85,20 +88,44 @@ public sealed class PdfExtractor : DocumentExtractorBase
     protected override async Task<ExtractedDocument> ReadAsync(string file, DocumentReadOptions options, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(options);
-        var (total, title) = Pdf(() =>
+        IPdfRenderDocument? drawn = null;
+        var drawing = options.Recognizer is not null && _renderer is { Ready: true } && _encoder is not null;
+
+        // PdfPig cannot open the file at all (an encryption or a structure it does not know): when the renderer can, every page is drawn.
+        var whole = false;
+        int total;
+        string title;
+        try
         {
-            using var stream = OpenFile(file);
-            using var head = PdfDocument.Open(stream);
-            return (head.NumberOfPages, head.Information.Title ?? string.Empty);
-        });
+            (total, title) = Pdf(() =>
+            {
+                using var stream = OpenFile(file);
+                using var head = PdfDocument.Open(stream);
+                return (head.NumberOfPages, head.Information.Title ?? string.Empty);
+            });
+        }
+        catch (InvalidDataException ex) when (drawing)
+        {
+            drawn = TryOpenRenderer(file);
+            if (drawn is null)
+            {
+                throw;
+            }
+
+            _logger.LogWarning("PdfPig could not open the PDF ({Reason}); every page is drawn by the PDF renderer", ex.Message);
+            (total, title, whole) = (drawn.Pages, string.Empty, true);
+        }
+
         if (total == 0)
         {
+            drawn?.Dispose();
             return new ExtractedDocument(title, [], 0, 0);
         }
 
         var range = options.Pages ?? new DocumentPageRange(1, total);
         if (range.From > total)
         {
+            drawn?.Dispose();
             throw new InvalidDataException($"The PDF has {total} pages; page {range.From} is not in it.");
         }
 
@@ -115,8 +142,6 @@ public sealed class PdfExtractor : DocumentExtractorBase
         var halted = string.Empty;
         FileStream? stream = null;
         PdfDocument? pdf = null;
-        IPdfRenderDocument? drawn = null;
-        var drawing = options.Recognizer is not null && _renderer is { Ready: true } && _encoder is not null;
         try
         {
             for (var number = range.From; number <= to; number++)
@@ -144,43 +169,67 @@ public sealed class PdfExtractor : DocumentExtractorBase
                     continue;
                 }
 
-                if (pdf is null || (number - range.From) % DocumentLimits.PdfReopenPages == 0)
+                var drawNow = drawing;
+                var text = string.Empty;
+                IReadOnlyList<ImagePart> images = [];
+                var cannot = false;
+                var parsed = false;
+                if (!whole)
                 {
-                    // What PdfPig parsed so far is let go with the document; the next pages start from a fresh one.
-                    pdf?.Dispose();
-                    stream?.Dispose();
-                    pdf = null;
-                    stream = OpenFile(file);
-                    var opened = stream;
-                    pdf = Pdf(() => PdfDocument.Open(opened));
+                    if (pdf is null || (number - range.From) % DocumentLimits.PdfReopenPages == 0)
+                    {
+                        // What PdfPig parsed so far is let go with the document; the next pages start from a fresh one.
+                        pdf?.Dispose();
+                        stream?.Dispose();
+                        pdf = null;
+                        stream = OpenFile(file);
+                        var opened = stream;
+                        pdf = Pdf(() => PdfDocument.Open(opened));
+                    }
+
+                    var current = pdf;
+                    try
+                    {
+                        (text, images, cannot) = Pdf(() =>
+                        {
+                            var page = current.GetPage(number);
+                            var read = PageText(page);
+                            var (parts, unsupportedImages) = read.Length == 0 && options.Recognizer is not null && !drawNow ? PdfPageImages.Read(page) : ([], false);
+                            return (read, parts, unsupportedImages);
+                        });
+                        parsed = true;
+                    }
+                    catch (InvalidDataException ex) when (drawNow)
+                    {
+                        // A content stream or a font PdfPig cannot decode: the renderer draws the page (it stays unread only when that fails too).
+                        _logger.LogWarning("Page {Page} could not be read by PdfPig ({Reason}); it is drawn by the PDF renderer", number, ex.Message);
+                    }
                 }
 
-                var current = pdf;
-                var drawNow = drawing;
-                var (text, images, cannot) = Pdf(() =>
-                {
-                    var page = current.GetPage(number);
-                    var read = PageText(page);
-                    var (parts, unsupportedImages) = read.Length == 0 && options.Recognizer is not null && !drawNow ? PdfPageImages.Read(page) : ([], false);
-                    return (read, parts, unsupportedImages);
-                });
                 if (text.Length == 0 && options.Recognizer is not null && drawNow && halted.Length == 0)
                 {
                     // The whole page as the reader sees it; when it cannot be drawn, its images as PdfPig hands them on.
-                    try
+                    drawn ??= TryOpenRenderer(file);
+                    if (drawn is null)
                     {
-                        drawn ??= _renderer!.Open(file);
-                        images = [_encoder!.Encode(drawn.Render(number, RenderDpi, RenderPixelsMax))];
+                        // The renderer cannot open this file at all: the rest of the pages go the old way.
+                        drawing = false;
                     }
-                    catch (Exception ex) when (ex is InvalidDataException or InvalidOperationException)
+                    else
                     {
-                        _logger.LogWarning("Page {Page} could not be drawn by the PDF renderer ({Reason}); its images are used instead", number, ex.Message);
-                        if (drawn is null)
+                        try
                         {
-                            // The renderer cannot open this file at all: the rest of the pages go the old way.
-                            drawing = false;
+                            images = [_encoder!.Encode(drawn.Render(number, RenderDpi, RenderPixelsMax))];
                         }
+                        catch (Exception ex) when (ex is InvalidDataException or InvalidOperationException)
+                        {
+                            _logger.LogWarning("Page {Page} could not be drawn by the PDF renderer ({Reason}); its images are used instead", number, ex.Message);
+                        }
+                    }
 
+                    if (images.Count == 0 && parsed)
+                    {
+                        var current = pdf!;
                         (images, cannot) = Pdf(() => PdfPageImages.Read(current.GetPage(number)));
                     }
                 }
@@ -291,6 +340,20 @@ public sealed class PdfExtractor : DocumentExtractorBase
         }
 
         return PageTextQuality.Usable(text) ? text : string.Empty;
+    }
+
+    /// <summary>The file opened by the renderer; null (logged) when it cannot open it.</summary>
+    private IPdfRenderDocument? TryOpenRenderer(string file)
+    {
+        try
+        {
+            return _renderer!.Open(file);
+        }
+        catch (Exception ex) when (ex is InvalidDataException or InvalidOperationException)
+        {
+            _logger.LogWarning("The PDF renderer could not open the file ({Reason}); its pages go without it", ex.Message);
+            return null;
+        }
     }
 
     /// <summary>A read-only stream of the file: PdfPig reads what it needs from it instead of taking the whole file into memory.</summary>

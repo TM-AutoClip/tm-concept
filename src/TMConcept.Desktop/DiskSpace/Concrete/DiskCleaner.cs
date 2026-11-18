@@ -48,6 +48,11 @@ public sealed class DiskCleaner(IEnumerable<IDiskItemSource> sources, IComponent
     {
         ArgumentNullException.ThrowIfNull(items);
         var chosen = items.Where(i => i.Removable).ToList();
+
+        // 0.1.27: a component whose library this process loaded (PDFium, the OCR's DirectML runtime) cannot be moved while the app runs.
+        var failed = chosen.Where(i => i is ComponentDiskItem { Component.LoadedInProcess: true })
+            .Select(i => (Item: i, Reason: text.Format("components.loaded_restart", i.Name))).ToList();
+        chosen = chosen.Except(failed.Select(f => f.Item)).ToList();
         if (session.WorkRunning || planner.Busy || sample.Busy || documents.Busy)
         {
             logger.LogInformation("Storage: nothing was removed, work is running");
@@ -85,7 +90,6 @@ public sealed class DiskCleaner(IEnumerable<IDiskItemSource> sources, IComponent
         }
 
         var kept = new List<IDiskItem>();
-        var failed = new List<(IDiskItem Item, string Reason)>();
         if (noBin.Count > 0)
         {
             var list = string.Join("\n", noBin.Select(n => "• " + n.Item.Name + " (" + n.Reason + ")"));

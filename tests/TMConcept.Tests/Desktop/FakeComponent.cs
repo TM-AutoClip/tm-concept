@@ -27,6 +27,8 @@ internal sealed class FakeComponent(string code, bool ready, params string[] dep
 
     public string? Folder { get; set; }
 
+    public bool LoadedInProcess { get; set; }
+
     public int Refreshes { get; private set; }
 
     public int Installs { get; private set; }

@@ -15,7 +15,7 @@ public sealed class DirectMlOcrNetworkFactory(DirectMlRuntimeStore store) : IOcr
     {
         if (!OperatingSystem.IsWindows() || !store.Ready)
         {
-            throw new InvalidOperationException("The DirectML runtime is not installed on this computer.");
+            throw new OcrCardException("The DirectML runtime is not installed on this computer.");
         }
 
         var runtime = DirectMlRuntime.Load(store.Folder);

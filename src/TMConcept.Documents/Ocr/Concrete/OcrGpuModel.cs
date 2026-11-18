@@ -66,6 +66,35 @@ public sealed class OcrGpuModel(DirectMlRuntimeStore store, IOcrAccelerationSett
         }
     }
 
+    /// <summary>Whether the networks are open on the card now.</summary>
+    public bool HoldsNetworks
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _networks is { Disposed: false };
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gives the card's memory back now (0.1.27: "Text recognition" set to Processor only): through the coordinator when this model is the one
+    /// on the card (nothing while a page holds its lease), otherwise its networks are closed directly.
+    /// </summary>
+    public async Task CloseAsync(IGpuCoordinator coordinator, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(coordinator);
+        if (ReferenceEquals(coordinator.Loaded, this))
+        {
+            await coordinator.FreeAsync(cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            CloseNetworks();
+        }
+    }
+
     /// <summary>DirectML failed: the networks on the card are closed and the card is not used again in this run (logged once).</summary>
     public void MarkUnusable(Exception error)
     {

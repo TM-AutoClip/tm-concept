@@ -102,7 +102,7 @@ public sealed partial class DocumentSectionViewModel(AppSession session, Documen
     public partial bool Finding { get; set; }
 
     /// <summary>Whether "Find topics" can be pressed.</summary>
-    public bool CanFind => !Finding && !Running && !Runner.Busy && Library.HasUsable;
+    public bool CanFind => !Finding && !Running && !Runner.Busy && !Library.Busy && Library.HasUsable;
 
     /// <summary>The steps of the running "Find topics" call.</summary>
     public CallStatusViewModel FindCall { get; } = new(text);
@@ -162,6 +162,13 @@ public sealed partial class DocumentSectionViewModel(AppSession session, Documen
             return;
         }
 
+        if (Library.Busy)
+        {
+            // Pages are being read or a document added: the topics would be found in a half-read document.
+            Refuse(Text["documents.busy"]);
+            return;
+        }
+
         var picker = Runner.Settings.Picker;
         if (picker.Model(PipelineSteps.Topics) is null)
         {
@@ -192,7 +199,7 @@ public sealed partial class DocumentSectionViewModel(AppSession session, Documen
                 throw new OperationCanceledException(cancel.Token);
             }
 
-            if (!Library.HasReady)
+            if (!Library.ReadyForRun)
             {
                 Refuse(Text["documents.none_ready"]);
                 return;
@@ -208,7 +215,7 @@ public sealed partial class DocumentSectionViewModel(AppSession session, Documen
             paid = model.Model;
             FindCall.Begin(model.Model.Name);
             var digest = ReadAll ? await DigestForTopicsAsync(profile, model, cancel.Token).ConfigureAwait(true) : null;
-            var result = await finder.FindAsync(profile, model, Subject, Library.Chosen, Asked(), Text.Language,
+            var result = await finder.FindAsync(profile, model, Subject, Library.ReadyChosen, Asked(), Text.Language,
                 new Progress<Core.Chat.ChatProgress>(FindCall.Report), cancel.Token, PageRange(), digest?.Notes).ConfigureAwait(true);
             result = result with { CostUsd = result.CostUsd + (digest?.CostUsd ?? 0) };
             spending.Live(FindCall, result.CostUsd);
@@ -269,7 +276,7 @@ public sealed partial class DocumentSectionViewModel(AppSession session, Documen
     {
         try
         {
-            var digest = await digester.RunAsync(profile, model, Library.Chosen, PageRange(), Subject, new Progress<DocumentDigestProgress>(p =>
+            var digest = await digester.RunAsync(profile, model, Library.ReadyChosen, PageRange(), Subject, new Progress<DocumentDigestProgress>(p =>
             {
                 FindStatus = Text.Format("documents.topics.read_all_progress", p.Done, p.Total);
                 work.Show(FindCall, FindStatus);
@@ -343,8 +350,14 @@ public sealed partial class DocumentSectionViewModel(AppSession session, Documen
     /// </summary>
     protected override async Task<ConceptBrief?> PrepareRunAsync(ConceptBrief brief, CancellationToken cancellationToken)
     {
-        if (brief is DocumentBrief)
+        if (brief is DocumentBrief chosen)
         {
+            if (Library.Busy)
+            {
+                ShowStatus(Text["documents.busy"], error: true);
+                return null;
+            }
+
             // 0.1.27: the chosen documents' pages that are still to read are read first.
             if (!await Library.ReadMissingBeforeUseAsync(cancellationToken).ConfigureAwait(true))
             {
@@ -352,11 +365,14 @@ public sealed partial class DocumentSectionViewModel(AppSession session, Documen
                 return null;
             }
 
-            if (!Library.HasReady)
+            // Only the ticked documents that are ready now are used (a ticked one whose pages could not be read is left out); none = stop.
+            if (!Library.ReadyForRun)
             {
                 ShowStatus(Text["documents.none_ready"], error: true);
                 return null;
             }
+
+            brief = chosen with { DocumentIds = Library.ReadyChosen };
         }
 
         if (!ReadAll || brief is not DocumentBrief documents || session.Profile is not { } profile)

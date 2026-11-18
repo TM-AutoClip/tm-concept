@@ -33,6 +33,9 @@ public sealed class DirectMlRuntimeComponent(DirectMlRuntimeStore store) : IComp
     public IReadOnlyList<string> Folders() => [store.Folder];
 
     /// <inheritdoc />
+    public bool LoadedInProcess => DirectMlRuntime.Loaded;
+
+    /// <inheritdoc />
     public Task RefreshAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     /// <inheritdoc />

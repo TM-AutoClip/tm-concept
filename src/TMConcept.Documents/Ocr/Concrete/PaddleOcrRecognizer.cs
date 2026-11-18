@@ -8,7 +8,7 @@ namespace TMConcept.Documents.Ocr;
 /// on a page image decoded by <see cref="IPageImageDecoder"/>. The two networks are given (ONNX files through <see cref="LocalOcrEngine"/>, a
 /// fake in the tests) and let go with the engine. Nothing leaves this computer; nothing is paid.
 /// 0.1.27: the networks come page by page from an <see cref="IOcrNetworkSource"/> (the graphics card when it can be had, otherwise the
-/// processor); when the card's networks fail on a page, the card is given up for this run and the same page is read again on the processor, so
+/// processor); when the card's networks fail on a page (<see cref="OcrCardException"/>), the card is given up for this run and the same page is read again on the processor, so
 /// the text is the same either way. The card's lease is released after every page, also on a failure or a cancel.
 /// </summary>
 public sealed class PaddleOcrRecognizer : OcrRecognizerBase, IDisposable
@@ -48,9 +48,10 @@ public sealed class PaddleOcrRecognizer : OcrRecognizerBase, IDisposable
                 _page = networks;
                 return await base.ReadAsync(page, cancellationToken).ConfigureAwait(false);
             }
-            catch (Exception ex) when (networks.Lease is not null && !retried && ex is not (OperationCanceledException or InvalidDataException or OutOfMemoryException))
+            catch (OcrCardException ex) when (networks.Lease is not null && !retried)
             {
-                // The graphics card failed on this page: given up for this run, the page is read again on the processor.
+                // The graphics card failed on this page (DirectML itself, not the app's code around it): given up for this run, the page is
+                // read again on the processor.
                 retried = true;
                 _source.Failed(networks, ex);
             }

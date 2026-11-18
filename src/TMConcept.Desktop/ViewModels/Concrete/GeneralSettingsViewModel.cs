@@ -32,7 +32,7 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
     IActivityLog activity, PreferencesImageAcceleration acceleration, Engines.Images.ImageBackendSelector backends, ComponentInstallFlow installs,
     ILogger<GeneralSettingsViewModel> logger, ComponentReinstaller reinstaller, Updates.AppUpdater updater, IAppUpdateDialog updateDialog,
     DiskSpace.IDiskCleaner cleaner, WhatsNewCheck whatsNew, Updates.IAppEdition edition, Updates.EditionInstaller editionInstaller,
-    IShortcutWriter shortcuts, PreferencesOcrAcceleration ocrAcceleration)
+    IShortcutWriter shortcuts, PreferencesOcrAcceleration ocrAcceleration, TMConcept.Documents.Ocr.OcrGpuModel ocrCard, Core.Models.IGpuCoordinator gpu)
     : SettingsSectionBase
 {
     /// <summary>The "Text recognition" choices (0.1.27).</summary>
@@ -532,6 +532,24 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
         ocrAcceleration.Change(chosen);
         logger.LogInformation("Setting changed: text recognition {Setting}", chosen);
         Status = text[chosen == OcrAcceleration.Processor ? "settings.ocr_acceleration.saved.processor" : "settings.ocr_acceleration.saved.automatic"];
+        if (chosen == OcrAcceleration.Processor)
+        {
+            // The OCR's networks on the card give its memory back now, not when another model next asks for the card.
+            _ = FreeOcrCardAsync();
+        }
+    }
+
+    /// <summary>Closes the local OCR's networks on the graphics card (0.1.27, "Processor only"); a failure is logged.</summary>
+    internal async Task FreeOcrCardAsync()
+    {
+        try
+        {
+            await ocrCard.CloseAsync(gpu, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException)
+        {
+            logger.LogWarning(ex, "The text recognition networks could not be taken off the graphics card");
+        }
     }
 
     partial void OnAccelerationChanged(ChoiceOption? value)

@@ -8,6 +8,7 @@ using TMConcept.Core.Keys;
 using TMConcept.Core.Pipeline;
 using TMConcept.Core.Profiles;
 using TMConcept.Core.Runs;
+using TMConcept.Desktop.Dialogs;
 using TMConcept.Desktop.DiskSpace;
 using TMConcept.Desktop.Localization;
 using TMConcept.Desktop.Startup;
@@ -38,6 +39,14 @@ public sealed class ScannedPagesPageTests
         var row = page.Settings.Picker.Row(PipelineSteps.Concepts)!;
         row.Selected = row.Options.First(o => o.Model?.Id == "claude-sonnet-5-5");
         return page;
+    }
+
+    /// <summary>Says yes to reading the missing pages online, no to every download.</summary>
+    private static FakeConfirm Online()
+    {
+        var confirm = new FakeConfirm { Answer = false };
+        confirm.Answers.Enqueue(true);
+        return confirm;
     }
 
     private static ChatResponse Answer(string text) => new(text, new ChatUsage(1_700, 0, 0, 600), null, "end_turn", "r");
@@ -97,7 +106,8 @@ public sealed class ScannedPagesPageTests
         var fake = new FakeChat()
             .Answer(r => Answer("Konstantinopolis surları " + r.User)).Answer(r => Answer("Konstantinopolis surları " + r.User))
             .Answer(_ => topicsAnswer).Answer(_ => topicsAnswer);
-        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
+        var confirm = Online();
+        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake).AddSingleton<IConfirmDialog>(confirm));
         var page = await PageAsync(h);
         var section = page.Documents;
         var library = section.Library;
@@ -119,6 +129,7 @@ public sealed class ScannedPagesPageTests
         await section.FindTopicsAsync();
 
         fake.Requests.Count.ShouldBe(4, "pages read once are never read again");
+        confirm.Asked.Count(t => t == h.Get<Localizer>()["documents.pages.online.title"]).ShouldBe(1, "the online reading was asked once");
     }
 
     [AvaloniaFact]
@@ -128,7 +139,8 @@ public sealed class ScannedPagesPageTests
             .Answer(r => Answer("Konstantinopolis surları " + r.User)).Answer(r => Answer("Konstantinopolis surları " + r.User))
             .Answer(_ => new ChatResponse("{\"konseptler\":[{\"baslik\":\"The land walls\",\"ozet\":\"" + Guid.NewGuid().ToString("N")
                 + "\",\"icerik\":\"[on screen: walls]\\nThe walls.\",\"kaynaklar\":[1]}]}", new ChatUsage(1000, 0, 0, 800), null, "end_turn", "r"));
-        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
+        var confirm = Online();
+        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake).AddSingleton<IConfirmDialog>(confirm));
         var page = await PageAsync(h);
         var section = page.Documents;
         await section.Library.AddFilesAsync([LargePdfTests.WritePdf(h.Paths, "scan.pdf", 4, p => p % 2 == 1)]);
@@ -142,6 +154,111 @@ public sealed class ScannedPagesPageTests
         fake.Requests.Select(r => r.User).Take(2).ShouldBe(["Page 2.", "Page 4."], "the missing pages were read before the concept call");
         fake.Requests[2].User.ShouldContain("Konstantinopolis surları Page 2.", Case.Sensitive, "the pages just read are part of the passages");
         section.Library.Documents.ShouldHaveSingleItem().HasMissing.ShouldBeFalse();
+        confirm.Messages[0].ShouldContain("Claude Haiku 5.5", Case.Sensitive, "the question names the engine and its estimate");
+    }
+
+    [AvaloniaFact]
+    public async Task ADeclinedOnlineReadingGoesOnWithThePagesAlreadyRead()
+    {
+        var fake = new FakeChat()
+            .Answer(_ => new ChatResponse("{\"konseptler\":[{\"baslik\":\"The land walls\",\"ozet\":\"" + Guid.NewGuid().ToString("N")
+                + "\",\"icerik\":\"[on screen: walls]\\nThe walls.\",\"kaynaklar\":[1]}]}", new ChatUsage(1000, 0, 0, 800), null, "end_turn", "r"));
+        var confirm = new FakeConfirm { Answer = false };
+        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake).AddSingleton<IConfirmDialog>(confirm));
+        var page = await PageAsync(h);
+        var section = page.Documents;
+        await section.Library.AddFilesAsync([LargePdfTests.WritePdf(h.Paths, "scan.pdf", 4, p => p % 2 == 1)]);
+        var step = page.Settings.Picker.Row(PipelineSteps.DocumentText)!;
+        step.Selected = step.Options.First(o => o.Model?.Id == "claude-haiku-5-5");
+        section.Count = 1;
+
+        await section.GenerateAsync();
+
+        confirm.Asked.ShouldBe([h.Get<Localizer>()["documents.pages.online.title"]]);
+        fake.Requests.ShouldHaveSingleItem("no page was sent; the concept call used the pages already read");
+        section.Library.Documents.ShouldHaveSingleItem().MissingCount.ShouldBe(2);
+    }
+
+    [AvaloniaFact]
+    public async Task ATickedDocumentWhosePagesWereNotReadIsLeftOutAndNoneReadyStops()
+    {
+        var fake = new FakeChat();
+        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake).AddSingleton<IConfirmDialog>(new FakeConfirm { Answer = false }));
+        var page = await PageAsync(h);
+        var section = page.Documents;
+        var library = section.Library;
+        var notes = Path.Combine(h.Paths.DataDirectory, "incoming", "notes.txt");
+        Directory.CreateDirectory(Path.GetDirectoryName(notes)!);
+        await File.WriteAllTextAsync(notes, "The land walls of Constantinople had three lines and a moat.");
+        await library.AddFilesAsync([notes]);
+        await library.AddFilesAsync([LargePdfTests.WritePdf(h.Paths, "scan.pdf", 2, _ => false)]);
+        var scan = library.Documents.Single(d => d.HasMissing);
+        scan.Ready.ShouldBeFalse();
+        scan.Checked = true;
+        var step = page.Settings.Picker.Row(PipelineSteps.DocumentText)!;
+        step.Selected = step.Options.First(o => o.Model?.Id == "claude-haiku-5-5");
+        section.Count = 1;
+
+        await section.GenerateAsync();
+
+        fake.Requests.ShouldBeEmpty("the only ticked document is still unread: no run on an empty context");
+        section.Status.ShouldBe(h.Get<Localizer>()["documents.none_ready"]);
+    }
+
+    [AvaloniaFact]
+    public async Task PagesThatCouldNotBeReadAreNotReadAgainAtEveryPress()
+    {
+        var topicsAnswer = new ChatResponse("{\"topics\":[{\"topic\":\"The land walls\",\"documents\":[1]}]}", new ChatUsage(900, 0, 0, 100), null, "end_turn", "r");
+        var fake = new FakeChat()
+            .Answer(_ => throw new InvalidOperationException("The page could not be read."))
+            .Answer(_ => throw new InvalidOperationException("The page could not be read."))
+            .Answer(_ => topicsAnswer).Answer(_ => topicsAnswer);
+        var confirm = Online();
+        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake).AddSingleton<IConfirmDialog>(confirm));
+        var page = await PageAsync(h);
+        var section = page.Documents;
+        var library = section.Library;
+        await library.AddFilesAsync([LargePdfTests.WritePdf(h.Paths, "scan.pdf", 4, p => p % 2 == 1)]);
+        var step = page.Settings.Picker.Row(PipelineSteps.DocumentText)!;
+        step.Selected = step.Options.First(o => o.Model?.Id == "claude-haiku-5-5");
+        var topics = page.Settings.Picker.Row(PipelineSteps.Topics)!;
+        topics.Selected = topics.Options.First(o => o.Model?.Id == "claude-haiku-5-5");
+        section.Count = 1;
+
+        await section.FindTopicsAsync();
+        library.Documents.ShouldHaveSingleItem().MissingCount.ShouldBe(2, "both pages failed");
+        fake.Requests.Count.ShouldBe(3);
+
+        await section.FindTopicsAsync();
+
+        fake.Requests.Count.ShouldBe(4, "only the topics call: the pages that failed are not sent again");
+        confirm.Asked.Count(t => t == h.Get<Localizer>()["documents.pages.online.title"]).ShouldBe(1);
+    }
+
+    [AvaloniaFact]
+    public async Task WithTheOcrInstalledAndNoEngineChosenTheOptionalPartsAreAskedOnceWithTheirOwnText()
+    {
+        var confirm = new FakeConfirm { Answer = false };
+        using var h = new DesktopHarness(s => s.AddSingleton<IConfirmDialog>(confirm));
+        var page = await PageAsync(h);
+        var library = page.Documents.Library;
+        var text = h.Get<Localizer>();
+        var ocr = h.Get<TMConcept.Documents.Ocr.LocalOcrEngine>();
+        foreach (var file in ocr.Missing)
+        {
+            var path = Path.Combine(ocr.Folder, file.ExecutablePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            await File.WriteAllBytesAsync(path, [1, 2, 3]);
+        }
+
+        ocr.Ready.ShouldBeTrue("installed in an earlier version (fake model files here)");
+        await library.AddFilesAsync([LargePdfTests.WritePdf(h.Paths, "scan.pdf", 2, p => p == 1)]);
+
+        await library.ReadMissingAsync(library.Documents.ShouldHaveSingleItem());
+
+        var question = confirm.Messages.ShouldHaveSingleItem("one question, not one for the OCR's list and another for its optional parts");
+        question.ShouldNotContain(text["install.purpose.document_text"], Case.Sensitive, "cancelling it does not leave the pages unread");
+        question.ShouldContain("PDFium");
     }
 
     [AvaloniaFact]
