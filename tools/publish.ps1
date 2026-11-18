@@ -111,7 +111,8 @@ function Pack-Installed([string]$rid, [string]$folder, [string[]]$extra) {
     }
 
     $notes = Join-Path $root "docs/release-notes/v$version.md"
-    $arguments = @('--skip-updates') + $extra + @('pack', '--packId', $packId, '--packVersion', $version, '--packDir', $folder,
+    # A cross-compile directive ([linux]) must be the first argument.
+    $arguments = $extra + @('--skip-updates', 'pack', '--packId', $packId, '--packVersion', $version, '--packDir', $folder,
         '--runtime', $rid, '--channel', $channel, '--packTitle', 'TM Concept', '--packAuthors', 'TM AutoClip', '--outputDir', $work, '--delta', 'BestSpeed')
     if (Test-Path $notes) { $arguments += @('--releaseNotes', $notes) }
     if ($rid.StartsWith('win')) {
