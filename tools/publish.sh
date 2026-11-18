@@ -1,7 +1,9 @@
 #!/usr/bin/env sh
-# Publishes self-contained single-file builds and packs them (artifacts/release). Usage: tools/publish.sh [rid ...]
-# RELEASE_DIR / PUBLISH_DIR (environment, relative to the repository or absolute) keep an earlier release's files untouched while it is
-# still being tried, e.g. RELEASE_DIR=artifacts/release-0.1.4 PUBLISH_DIR=artifacts/publish-0.1.4 tools/publish.sh
+# Publishes the portable edition: self-contained single-file builds, packed by tools/package.py (artifacts/release-<version>).
+# Usage: tools/publish.sh [rid ...]
+# RELEASE_DIR / PUBLISH_DIR (environment, relative to the repository or absolute) default to artifacts/release-<version> and
+# artifacts/publish-<version>. The installed edition (Velopack Setup, packages, AppImage) and the checks of a whole release are made by
+# tools/publish.ps1 on Windows; a release is built there.
 #
 # A release is built only from a clean working tree (commit the version bump first): the binaries carry the commit they were built from
 # (informational version "<version>+<commit>"), so that commit must hold exactly the code that was built. Tag that commit.
@@ -13,11 +15,11 @@ if [ -n "$(git -C "$root" status --porcelain)" ]; then
   exit 1
 fi
 commit=$(git -C "$root" rev-parse HEAD)
-release_dir=${RELEASE_DIR:-artifacts/release}
-publish_dir=${PUBLISH_DIR:-artifacts/publish}
+version=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' "$root/Directory.Build.props" | head -n 1)
+release_dir=${RELEASE_DIR:-artifacts/release-$version}
+publish_dir=${PUBLISH_DIR:-artifacts/publish-$version}
 case "$release_dir" in /*) ;; *) release_dir="$root/$release_dir" ;; esac
 case "$publish_dir" in /*) ;; *) publish_dir="$root/$publish_dir" ;; esac
-version=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' "$root/Directory.Build.props" | head -n 1)
 echo "Building $version from commit $commit into $release_dir"
 [ "$#" -gt 0 ] || set -- win-x64 linux-x64 linux-arm64
 for rid in "$@"; do

@@ -232,7 +232,8 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
         // What changed since the version that ran before (once, from the notes built into the app); never holds the start up.
         _ = ShowWhatsNewAsync(previous);
 
-        // A newer version of the app (at most once a day, when it is not turned off): offered in a window, installed only on confirmation.
+        // The portable program asks once whether to install TM Concept (0.1.26); then a newer version of the app (at most once a day, when it
+        // is not turned off): offered in a window, installed only on confirmation.
         _ = OfferUpdateAsync();
 
         try
@@ -283,6 +284,20 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
     {
         try
         {
+            var install = services.GetRequiredService<Updates.InstallOffer>();
+            if (await install.AskAsync().ConfigureAwait(true))
+            {
+                await InstallEditionAsync().ConfigureAwait(true);
+                return;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            logger.LogWarning(ex, "The install question could not be asked");
+        }
+
+        try
+        {
             var updater = services.GetRequiredService<Updates.AppUpdater>();
             var offer = await Task.Run(() => updater.CheckAtStartAsync(CancellationToken.None)).ConfigureAwait(true);
             if (offer is not null)
@@ -293,6 +308,30 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or HttpRequestException)
         {
             logger.LogWarning(ex, "The check for a newer version failed");
+        }
+    }
+
+    /// <summary>
+    /// "Install TM Concept?" was answered with Yes: Setup of this version is downloaded (the activity panel says so), checked and started, and
+    /// this copy closes. A failure is shown there; the portable copy keeps running (Settings → General offers the install again).
+    /// </summary>
+    private async Task InstallEditionAsync()
+    {
+        activity.Add(ActivityLevel.Info, text["edition.install.downloading"]);
+        try
+        {
+            await Task.Run(() => services.GetRequiredService<Updates.EditionInstaller>().InstallAsync(null, CancellationToken.None)).ConfigureAwait(true);
+        }
+        catch (Updates.AppUpdateException ex)
+        {
+            logger.LogWarning(ex, "TM Concept was not installed ({Code})", ex.Code);
+            activity.Add(ActivityLevel.Error, text["edition.install.fail." + ex.Code]);
+        }
+        catch (Exception ex) when (ex is Core.Tools.ToolInstallException or IOException or UnauthorizedAccessException or HttpRequestException
+            or System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            logger.LogError(ex, "TM Concept could not be installed; the portable copy keeps running");
+            activity.Add(ActivityLevel.Error, text.Format("edition.install.failed", ex.Message));
         }
     }
 

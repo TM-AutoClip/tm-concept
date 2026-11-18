@@ -338,6 +338,13 @@ public static class DesktopServices
         services.AddSingleton<Updates.SelfReplacer>();
         services.AddSingleton<Updates.IAppRestarter, Updates.AppRestarter>();
         services.AddSingleton<Updates.AppUpdater>();
+
+        // Two editions (0.1.26): installed by Setup (Velopack; Program.Main registers what Velopack found) or the portable program.
+        services.AddSingleton<Updates.IAppEdition>(_ => Updates.VelopackEdition.Current());
+        services.AddSingleton<Updates.IInstalledUpdates, Updates.VelopackUpdates>();
+        services.AddSingleton<Updates.ISetupLauncher, Updates.SetupLauncher>();
+        services.AddSingleton<Updates.EditionInstaller>();
+        services.AddSingleton<Updates.InstallOffer>();
         services.AddSingleton<Dialogs.IAppUpdateDialog, Dialogs.AppUpdateDialog>();
         services.AddSingleton<Dialogs.IWhatsNewDialog, Dialogs.WhatsNewDialog>();
         services.AddSingleton<Components.ComponentReinstaller>();

@@ -6,6 +6,7 @@ using TMConcept.Desktop.Composition;
 using TMConcept.Desktop.Instance;
 using TMConcept.Desktop.Logging;
 using TMConcept.Desktop.Paths;
+using Velopack;
 
 namespace TMConcept.Desktop;
 
@@ -25,7 +26,24 @@ internal static class Program
             return RunSpeechWorker(args);
         }
 
+        // The installed edition (Velopack): Setup's and the uninstaller's hooks (--veloapp-install / -updated / -obsolete / -uninstall) run here
+        // and end the process before the data folder lock is taken or any service is built. A downloaded update is never applied at start: the
+        // apply ends every process running from the install folder (a second start or the speech worker would end a working first instance),
+        // so it is applied only from the update window when no work runs. The portable program passes straight through.
+        VelopackApp.Build().SetAutoApplyOnStartup(false).SetAppUserModelId(Os.TaskbarIcon.AppId).Run();
+        var edition = Updates.VelopackEdition.Current();
+
         var options = StartOptions.Parse(args);
+        var dataDirectory = options.DataDirectory ?? DesktopServices.CurrentOs.DefaultDataDirectory();
+        if (edition.Kind == Updates.AppEditionKind.Installed && Updates.EditionGuard.Overlaps(dataDirectory, edition.InstallRoot))
+        {
+            // An uninstall empties the install folder: the data must never live there (Setup started with --installto at the data folder).
+            Os.StartupMessage.Show("TM Concept",
+                "TM Concept was installed into its data folder (" + dataDirectory + "). Uninstalling it would delete your data, so it does not start. "
+                + "Uninstall it from Windows' Apps list (your data stays) and run Setup again without choosing a folder.");
+            return 3;
+        }
+
         if (options.WaitForProcess is { } previous)
         {
             // Started by the old version after an update: it is closing; the data folder is free once it has ended.
@@ -40,7 +58,7 @@ internal static class Program
             return 0;
         }
 
-        using var services = DesktopServices.Build(paths);
+        using var services = DesktopServices.Build(paths, s => s.AddSingleton<Updates.IAppEdition>(edition));
         var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(Program));
         var children = services.GetRequiredService<Engines.Processes.ChildProcessGuardBase>();
 
@@ -48,8 +66,9 @@ internal static class Program
         // or they would outlive the app.
         services.GetRequiredService<CrashLog>().Attach(terminating: () => children.KillAll());
         AppDomain.CurrentDomain.ProcessExit += (_, _) => children.KillAll();
-        logger.LogInformation("TM Concept {Version} starting on {Os} ({Architecture}, {Runtime}); data folder: {Mode}", AppIdentity.Version, AppIdentity.Os,
-            AppIdentity.Architecture, AppIdentity.Runtime, options.DataDirectory is null ? "default" : "portable");
+        logger.LogInformation("TM Concept {Version} ({Edition} edition) starting on {Os} ({Architecture}, {Runtime}); data folder: {Mode}", AppIdentity.Version,
+            edition.Kind == Updates.AppEditionKind.Installed ? "installed" : "portable", AppIdentity.Os, AppIdentity.Architecture, AppIdentity.Runtime,
+            options.DataDirectory is null ? "default" : "custom data folder");
         SweepOrphans(children, paths, logger);
 
         instance.Logger = services.GetRequiredService<ILogger<SingleInstance>>();

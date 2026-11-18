@@ -2,9 +2,12 @@
 
     python tools/package.py <publish folder> <rid> <version> [release folder]
 
-The release folder defaults to artifacts/release.
-win-x64: copies the single exe to <release folder>/TMConcept-<version>-win-x64.exe.
-linux-*: writes <release folder>/tm-concept-<version>-<rid>.tar.gz with a tm-concept/ folder: the program (executable), an icon,
+The release folder defaults to artifacts/release-<version>.
+The portable files carry no version in their names (0.1.26): a downloaded copy keeps a true name after it updated itself. Their names
+still end with -<rid>.exe / -<rid>.tar.gz, which is what the updaters of 0.1.25 and older look for (exactly one such file per system
+in a release; tools/publish.ps1 checks it).
+win-x64: copies the single exe to <release folder>/TMConcept-Portable-win-x64.exe.
+linux-*: writes <release folder>/tm-concept-portable-<rid>.tar.gz with a tm-concept/ folder: the program (executable), an icon,
 a .desktop file, install-desktop-entry.sh (adds the menu entry for the current user), README, LICENSE, third-party notices, licenses/.
 """
 import hashlib
@@ -26,13 +29,13 @@ def sha256(path):
 
 def main():
     folder, rid, version = sys.argv[1], sys.argv[2], sys.argv[3]
-    out = sys.argv[4] if len(sys.argv) > 4 else os.path.join(ROOT, "artifacts", "release")
+    out = sys.argv[4] if len(sys.argv) > 4 else os.path.join(ROOT, "artifacts", "release-" + version)
     os.makedirs(out, exist_ok=True)
     if rid.startswith("win"):
-        target = os.path.join(out, f"TMConcept-{version}-{rid}.exe")
+        target = os.path.join(out, f"TMConcept-Portable-{rid}.exe")
         shutil.copyfile(os.path.join(folder, "TMConcept.exe"), target)
     else:
-        target = os.path.join(out, f"tm-concept-{version}-{rid}.tar.gz")
+        target = os.path.join(out, f"tm-concept-portable-{rid}.tar.gz")
         with tarfile.open(target, "w:gz") as tar:
             def add(source, name, mode):
                 info = tar.gettarinfo(source, arcname="tm-concept/" + name)

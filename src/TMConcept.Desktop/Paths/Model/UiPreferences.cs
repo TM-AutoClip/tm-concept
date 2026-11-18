@@ -51,4 +51,10 @@ public sealed class UiPreferences
 
     /// <summary>When <see cref="UpdateOfferedVersion"/> was offered (UTC).</summary>
     public DateTimeOffset? UpdateOfferedAtUtc { get; set; }
+
+    /// <summary>
+    /// The portable program asked "Install TM Concept?" once (0.1.26; either answer): never asked again at start, Settings → General still
+    /// offers the install.
+    /// </summary>
+    public bool InstallOfferAnswered { get; set; }
 }

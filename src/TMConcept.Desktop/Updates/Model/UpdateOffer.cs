@@ -13,6 +13,9 @@ public sealed record UpdateOffer(AppVersion Version, string Current, string Note
     /// <summary>Every newer version, oldest first (the newest, <see cref="Version"/>, is the last); just the newest when nothing else is known.</summary>
     public IReadOnlyList<VersionNotes> Versions { get; init; } = [];
 
+    /// <summary>The installed edition's packages (Velopack), checked against the notes; null for the portable program or when not installable.</summary>
+    public InstalledUpdate? Installed { get; init; }
+
     /// <summary>Whether the app can download and install it itself.</summary>
     public bool CanInstall => Problem.Length == 0;
 }

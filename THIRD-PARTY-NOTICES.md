@@ -34,6 +34,12 @@ The release files are self-contained: they carry the .NET runtime and these libr
 | ZstdSharp.Port (reads the Linux Ollama package, `.tar.zst`) | MIT |
 | PdfPig (UglyToad.PdfPig; reads the text of PDF documents, 0.1.21) | Apache-2.0 |
 | ONNX Runtime (Microsoft.ML.OnnxRuntime with its native library; runs the documents' meaning model on the processor, 0.1.21, and the local OCR of scanned pages, 0.1.25) | MIT |
+| Velopack (the installed edition's install, shortcuts and updates, 0.1.26; the portable program carries the library but does not use it) | MIT |
+
+The installed edition (0.1.26) is installed by Velopack's Setup and updated by its `Update.exe` (both part of Velopack, MIT, github.com/velopack/velopack,
+put into `TMConcept-win-x64-Setup.exe` by the `vpk` packing tool at the same version as the library). The Linux AppImage, when one is
+published, starts with the AppImage type 2 runtime (MIT, github.com/AppImage/type2-runtime) that `vpk` adds; `mksquashfs`, which `vpk`
+uses to build it, only runs on the build machine and is not distributed.
 
 Exact versions are in `Directory.Packages.props`. Since 0.1.3 the speech libraries (sherpa-onnx with its ONNX Runtime) are no longer bundled;
 they are downloaded like the other tools (below). Since 0.1.21 the program carries ONNX Runtime again (Microsoft.ML.OnnxRuntime, for the

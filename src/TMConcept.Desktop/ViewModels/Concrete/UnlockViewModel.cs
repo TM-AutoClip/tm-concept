@@ -17,7 +17,7 @@ namespace TMConcept.Desktop.ViewModels;
 /// deleted), and the first start follows (new start or restore).
 /// </summary>
 public sealed partial class UnlockViewModel(Vault vault, UiMasterPassword masterPassword, IConfirmDialog confirm, Localizer text, Updates.SelfReplacer replacer,
-    ILogger<UnlockViewModel> logger)
+    Updates.AppUpdater updater, IAppUpdateDialog updateDialog, ILogger<UnlockViewModel> logger)
     : ObservableObject
 {
     /// <summary>Raised when the database is open.</summary>
@@ -41,6 +41,13 @@ public sealed partial class UnlockViewModel(Vault vault, UiMasterPassword master
     [ObservableProperty]
     public partial bool CanSetAside { get; set; }
 
+    /// <summary>
+    /// Whether "Update this copy" is offered (0.1.26): the database was made or upgraded by a newer version, so this older copy (the other
+    /// edition, or a copy kept elsewhere) must be updated to open it; nothing was changed.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool CanUpdateCopy { get; set; }
+
     /// <summary>Running.</summary>
     [ObservableProperty]
     public partial bool Busy { get; set; }
@@ -62,6 +69,37 @@ public sealed partial class UnlockViewModel(Vault vault, UiMasterPassword master
     public void Show(DatabaseVersionException error)
     {
         (Error, CanSetAside) = Describe(error, text, replacer.PreviousProgram);
+        CanUpdateCopy = error.Problem == DatabaseVersionProblem.Newer;
+    }
+
+    /// <summary>
+    /// Looks for the newest version now and offers it in the update window (the edition's own way: Setup's packages or the program file); the
+    /// database is not touched. Without a newer version the window says where to get one.
+    /// </summary>
+    [RelayCommand]
+    public async Task UpdateCopyAsync()
+    {
+        Busy = true;
+        try
+        {
+            var offer = await Task.Run(() => updater.CheckAsync(force: true, CancellationToken.None)).ConfigureAwait(true);
+            if (offer is null)
+            {
+                Error = text["database.update_none"];
+                return;
+            }
+
+            await updateDialog.ShowAsync(offer).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or HttpRequestException)
+        {
+            logger.LogWarning(ex, "The newer version for a newer database could not be looked for");
+            Error = text.Format("database.update_failed", ex.Message);
+        }
+        finally
+        {
+            Busy = false;
+        }
     }
 
     /// <summary>
@@ -83,6 +121,7 @@ public sealed partial class UnlockViewModel(Vault vault, UiMasterPassword master
         Busy = true;
         Error = string.Empty;
         CanSetAside = false;
+        CanUpdateCopy = false;
         try
         {
             if (NeedsPassword)

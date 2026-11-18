@@ -55,6 +55,14 @@ public static partial class ReleaseNotes
         return release.Assets.FirstOrDefault(a => a.Name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>The installer of <paramref name="release"/> for <paramref name="rid"/> (win-x64 → <c>…-win-x64-Setup.exe</c>); null when it has none.</summary>
+    public static GitHubAsset? SetupFor(GitHubRelease release, string rid)
+    {
+        ArgumentNullException.ThrowIfNull(release);
+        var suffix = "-" + rid + ReleaseAssetNames.SetupSuffix;
+        return release.Assets.FirstOrDefault(a => a.Name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase));
+    }
+
     /// <summary>This computer's runtime id among the published ones (win-x64, linux-x64, linux-arm64); empty when there is no build for it.</summary>
     public static string CurrentRid()
     {

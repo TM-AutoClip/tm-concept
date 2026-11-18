@@ -48,7 +48,9 @@ public sealed partial class AppUpdateViewModel(UpdateOffer offer, AppUpdater upd
     public string Problem => Offer.CanInstall ? string.Empty : text["appupdate.problem." + Offer.Problem];
 
     /// <summary>What happens on install (the size and the restart).</summary>
-    public string Hint => Offer.Asset is { } asset ? text.Format("appupdate.hint", asset.Name, ComponentInstallFlow.Megabytes(asset.Size)) : string.Empty;
+    public string Hint => Offer.Asset is { } asset
+        ? text.Format(Offer.Installed is null ? "appupdate.hint" : "appupdate.hint.installed", asset.Name, ComponentInstallFlow.Megabytes(asset.Size))
+        : string.Empty;
 
     /// <summary>Downloading or installing.</summary>
     [ObservableProperty]

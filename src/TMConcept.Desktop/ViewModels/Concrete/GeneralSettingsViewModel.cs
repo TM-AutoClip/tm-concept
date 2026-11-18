@@ -30,9 +30,104 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
     ComponentPlanner components, IToolPlatform platform, Engines.Engines.SampleRender sample, IConfirmDialog confirm, ShellLauncher shell,
     IActivityLog activity, PreferencesImageAcceleration acceleration, Engines.Images.ImageBackendSelector backends, ComponentInstallFlow installs,
     ILogger<GeneralSettingsViewModel> logger, ComponentReinstaller reinstaller, Updates.AppUpdater updater, IAppUpdateDialog updateDialog,
-    DiskSpace.IDiskCleaner cleaner, WhatsNewCheck whatsNew)
+    DiskSpace.IDiskCleaner cleaner, WhatsNewCheck whatsNew, Updates.IAppEdition edition, Updates.EditionInstaller editionInstaller,
+    IShortcutWriter shortcuts)
     : SettingsSectionBase
 {
+    /// <summary>"Edition: installed · 0.1.26" or "Edition: portable · 0.1.26".</summary>
+    public string EditionLine => text.Format(edition.Kind == Updates.AppEditionKind.Installed ? "edition.installed" : "edition.portable", updater.Current);
+
+    /// <summary>The installed edition's folder (shown read-only); empty for the portable program.</summary>
+    public string InstallFolder => edition.InstallRoot is { } root ? text.Format("edition.folder", root) : string.Empty;
+
+    /// <summary>Whether the install folder is shown.</summary>
+    public bool HasInstallFolder => edition.InstallRoot is not null;
+
+    /// <summary>"Install TM Concept" is offered (the published portable program on Windows).</summary>
+    public bool CanInstallEdition => editionInstaller.Available;
+
+    /// <summary>"Recreate shortcuts" is offered (the installed edition on Windows).</summary>
+    public bool CanRecreateShortcuts => edition.Kind == Updates.AppEditionKind.Installed && shortcuts.Supported;
+
+    /// <summary>What the install or the shortcuts did last (progress, done, why not).</summary>
+    [ObservableProperty]
+    public partial string EditionStatus { get; set; } = string.Empty;
+
+    /// <summary>The install is running.</summary>
+    [ObservableProperty]
+    public partial bool InstallingEdition { get; set; }
+
+    /// <summary>
+    /// Installs TM Concept from the portable program after a confirmation: Setup of this version is downloaded, checked against the release
+    /// notes, started, and this copy closes. The portable file stays.
+    /// </summary>
+    [RelayCommand]
+    public async Task InstallEditionAsync()
+    {
+        if (InstallingEdition || !CanInstallEdition)
+        {
+            return;
+        }
+
+        var answer = await confirm.AskAsync(text["edition.offer.title"], text["edition.offer.message"], text["edition.offer.install"], danger: false)
+            .ConfigureAwait(true);
+        if (!answer.Confirmed)
+        {
+            return;
+        }
+
+        InstallingEdition = true;
+        EditionStatus = text["edition.install.downloading"];
+        try
+        {
+            var progress = new Progress<ToolProgress>(p => EditionStatus = text.Format("edition.install.progress", Math.Round(p.Share * 100)));
+            await Task.Run(() => editionInstaller.InstallAsync(progress, CancellationToken.None)).ConfigureAwait(true);
+            EditionStatus = text["edition.install.started"];
+        }
+        catch (Updates.AppUpdateException ex)
+        {
+            logger.LogWarning(ex, "TM Concept was not installed ({Code})", ex.Code);
+            EditionStatus = text["edition.install.fail." + ex.Code];
+        }
+        catch (ToolInstallException ex)
+        {
+            logger.LogError(ex, "The installer could not be downloaded");
+            EditionStatus = text.Format("edition.install.failed", ComponentInstallFlow.Reason(text, ex));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or HttpRequestException or System.ComponentModel.Win32Exception
+            or InvalidOperationException)
+        {
+            logger.LogError(ex, "TM Concept could not be installed; the portable copy keeps running");
+            EditionStatus = text.Format("edition.install.failed", ex.Message);
+        }
+        finally
+        {
+            InstallingEdition = false;
+        }
+    }
+
+    /// <summary>Writes the desktop and Start menu shortcuts of the installed edition again (one the user deleted comes back).</summary>
+    [RelayCommand]
+    public void RecreateShortcuts()
+    {
+        if (!CanRecreateShortcuts || Environment.ProcessPath is not { Length: > 0 } program)
+        {
+            return;
+        }
+
+        try
+        {
+            // The id the window gives itself (TaskbarIcon) and Setup gives its shortcuts (vpk --aumid): a pinned button and the window group.
+            var written = shortcuts.Write(program, TaskbarIcon.AppId);
+            EditionStatus = text.Format("edition.shortcuts.done", written.Count);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+        {
+            logger.LogError(ex, "The shortcuts could not be written");
+            EditionStatus = text.Format("edition.shortcuts.failed", ex.Message);
+        }
+    }
+
     /// <summary>Look for a newer version of the app at start (stored at once, per computer).</summary>
     [ObservableProperty]
     public partial bool CheckForUpdates { get; set; }

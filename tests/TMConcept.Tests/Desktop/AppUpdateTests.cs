@@ -183,13 +183,19 @@ public sealed class AppUpdateTests
 
         await updater.InstallAsync(offer, null, CancellationToken.None);
 
-        File.ReadAllBytes(program).ShouldBe(NewProgram, "the new version is at the same path (shortcuts keep working)");
+        // 0.1.26: the program was named by its release (TMConcept-0.1.17-win-x64.exe); the new version gets the versionless portable name.
+        var portable = Path.Combine(Path.GetDirectoryName(program)!, ReleaseAssetNames.PortableWindows);
+        File.ReadAllBytes(portable).ShouldBe(NewProgram, "the new version keeps no misleading version in its name");
         if (OperatingSystem.IsWindows())
         {
             File.ReadAllText(program + UpdateRules.OldSuffix).ShouldBe("the old program", "the running file was renamed aside, not overwritten");
         }
+        else
+        {
+            File.Exists(program).ShouldBeFalse();
+        }
 
-        restarter.Started.ShouldBe([program]);
+        restarter.Started.ShouldBe([portable]);
 
         // The next start removes what the update left.
         h.Get<SelfReplacer>().CleanUp();
@@ -224,7 +230,7 @@ public sealed class AppUpdateTests
         var error = await Should.ThrowAsync<AppUpdateException>(() => updater.InstallAsync(offer, null, CancellationToken.None));
 
         error.Code.ShouldBe("restart", "installed, but not started: the user starts the app again (not a generic crash text)");
-        File.ReadAllBytes(program).ShouldBe(NewProgram);
+        File.ReadAllBytes(Path.Combine(Path.GetDirectoryName(program)!, ReleaseAssetNames.PortableWindows)).ShouldBe(NewProgram);
         if (OperatingSystem.IsWindows())
         {
             h.Get<SelfReplacer>().PreviousProgram.ShouldBe(program + UpdateRules.OldSuffix, "kept until the new version has started");
@@ -486,9 +492,97 @@ public sealed class AppUpdateTests
         queue.Count.ShouldBe(1);
     }
 
+    [Fact]
+    public async Task TheInstalledEditionGetsVelopacksPackagesOnlyWhenTheNotesConfirmEveryOne()
+    {
+        var full = new InstalledUpdateFile("TMConcept-0.1.18-win-x64-full.nupkg", "0.1.18", Hash(NewProgram), 1000);
+        var delta = new InstalledUpdateFile("TMConcept-0.1.18-win-x64-delta.nupkg", "0.1.18", new string('d', 64), 10);
+        var release = Release("v0.1.18", Notes(NewProgram) + $"\n{full.Sha256}  {full.FileName}\n{delta.Sha256}  {delta.FileName}\n");
+        release.Assets.Add(Asset("v0.1.18", full.FileName, full.Size));
+        release.Assets.Add(Asset("v0.1.18", delta.FileName, delta.Size));
+        var packages = new FakeInstalledUpdates { Update = new InstalledUpdate("0.1.18", full, [delta]) };
+        var restarter = new FakeRestarter();
+        using var h = Harness(new FakeGitHub(release), out var program, out _, restarter, more: s =>
+        {
+            s.AddSingleton<IAppEdition>(new VelopackEdition("0.1.17", false, Path.Combine(Path.GetTempPath(), "tmconcept-tests", "installed"), TMConcept.Desktop.Os.TaskbarIcon.AppId));
+            s.AddSingleton<IInstalledUpdates>(packages);
+        });
+        var updater = Updater(h);
+
+        var offer = (await updater.CheckAsync(true, CancellationToken.None)).ShouldNotBeNull();
+        offer.CanInstall.ShouldBeTrue();
+        offer.Installed.ShouldBe(packages.Update);
+        offer.Asset!.Size.ShouldBe(10, "only the delta is downloaded");
+
+        await updater.InstallAsync(offer, null, CancellationToken.None);
+        packages.Downloaded.ShouldBe(1);
+        packages.Applied.ShouldBe(1, "Velopack's updater applies it after the app has closed");
+        restarter.Closed.ShouldBe(1);
+        restarter.Started.ShouldBeEmpty("the installed edition never replaces its own program file");
+        File.ReadAllText(program).ShouldBe("the old program");
+
+        // A package whose SHA-256 the notes do not confirm: not installable, nothing downloaded.
+        packages.Update = new InstalledUpdate("0.1.18", full with { Sha256 = new string('e', 64) }, []);
+        var refused = (await updater.CheckAsync(true, CancellationToken.None)).ShouldNotBeNull();
+        refused.Problem.ShouldBe("no_hash");
+        refused.Installed.ShouldBeNull();
+        await Should.ThrowAsync<AppUpdateException>(() => updater.InstallAsync(refused, null, CancellationToken.None));
+        packages.Downloaded.ShouldBe(1);
+
+        // Velopack finds no packages for the newest release (a release without its index): the release page instead.
+        packages.Update = null;
+        (await updater.CheckAsync(true, CancellationToken.None))!.Problem.ShouldBe("no_asset");
+    }
+
+    [Fact]
+    public async Task InstallingFromThePortableProgramRunsTheCheckedSetupOfThisVersionAndCloses()
+    {
+        var setup = Encoding.UTF8.GetBytes("the installer");
+        var running = Release("v0.1.17", $"## SHA-256\n{Hash(setup)}  {ReleaseAssetNames.SetupWindows}\n");
+        running.Assets.Add(Asset("v0.1.17", ReleaseAssetNames.SetupWindows, setup.Length));
+        var launcher = new FakeSetupLauncher();
+        var restarter = new FakeRestarter();
+        using var h = Harness(new FakeGitHub(Release("v0.1.18", "newer"), running), out var program, out _, restarter, new FlakyServer(setup),
+            s => s.AddSingleton<ISetupLauncher>(launcher));
+
+        await Installer(h).InstallAsync(null, CancellationToken.None);
+
+        var started = launcher.Started.ShouldHaveSingleItem();
+        Path.GetFileName(started).ShouldBe(ReleaseAssetNames.SetupWindows, "the running version's own Setup, not the newest release's");
+        File.ReadAllBytes(started).ShouldBe(setup);
+        restarter.Closed.ShouldBe(1, "this copy closes so the installed one can open the data folder");
+        File.ReadAllText(program).ShouldBe("the old program", "the portable file stays");
+    }
+
+    [Fact]
+    public async Task ASetupWithoutItsSha256InTheNotesIsNeverStarted()
+    {
+        var running = Release("v0.1.17", "No checksums here.");
+        running.Assets.Add(Asset("v0.1.17", ReleaseAssetNames.SetupWindows, 3));
+        var launcher = new FakeSetupLauncher();
+        using var h = Harness(new FakeGitHub(running), out _, out _, more: s => s.AddSingleton<ISetupLauncher>(launcher));
+
+        (await Should.ThrowAsync<AppUpdateException>(() => Installer(h).InstallAsync(null, CancellationToken.None))).Code.ShouldBe("no_hash");
+        launcher.Started.ShouldBeEmpty();
+
+        using var offline = Harness(new FakeGitHub(Release("v0.1.18", "only a newer one")), out _, out _);
+        (await Should.ThrowAsync<AppUpdateException>(() => Installer(offline).InstallAsync(null, CancellationToken.None))).Code.ShouldBe("no_release");
+    }
+
+    private static EditionInstaller Installer(DesktopHarness h) =>
+        new(h.Get<ReleaseFeed>(), h.Get<ToolDownloader>(), h.Get<SelfReplacer>(), h.Get<IAppEdition>(), h.Get<ISetupLauncher>(), h.Get<IAppRestarter>(),
+            h.Get<TMConcept.Desktop.Startup.AppSession>(), NullLogger<EditionInstaller>.Instance)
+        {
+            Current = "0.1.17",
+            Rid = "win-x64",
+        };
+
+    private static GitHubAsset Asset(string tag, string name, long size) =>
+        new() { Name = name, DownloadUrl = AppUpdater.DownloadPrefix + tag + "/" + name, Size = size };
+
     private static AppUpdater Updater(DesktopHarness h) => new(h.Get<ReleaseFeed>(), h.Get<SelfReplacer>(), h.Get<ToolDownloader>(), h.Get<UiPreferencesFile>(),
         h.Get<IAppRestarter>(), h.Get<TMConcept.Desktop.Startup.AppSession>(), h.Get<TMConcept.Speech.Speech.SpeechWorkerClient>(), h.Get<TimeProvider>(),
-        NullLogger<AppUpdater>.Instance)
+        h.Get<IAppEdition>(), h.Get<IInstalledUpdates>(), NullLogger<AppUpdater>.Instance)
     {
         Current = "0.1.17",
         Rid = "win-x64",
@@ -496,7 +590,7 @@ public sealed class AppUpdateTests
 
     /// <summary>A harness with a fake GitHub and download server, a packaged program in a temp folder, a fake clock and restarter.</summary>
     private static DesktopHarness Harness(FakeGitHub github, out string program, out FakeTimeProvider clock, FakeRestarter? restarter = null,
-        FlakyServer? downloads = null)
+        FlakyServer? downloads = null, Action<IServiceCollection>? more = null)
     {
         var folder = Path.Combine(Path.GetTempPath(), "tmconcept-tests", "program-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
@@ -515,6 +609,8 @@ public sealed class AppUpdateTests
             {
                 s.AddSingleton(new DownloadTransport(() => downloads));
             }
+
+            more?.Invoke(s);
         });
     }
 
@@ -567,9 +663,40 @@ public sealed class AppUpdateTests
         return memory.ToArray();
     }
 
+    private sealed class FakeInstalledUpdates : IInstalledUpdates
+    {
+        public InstalledUpdate? Update { get; set; }
+
+        public int Downloaded { get; private set; }
+
+        public int Applied { get; private set; }
+
+        public Task<InstalledUpdate?> CheckAsync(CancellationToken cancellationToken) => Task.FromResult(Update);
+
+        public Task DownloadAsync(InstalledUpdate update, Action<int> percent, CancellationToken cancellationToken)
+        {
+            Downloaded++;
+            percent(100);
+            return Task.CompletedTask;
+        }
+
+        public void ApplyAfterExit(InstalledUpdate update, IReadOnlyList<string> restartArguments) => Applied++;
+    }
+
+    private sealed class FakeSetupLauncher : ISetupLauncher
+    {
+        public List<string> Started { get; } = [];
+
+        public void Start(string setup) => Started.Add(setup);
+    }
+
     private sealed class FakeRestarter : IAppRestarter
     {
         public List<string> Started { get; } = [];
+
+        public int Closed { get; private set; }
+
+        public void Close() => Closed++;
 
         public bool Fail { get; init; }
 

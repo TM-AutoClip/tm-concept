@@ -19,6 +19,9 @@ public static class UpdateRules
     /// <summary>The most pages of the release list read in one look (each one counts against the hourly limit).</summary>
     public const int MaxPages = 5;
 
+    /// <summary>The project's repository (Velopack's GitHub source for the installed edition reads its releases).</summary>
+    public const string Repository = "https://github.com/TM-AutoClip/tm-concept";
+
     /// <summary>The releases page (shown when the app cannot install a release itself).</summary>
     public static readonly Uri ReleasesPage = new("https://github.com/TM-AutoClip/tm-concept/releases");
 

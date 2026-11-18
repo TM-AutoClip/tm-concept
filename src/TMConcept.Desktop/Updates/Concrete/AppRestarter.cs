@@ -34,8 +34,12 @@ public sealed class AppRestarter(ILogger<AppRestarter> logger) : IAppRestarter
             logger.LogInformation("The new version was started; this one closes");
         }
 
-        OnUiThread(static () => (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Shutdown());
+        Close();
     }
+
+    /// <inheritdoc />
+    public void Close() =>
+        OnUiThread(static () => (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Shutdown());
 
     /// <summary>Runs <paramref name="action"/> at once on the UI thread, or posts it there from any other thread.</summary>
     internal static void OnUiThread(Action action) => OnUiThread(action, Dispatcher.UIThread.CheckAccess, a => Dispatcher.UIThread.Post(a));
