@@ -23,8 +23,10 @@ public abstract class OwnerDeletionBase(IAppPaths paths, IFolderDiscard discard,
     protected IVideoStore Videos { get; } = videos;
 
     /// <summary>
-    /// The files of <paramref name="video"/>: its version folder, or, when another record's folder is that folder or lies inside it (a
-    /// version made inside an older single-folder video), only the files the app wrote there.
+    /// The files of <paramref name="video"/>: its version folder, or, when another record's folder lies inside it (a version made inside an
+    /// older single-folder video), only the files the app wrote there. When another record has the very same folder (an old database or a
+    /// restored backup), nothing: the app's file names there are that record's files too, so only the record goes and the folder is left
+    /// to the other record's delete (or to the orphan scan of the storage page).
     /// </summary>
     protected IReadOnlyList<string> VideoPaths(VideoRecord video, IReadOnlyCollection<VideoRecord> all)
     {
@@ -35,8 +37,13 @@ public abstract class OwnerDeletionBase(IAppPaths paths, IFolderDiscard discard,
             return [];
         }
 
-        var shared = all.Any(o => o.Id != video.Id && Resolve(o.Folder) is { } other && (Same(other, folder) || Inside(other, folder)));
-        if (!shared)
+        var others = all.Where(o => o.Id != video.Id).Select(o => Resolve(o.Folder)).OfType<string>().ToList();
+        if (others.Any(other => Same(other, folder)))
+        {
+            return [];
+        }
+
+        if (!others.Any(other => Inside(other, folder)))
         {
             return [folder];
         }

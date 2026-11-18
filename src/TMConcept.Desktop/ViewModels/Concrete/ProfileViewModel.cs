@@ -485,8 +485,9 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
     }
 
     /// <summary>
-    /// Removes a sample image: its copied file for good, then its record (one picked on a new profile was never copied). A file that cannot
-    /// be removed keeps the image and the reason is shown.
+    /// Removes a sample image: its copied file for good, then its record (one picked on a new profile was never copied, so it is only taken
+    /// off the list). A saved one asks first, with the size and that it cannot be undone. A file that cannot be removed keeps the image and
+    /// the reason is shown.
     /// </summary>
     [RelayCommand]
     private async Task RemoveImageAsync(ProfileImageViewModel? image)
@@ -500,6 +501,14 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
         {
             try
             {
+                var bytes = await imageDeletion.SizeAsync([image.Image.Id], CancellationToken.None).ConfigureAwait(true);
+                var answer = await confirm.AskAsync(text["profile.images.remove.title"], text.Format("profile.images.remove.message", image.FileName,
+                    StorageSettingsViewModel.Size(bytes, text.Culture)), text["common.delete"], danger: true).ConfigureAwait(true);
+                if (!answer.Confirmed)
+                {
+                    return;
+                }
+
                 var result = await imageDeletion.DeleteAsync([image.Image.Id], CancellationToken.None).ConfigureAwait(true);
                 if (!result.Complete)
                 {

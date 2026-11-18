@@ -8,14 +8,14 @@ namespace TMConcept.Desktop.Dialogs;
 public sealed class UpdateDialog(WindowHost host, Localizer text) : IUpdateDialog
 {
     /// <inheritdoc />
-    public async Task<UpdateChoice> AskAsync(string from, string to, string toolsFolder)
+    public async Task<UpdateChoice> AskAsync(string from, string to, string toolsFolder, long toolsBytes)
     {
         if (host.Active is not { } owner)
         {
             return UpdateChoice.Later;
         }
 
-        var model = new UpdateViewModel(Title(text, from, to), text.Format("update.message", toolsFolder));
+        var model = new UpdateViewModel(Title(text, from, to), text.Format("update.message", toolsFolder, ViewModels.StorageSettingsViewModel.Size(toolsBytes, text.Culture)));
         await new UpdateWindow { DataContext = model }.ShowDialog(owner).ConfigureAwait(true);
         return model.Choice;
     }

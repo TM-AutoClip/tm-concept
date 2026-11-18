@@ -104,6 +104,7 @@ public sealed class VersionChangeTests
             await h.Get<VersionCheck>().RunAsync("0.1.16", CancellationToken.None);
 
             dialog.Asked.Count.ShouldBe(1);
+            dialog.Sizes.ShouldBe([3L], "the window shows what the old folder holds (the old sd-cli.exe: 3 bytes), since it is deleted for good");
             confirm.Asked.Count.ShouldBe(1, "one confirmation: the downloads");
             discard.Discarded.ShouldBe([aside]);
             Directory.Exists(aside).ShouldBeFalse("deleted for good: an old components folder is gigabytes");
@@ -332,10 +333,13 @@ public sealed class VersionChangeTests
 
         public List<string> Folders { get; } = [];
 
-        public Task<UpdateChoice> AskAsync(string from, string to, string toolsFolder)
+        public List<long> Sizes { get; } = [];
+
+        public Task<UpdateChoice> AskAsync(string from, string to, string toolsFolder, long toolsBytes)
         {
             Asked.Add((from, to));
             Folders.Add(toolsFolder);
+            Sizes.Add(toolsBytes);
             return Task.FromResult(choice);
         }
     }

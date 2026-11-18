@@ -86,12 +86,15 @@ public sealed partial class TrashViewModel(AppSession session, IConceptStore con
         }
     }
 
-    /// <summary>Deletes the checked concepts permanently after a confirmation.</summary>
+    /// <summary>
+    /// Deletes the checked concepts permanently after a confirmation. Not while work runs (a new version may be made from one of their
+    /// videos): checked before the confirmation and again after it.
+    /// </summary>
     [RelayCommand]
     public async Task DeletePermanentlyAsync()
     {
         var ids = Chosen();
-        if (ids.Count == 0)
+        if (ids.Count == 0 || RefuseWhileWorking())
         {
             return;
         }
@@ -113,7 +116,7 @@ public sealed partial class TrashViewModel(AppSession session, IConceptStore con
             ? text.Format("trash.delete.message", plan.Concepts, plan.Videos, size)
             : text.Format("trash.delete.message_no_videos", plan.Concepts, size);
         var answer = await confirm.AskAsync(text["trash.delete.title"], message, text["trash.delete.confirm"], danger: true).ConfigureAwait(true);
-        if (!answer.Confirmed)
+        if (!answer.Confirmed || RefuseWhileWorking())
         {
             return;
         }
@@ -152,6 +155,18 @@ public sealed partial class TrashViewModel(AppSession session, IConceptStore con
             logger.LogError(ex, "Concepts could not be deleted permanently");
             Status = text.Format("error.generic", ex.Message);
         }
+    }
+
+    /// <summary>Whether a permanent delete must wait for running work (the status says so).</summary>
+    private bool RefuseWhileWorking()
+    {
+        if (!session.WorkRunning)
+        {
+            return false;
+        }
+
+        Status = text["trash.delete.busy"];
+        return true;
     }
 
     partial void OnSearchChanged(string value) => Filter();

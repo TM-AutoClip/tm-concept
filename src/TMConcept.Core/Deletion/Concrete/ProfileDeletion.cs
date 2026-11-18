@@ -13,7 +13,7 @@ namespace TMConcept.Core.Deletion;
 /// another profile still uses stays: two profiles whose names give the same library folder share it, so the profile's library folder is
 /// never deleted as a whole, only what it owns and then the folders left empty), its document copies, the kept scene images of its
 /// concepts, and last the profile row (its concepts, queue and the rest go with it in the database). When a file cannot be removed (in use)
-/// the profile row STAYS and the failures are reported; a second try finishes it.
+/// the profile row STAYS with its document copies and the failures are reported; a second try finishes it.
 /// </summary>
 public sealed class ProfileDeletion(IAppPaths paths, IFolderDiscard discard, IVideoStore videos, IProfileStore profiles, IConceptStore concepts,
     DocumentLibrary documents, SampleImageDeletion images, ILogger<ProfileDeletion> logger) : OwnerDeletionBase(paths, discard, videos, logger)
@@ -44,15 +44,21 @@ public sealed class ProfileDeletion(IAppPaths paths, IFolderDiscard discard, IVi
         complete &= await RemoveAsync(await PhotoAsync(profileId, cancellationToken).ConfigureAwait(false), tally, cancellationToken).ConfigureAwait(false);
         var conceptIds = await ConceptIdsAsync(profileId, cancellationToken).ConfigureAwait(false);
         complete &= await RemoveAsync(conceptIds.Select(SceneImages).ToList(), tally, cancellationToken).ConfigureAwait(false);
-        try
+
+        // The document copies go only when everything before went: a profile that stays (a file was in use) keeps its documents and their
+        // records together, so the user can keep using it instead of trying again.
+        if (complete)
         {
-            await documents.DiscardProfileAsync(profileId, Discard, cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
-        {
-            logger.LogError(ex, "Delete: the profile's document copies could not be removed; the profile stays");
-            tally.Failed.Add(new DeletionFailure(DocumentFolder(profileId), ex.Message));
-            complete = false;
+            try
+            {
+                await documents.DiscardProfileAsync(profileId, Discard, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+            {
+                logger.LogError(ex, "Delete: the profile's document copies could not be removed; the profile stays");
+                tally.Failed.Add(new DeletionFailure(DocumentFolder(profileId), ex.Message));
+                complete = false;
+            }
         }
 
         tally.Deleted = 0;

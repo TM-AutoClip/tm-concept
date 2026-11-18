@@ -309,7 +309,10 @@ public sealed partial class VoiceSettingsViewModel(PronunciationService pronunci
         }
     }
 
-    /// <summary>Removes a sample (a voice choice that names it falls back to another voice on the video page).</summary>
+    /// <summary>
+    /// Removes a sample (a voice choice that names it falls back to another voice on the video page). A file of it that is in use, or a
+    /// storage error, keeps the sample and the reason is shown.
+    /// </summary>
     [RelayCommand]
     public async Task DeleteSampleAsync(VoiceSampleInfo? sample)
     {
@@ -318,8 +321,17 @@ public sealed partial class VoiceSettingsViewModel(PronunciationService pronunci
             return;
         }
 
-        await samples.DeleteAsync(sample.Id, CancellationToken.None).ConfigureAwait(true);
-        SampleStatus = text.Format("voices.samples.removed", sample.Name);
+        try
+        {
+            await samples.DeleteAsync(sample.Id, CancellationToken.None).ConfigureAwait(true);
+            SampleStatus = text.Format("voices.samples.removed", sample.Name);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "A voice sample could not be removed");
+            SampleStatus = text.Format("voices.samples.remove_failed", sample.Name, ex.Message);
+        }
+
         await LoadSamplesAsync().ConfigureAwait(true);
     }
 

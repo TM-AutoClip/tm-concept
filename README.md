@@ -376,8 +376,8 @@ when ticked), the scene images of deleted concepts, and the listen and sample re
 folder (and its concept's folder with the last version); concepts deleted from the Trash take their videos and scene images; a profile
 takes its videos, sample images, channel photo, document copies and its concepts' scene images (a file another profile still uses stays);
 a removed sample image takes its file; a deleted voice sample takes the narration cached with it. Files go first and the record after:
-when a file is in use, the record stays, the reason is shown, and trying again finishes it. Models are never touched by a delete or a
-clean-up unless you tick them. Old work files (cached narration and work folders older than 7 days) are cleaned at start and at the end
+when a file is in use, the record stays, the reason is shown, and trying again finishes it. A video or a concept in the Trash is not
+deleted while a new version or a video queue is running. Models are never touched by a delete or a clean-up unless you tick them. Old work files (cached narration and work folders older than 7 days) are cleaned at start and at the end
 of a video queue.
 
 **What the catalog says about a model.** Every model in a picker has its own **?** with facts the app already knows, nothing judged

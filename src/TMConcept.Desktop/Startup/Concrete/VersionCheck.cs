@@ -48,7 +48,9 @@ public sealed class VersionCheck(UiPreferencesFile preferences, ComponentReinsta
 
         logger.LogInformation("App version {From} -> {To} with {Count} installed components: asking what to do with them", Shown(recorded), current,
             installed.Count);
-        var choice = await dialog.AskAsync(recorded, current, components.Location()).ConfigureAwait(true);
+        // The size is shown: "reinstall from scratch" deletes the old folder for good, and it is often tens of GB.
+        var size = await Task.Run(() => Core.DiskSpace.DiskSizes.Of(components.Folder), cancellationToken).ConfigureAwait(true);
+        var choice = await dialog.AskAsync(recorded, current, components.Location(), size).ConfigureAwait(true);
         logger.LogInformation("After the version change the user chose: {Choice}", choice);
         switch (choice)
         {

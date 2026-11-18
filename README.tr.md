@@ -371,8 +371,8 @@ dinleme ve deneme çıktısı dosyaları.
 birlikte konseptin klasörünü de) götürür; çöpten silinen konseptler videolarını ve sahne görsellerini götürür; profil videolarını, örnek
 görsellerini, kanal fotoğrafını, belge kopyalarını ve konseptlerinin sahne görsellerini götürür (başka bir profilin hâlâ kullandığı dosya
 kalır); kaldırılan örnek görsel dosyasını götürür; silinen ses örneği onunla önbelleğe alınan seslendirmeyi götürür. Önce dosyalar, sonra
-kayıt gider: bir dosya kullanımdaysa kayıt kalır, nedeni gösterilir, tekrar deneyince iş biter. Modellere, sen işaretlemedikçe hiçbir
-silme ya da temizlik dokunmaz. Eski iş dosyaları (7 günden eski önbellekteki seslendirme ve iş klasörleri) açılışta ve video kuyruğunun
+kayıt gider: bir dosya kullanımdaysa kayıt kalır, nedeni gösterilir, tekrar deneyince iş biter. Yeni bir sürüm ya da video kuyruğu
+çalışırken video ya da çöpteki konsept silinmez. Modellere, sen işaretlemedikçe hiçbir silme ya da temizlik dokunmaz. Eski iş dosyaları (7 günden eski önbellekteki seslendirme ve iş klasörleri) açılışta ve video kuyruğunun
 sonunda temizlenir.
 
 **Katalog bir model hakkında ne diyor.** Seçicideki her modelin kendi **?** işareti var; programın zaten bildiği bilgileri gösterir,

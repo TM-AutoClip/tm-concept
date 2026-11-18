@@ -184,12 +184,13 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
     /// <summary>
     /// Deletes the shown version for good after a confirmation that shows its size (0.1.28: its folder always goes, and its concept's folder
     /// when it was the last version; the other versions stay). The player lets go of the file first. A folder that cannot be removed keeps the
-    /// record and the reason is shown.
+    /// record and the reason is shown. While work runs (a new version being made from a version, a video queue) nothing is deleted: the
+    /// running work may read the files of the version (checked before the confirmation and again after it).
     /// </summary>
     [RelayCommand]
     public async Task DeleteAsync()
     {
-        if ((SelectedVersion ?? Selected) is not { } row)
+        if ((SelectedVersion ?? Selected) is not { } row || RefuseWhileWorking())
         {
             return;
         }
@@ -200,7 +201,7 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
             var size = StorageSettingsViewModel.Size(plan.Bytes, text.Culture);
             var answer = await confirm.AskAsync(text["produced.delete.title"], text.Format("produced.delete.message", row.Title, size), text["common.delete"],
                 danger: true).ConfigureAwait(true);
-            if (!answer.Confirmed)
+            if (!answer.Confirmed || RefuseWhileWorking())
             {
                 return;
             }
@@ -235,6 +236,18 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
         }
 
         await ReloadAsync().ConfigureAwait(true);
+    }
+
+    /// <summary>Whether a delete must wait: a new version or a video queue is running (the status says so).</summary>
+    private bool RefuseWhileWorking()
+    {
+        if (!session.WorkRunning && !Editor.Busy)
+        {
+            return false;
+        }
+
+        Status = text["produced.delete.busy"];
+        return true;
     }
 
     partial void OnSearchChanged(string value) => Filter();

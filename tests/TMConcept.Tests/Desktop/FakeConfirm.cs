@@ -17,11 +17,15 @@ internal sealed class FakeConfirm : IConfirmDialog
 
     public List<bool> Dangers { get; } = [];
 
+    /// <summary>Runs while the question is open (something that happens while the user reads it).</summary>
+    public Action? OnAsk { get; set; }
+
     public Task<ConfirmResult> AskAsync(string title, string message, string confirmText, bool danger, string? checkbox = null, string? cancelText = null)
     {
         Asked.Add(title);
         Messages.Add(message);
         Dangers.Add(danger);
+        OnAsk?.Invoke();
         return Task.FromResult(new ConfirmResult(Answers.Count > 0 ? Answers.Dequeue() : Answer, Checked));
     }
 }

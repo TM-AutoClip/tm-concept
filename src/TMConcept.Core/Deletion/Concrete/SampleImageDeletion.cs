@@ -21,6 +21,15 @@ public sealed class SampleImageDeletion(IAppPaths paths, IFolderDiscard discard,
         return Result(tally);
     }
 
+    /// <summary>The bytes deleting the image records <paramref name="ids"/> frees (their files that no other image record uses).</summary>
+    public async Task<long> SizeAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        var all = await profiles.AllImagesAsync(cancellationToken).ConfigureAwait(false);
+        var going = all.Where(i => ids.Contains(i.Id)).ToList();
+        return await Task.Run(() => Size(Files(going, all)), cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>The files of <paramref name="images"/> that no other image record uses (<paramref name="all"/>: every image record).</summary>
     public IReadOnlyList<string> Files(IReadOnlyCollection<ProfileImage> images, IReadOnlyCollection<ProfileImage> all)
     {

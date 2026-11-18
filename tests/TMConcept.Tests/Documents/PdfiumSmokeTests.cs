@@ -27,7 +27,8 @@ public sealed class PdfiumSmokeTests
             Assert.Skip("TMC_PDFIUM_DIR does not name a folder with " + name + ".");
         }
 
-        // The loaded library cannot be deleted while the test process runs: its folder is kept (under the system's temp folder) and reused.
+        // The loaded library cannot be deleted while the test process runs: its folder is kept (under the system's temp folder) and the
+        // next test run deletes it once this process is gone (TestRunFolder).
         using var paths = TempPaths.At(Path.Combine(Path.GetTempPath(), "tmconcept-tests", "pdfium-smoke", Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture)));
         var rid = (OperatingSystem.IsWindows() ? "win-" : "linux-") + (System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture
             == System.Runtime.InteropServices.Architecture.Arm64 ? "arm64" : "x64");

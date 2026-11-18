@@ -356,6 +356,183 @@ public sealed class DeletionTests
         discard.Owns(Path.Combine(TestFolders.Root, "x")).ShouldBeFalse();
     }
 
+    [AvaloniaFact]
+    public async Task TwoRecordsOnOneFolderNeverDeleteEachOthersFiles()
+    {
+        using var h = await HarnessAsync();
+        var profile = await ProfileAsync(h, "Byzantium");
+        var first = await VideoAsync(h, profile, "Byzantium/greek-fire/v1");
+        var second = await VideoAsync(h, profile, "Byzantium/greek-fire/v1", write: false);
+        var deletion = h.Get<VideoDeletion>();
+        var file = Path.Combine(Full(h, first.Folder), VideoFolders.VideoFile);
+
+        (await deletion.PlanAsync([first.Id], None)).Bytes.ShouldBe(0, "the files are the other record's too");
+        (await deletion.DeleteAsync([first.Id], None)).Complete.ShouldBeTrue();
+
+        (await h.Get<IVideoStore>().GetAsync(first.Id, None)).ShouldBeNull("only the record goes");
+        File.Exists(file).ShouldBeTrue("the second record still uses the same video.mp4");
+        (await h.Get<IVideoStore>().GetAsync(second.Id, None)).ShouldNotBeNull();
+
+        (await deletion.DeleteAsync([second.Id], None)).Complete.ShouldBeTrue();
+        Directory.Exists(Full(h, second.Folder)).ShouldBeFalse("the last record takes the folder");
+    }
+
+    [AvaloniaFact]
+    public async Task AProfileThatStaysKeepsItsDocumentCopies()
+    {
+        var discard = new RecordingDiscard();
+        using var h = await HarnessAsync(discard);
+        var profile = await ProfileAsync(h, "Byzantium");
+        var video = await VideoAsync(h, profile, "Byzantium/greek-fire/v1");
+        var documents = h.Get<DocumentLibrary>();
+        var source = Path.Combine(h.Paths.DataDirectory, "walls.txt");
+        File.WriteAllText(source, "The walls held.");
+        await documents.AddFileAsync(profile.Id, source, null, None);
+        var copies = Path.Combine(documents.Folder, profile.Id.ToString("N"));
+        Directory.Exists(copies).ShouldBeTrue();
+        discard.FailWhen = p => p == Full(h, video.Folder);
+
+        var result = await h.Get<ProfileDeletion>().DeleteAsync(profile.Id, None);
+
+        result.Complete.ShouldBeFalse();
+        (await h.Get<IProfileStore>().GetAsync(profile.Id, None)).ShouldNotBeNull();
+        Directory.Exists(copies).ShouldBeTrue("the profile stays, so its documents stay with their records");
+        (await documents.ListAsync(profile.Id, None)).ShouldHaveSingleItem();
+
+        discard.FailWhen = _ => false;
+        (await h.Get<ProfileDeletion>().DeleteAsync(profile.Id, None)).Complete.ShouldBeTrue();
+        Directory.Exists(copies).ShouldBeFalse("a second try finishes it");
+    }
+
+    [AvaloniaFact]
+    public async Task AVideoIsNotDeletedWhileWorkRuns()
+    {
+        var confirm = new FakeConfirm();
+        using var h = await HarnessAsync(confirm: confirm);
+        var profile = await ProfileAsync(h, "Byzantium");
+        var video = await VideoAsync(h, profile, "Byzantium/greek-fire/v1");
+        var session = h.Get<AppSession>();
+        await session.SelectProfileAsync(profile, None);
+        var page = h.Get<ProducedViewModel>();
+        await page.ActivateAsync();
+        page.Selected = page.Items.Single();
+        var text = h.Get<Localizer>();
+
+        // Running before the delete: nothing is asked.
+        session.WorkRunning = true;
+        await page.DeleteAsync();
+        confirm.Asked.ShouldBeEmpty();
+        page.Status.ShouldBe(text["produced.delete.busy"]);
+        Directory.Exists(Full(h, video.Folder)).ShouldBeTrue();
+
+        // Started while the confirmation was open: checked again after it.
+        session.WorkRunning = false;
+        confirm.OnAsk = () => session.WorkRunning = true;
+        await page.DeleteAsync();
+        confirm.Asked.ShouldHaveSingleItem();
+        page.Status.ShouldBe(text["produced.delete.busy"]);
+        Directory.Exists(Full(h, video.Folder)).ShouldBeTrue("a new version may be reading its files");
+        (await h.Get<IVideoStore>().GetAsync(video.Id, None)).ShouldNotBeNull();
+    }
+
+    [AvaloniaFact]
+    public async Task AConceptIsNotDeletedFromTheTrashWhileWorkRuns()
+    {
+        var confirm = new FakeConfirm();
+        using var h = await HarnessAsync(confirm: confirm);
+        var profile = await ProfileAsync(h, "Byzantium");
+        var concept = await ConceptAsync(h, profile, "Greek fire", ConceptStatus.Trashed);
+        var video = await VideoAsync(h, profile, "Byzantium/greek-fire/v1", concept.Id);
+        var session = h.Get<AppSession>();
+        await session.SelectProfileAsync(profile, None);
+        var trash = h.Get<TrashViewModel>();
+        await trash.ActivateAsync();
+        trash.Items.Single().IsChecked = true;
+        var text = h.Get<Localizer>();
+
+        session.WorkRunning = true;
+        await trash.DeletePermanentlyAsync();
+        confirm.Asked.ShouldBeEmpty();
+        trash.Status.ShouldBe(text["trash.delete.busy"]);
+
+        session.WorkRunning = false;
+        confirm.OnAsk = () => session.WorkRunning = true;
+        await trash.DeletePermanentlyAsync();
+        confirm.Asked.ShouldHaveSingleItem();
+        trash.Status.ShouldBe(text["trash.delete.busy"]);
+        (await h.Get<IConceptStore>().GetAsync(concept.Id, None)).ShouldNotBeNull();
+        Directory.Exists(Full(h, video.Folder)).ShouldBeTrue();
+    }
+
+    [AvaloniaFact]
+    public async Task ASampleImageIsDeletedOnlyAfterAConfirmationWithItsSize()
+    {
+        var confirm = new FakeConfirm { Answer = false };
+        using var h = await HarnessAsync(confirm: confirm);
+        var profile = await ProfileAsync(h, "History");
+        Put(Path.Combine(h.Paths.LibraryDirectory, "History", "images"), "0123456789-a.png", 10);
+        await h.Get<IProfileStore>().SaveImageAsync(new ProfileImage { ProfileId = profile.Id, FileName = "History/images/0123456789-a.png" }, None);
+        var file = Path.Combine(h.Paths.LibraryDirectory, "History", "images", "0123456789-a.png");
+        await h.Get<AppSession>().SelectProfileAsync(profile, None);
+        var page = h.Get<ProfileViewModel>();
+        await page.ActivateAsync();
+        var image = page.Images.Single();
+        var text = h.Get<Localizer>();
+
+        await page.RemoveImageCommand.ExecuteAsync(image);
+
+        confirm.Messages.ShouldHaveSingleItem().ShouldBe(text.Format("profile.images.remove.message", "0123456789-a.png",
+            StorageSettingsViewModel.Size(10, text.Culture)));
+        confirm.Dangers.ShouldBe([true]);
+        File.Exists(file).ShouldBeTrue("declined: nothing is deleted");
+        page.Images.ShouldHaveSingleItem();
+
+        confirm.Answer = true;
+        await page.RemoveImageCommand.ExecuteAsync(image);
+        File.Exists(file).ShouldBeFalse();
+        page.Images.ShouldBeEmpty();
+        (await h.Get<IProfileStore>().ImagesAsync(profile.Id, None)).ShouldBeEmpty();
+    }
+
+    [AvaloniaFact]
+    public async Task AVoiceSampleWhoseNarrationIsInUseStaysAndTheReasonIsShown()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Skip("Only Windows refuses to delete a file that is open.");
+        }
+
+        using var h = await HarnessAsync();
+        var sample = new VoiceSample { Name = "Me", Wav = [1, 2, 3], Sha256 = "x" };
+        await h.Get<IVoiceSampleStore>().AddAsync(sample, None);
+        var cache = Path.Combine(h.Paths.WorkDirectory, "speech-cache");
+        var clip = SpeechService.VoiceTag(VoiceSampleLibrary.VoiceId(sample.Id)) + "-aaaa.wav";
+        Put(cache, clip, 5);
+        var listen = Path.Combine(h.Paths.WorkDirectory, "listen", "voice-sample.wav");
+        Put(Path.GetDirectoryName(listen)!, "voice-sample.wav", 5);
+        var page = h.Get<VoiceSettingsViewModel>();
+        var text = h.Get<Localizer>();
+        var info = new VoiceSampleInfo(sample.Id, sample.Name, 0, DateTime.UtcNow);
+
+        // The system player holds the listen file: it never stops the delete.
+        using (new FileStream(listen, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            using (new FileStream(Path.Combine(cache, clip), FileMode.Open, FileAccess.Read, FileShare.None))
+            {
+                await page.DeleteSampleAsync(info);
+
+                page.SampleStatus.ShouldStartWith(text.Format("voices.samples.remove_failed", "Me", "").Split('')[0]);
+                (await h.Get<IVoiceSampleStore>().GetAsync(sample.Id, None)).ShouldNotBeNull("a narration in use keeps the sample");
+            }
+
+            await page.DeleteSampleAsync(info);
+        }
+
+        page.SampleStatus.ShouldBe(text.Format("voices.samples.removed", "Me"));
+        (await h.Get<IVoiceSampleStore>().GetAsync(sample.Id, None)).ShouldBeNull("the listen file in use did not stop it");
+        Directory.GetFiles(cache).ShouldBeEmpty();
+    }
+
     private static async Task<DesktopHarness> HarnessAsync(RecordingDiscard? discard = null, FakeConfirm? confirm = null)
     {
         var h = new DesktopHarness(s =>
