@@ -457,6 +457,7 @@
   "produced.badge.images_failed": "⚠ no images",
   "produced.badge.ai_voice": "AI voice",
   "produced.badge.repaired": "code repaired",
+  "produced.badge.app_code": "app's own animation",
   "produced.badge.samples_none": "⚠ no sample images",
   "produced.badge.speech_skipped": "words left out",
   "produced.note.speech_off": "Narration was off: the video is silent.",

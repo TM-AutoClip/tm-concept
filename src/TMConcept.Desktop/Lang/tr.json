@@ -457,6 +457,7 @@
   "produced.badge.images_failed": "⚠ görselsiz",
   "produced.badge.ai_voice": "YZ sesi",
   "produced.badge.repaired": "kod onarıldı",
+  "produced.badge.app_code": "uygulamanın animasyonu",
   "produced.badge.samples_none": "⚠ örnek görsel yok",
   "produced.badge.speech_skipped": "atlanan kelimeler",
   "produced.note.speech_off": "Seslendirme kapalıydı: video sessiz.",
