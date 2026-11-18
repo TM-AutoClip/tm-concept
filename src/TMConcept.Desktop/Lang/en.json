@@ -703,6 +703,8 @@
   "license.stability-community.terms": "Free, also for commercial use, for individuals and organizations with less than 1 million USD annual revenue; above that an enterprise license from Stability AI is needed.",
   "license.openrail-plusplus": "OpenRAIL++ license",
   "license.openrail-plusplus.terms": "Commercial use is allowed, but its use restrictions apply to you too: among them, no illegal content, no harming or deceiving people, no impersonation.",
+  "license.gemma": "Gemma Terms of Use",
+  "license.gemma.terms": "Google allows commercial use, but its Prohibited Use Policy applies to you too: among them, no illegal or harmful content, no deceiving people, no impersonation. Read the full text: only it counts.",
   "license.cpml": "Coqui Public Model License (CPML)",
   "license.cpml.terms": "Coqui allows only non-commercial use of the model and of the speech it makes. A channel with ads or sponsors, paid work and a client's video all count as commercial use.",
   "license.cc-by-nc-4.0": "Creative Commons Attribution-NonCommercial 4.0 (CC BY-NC 4.0)",

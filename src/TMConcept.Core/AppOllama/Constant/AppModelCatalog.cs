@@ -21,6 +21,13 @@ public static class AppModelCatalog
     private const string GemmaLicense = "https://huggingface.co/google/gemma-4-E4B-it";
     private const string GptOssLicense = "https://huggingface.co/openai/gpt-oss-20b";
 
+    // Gemma 3 is under Google's Gemma Terms of Use (commercial use allowed, with the Prohibited Use Policy): a license with conditions.
+    private const string Gemma = "gemma";
+    private const string Gemma3License = "https://ai.google.dev/gemma/terms";
+
+    // https://ollama.com/library/gemma3/tags
+    private const string Gemma3Tags = "https://ollama.com/library/gemma3/tags";
+
     // https://ollama.com/library/qwen3.5/tags
     private const string QwenTags = "https://ollama.com/library/qwen3.5/tags";
 
@@ -40,6 +47,11 @@ public static class AppModelCatalog
 
         // qwen3.5:4b-q4_K_M: 3.3GB, 256K (manifest: 3 324 173 757 bytes).
         new("qwen3.5:4b-q4_K_M", "Qwen 3.5 4B", "qwen3.5", 3_324_173_757, 8_192, 262_144, 32 * Kb, true, true, Apache, LicenseUse.Commercial, QwenLicense, QwenTags),
+
+        // gemma3:4b (the developer, 18 Nov 2026; the same as gemma3:4b-it-q4_K_M): 3.3GB, 128K, text + image input, no thinking. Its manifest
+        // was not read for this entry (no network while it was written): the size is the library page's 3.3 GB, and the pull reports the
+        // real bytes. KV cache: 34 layers, 4 KV heads of 256, five of six layers keep a 1 024-token window, so about 24 KB per token.
+        new("gemma3:4b", "Gemma 3 4B", "gemma3", 3_300_000_000, 8_192, 131_072, 24 * Kb, true, false, Gemma, LicenseUse.Limited, Gemma3License, Gemma3Tags),
 
         // gemma4:e2b-it-qat: 4.3GB, 128K (manifest: 4 336 357 640 bytes).
         new("gemma4:e2b-it-qat", "Gemma 4 E2B", "gemma4", 4_336_357_640, 8_192, 131_072, 64 * Kb, true, true, Apache, LicenseUse.Commercial, GemmaLicense, GemmaTags),

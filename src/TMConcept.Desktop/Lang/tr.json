@@ -703,6 +703,8 @@
   "license.stability-community.terms": "Yıllık geliri 1 milyon doların altındaki kişi ve kuruluşlar için ticari kullanım dahil ücretsiz; üstü için Stability AI'dan kurumsal lisans gerekir.",
   "license.openrail-plusplus": "OpenRAIL++ lisansı",
   "license.openrail-plusplus.terms": "Ticari kullanım serbest, ama kullanım kısıtları senin için de geçerli: bunlardan bazıları yasa dışı içerik üretmemek, insanlara zarar vermemek ya da onları aldatmamak, kimseyi taklit etmemek.",
+  "license.gemma": "Gemma Kullanım Koşulları",
+  "license.gemma.terms": "Google ticari kullanıma izin veriyor ama Yasaklı Kullanım Politikası sana da geçerli: yasa dışı ya da zararlı içerik yok, insanları kandırmak yok, başkası gibi davranmak yok. Asıl geçerli olan tam metin, onu oku.",
   "license.cpml": "Coqui Herkese Açık Model Lisansı (CPML)",
   "license.cpml.terms": "Coqui modelin ve ürettiği sesin yalnız ticari olmayan kullanımına izin veriyor. Reklamlı ya da sponsorlu bir kanal, ücretli iş ve bir müşterinin videosu ticari kullanım sayılır.",
   "license.cc-by-nc-4.0": "Creative Commons Atıf-GayriTicari 4.0 (CC BY-NC 4.0)",
