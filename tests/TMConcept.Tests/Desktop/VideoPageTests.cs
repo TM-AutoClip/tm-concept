@@ -562,6 +562,50 @@ public sealed class VideoPageTests
         page.Status.ShouldBe(text["video.queue.stopped.error"]);
     }
 
+    [AvaloniaFact]
+    public async Task EachMadeVideoAppearsUnderProducedWhileTheQueueStillRuns()
+    {
+        // The developer (18 Nov 2026): the made videos showed only after a page switch; the page skipped its own change event while busy.
+        var engine = new FakeEngine();
+        var watch = new ListWatchingRunner();
+        using var h = Harness(new FakeChat().Answer(_ => Code(engine.SampleCode)).Answer(_ => Code(engine.SampleCode)), engine,
+            s => s.AddSingleton<IVideoQueueRunner>(watch));
+        var (page, concept) = await OpenAsync(h);
+        await h.Get<IConceptStore>().AddAsync([new Concept
+        {
+            ProfileId = concept.ProfileId, Title = "Iron chain", Summary = "s", Content = Content, Language = "en", Status = ConceptStatus.Approved,
+        }], CancellationToken.None);
+        await page.ActivateAsync();
+        foreach (var card in page.Approved.ToList())
+        {
+            await page.EnqueueAsync(card);
+        }
+
+        watch.Lists = () => (page.Produced.Count, page.Queue.Count);
+        await page.ProduceAllAsync();
+
+        watch.Seen.ShouldBe([(1, 1), (2, 0)], "after each video: one more made, one less queued, before the next one starts");
+    }
+
+    /// <summary>The real runner; after each item it notes how many videos the page lists as made and queued.</summary>
+    private sealed class ListWatchingRunner : IVideoQueueRunner
+    {
+        public Func<(int Produced, int Queued)>? Lists { get; set; }
+
+        public List<(int Produced, int Queued)> Seen { get; } = [];
+
+        public Task<QueueRunResult> RunAsync<T>(Func<CancellationToken, Task<T?>> next, Func<T, CancellationToken, Task<QueueItemOutcome>> produce,
+            Func<bool> nightMode, CancellationToken cancellationToken)
+            where T : class =>
+            new VideoQueueRunner(TimeProvider.System, Microsoft.Extensions.Logging.Abstractions.NullLogger<VideoQueueRunner>.Instance).RunAsync(next,
+                async (item, token) =>
+                {
+                    var outcome = await produce(item, token);
+                    Seen.Add(Lists!());
+                    return outcome;
+                }, nightMode, cancellationToken);
+    }
+
     /// <summary>The real runner, after removing every API key (as if the user deleted the key while the queue was being prepared).</summary>
     private sealed class KeyGoneRunner(IApiKeyStore keys) : IVideoQueueRunner
     {
