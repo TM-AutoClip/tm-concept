@@ -32,19 +32,19 @@ public sealed class DocumentConceptSource(DocumentGrounder grounder, ICostCalcul
         var chosen = await ChosenAsync(request.Profile.Id, brief.DocumentIds, found, cancellationToken).ConfigureAwait(false);
         if (request.Estimate)
         {
-            var estimated = await Grounder.EstimateTokensAsync(request.Profile, chosen, budget, cancellationToken).ConfigureAwait(false);
+            var estimated = await Grounder.EstimateTokensAsync(request.Profile, chosen, budget, cancellationToken, brief.Pages, brief.Digest).ConfigureAwait(false);
             return new ConceptSourceBatch(brief.ExtraPrompt, topics, DocumentGrounding.Empty, lowered, size < request.Size ? size : null, estimated);
         }
 
         var query = string.Join(' ', new[] { brief.Subject }.Concat(topics ?? []).Concat(found?.Keywords ?? []).Where(t => t.Length > 0));
         var tokens = PassageTokens.For(Costs, request.Profile.ContentLanguage);
-        var grounding = await Grounder.GroundAsync(request.Profile, chosen, query, budget, false, tokens, cancellationToken, request.Used, brief.Phase)
-            .ConfigureAwait(false);
+        var grounding = await Grounder.GroundAsync(request.Profile, chosen, query, budget, false, tokens, cancellationToken, request.Used, brief.Phase, brief.Pages,
+            brief.Digest).ConfigureAwait(false);
         if (!grounding.Matched && !ReferenceEquals(chosen, brief.DocumentIds))
         {
             // Nothing about the topic in the documents it was said to come from (a wrong number in the answer): every chosen one is searched.
-            grounding = await Grounder.GroundAsync(request.Profile, brief.DocumentIds, query, budget, false, tokens, cancellationToken, request.Used, brief.Phase)
-                .ConfigureAwait(false);
+            grounding = await Grounder.GroundAsync(request.Profile, brief.DocumentIds, query, budget, false, tokens, cancellationToken, request.Used, brief.Phase,
+                brief.Pages, brief.Digest).ConfigureAwait(false);
         }
         return new ConceptSourceBatch(brief.ExtraPrompt, topics, grounding, lowered, size < request.Size ? size : null);
     }
