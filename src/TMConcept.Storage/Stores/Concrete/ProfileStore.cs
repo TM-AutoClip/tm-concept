@@ -62,6 +62,13 @@ public sealed class ProfileStore(ConceptDatabase database) : IProfileStore
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<ProfileImage>> AllImagesAsync(CancellationToken cancellationToken)
+    {
+        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
+        return await db.ProfileImages.ToListAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public async Task SaveImageAsync(ProfileImage image, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(image);

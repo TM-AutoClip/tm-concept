@@ -20,7 +20,7 @@ namespace TMConcept.Desktop.ViewModels;
 /// <summary>
 /// General settings: interface language (changes at once), drawing (after a restart), the bottom-right notifications, the answer limit of
 /// "Suggest topics" (saved with the notifications' Save button), and the installed
-/// components (read-only list with sizes of what is on disk, an incomplete one marked; Remove after a confirmation, to the recycle bin
+/// components (read-only list with sizes of what is on disk, an incomplete one marked; Remove after a confirmation, deleted for good
 /// like Settings → Storage; a ready engine can
 /// render its sample; on Linux the apt command for Chrome's missing libraries). Components are installed when a process that needs them starts (after one confirmation).
 /// Image acceleration (per computer): which stable-diffusion.cpp build runs the local image models, with what Automatic picks here (the
@@ -318,8 +318,7 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
         row.Busy = true;
         try
         {
-            // The same way as Settings → Storage: not while work runs, the voice workers ended and the card freed first, the recycle bin
-            // (for good only after its own confirmation).
+            // The same way as Settings → Storage: not while work runs, the voice workers ended and the card freed first, deleted for good.
             var outcome = await cleaner.RemoveAsync([cleaner.ItemOf(row.Component)], CancellationToken.None).ConfigureAwait(true);
             if (outcome.Busy)
             {
@@ -330,11 +329,6 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
             {
                 Status = text.Format("components.remove_failed", row.Name, outcome.Failed[0].Reason);
                 activity.Add(ActivityLevel.Error, Status);
-            }
-            else if (outcome.Kept.Count > 0)
-            {
-                Status = text.Format("storage.kept", row.Name);
-                activity.Add(ActivityLevel.Warning, Status);
             }
             else
             {
@@ -363,8 +357,8 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
     public partial bool Reinstalling { get; set; }
 
     /// <summary>
-    /// "Reinstall components from scratch" (the same as after a new app version): after a confirmation the whole components folder goes to
-    /// the recycle bin and what was installed is installed again. Not while work runs: its components are in use.
+    /// "Reinstall components from scratch" (the same as after a new app version): after a confirmation (which shows the folder's size) what
+    /// was installed is installed again into a new folder and the old one is deleted for good. Not while work runs: its components are in use.
     /// </summary>
     [RelayCommand]
     public async Task ReinstallComponentsAsync()
@@ -381,7 +375,8 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
             return;
         }
 
-        var answer = await confirm.AskAsync(text["components.reinstall.title"], text.Format("components.reinstall.message", reinstaller.Location()),
+        var size = StorageSettingsViewModel.Size(await Task.Run(() => Core.DiskSpace.DiskSizes.Of(reinstaller.Folder)).ConfigureAwait(true), text.Culture);
+        var answer = await confirm.AskAsync(text["components.reinstall.title"], text.Format("components.reinstall.message", reinstaller.Location(), size),
             text["components.reinstall"], danger: true).ConfigureAwait(true);
         if (!answer.Confirmed)
         {

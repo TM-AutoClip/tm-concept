@@ -44,4 +44,7 @@ public static class ComponentCodes
 
     /// <summary>Prefix of local embedding model components ("embedding.paraphrase-multilingual-minilm").</summary>
     public const string EmbeddingPrefix = "embedding.";
+
+    /// <summary>The start of the code of the text recognition's model and runtime (kept like a model by the clean-ups).</summary>
+    public const string OcrPrefix = "ocr.";
 }

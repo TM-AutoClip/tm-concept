@@ -6,6 +6,9 @@ public interface IVideoStore
     /// <summary>Videos of a profile, newest first.</summary>
     Task<IReadOnlyList<VideoRecord>> ListAsync(Guid profileId, CancellationToken cancellationToken);
 
+    /// <summary>Every video of every profile (the delete checks which folders other records still use; the storage page's orphan scan).</summary>
+    Task<IReadOnlyList<VideoRecord>> AllAsync(CancellationToken cancellationToken);
+
     /// <summary>One video.</summary>
     Task<VideoRecord?> GetAsync(Guid id, CancellationToken cancellationToken);
 

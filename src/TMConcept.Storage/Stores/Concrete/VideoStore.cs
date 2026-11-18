@@ -15,6 +15,13 @@ public sealed class VideoStore(ConceptDatabase database) : IVideoStore
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<VideoRecord>> AllAsync(CancellationToken cancellationToken)
+    {
+        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
+        return await db.Videos.ToListAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public async Task<VideoRecord?> GetAsync(Guid id, CancellationToken cancellationToken)
     {
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);

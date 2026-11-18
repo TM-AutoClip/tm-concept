@@ -25,7 +25,7 @@ namespace TMConcept.Tests.Desktop;
 
 /// <summary>
 /// 0.1.21, the concept page's three sources: "Konu öner", "Fikirden" and "Belgelerden" each ADD to the one list in any order; the documents
-/// section grounds its concepts in the profile's documents ("Belgelerim") and names them; documents are deleted through the recycle bin and
+/// section grounds its concepts in the profile's documents ("Belgelerim") and names them; documents are deleted for good and
 /// the storage manager keeps them out of "Clean up unused"; the meaning model is downloaded only after a yes. Fake models only.
 /// </summary>
 public sealed class DocumentPageTests
@@ -238,14 +238,13 @@ public sealed class DocumentPageTests
     }
 
     [AvaloniaFact]
-    public async Task DeletingADocumentUsesTheRecycleBinAndCleanUpNeverTakesADocument()
+    public async Task DeletingADocumentIsPermanentAndNeitherCleanUpNorTheFullDeleteTakesADocument()
     {
-        var bin = new FakeBin();
+        var discard = new RecordingDiscard();
         var confirm = new FakeConfirm { Answer = true };
         using var h = new DesktopHarness(s =>
         {
-            s.RemoveAll<IRecycleBin>();
-            s.AddSingleton<IRecycleBin>(bin);
+            discard.Register(s);
             s.AddSingleton<IConfirmDialog>(confirm);
         });
         await PrepareAsync(h);
@@ -264,19 +263,22 @@ public sealed class DocumentPageTests
         DiskSelection.Unused(report.Items).ShouldContain(i => i.Key == DocumentDiskSource.LeftoverKey);
         report.Items.Single(i => i.Key == DocumentDiskSource.LeftoverKey).Paths.ShouldHaveSingleItem().ShouldEndWith("orphan.part", Case.Sensitive,
             "a fresh part may be an add writing its copy");
-        DiskSelection.Full(report.Items).Count(i => i.Key.StartsWith("document:", StringComparison.Ordinal)).ShouldBe(2, "the full delete takes them");
+        DiskSelection.Full(report.Items).Where(i => i.Key.StartsWith("document:", StringComparison.Ordinal)).ShouldBeEmpty(
+            "0.1.28: the user's documents go only when their row is ticked");
         report.Totals.ShouldContain(t => t.Area == DiskArea.Documents);
 
         var walls = page.Documents.Library.Documents.Single(d => d.Title == "walls");
         await page.Documents.Library.DeleteAsync(walls);
 
-        confirm.Asked.ShouldHaveSingleItem();
-        bin.Moved.ShouldHaveSingleItem().ShouldBe(library.FileOf(walls.Document));
+        confirm.Messages.ShouldHaveSingleItem().ShouldContain(h.Get<Localizer>().Format("documents.delete.message", "walls",
+            TMConcept.Desktop.ViewModels.StorageSettingsViewModel.Size(6, h.Get<Localizer>().Culture)));
+        discard.Discarded.ShouldHaveSingleItem().ShouldBe(library.FileOf(walls.Document));
+        File.Exists(library.FileOf(walls.Document)).ShouldBeFalse("deleted for good, not moved anywhere");
         page.Documents.Library.Documents.ShouldHaveSingleItem().Title.ShouldBe("trade");
 
-        var full = DiskSelection.Full((await h.Get<IDiskCleaner>().ReportAsync(None)).Items).Where(i => i.Area == DiskArea.Documents).ToList();
-        (await h.Get<IDiskCleaner>().RemoveAsync(full, None)).Removed.Count.ShouldBe(2);
-        (await library.ListAsync(page.Documents.Library.Documents[0].Document.ProfileId, None)).ShouldBeEmpty("the full delete takes the records and passages too");
+        var ticked = (await h.Get<IDiskCleaner>().ReportAsync(None)).Items.Where(i => i.Area == DiskArea.Documents).ToList();
+        (await h.Get<IDiskCleaner>().RemoveAsync(ticked, None)).Removed.Count.ShouldBe(2);
+        (await library.ListAsync(page.Documents.Library.Documents[0].Document.ProfileId, None)).ShouldBeEmpty("a ticked row takes the record and passages too");
     }
 
     [AvaloniaFact]
@@ -336,13 +338,12 @@ public sealed class DocumentPageTests
     }
 
     [AvaloniaFact]
-    public async Task DeletingAProfileSendsItsDocumentCopiesToTheRecycleBin()
+    public async Task DeletingAProfileDeletesItsDocumentCopies()
     {
-        var bin = new FakeBin();
+        var discard = new RecordingDiscard();
         using var h = new DesktopHarness(s =>
         {
-            s.RemoveAll<IRecycleBin>();
-            s.AddSingleton<IRecycleBin>(bin);
+            discard.Register(s);
             s.AddSingleton<IConfirmDialog>(new FakeConfirm { Answer = true });
         });
         await FirstRunTests.CreateAsync(h);
@@ -361,7 +362,7 @@ public sealed class DocumentPageTests
 
         (await h.Get<IProfileStore>().ListAsync(None)).ShouldBeEmpty();
         Directory.Exists(folder).ShouldBeFalse("the plain-text copies of a deleted channel do not stay on disk");
-        bin.Moved.ShouldContain(folder);
+        discard.Discarded.ShouldContain(folder);
     }
 
     [AvaloniaFact]
@@ -416,26 +417,5 @@ public sealed class DocumentPageTests
         public List<TMConcept.Core.Notifications.AppNotification> Sent { get; } = [];
 
         public void Notify(TMConcept.Core.Notifications.AppNotification notification) => Sent.Add(notification);
-    }
-
-    /// <summary>A recycle bin that deletes what it is given.</summary>
-    private sealed class FakeBin : IRecycleBin
-    {
-        public List<string> Moved { get; } = [];
-
-        public Task MoveAsync(string folder, CancellationToken cancellationToken)
-        {
-            Moved.Add(folder);
-            if (File.Exists(folder))
-            {
-                File.Delete(folder);
-            }
-            else if (Directory.Exists(folder))
-            {
-                Directory.Delete(folder, recursive: true);
-            }
-
-            return Task.CompletedTask;
-        }
     }
 }

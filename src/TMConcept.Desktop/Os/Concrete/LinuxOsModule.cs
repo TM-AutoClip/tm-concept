@@ -39,7 +39,6 @@ public sealed class LinuxOsModule : IOsModule
     {
         services.AddSingleton<ICommandRunner, ProcessCommandRunner>();
         services.AddSingleton<IKeyProtector, SecretServiceKeyProtector>();
-        services.AddSingleton<IRecycleBin, LinuxRecycleBin>();
         services.AddSingleton<IShortcutWriter, UnsupportedShortcutWriter>();
         services.AddSingleton<Core.Tools.IToolPlatform, Engines.Tools.LinuxToolPlatform>();
         services.AddSingleton<Core.Playback.IAudioOutputFactory, Playback.AudioOutputFactory<Playback.PulseAudioOutput>>();

@@ -89,9 +89,21 @@ public sealed class VoiceSampleLibrary(IVoiceSampleStore store, IVoiceSampleConv
         }
     }
 
-    /// <summary>Removes a sample (a voice choice that names it falls back to another voice when the page is shown again).</summary>
+    /// <summary>
+    /// Removes a sample (a voice choice that names it falls back to another voice when the page is shown again) with what was made from it
+    /// (0.1.28): the cached narration spoken with it (<see cref="SpeechService.VoiceTag"/>) and the listen file of the settings page, before
+    /// the record. A file that cannot be deleted stops it with the reason (the sample stays, a second try finishes it).
+    /// </summary>
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
+        var cache = Path.Combine(paths.WorkDirectory, "speech-cache");
+        var made = Directory.Exists(cache) ? Directory.EnumerateFiles(cache, SpeechService.VoiceTag(VoiceId(id)) + "-*.wav").ToList() : [];
+        made.Add(Path.Combine(paths.WorkDirectory, "listen", "voice-sample.wav"));
+        foreach (var file in made.Where(File.Exists))
+        {
+            File.Delete(file);
+        }
+
         await store.DeleteAsync(id, cancellationToken).ConfigureAwait(false);
         await RefreshAsync(cancellationToken).ConfigureAwait(false);
         logger.LogInformation("Voice sample removed");

@@ -15,9 +15,10 @@ namespace TMConcept.Desktop.ViewModels;
 /// Settings → Storage (the developer, 17 Nov 2026: the app starts small and downloads what is needed later, so the user must see and free
 /// the space): the totals by area (tools, models, work caches, backups, logs) and every installed component and leftover with its size, its
 /// state (used / unused / incomplete / can be cleaned) and who uses it (profile / step, from every profile's saved choices). "Remove
-/// selected" (several at once), "Clean up unused" (unused components and leftovers that come back by themselves; never a used one) and
-/// "Full delete" (every component and cache; the database, profiles, concepts, videos, backups and logs stay). Each one asks first, goes
-/// to the recycle bin, and is refused while work runs.
+/// selected" (several at once; the only way a model, a document or an orphan library row goes), "Clean up unused" (unused tools and
+/// leftovers that come back by themselves; never a used one, never a model) and "Full delete" (every tool and cache; models, documents, the
+/// database, profiles, concepts, videos, backups and logs stay). Each one asks first with the size and "cannot be undone", deletes for good
+/// (0.1.28: no recycle bin), and is refused while work runs.
 /// </summary>
 public sealed partial class StorageSettingsViewModel(IDiskCleaner cleaner, Localizer text, IConfirmDialog confirm, IActivityLog activity,
     ILogger<StorageSettingsViewModel> logger) : SettingsSectionBase
@@ -159,11 +160,11 @@ public sealed partial class StorageSettingsViewModel(IDiskCleaner cleaner, Local
         {
             var outcome = await cleaner.RemoveAsync(items, CancellationToken.None).ConfigureAwait(true);
             Status = Report(outcome);
-            activity.Add(outcome.Busy || outcome.Kept.Count > 0 ? ActivityLevel.Warning : outcome.Failed.Count > 0 ? ActivityLevel.Error : ActivityLevel.Info, Status);
+            activity.Add(outcome.Busy ? ActivityLevel.Warning : outcome.Failed.Count > 0 ? ActivityLevel.Error : ActivityLevel.Info, Status);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
-            // Not the recycle bin's refusal (that is asked about): a folder in use, a path outside the data folder. Shown, logged red, stops.
+            // A failure outside a row (a row's own failure is in the outcome): shown, logged red, stops.
             logger.LogError(ex, "Storage: the removal stopped");
             Status = text.Format("storage.failed", ex.Message);
             activity.Add(ActivityLevel.Error, Status);
@@ -184,11 +185,6 @@ public sealed partial class StorageSettingsViewModel(IDiskCleaner cleaner, Local
         }
 
         var lines = new List<string> { text.Format("storage.done", outcome.Removed.Count, Size(outcome.Freed, text.Culture)) };
-        if (outcome.Kept.Count > 0)
-        {
-            lines.Add(text.Format("storage.kept", string.Join(", ", outcome.Kept.Select(i => i.Name))));
-        }
-
         lines.AddRange(outcome.Failed.Select(f => text.Format("storage.item_failed", f.Item.Name, f.Reason)));
         return string.Join(" ", lines);
     }

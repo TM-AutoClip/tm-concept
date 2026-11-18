@@ -18,6 +18,12 @@ public enum DiskArea
     /// <summary>Logs and problem reports (<c>logs/</c>, <c>reports/</c>; never removed by the storage manager).</summary>
     Logs,
 
-    /// <summary>Documents the user added (a later version; the full delete will take them too).</summary>
+    /// <summary>Documents the user added (only ticking a document's row deletes it; the clean-ups take only leftovers).</summary>
     Documents,
+
+    /// <summary>
+    /// Files in the video library no record points at any more (video folders a delete before 0.1.28 kept on purpose, images no profile
+    /// uses): only ticking their row deletes them.
+    /// </summary>
+    Library,
 }

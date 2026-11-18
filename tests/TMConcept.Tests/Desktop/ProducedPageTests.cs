@@ -7,7 +7,6 @@ using TMConcept.Core.Videos;
 using TMConcept.Core.Concepts;
 using TMConcept.Desktop.Dialogs;
 using TMConcept.Desktop.Localization;
-using TMConcept.Desktop.Os;
 using TMConcept.Desktop.Startup;
 using TMConcept.Desktop.ViewModels;
 
@@ -16,14 +15,14 @@ namespace TMConcept.Tests.Desktop;
 public sealed class ProducedPageTests
 {
     [AvaloniaFact]
-    public async Task DetailsShowTheVoiceNotesAndDeletingCanMoveTheFilesToTheRecycleBin()
+    public async Task DetailsShowTheVoiceNotesAndDeletingDeletesTheFilesForGood()
     {
-        var confirm = new FakeConfirm { Checked = true };
-        var bin = new FakeBin();
+        var confirm = new FakeConfirm();
+        var discard = new RecordingDiscard();
         using var h = new DesktopHarness(s =>
         {
             s.AddSingleton<IConfirmDialog>(confirm);
-            s.AddSingleton<IRecycleBin>(bin);
+            discard.Register(s);
         });
         await FirstRunTests.CreateAsync(h);
         var profile = new Profile { Name = "Byzantium", ContentLanguage = ContentLanguages.Turkish, ConceptText = "x" };
@@ -79,7 +78,9 @@ public sealed class ProducedPageTests
         page.Player.DurationMs.ShouldBe(video.DurationMs);
         await page.DeleteAsync();
 
-        bin.Moved.Single().ShouldBe(folder);
+        confirm.Messages.ShouldHaveSingleItem().ShouldBe(text.Format("produced.delete.message", "Greek fire", StorageSettingsViewModel.Size(16, text.Culture)));
+        discard.Discarded.Single().ShouldBe(folder);
+        Directory.Exists(folder).ShouldBeFalse("0.1.28: the files always go with the record");
         page.Items.ShouldBeEmpty();
         (await h.Get<IVideoStore>().ListAsync(profile.Id, CancellationToken.None)).ShouldBeEmpty();
     }
@@ -199,16 +200,5 @@ public sealed class ProducedPageTests
         }
 
         window.Close();
-    }
-
-    private sealed class FakeBin : IRecycleBin
-    {
-        public List<string> Moved { get; } = [];
-
-        public Task MoveAsync(string folder, CancellationToken cancellationToken)
-        {
-            Moved.Add(folder);
-            return Task.CompletedTask;
-        }
     }
 }

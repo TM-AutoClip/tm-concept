@@ -18,24 +18,40 @@ namespace TMConcept.Desktop.DiskSpace;
 /// folders (<c>tools/images/&lt;id&gt;</c>) this copy does not know are a row of their own that only the full delete takes;</item>
 /// <item>old components folders next to <c>tools/</c> left by "Reinstall from scratch" (<c>tools.old-*</c>, <c>tools.failed-*</c>,
 /// <c>tools.aside-*</c>);</item>
-/// <item>the work caches: voice sample files, and cached narration, run folders and scene images older than the work keep time (the clean-up
-/// takes those; the recent ones that a retry still uses go only with the full delete: a retry of a failed video would otherwise pay the
-/// online voice and the online images again).</item>
+/// <item>the work caches: voice sample files, the listen and sample-render files, the scene images of concepts that no longer exist, and
+/// cached narration, run folders and scene images older than the work keep time (the clean-up takes those; the recent ones that a retry
+/// still uses go only with the full delete: a retry of a failed video would otherwise pay the online voice and the online images again).</item>
 /// </list>
-/// The database, keys, settings, backups, logs and the videos in the library are never rows here.
+/// The database, keys, settings, backups and logs are never rows here; library files no record points at are <see cref="LibraryOrphanSource"/>'s.
 /// </summary>
-public sealed class LeftoverDiskSource(AppPaths paths, PythonLayout python, ComponentPlanner planner, AppModelStore appModels, Localizer text, TimeProvider clock)
-    : IDiskItemSource
+public sealed class LeftoverDiskSource(AppPaths paths, PythonLayout python, ComponentPlanner planner, AppModelStore appModels, Localizer text, TimeProvider clock,
+    Core.Concepts.IConceptStore concepts) : IDiskItemSource
 {
     /// <summary>The names an old components folder starts with (next to <c>tools</c>).</summary>
     public static readonly IReadOnlyList<string> AsidePrefixes =
         [Components.ComponentReinstaller.AsidePrefix, Components.ComponentReinstaller.FailedPrefix, ".aside-"];
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<IDiskItem>> ListAsync(UsageMap usage, CancellationToken cancellationToken) =>
-        Task.Run<IReadOnlyList<IDiskItem>>(() => List().Where(i => i.Bytes > 0).ToList(), cancellationToken);
+    public async Task<IReadOnlyList<IDiskItem>> ListAsync(UsageMap usage, CancellationToken cancellationToken)
+    {
+        // The scene images of a concept that no longer exists (deleted for good, its profile deleted) are of no use: no 7-day wait for them.
+        var gone = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var images = Path.Combine(paths.WorkDirectory, "scene-images");
+        if (Directory.Exists(images))
+        {
+            foreach (var folder in Directory.EnumerateDirectories(images))
+            {
+                if (!Guid.TryParseExact(Path.GetFileName(folder), "N", out var id) || await concepts.GetAsync(id, cancellationToken).ConfigureAwait(false) is null)
+                {
+                    gone.Add(Path.GetFileName(folder));
+                }
+            }
+        }
 
-    private IEnumerable<IDiskItem> List()
+        return await Task.Run<IReadOnlyList<IDiskItem>>(() => List(gone).Where(i => i.Bytes > 0).ToList(), cancellationToken).ConfigureAwait(false);
+    }
+
+    private IEnumerable<IDiskItem> List(HashSet<string> goneConcepts)
     {
         var tools = paths.ToolsDirectory;
         var downloads = Path.Combine(tools, "downloads");
@@ -44,7 +60,7 @@ public sealed class LeftoverDiskSource(AppPaths paths, PythonLayout python, Comp
         string[] helpers = [python.ScriptsFolder, python.LocksFolder, python.HomeFolder];
         yield return Folder("tools:speech-py-helpers", "storage.item.python_helpers", DiskArea.Tools, helpers, true);
 
-        yield return Folder("models:app-ollama-unused", "storage.item.app_model_leftovers", DiskArea.Models, appModels.UnreferencedBlobs(), true);
+        yield return Folder(DiskSelection.AppModelLeftoversKey, "storage.item.app_model_leftovers", DiskArea.Models, appModels.UnreferencedBlobs(), true);
 
         var owned = planner.All.SelectMany(c => c.Folders()).Concat(helpers).Append(downloads).Select(Full).ToList();
         var unowned = Unowned(tools, owned).ToList();
@@ -79,6 +95,13 @@ public sealed class LeftoverDiskSource(AppPaths paths, PythonLayout python, Comp
         yield return Folder("work:speech-cache:old", "storage.item.speech_cache.old", DiskArea.Work, oldClips, true);
         yield return Folder("work:speech-cache:recent", "storage.item.speech_cache.recent", DiskArea.Work, clips.Except(oldClips).ToList(), false);
         yield return Folder("work:voices", "storage.item.voice_files", DiskArea.Work, [Path.Combine(work, "voices")], true);
+        yield return Folder("work:listen", "storage.item.listen", DiskArea.Work, [Path.Combine(work, "listen")], true);
+        yield return Folder("work:sample", "storage.item.sample_render", DiskArea.Work, [Path.Combine(work, "sample")], true);
+        var sceneImages = Path.Combine(work, "scene-images");
+        var orphanImages = Directory.Exists(sceneImages)
+            ? Directory.EnumerateDirectories(sceneImages).Where(d => goneConcepts.Contains(Path.GetFileName(d))).ToList()
+            : [];
+        yield return Folder("work:scene-images:orphan", "storage.item.scene_images.orphan", DiskArea.Work, orphanImages, true);
         foreach (var (kind, oldKey, recentKey) in new[]
         {
             ("videos", "storage.item.runs.old", "storage.item.runs.recent"),
@@ -86,7 +109,9 @@ public sealed class LeftoverDiskSource(AppPaths paths, PythonLayout python, Comp
         })
         {
             var folder = Path.Combine(work, kind);
-            var children = Directory.Exists(folder) ? Directory.EnumerateDirectories(folder).ToList() : [];
+            var children = Directory.Exists(folder)
+                ? Directory.EnumerateDirectories(folder).Where(d => kind != "scene-images" || !goneConcepts.Contains(Path.GetFileName(d))).ToList()
+                : [];
             var old = children.Where(c => clock.GetUtcNow() - Directory.GetLastWriteTimeUtc(c) > Core.Videos.VideoPipeline.WorkKeep).ToList();
             var recent = children.Except(old).ToList();
             yield return Folder("work:" + kind + ":old", oldKey, DiskArea.Work, old, true);

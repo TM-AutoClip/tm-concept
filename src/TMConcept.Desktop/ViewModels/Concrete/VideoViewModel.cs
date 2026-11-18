@@ -448,10 +448,13 @@ public sealed partial class VideoViewModel : PageViewModelBase
         try
         {
             await _pipeline.FreeCardAsync(CancellationToken.None).ConfigureAwait(true);
+
+            // Work files older than their keep time go now too (until 0.1.28 only at the next start).
+            await Task.Run(_pipeline.CleanOld).ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            _logger.LogWarning(ex, "The graphics card could not be freed after the queue");
+            _logger.LogWarning(ex, "The graphics card could not be freed or the old work files cleaned after the queue");
         }
     }
 

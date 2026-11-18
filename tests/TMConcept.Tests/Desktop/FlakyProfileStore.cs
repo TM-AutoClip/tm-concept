@@ -27,6 +27,8 @@ internal sealed class FlakyProfileStore(ProfileStore inner) : IProfileStore
 
     public Task<IReadOnlyList<ProfileImage>> ImagesAsync(Guid profileId, CancellationToken cancellationToken) => inner.ImagesAsync(profileId, cancellationToken);
 
+    public Task<IReadOnlyList<ProfileImage>> AllImagesAsync(CancellationToken cancellationToken) => inner.AllImagesAsync(cancellationToken);
+
     public Task SaveImageAsync(ProfileImage image, CancellationToken cancellationToken) => inner.SaveImageAsync(image, cancellationToken);
 
     public Task DeleteImageAsync(Guid id, CancellationToken cancellationToken) => inner.DeleteImageAsync(id, cancellationToken);

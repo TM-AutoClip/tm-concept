@@ -20,24 +20,20 @@ namespace TMConcept.Tests.Desktop;
 /// <summary>
 /// Settings → Local AI, the pickers and the storage manager with the app's own Ollama copy (0.1.20): the card class picks the recommended
 /// models, nothing is pulled or started before the user confirms, an installed model is offered in every text step without a key, and the
-/// storage manager lists it with who uses it and removes it through the recycle bin. Fake launcher, API and bin: no process, no network,
+/// storage manager lists it with who uses it and deletes it for good only when its row is ticked. Fake launcher and API: no process, no network,
 /// and the user's own Ollama is never touched.
 /// </summary>
 public sealed class LocalAiTests
 {
     private static readonly CancellationToken None = CancellationToken.None;
 
-    private static DesktopHarness Harness(FakeConfirm confirm, FakeAppOllamaLauncher launcher, FakeAppOllamaApi api, FakeBin? bin = null) => new(s =>
+    private static DesktopHarness Harness(FakeConfirm confirm, FakeAppOllamaLauncher launcher, FakeAppOllamaApi api, RecordingDiscard? discard = null) => new(s =>
     {
         s.AddSingleton<IConfirmDialog>(confirm);
         s.AddSingleton<IGpuInfo>(new FakeGpu(6L << 30));
         s.AddSingleton<IAppOllamaLauncher>(launcher);
         s.AddSingleton<IAppOllamaApi>(api);
-        if (bin is not null)
-        {
-            s.RemoveAll<IRecycleBin>();
-            s.AddSingleton<IRecycleBin>(bin);
-        }
+        discard?.Register(s);
     });
 
     /// <summary>Puts a finished copy of the app's Ollama program in place (as if it had been installed earlier).</summary>
@@ -120,11 +116,11 @@ public sealed class LocalAiTests
     }
 
     [AvaloniaFact]
-    public async Task TheStorageManagerListsAnAppModelWithItsUsersAndRemovesItThroughTheBin()
+    public async Task TheStorageManagerListsAnAppModelWithItsUsersAndDeletesItOnlyWhenTicked()
     {
-        var bin = new FakeBin();
+        var discard = new RecordingDiscard();
         var launcher = new FakeAppOllamaLauncher();
-        using var h = Harness(new FakeConfirm { Answer = true }, launcher, new FakeAppOllamaApi(), bin);
+        using var h = Harness(new FakeConfirm { Answer = true }, launcher, new FakeAppOllamaApi(), discard);
         await FirstRunTests.CreateAsync(h);
         InstallProgram(h);
         var store = h.Get<AppModelStore>();
@@ -150,16 +146,16 @@ public sealed class LocalAiTests
         unused.State.ShouldBe(DiskItemState.Unused);
         unused.Bytes.ShouldBeGreaterThan(0);
         report.Items.ShouldNotContain(i => i.Key == "tools:unowned" && i.Bytes > 0, "the models folder is owned, not a leftover");
-        DiskSelection.Unused(report.Items).ShouldContain(unused);
+        DiskSelection.Unused(report.Items).ShouldNotContain(unused, "0.1.28: a model goes only when its row is ticked");
         DiskSelection.Unused(report.Items).ShouldNotContain(used);
-        DiskSelection.Full(report.Items).ShouldContain(used, "the full delete takes the app's models too");
+        DiskSelection.Full(report.Items).ShouldNotContain(used, "the full delete keeps the models too");
 
         await h.Get<IAppOllamaServer>().StartAsync(None);
         var outcome = await cleaner.RemoveAsync([unused], None);
 
         outcome.Removed.ShouldBe([unused]);
         launcher.Started.ShouldHaveSingleItem().Stops.ShouldBe(1, "the app's server is ended before its files are taken");
-        bin.Moved.ShouldContain(store.ManifestPath("qwen3.5:4b-q4_K_M"));
+        discard.Discarded.ShouldContain(store.ManifestPath("qwen3.5:4b-q4_K_M"));
         File.Exists(store.BlobPath(shared[2])!).ShouldBeTrue("the layer the other model uses stays");
         store.IsInstalled("gemma4:e4b-it-qat").ShouldBeTrue();
         await h.Get<ComponentPlanner>().RefreshAllAsync(None);
@@ -196,8 +192,7 @@ public sealed class LocalAiTests
     [AvaloniaFact]
     public async Task TheStorageManagerListsAnOldAppModelAndFilesNoModelUses()
     {
-        var bin = new FakeBin();
-        using var h = Harness(new FakeConfirm { Answer = true }, new FakeAppOllamaLauncher(), new FakeAppOllamaApi(), bin);
+        using var h = Harness(new FakeConfirm { Answer = true }, new FakeAppOllamaLauncher(), new FakeAppOllamaApi());
         await FirstRunTests.CreateAsync(h);
         InstallProgram(h);
         var store = h.Get<AppModelStore>();
@@ -211,10 +206,10 @@ public sealed class LocalAiTests
 
         var row = report.Items.Single(i => i.Key == "component:ollama-model.qwen3:8b");
         row.State.ShouldBe(DiskItemState.Unused);
-        DiskSelection.Unused(report.Items).ShouldContain(row);
+        DiskSelection.Unused(report.Items).ShouldNotContain(row, "an unused model is kept unless ticked");
         var leftovers = report.Items.Single(i => i.Key == "models:app-ollama-unused");
         leftovers.Bytes.ShouldBe(new FileInfo(partial).Length);
-        DiskSelection.Unused(report.Items).ShouldContain(leftovers);
+        DiskSelection.Unused(report.Items).ShouldContain(leftovers, "files no model uses are no usable model");
 
         var outcome = await cleaner.RemoveAsync([row, leftovers], None);
 
@@ -222,25 +217,5 @@ public sealed class LocalAiTests
         store.HasManifest("qwen3:8b").ShouldBeFalse();
         File.Exists(store.BlobPath(old[1])!).ShouldBeFalse();
         File.Exists(partial).ShouldBeFalse();
-    }
-
-    internal sealed class FakeBin : IRecycleBin
-    {
-        public List<string> Moved { get; } = [];
-
-        public Task MoveAsync(string folder, CancellationToken cancellationToken)
-        {
-            Moved.Add(folder);
-            if (File.Exists(folder))
-            {
-                File.Delete(folder);
-            }
-            else if (Directory.Exists(folder))
-            {
-                Directory.Delete(folder, recursive: true);
-            }
-
-            return Task.CompletedTask;
-        }
     }
 }

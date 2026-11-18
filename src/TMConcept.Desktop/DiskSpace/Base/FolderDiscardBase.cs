@@ -5,32 +5,32 @@ using TMConcept.Core.Paths;
 namespace TMConcept.Desktop.DiskSpace;
 
 /// <summary>
-/// The common part of a discard: only a path strictly inside the data folder is taken (anything else, the data folder itself included, is
-/// refused with <see cref="InvalidOperationException"/>: a wrong path never reaches the bin or a delete); a path that is gone already is
-/// nothing to do; each one is logged without the user's folders.
+/// The common part of a discard: only a path strictly inside the data folder or the library folder is taken (anything else, the two folders
+/// themselves and a folder that holds one of them included, is refused with <see cref="InvalidOperationException"/>: a wrong path never reaches a delete); a path that is gone
+/// already is nothing to do; each one is logged relative to its root (never the user's folders).
 /// </summary>
 public abstract class FolderDiscardBase(IAppPaths paths, ILogger logger) : IFolderDiscard
 {
-    /// <inheritdoc />
-    public abstract bool Permanent { get; }
-
     /// <inheritdoc />
     public async Task DiscardAsync(string path, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
         var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
-        if (!Inside(full, paths.DataDirectory))
-        {
-            throw new InvalidOperationException("Only a folder inside the app's data folder can be removed.");
-        }
-
+        var root = RootOf(full) ?? throw new InvalidOperationException("Only a folder inside the app's data folder or video library can be removed.");
         if (!Directory.Exists(full) && !File.Exists(full))
         {
             return;
         }
 
         await TakeAsync(full, cancellationToken).ConfigureAwait(false);
-        logger.LogInformation("{Path} {Way}", Path.GetRelativePath(paths.DataDirectory, full), Permanent ? "deleted permanently" : "moved to the recycle bin");
+        logger.LogInformation("{Path} deleted permanently", Path.GetRelativePath(root, full));
+    }
+
+    /// <inheritdoc />
+    public bool Owns(string path)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(path);
+        return RootOf(Path.TrimEndingDirectorySeparator(Path.GetFullPath(path))) is not null;
     }
 
     /// <summary>Whether <paramref name="path"/> lies strictly inside <paramref name="folder"/>.</summary>
@@ -44,6 +44,22 @@ public abstract class FolderDiscardBase(IAppPaths paths, ILogger logger) : IFold
         return full.Length > root.Length && full.StartsWith(root, comparison);
     }
 
-    /// <summary>Takes the existing <paramref name="path"/> away; throws when it could not.</summary>
+    /// <summary>Deletes the existing <paramref name="path"/>; throws when it could not.</summary>
     protected abstract Task TakeAsync(string path, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The root (data folder or library folder) <paramref name="full"/> lies strictly inside; <c>null</c> when none, and when it is a root or
+    /// holds one (a portable copy keeps the library inside the data folder: the library folder itself is never taken).
+    /// </summary>
+    private string? RootOf(string full)
+    {
+        string[] roots = [paths.DataDirectory, paths.LibraryDirectory];
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        if (roots.Any(r => string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(r)), full, comparison) || Inside(r, full)))
+        {
+            return null;
+        }
+
+        return roots.FirstOrDefault(r => Inside(full, r));
+    }
 }

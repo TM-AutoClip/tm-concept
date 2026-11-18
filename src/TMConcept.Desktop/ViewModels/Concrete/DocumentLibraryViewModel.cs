@@ -21,7 +21,7 @@ namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
 /// "Belgelerim" of the open profile (0.1.21): the documents added in this profile, adding files (PDF, Word, text, Markdown), a web address or
-/// a Wikipedia article (by address, or by title in a chosen language), deleting one (its copy to the recycle bin, through the storage
+/// a Wikipedia article (by address, or by title in a chosen language), deleting one (its copy for good, through the storage
 /// manager, so nothing is removed while work runs), and installing the meaning model (only after the confirmation with the download list).
 /// Every failure is shown on the panel in the user's language and logged. One add at a time.
 /// 0.1.24: a picked PDF first waits in <see cref="Pending"/> with its page count, how much of it looks scanned, a page range to add and
@@ -414,7 +414,7 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
     [RelayCommand]
     public Task AddWikipediaAsync() => AddAddressAsync(DocumentKind.Wikipedia);
 
-    /// <summary>Deletes a document after asking (its copy to the recycle bin; its passages from the database).</summary>
+    /// <summary>Deletes a document after asking (with its size): its copy for good, its passages from the database.</summary>
     [RelayCommand]
     public async Task DeleteAsync(DocumentRowViewModel? row)
     {
@@ -423,8 +423,10 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
             return;
         }
 
-        var answer = await confirm.AskAsync(text["documents.delete.title"], text.Format("documents.delete.message", row.Title), text["documents.delete"], danger: true)
-            .ConfigureAwait(true);
+        var file = row.Document.StoredFile.Length > 0 ? library.FileOf(row.Document) : string.Empty;
+        var bytes = file.Length > 0 ? await Task.Run(() => Core.DiskSpace.DiskSizes.Of(file)).ConfigureAwait(true) : 0;
+        var answer = await confirm.AskAsync(text["documents.delete.title"], text.Format("documents.delete.message", row.Title,
+            StorageSettingsViewModel.Size(bytes, text.Culture)), text["documents.delete"], danger: true).ConfigureAwait(true);
         if (!answer.Confirmed)
         {
             return;
@@ -432,8 +434,7 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
 
         try
         {
-            var item = new DocumentDiskItem(row.Document, session.Profile?.Name ?? string.Empty, library, 0,
-                row.Document.StoredFile.Length > 0 ? library.FileOf(row.Document) : string.Empty);
+            var item = new DocumentDiskItem(row.Document, session.Profile?.Name ?? string.Empty, library, bytes, file);
             var result = await cleaner.RemoveAsync([item], CancellationToken.None).ConfigureAwait(true);
             if (result.Busy)
             {
@@ -442,10 +443,6 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
             else if (result.Failed.Count > 0)
             {
                 Say(text.Format("storage.item_failed", row.Title, result.Failed[0].Reason), error: true);
-            }
-            else if (result.Kept.Count > 0)
-            {
-                Say(text.Format("storage.kept", row.Title), error: true);
             }
             else
             {
@@ -464,7 +461,7 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
 
     /// <summary>
     /// Takes away the documents a research run added when the user chose not to keep them (0.1.22): no question (the choice was made on
-    /// the section), through the recycle bin like a delete. Returns the reason when some could not be taken away (empty = all went).
+    /// the section), for good like a delete. Returns the reason when some could not be taken away (empty = all went).
     /// </summary>
     public async Task<string> RemoveAddedAsync(IReadOnlyCollection<Guid> ids)
     {

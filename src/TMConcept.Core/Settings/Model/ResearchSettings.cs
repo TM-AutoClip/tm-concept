@@ -24,7 +24,7 @@ public sealed class ResearchSettings
     /// <summary>Extra languages read besides the profile's and English, as typed ("fr, de").</summary>
     public string ExtraLanguages { get; set; } = string.Empty;
 
-    /// <summary>The fetched pages stay in the profile's documents after the run (else the ones the run added go to the recycle bin).</summary>
+    /// <summary>The fetched pages stay in the profile's documents after the run (else the ones the run added are deleted).</summary>
     public bool KeepInLibrary { get; set; } = true;
 
     /// <summary>The user's MCP servers are used at all (advanced; off by default).</summary>

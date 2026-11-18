@@ -93,7 +93,7 @@ public sealed class SpeechService(IEnumerable<ISpeechEngine> engines, StepModelR
         ArgumentNullException.ThrowIfNull(setup);
         var voice = setup.Voice.Length > 0 ? setup.Voice : setup.Engine.Voices(language).FirstOrDefault()?.Id ?? string.Empty;
         var spoken = await pronunciations.PrepareAsync(text, language, extra, cancellationToken).ConfigureAwait(false);
-        var cache = Path.Combine(paths.WorkDirectory, "speech-cache", Key(spoken, setup.Engine.Code, setup.Model.Id, voice, setup.Speed) + ".wav");
+        var cache = Path.Combine(paths.WorkDirectory, "speech-cache", VoiceTag(voice) + "-" + Key(spoken, setup.Engine.Code, setup.Model.Id, voice, setup.Speed) + ".wav");
         Directory.CreateDirectory(Path.GetDirectoryName(outputWav)!);
         if (File.Exists(cache))
         {
@@ -186,7 +186,17 @@ public sealed class SpeechService(IEnumerable<ISpeechEngine> engines, StepModelR
         }
     }
 
-    /// <summary>The cache key.</summary>
+    /// <summary>
+    /// The start of a cached clip's name: the same for every clip of one voice (0.1.28), so deleting a voice sample finds the narration made
+    /// with it (<see cref="VoiceSampleLibrary.DeleteAsync"/>). The first 12 hex characters of the voice id's SHA-256.
+    /// </summary>
+    public static string VoiceTag(string voice)
+    {
+        ArgumentNullException.ThrowIfNull(voice);
+        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(voice)))[..12];
+    }
+
+    /// <summary>The cache key of a clip (text, engine, model, voice and speed).</summary>
     public static string Key(string text, string engine, string model, string voice, double speed) =>
         Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\u001f', text, engine, model, voice,
             speed.ToString("0.00", CultureInfo.InvariantCulture)))));

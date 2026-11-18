@@ -15,12 +15,14 @@ namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
 /// 🗑 Trash: deleted concepts are kept forever (they still count in the duplicate check). "Restore" puts them back to new. "Delete
-/// permanently" asks first and then removes the rows; a permanently deleted concept no longer counts anywhere (there is no "deleted" flag).
+/// permanently" asks first (with how many videos go and the size) and then deletes them with everything they generated: their videos and
+/// work files, then the rows (<see cref="Core.Deletion.ConceptDeletion"/>); a permanently deleted concept no longer counts anywhere (there is
+/// no "deleted" flag). One whose files are in use stays in the trash and the reason is shown.
 /// Deleting <see cref="BackupRules.BulkChange"/> or more takes a backup first. Only checked cards that are visible (not hidden by the
 /// search) are acted on. A storage error is shown and logged, never a crash.
 /// </summary>
 public sealed partial class TrashViewModel(AppSession session, IConceptStore concepts, IConfirmDialog confirm, ConceptEvents events, IActivityLog activity,
-    BackupService backup, Localizer text, ILogger<TrashViewModel> logger) : PageViewModelBase
+    BackupService backup, Core.Deletion.ConceptDeletion deletion, Localizer text, ILogger<TrashViewModel> logger) : PageViewModelBase
 {
     private readonly List<ConceptCardViewModel> _all = [];
     private bool _attached;
@@ -94,8 +96,23 @@ public sealed partial class TrashViewModel(AppSession session, IConceptStore con
             return;
         }
 
-        var answer = await confirm.AskAsync(text["trash.delete.title"], text.Format("trash.delete.message", ids.Count), text["trash.delete.confirm"],
-            danger: true).ConfigureAwait(true);
+        Core.Deletion.DeletionPlan plan;
+        try
+        {
+            plan = await deletion.PlanAsync(ids, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "What a permanent delete takes could not be counted");
+            Status = text.Format("error.generic", ex.Message);
+            return;
+        }
+
+        var size = StorageSettingsViewModel.Size(plan.Bytes, text.Culture);
+        var message = plan.Videos > 0
+            ? text.Format("trash.delete.message", plan.Concepts, plan.Videos, size)
+            : text.Format("trash.delete.message_no_videos", plan.Concepts, size);
+        var answer = await confirm.AskAsync(text["trash.delete.title"], message, text["trash.delete.confirm"], danger: true).ConfigureAwait(true);
         if (!answer.Confirmed)
         {
             return;
@@ -118,9 +135,15 @@ public sealed partial class TrashViewModel(AppSession session, IConceptStore con
 
         try
         {
-            var removed = await concepts.DeletePermanentlyAsync(ids, CancellationToken.None).ConfigureAwait(true);
-            logger.LogInformation("{Count} concepts deleted permanently", removed);
-            activity.Add(ActivityLevel.Info, text.Format("trash.deleted", removed));
+            var result = await deletion.DeleteAsync(ids, CancellationToken.None).ConfigureAwait(true);
+            logger.LogInformation("{Count} concepts deleted permanently", result.Deleted);
+            activity.Add(ActivityLevel.Info, text.Format("trash.deleted", result.Deleted, StorageSettingsViewModel.Size(result.Freed, text.Culture)));
+            if (!result.Complete)
+            {
+                Status = text.Format("trash.delete_failed", result.Failed[0].Reason);
+                activity.Add(ActivityLevel.Error, Status);
+            }
+
             events.Raise(this);
             await ReloadAsync().ConfigureAwait(true);
         }

@@ -307,32 +307,67 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
     /// <summary>
     /// Called once at start, before any video runs (no run can own a work folder then). A run's work folder left by an app that was closed
     /// or killed mid-run is an orphan: it is emptied at once, except a rejected code kept for reading (the folder goes with it after
-    /// <see cref="WorkKeep"/>). Scene images that were paid for stay for a retry until <see cref="WorkKeep"/>.
+    /// <see cref="WorkKeep"/>). Scene images that were paid for stay for a retry until <see cref="WorkKeep"/>. 0.1.28: also what
+    /// <see cref="CleanOld"/> takes, and the listen and sample-render files (nothing plays or renders them at start).
     /// </summary>
     public void CleanWork()
     {
         var runs = Path.Combine(paths.WorkDirectory, "videos");
         if (Directory.Exists(runs))
         {
-            foreach (var folder in Directory.EnumerateDirectories(runs))
+            foreach (var folder in Directory.EnumerateDirectories(runs).Where(f => clock.GetUtcNow() - Directory.GetLastWriteTimeUtc(f) <= WorkKeep))
             {
-                if (clock.GetUtcNow() - Directory.GetLastWriteTimeUtc(folder) > WorkKeep)
+                assembler.CleanFailed(folder, new VersionTarget());
+            }
+        }
+
+        CleanOld();
+        assembler.TryDelete(Path.Combine(paths.WorkDirectory, "listen"));
+        assembler.TryDelete(Path.Combine(paths.WorkDirectory, "sample"));
+    }
+
+    /// <summary>
+    /// At start and at the end of the video queue (0.1.28; until then only at start, and the cached narration never): what is older than its
+    /// keep time and so no retry uses: run folders, scene images and cached narration older than <see cref="WorkKeep"/>, and voice sample
+    /// work files older than a day (a crash left them; a request deletes its own right after it). A file that cannot be removed now is
+    /// logged and tried again next time (the storage page lists it meanwhile).
+    /// </summary>
+    public void CleanOld()
+    {
+        var now = clock.GetUtcNow();
+        foreach (var kind in new[] { "videos", "scene-images" })
+        {
+            var root = Path.Combine(paths.WorkDirectory, kind);
+            if (Directory.Exists(root))
+            {
+                foreach (var folder in Directory.EnumerateDirectories(root).Where(f => now - Directory.GetLastWriteTimeUtc(f) > WorkKeep))
                 {
                     assembler.TryDelete(folder);
-                }
-                else
-                {
-                    assembler.CleanFailed(folder, new VersionTarget());
                 }
             }
         }
 
-        var images = Path.Combine(paths.WorkDirectory, "scene-images");
-        if (Directory.Exists(images))
+        DeleteOlder(Path.Combine(paths.WorkDirectory, "speech-cache"), now - WorkKeep);
+        DeleteOlder(Path.Combine(paths.WorkDirectory, "voices"), now - TimeSpan.FromDays(1));
+    }
+
+    /// <summary>Deletes the files of <paramref name="folder"/> last written before <paramref name="before"/>.</summary>
+    private void DeleteOlder(string folder, DateTimeOffset before)
+    {
+        if (!Directory.Exists(folder))
         {
-            foreach (var folder in Directory.EnumerateDirectories(images).Where(f => clock.GetUtcNow() - Directory.GetLastWriteTimeUtc(f) > WorkKeep))
+            return;
+        }
+
+        foreach (var file in Directory.EnumerateFiles(folder).Where(f => File.GetLastWriteTimeUtc(f) < before.UtcDateTime))
+        {
+            try
             {
-                assembler.TryDelete(folder);
+                File.Delete(file);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                logger.LogWarning(ex, "An old work file could not be removed yet");
             }
         }
     }
@@ -535,7 +570,10 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         }
     }
 
-    private string SceneImageRoot(Guid conceptId) => Path.Combine(paths.WorkDirectory, "scene-images", conceptId.ToString("N"));
+    private string SceneImageRoot(Guid conceptId) => SceneImageFolder(paths.WorkDirectory, conceptId);
+
+    /// <summary>The kept scene images of a concept (<c>work/scene-images/&lt;concept&gt;</c>; deleted with the concept or its profile).</summary>
+    public static string SceneImageFolder(string workDirectory, Guid conceptId) => Path.Combine(workDirectory, "scene-images", conceptId.ToString("N"));
 
     /// <summary>
     /// The key of a concept's kept image prompts and images: another channel, model, size, scene text or template drawing style makes new ones

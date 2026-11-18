@@ -1,14 +1,16 @@
 namespace TMConcept.Core.DiskSpace;
 
 /// <summary>
-/// Takes a folder (or file) of the data folder away: to the recycle bin / trash, or (only after the user confirmed it, when the bin cannot
-/// be used) for good. A path that does not exist is nothing to do; a path outside the data folder is refused. Throws when it could not.
+/// Deletes a folder or file the app made, for good (0.1.28: there is no recycle bin step any more; every delete is confirmed by the user
+/// with its size and "cannot be undone" first). Only a path strictly inside the data folder or the library folder is taken (a root itself or
+/// anything outside is refused with <see cref="InvalidOperationException"/>); a path that does not exist is nothing to do. Throws when it
+/// could not (a file in use, no access).
 /// </summary>
 public interface IFolderDiscard
 {
-    /// <summary>Whether this one deletes for good (the bin keeps nothing).</summary>
-    bool Permanent { get; }
-
-    /// <summary>Takes <paramref name="path"/> away.</summary>
+    /// <summary>Deletes <paramref name="path"/>.</summary>
     Task DiscardAsync(string path, CancellationToken cancellationToken);
+
+    /// <summary>Whether <paramref name="path"/> lies strictly inside a folder this one may delete in.</summary>
+    bool Owns(string path);
 }

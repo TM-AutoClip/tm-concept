@@ -20,8 +20,8 @@ namespace TMConcept.Tests.Desktop;
 /// <summary>
 /// The storage manager (Settings → Storage, the developer, 17 Nov 2026): which components are used comes from every profile's saved step
 /// choices (the catalog model's components, the video code step's engine, ffmpeg for the app itself) closed over the dependencies; "Clean
-/// up unused" never takes a used one; everything goes to the recycle bin, for good only after its own confirmation; nothing is touched
-/// while work runs. Fake components on a temporary data folder; nothing is downloaded.
+/// up unused" never takes a used one; neither clean-up takes a model (only ticking its row does); everything is deleted for good (0.1.28:
+/// no recycle bin); a row that fails is reported and the others go on; nothing is touched while work runs. Fake components on a temporary data folder; nothing is downloaded.
 /// </summary>
 public sealed class StorageManagerTests
 {
@@ -137,9 +137,9 @@ public sealed class StorageManagerTests
 
         var unused = DiskSelection.Unused(report.Items).Select(i => i.Key).ToList();
 
-        unused.ShouldContain("component:voice.supertonic");
+        unused.ShouldNotContain("component:voice.supertonic", "0.1.28: an unused model goes only when its row is ticked");
         unused.ShouldContain("component:engine.hyperframes");
-        unused.ShouldContain("component:image.flux2-klein-4b");
+        unused.ShouldNotContain("component:image.flux2-klein-4b", "an image model, even a half-finished one, only when ticked");
         unused.ShouldContain("tools:downloads");
         unused.ShouldContain("tools:unowned");
         unused.ShouldContain("work:speech-cache:old");
@@ -151,7 +151,8 @@ public sealed class StorageManagerTests
             unused.ShouldNotContain(used.Key);
         }
 
-        DiskSelection.Full(report.Items).Select(i => i.Key).ShouldContain("component:voice.kokoro", "the full delete takes every component");
+        DiskSelection.Full(report.Items).Select(i => i.Key).ShouldContain("component:engine.remotion", "the full delete takes every tool");
+        DiskSelection.Full(report.Items).Where(i => i.Area == DiskArea.Models).ShouldBeEmpty("and never a model");
         DiskSelection.Full(report.Items).Select(i => i.Key).ShouldContain("work:videos:recent");
         DiskSelection.Full(report.Items).Select(i => i.Key).ShouldContain("work:speech-cache:recent");
     }
@@ -170,11 +171,11 @@ public sealed class StorageManagerTests
         report.Items.Single(i => i.Key == "tools:unknown-image-models").Paths.ShouldBe([unknown]);
         report.Items.Single(i => i.Key == "tools:unowned").Paths.ShouldNotContain(unknown);
         DiskSelection.Unused(report.Items).Select(i => i.Key).ShouldNotContain("tools:unknown-image-models");
-        DiskSelection.Full(report.Items).Select(i => i.Key).ShouldContain("tools:unknown-image-models", "the full delete still takes it");
+        DiskSelection.Full(report.Items).Select(i => i.Key).ShouldNotContain("tools:unknown-image-models", "a model goes only when ticked");
     }
 
     [AvaloniaFact]
-    public async Task RemovedItemsGoToTheRecycleBinAndTheInstallRecordForgetsThem()
+    public async Task RemovedItemsAreDeletedForGoodAndTheInstallRecordForgetsThem()
     {
         var setup = await SetupAsync();
         using var h = setup.H;
@@ -182,44 +183,44 @@ public sealed class StorageManagerTests
         var report = await cleaner.ReportAsync(None);
         h.Get<IInstallRecord>().Installed("voice.supertonic");
 
-        var outcome = await cleaner.RemoveAsync(DiskSelection.Unused(report.Items), None);
+        var ticked = DiskSelection.Unused(report.Items).Append(report.Items.Single(i => i.Key == "component:voice.supertonic")).ToList();
+        var outcome = await cleaner.RemoveAsync(ticked, None);
 
         outcome.Busy.ShouldBeFalse();
         outcome.Failed.ShouldBeEmpty();
-        outcome.Kept.ShouldBeEmpty();
-        setup.Bin.Moved.ShouldContain(setup.Supertonic.Folder!);
-        setup.Bin.Moved.ShouldContain(Path.Combine(h.Paths.ToolsDirectory, "ffmpeg", "6.0"));
+        setup.Discard.Discarded.ShouldContain(setup.Supertonic.Folder!);
+        setup.Discard.Discarded.ShouldContain(Path.Combine(h.Paths.ToolsDirectory, "ffmpeg", "6.0"));
         Directory.Exists(setup.Supertonic.Folder).ShouldBeFalse();
         Directory.Exists(setup.Kokoro.Folder).ShouldBeTrue("a used voice is never cleaned up");
         File.Exists(Path.Combine(h.Paths.ToolsDirectory, "ffmpeg", "tool.fallback")).ShouldBeTrue("files next to versions stay");
         Directory.Exists(Path.Combine(h.Paths.WorkDirectory, "videos", "recent")).ShouldBeTrue();
         h.Get<IInstallRecord>().List().ShouldNotContain(r => r.Code == "voice.supertonic");
-        setup.Confirm.Asked.ShouldBeEmpty("the recycle bin took everything: no question about a permanent delete");
+        setup.Confirm.Asked.ShouldBeEmpty("the page asked once before; the cleaner asks nothing more");
         outcome.Freed.ShouldBeGreaterThan(5000);
     }
 
     [AvaloniaFact]
-    public async Task WithoutARecycleBinNothingIsDeletedForGoodUnlessTheUserConfirmsIt()
+    public async Task ARowThatCannotBeDeletedIsReportedWithItsReasonAndTheOthersGo()
     {
         var setup = await SetupAsync();
         using var h = setup.H;
         var cleaner = h.Get<IDiskCleaner>();
-        setup.Bin.Fail = true;
-        var item = (await cleaner.ReportAsync(None)).Items.Single(i => i.Key == "component:voice.supertonic");
+        setup.Discard.FailWhen = p => p == setup.Supertonic.Folder;
+        var report = await cleaner.ReportAsync(None);
+        var supertonic = report.Items.Single(i => i.Key == "component:voice.supertonic");
+        var downloads = report.Items.Single(i => i.Key == "tools:downloads");
 
-        setup.Confirm.Answers.Enqueue(false);
-        var declined = await cleaner.RemoveAsync([item], None);
+        var outcome = await cleaner.RemoveAsync([supertonic, downloads], None);
 
-        declined.Kept.ShouldBe([item]);
-        declined.Removed.ShouldBeEmpty();
+        outcome.Failed.ShouldHaveSingleItem().Item.ShouldBe(supertonic);
+        outcome.Failed[0].Reason.ShouldContain("being used by another process");
+        outcome.Removed.ShouldBe([downloads]);
         Directory.Exists(setup.Supertonic.Folder).ShouldBeTrue();
-        setup.Confirm.Asked.ShouldBe([h.Get<Localizer>()["storage.bin_failed.title"]]);
+        setup.Confirm.Asked.ShouldBeEmpty("no second question: the failure is reported");
 
-        setup.Confirm.Answers.Enqueue(true);
-        var confirmed = await cleaner.RemoveAsync([item], None);
-
-        confirmed.Removed.ShouldBe([item]);
-        Directory.Exists(setup.Supertonic.Folder).ShouldBeFalse("deleted permanently after its own confirmation");
+        setup.Discard.FailWhen = _ => false;
+        (await cleaner.RemoveAsync([supertonic], None)).Removed.ShouldBe([supertonic], "a second try finishes it");
+        Directory.Exists(setup.Supertonic.Folder).ShouldBeFalse();
     }
 
     [AvaloniaFact]
@@ -234,7 +235,7 @@ public sealed class StorageManagerTests
         var outcome = await cleaner.RemoveAsync(DiskSelection.Full(report.Items), None);
 
         outcome.Busy.ShouldBeTrue();
-        setup.Bin.Moved.ShouldBeEmpty();
+        setup.Discard.Discarded.ShouldBeEmpty();
         Directory.Exists(setup.Supertonic.Folder).ShouldBeTrue();
     }
 
@@ -253,7 +254,7 @@ public sealed class StorageManagerTests
 
         sample.Busy.ShouldBeTrue();
         (await cleaner.RemoveAsync(DiskSelection.Full(report.Items), None)).Busy.ShouldBeTrue();
-        setup.Bin.Moved.ShouldBeEmpty();
+        setup.Discard.Discarded.ShouldBeEmpty();
 
         engine.Finish.SetResult();
         await rendering;
@@ -299,7 +300,7 @@ public sealed class StorageManagerTests
     public async Task AFolderOutsideTheDataFolderIsNeverDiscarded()
     {
         using var h = new DesktopHarness();
-        var outside = Path.Combine(Path.GetTempPath(), "tmconcept-tests", "outside-" + Guid.NewGuid().ToString("N"));
+        var outside = Path.Combine(TestFolders.Root, "outside-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(outside);
         try
         {
@@ -335,7 +336,9 @@ public sealed class StorageManagerTests
 
         setup.Confirm.Asked.ShouldBe([h.Get<Localizer>()["storage.clean.title"]]);
         setup.Confirm.Messages[0].ShouldNotContain("Kokoro", Case.Insensitive, "a used one is never offered for clean-up");
-        Directory.Exists(setup.Supertonic.Folder).ShouldBeFalse();
+        setup.Confirm.Messages[0].ShouldContain("Bu işlem geri alınamaz.");
+        Directory.Exists(Path.Combine(h.Paths.ToolsDirectory, "engines", "hyperframes")).ShouldBeFalse("an unused tool is cleaned up");
+        Directory.Exists(setup.Supertonic.Folder).ShouldBeTrue("an unused model stays unless ticked");
         Directory.Exists(setup.Kokoro.Folder).ShouldBeTrue();
         page.Items.ShouldNotContain(r => r.Item.Key == "tools:downloads", "the list is read again after the removal");
         page.Status.ShouldContain("kaldırıldı");
@@ -356,7 +359,7 @@ public sealed class StorageManagerTests
     /// </summary>
     private static async Task<Setup> SetupAsync()
     {
-        var folder = Path.Combine(Path.GetTempPath(), "tmconcept-tests", "storage-" + Guid.NewGuid().ToString("N"));
+        var folder = Path.Combine(TestFolders.Root, "storage-" + Guid.NewGuid().ToString("N"));
         var tools = Path.Combine(folder, "tools");
         FakeComponent Make(string code, bool ready, string relative, int bytes, params string[] dependsOn)
         {
@@ -396,14 +399,13 @@ public sealed class StorageManagerTests
         Directory.SetLastWriteTimeUtc(old, DateTime.UtcNow.AddDays(-10));
         Put(Path.Combine(folder, "work", "videos", "recent"), 500);
 
-        var bin = new FakeBin();
+        var discard = new RecordingDiscard();
         var confirm = new FakeConfirm { Answer = true };
         var h = new DesktopHarness(folder, s =>
         {
             s.RemoveAll<IComponentSource>();
             s.AddSingleton<IComponentSource>(new FakeComponents(all));
-            s.RemoveAll<IRecycleBin>();
-            s.AddSingleton<IRecycleBin>(bin);
+            discard.Register(s);
             s.AddSingleton<IConfirmDialog>(confirm);
         });
         await FirstRunTests.CreateAsync(h);
@@ -421,7 +423,7 @@ public sealed class StorageManagerTests
         await steps.SaveAsync(new StepModelChoice { Step = PipelineSteps.Images, ProfileId = byzantium.Id, Provider = ModelProviders.Local, Model = "z-image-turbo" },
             None);
         await steps.SaveAsync(new StepModelChoice { Step = PipelineSteps.Embedding, ProfileId = byzantium.Id, Provider = ModelProviders.Off }, None);
-        return new Setup(h, bin, confirm, kokoro, supertonic, remotion);
+        return new Setup(h, discard, confirm, kokoro, supertonic, remotion);
     }
 
     private static void Put(string folder, int bytes, string name = "data.bin")
@@ -430,34 +432,5 @@ public sealed class StorageManagerTests
         File.WriteAllBytes(Path.Combine(folder, name), new byte[bytes]);
     }
 
-    private sealed record Setup(DesktopHarness H, FakeBin Bin, FakeConfirm Confirm, FakeComponent Kokoro, FakeComponent Supertonic, FakeComponent Remotion);
-
-    /// <summary>A recycle bin that deletes the folder or file it is given (or fails, like a drive without a bin).</summary>
-    private sealed class FakeBin : IRecycleBin
-    {
-        public List<string> Moved { get; } = [];
-
-        public bool Fail { get; set; }
-
-        public Task MoveAsync(string folder, CancellationToken cancellationToken)
-        {
-            if (Fail)
-            {
-                throw new IOException("the recycle bin is not available");
-            }
-
-            Moved.Add(folder);
-            if (File.Exists(folder))
-            {
-                // A cached narration file older than the work keep time.
-                File.Delete(folder);
-            }
-            else
-            {
-                Directory.Delete(folder, recursive: true);
-            }
-
-            return Task.CompletedTask;
-        }
-    }
+    private sealed record Setup(DesktopHarness H, RecordingDiscard Discard, FakeConfirm Confirm, FakeComponent Kokoro, FakeComponent Supertonic, FakeComponent Remotion);
 }

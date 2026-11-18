@@ -320,20 +320,20 @@ public sealed class DocumentStorageTests
         public Task SaveVectorsAsync(IReadOnlyList<DocumentChunkVector> vectors, CancellationToken cancellationToken) => inner.SaveVectorsAsync(vectors, cancellationToken);
     }
 
-    /// <summary>A recycle bin that deletes what it is given, or fails.</summary>
+    /// <summary>A delete that deletes what it is given, or fails like a file in use.</summary>
     private sealed class FakeDiscard : IFolderDiscard
     {
         public List<string> Discarded { get; } = [];
 
         public bool Fail { get; set; }
 
-        public bool Permanent => false;
+        public bool Owns(string path) => true;
 
         public Task DiscardAsync(string path, CancellationToken cancellationToken)
         {
             if (Fail)
             {
-                throw new IOException("no recycle bin");
+                throw new IOException("the file is in use");
             }
 
             Discarded.Add(path);

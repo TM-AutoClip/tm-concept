@@ -13,8 +13,8 @@ namespace TMConcept.Core.Documents;
 /// the meaning search's vectors. Adding: the app keeps its OWN copy, unencrypted, in <c>&lt;data&gt;/documents/&lt;profile&gt;/&lt;sha256&gt;.&lt;ext&gt;</c>
 /// (the same content is refused a second time in a profile); its text is read with managed code only, cut into passages
 /// (<see cref="DocumentChunker"/>) and saved in the encrypted database; when the meaning model is installed the passages' vectors are made
-/// right away (on this computer's processor). A copy whose text could not be read is taken away again. Deleting moves the copy to the
-/// recycle bin first (<see cref="IFolderDiscard"/>) and only then deletes the record with its passages and vectors. One add, vector run or
+/// right away (on this computer's processor). A copy whose text could not be read is taken away again. Deleting deletes the copy for good
+/// first (<see cref="IFolderDiscard"/>) and only then deletes the record with its passages and vectors. One add, vector run or
 /// delete at a time (a delete waits for a running add), and <see cref="Busy"/> tells the storage manager not to clean up meanwhile (a copy
 /// being written has no record yet). A copy that could not be finished (canceled, a failed copy) is taken away again.
 /// 0.1.25: the text of every page of a PDF (its text layer, or what the local OCR or a vision model read) is kept with the file
@@ -164,7 +164,7 @@ public sealed class DocumentLibrary(IAppPaths paths, IDocumentStore store, IEnum
     }
 
     /// <summary>
-    /// Deletes a document: its copy goes through <paramref name="discard"/> (the recycle bin) first, and only when that worked are its record,
+    /// Deletes a document: its copy is deleted for good through <paramref name="discard"/> first, and only when that worked are its record,
     /// passages and vectors deleted. A copy that is already gone is nothing to do.
     /// </summary>
     public async Task DeleteAsync(SourceDocument document, IFolderDiscard discard, CancellationToken cancellationToken)
@@ -187,12 +187,11 @@ public sealed class DocumentLibrary(IAppPaths paths, IDocumentStore store, IEnum
             Exit();
         }
 
-        logger.LogInformation("Document {Id} ({Kind}, {Chunks} passages) deleted{Bin}", document.Id, document.Kind, document.Chunks,
-            discard.Permanent ? " for good" : ", its copy went to the recycle bin");
+        logger.LogInformation("Document {Id} ({Kind}, {Chunks} passages) deleted for good", document.Id, document.Kind, document.Chunks);
     }
 
     /// <summary>
-    /// Sends the copies of a deleted profile's documents (its folder) through <paramref name="discard"/> (the recycle bin): the database
+    /// Deletes the copies of a deleted profile's documents (its folder) for good through <paramref name="discard"/>: the database
     /// deletes their records and passages with the profile, and the plain-text copies of a deleted channel should not stay readable on disk.
     /// Nothing to do when the profile had none. Waits for a running add or vector run.
     /// </summary>
@@ -215,7 +214,7 @@ public sealed class DocumentLibrary(IAppPaths paths, IDocumentStore store, IEnum
             Exit();
         }
 
-        logger.LogInformation("The document copies of a deleted profile were {Where}", discard.Permanent ? "deleted for good" : "moved to the recycle bin");
+        logger.LogInformation("The document copies of a deleted profile were deleted for good");
     }
 
     /// <summary>

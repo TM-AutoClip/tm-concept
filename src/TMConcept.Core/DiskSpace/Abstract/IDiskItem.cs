@@ -34,7 +34,10 @@ public interface IDiskItem
     /// <summary>Whether "Clean up unused" takes it: never anything that is used; only what is safe to lose and comes back when needed.</summary>
     bool InCleanup { get; }
 
-    /// <summary>Whether the full delete takes it (components and caches; never the database, backups, logs or the videos).</summary>
+    /// <summary>
+    /// Whether the full delete takes it (tools and caches; never the database, backups, logs, the videos, a document; a model is kept by
+    /// <c>DiskSelection</c> whatever this says).
+    /// </summary>
     bool InFullDelete { get; }
 
     /// <summary>Takes it away through <paramref name="discard"/> (the install record forgets a component). Throws when it could not.</summary>

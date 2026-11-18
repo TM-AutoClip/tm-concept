@@ -228,8 +228,8 @@ public sealed class ComponentPlanner(IEnumerable<IComponentSource> sources, ILog
     public bool Busy => _gate.CurrentCount == 0;
 
     /// <summary>
-    /// Removes a component: each of its folders goes through <paramref name="discard"/> (the recycle bin; for good only after the user
-    /// confirmed it) under the install gate, then the install record forgets it. It is downloaded again the next time a setting needs it.
+    /// Removes a component: each of its folders is deleted for good through <paramref name="discard"/> (the user confirmed it
+    /// first) under the install gate, then the install record forgets it. It is downloaded again the next time a setting needs it.
     /// The caller ends the speech and Python workers and frees the graphics card first (the storage manager does). A folder that could not
     /// be taken stops the removal with the error; what was taken stays taken and the record still names the component until all is gone.
     /// </summary>
@@ -245,7 +245,7 @@ public sealed class ComponentPlanner(IEnumerable<IComponentSource> sources, ILog
                 await discard.DiscardAsync(folder, cancellationToken).ConfigureAwait(false);
             }
 
-            logger.LogInformation("{Component} removed ({Way})", component.Code, discard.Permanent ? "deleted permanently" : "moved to the recycle bin");
+            logger.LogInformation("{Component} removed (deleted permanently)", component.Code);
             try
             {
                 record?.Removed(component.Code);

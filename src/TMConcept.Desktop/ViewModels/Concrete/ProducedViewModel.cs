@@ -11,7 +11,6 @@ using TMConcept.Core.Text;
 using TMConcept.Core.Videos;
 using TMConcept.Desktop.Dialogs;
 using TMConcept.Desktop.Localization;
-using TMConcept.Desktop.Os;
 using TMConcept.Desktop.Startup;
 
 namespace TMConcept.Desktop.ViewModels;
@@ -22,12 +21,12 @@ namespace TMConcept.Desktop.ViewModels;
 /// watch it, delete one); the in-app player (a chosen video does not start by itself) with "open in the system player" beside it; the
 /// whole narration scene by scene, the whole concept text, settings and cost per step; "New version" (a new voice for an edited narration
 /// rendered here with the same code, or new code for another engine: <see cref="VersionEditorViewModel"/>); open the folder; produce
-/// again (the concept goes back to the approved list of the video page; the new video is a new row); delete the version (the files can be
-/// moved to the recycle bin in the same step). A chosen version whose thumbnail file is missing gets it made again in the background (the
+/// again (the concept goes back to the approved list of the video page; the new video is a new row); delete the version (0.1.28: for good
+/// with its files, after a confirmation that shows the size). A chosen version whose thumbnail file is missing gets it made again in the background (the
 /// same rule: the first frame that is not black), so the player and the list do not show a black area.
 /// </summary>
 public sealed partial class ProducedViewModel(AppSession session, IVideoStore videos, IConceptStore concepts, Videos.VideoRows rows, Videos.VideoFiles files,
-    IRecycleBin recycleBin, IConfirmDialog confirm, ConceptEvents events, Concepts.ConceptActions actions, IActivityLog activity, PlayerViewModel player,
+    Core.Deletion.VideoDeletion deletion, IConfirmDialog confirm, ConceptEvents events, Concepts.ConceptActions actions, IActivityLog activity, PlayerViewModel player,
     IMediaTools media, Localizer text, VersionEditorViewModel editor, Core.Runs.IRunStore runs, ILogger<ProducedViewModel> logger)
     : PageViewModelBase
 {
@@ -182,7 +181,11 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
         }
     }
 
-    /// <summary>Deletes the shown version's record (and, if ticked, moves its files to the recycle bin); the other versions stay.</summary>
+    /// <summary>
+    /// Deletes the shown version for good after a confirmation that shows its size (0.1.28: its folder always goes, and its concept's folder
+    /// when it was the last version; the other versions stay). The player lets go of the file first. A folder that cannot be removed keeps the
+    /// record and the reason is shown.
+    /// </summary>
     [RelayCommand]
     public async Task DeleteAsync()
     {
@@ -191,43 +194,46 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
             return;
         }
 
-        var answer = await confirm.AskAsync(text["produced.delete.title"], text.Format("produced.delete.message", row.Title), text["common.delete"], danger: true,
-            checkbox: text["produced.delete.files"]).ConfigureAwait(true);
-        if (!answer.Confirmed)
+        try
         {
-            return;
-        }
-
-        if (answer.Checked && Directory.Exists(row.Folder))
-        {
-            try
+            var plan = await deletion.PlanAsync([row.Video.Id], CancellationToken.None).ConfigureAwait(true);
+            var size = StorageSettingsViewModel.Size(plan.Bytes, text.Culture);
+            var answer = await confirm.AskAsync(text["produced.delete.title"], text.Format("produced.delete.message", row.Title, size), text["common.delete"],
+                danger: true).ConfigureAwait(true);
+            if (!answer.Confirmed)
             {
-                // A version folder (v1/, v2/…) that is alone in its concept's folder goes with that folder, so the recycle bin shows the title.
-                var parent = Path.GetDirectoryName(row.Folder);
-                var alone = parent is not null && row.Version is not null && Directory.EnumerateFileSystemEntries(parent).Count() == 1;
-                await recycleBin.MoveAsync(alone ? parent! : row.Folder, CancellationToken.None).ConfigureAwait(true);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or OperationCanceledException)
-            {
-                logger.LogError(ex, "The video folder could not be moved to the recycle bin");
-                activity.Add(ActivityLevel.Error, text.Format("produced.recycle_failed", ex.Message));
-                Status = text.Format("produced.recycle_failed", ex.Message);
                 return;
             }
-        }
 
-        if (ReferenceEquals(SelectedVersion, row) || ReferenceEquals(Selected, row))
+            if (ReferenceEquals(SelectedVersion, row) || ReferenceEquals(Selected, row))
+            {
+                // The player holds the file open on Windows: it lets go before the folder is deleted.
+                Player.Unload();
+            }
+
+            var result = await deletion.DeleteAsync([row.Video.Id], CancellationToken.None).ConfigureAwait(true);
+            if (!result.Complete)
+            {
+                var reason = result.Failed[0].Reason;
+                logger.LogError(LogEvents.OnScreen, "The video could not be deleted; its record stays");
+                Status = text.Format("produced.delete_failed", reason);
+                activity.Add(ActivityLevel.Error, Status);
+                await ReloadAsync().ConfigureAwait(true);
+                return;
+            }
+
+            // Another version of the same video stays shown (the newest that is left).
+            _select = Versions.LastOrDefault(v => !ReferenceEquals(v, row))?.Video.Id;
+            var freed = StorageSettingsViewModel.Size(result.Freed, text.Culture);
+            activity.Add(ActivityLevel.Info, text.Format("produced.deleted", row.Title, freed), text.Format("produced.deleted", ActivityPlaceholders.Title, freed));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // The player holds the file open on Windows: it is released before the folder moves.
-            Player.Unload();
+            logger.LogError(ex, "The video could not be deleted");
+            Status = text.Format("produced.delete_failed", ex.Message);
+            activity.Add(ActivityLevel.Error, Status);
         }
 
-        await videos.DeleteAsync(row.Video.Id, CancellationToken.None).ConfigureAwait(true);
-
-        // Another version of the same video stays shown (the newest that is left).
-        _select = Versions.LastOrDefault(v => !ReferenceEquals(v, row))?.Video.Id;
-        var deleted = answer.Checked ? "produced.deleted_files" : "produced.deleted";
-        activity.Add(ActivityLevel.Info, text.Format(deleted, row.Title), text.Format(deleted, ActivityPlaceholders.Title));
         await ReloadAsync().ConfigureAwait(true);
     }
 

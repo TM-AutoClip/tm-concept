@@ -36,8 +36,9 @@ public interface IConceptStore
     Task TrashAsync(IReadOnlyCollection<Guid> ids, TrashReason reason, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Deletes trashed concepts for good (a real DELETE; their embeddings go with them, videos keep their record). Concepts that are not in
-    /// the trash are left alone. Returns how many were deleted.
+    /// Deletes trashed concepts for good (a real DELETE; their embeddings go with them; a video record that is left loses its link).
+    /// Concepts that are not in the trash are left alone. Returns how many were deleted. Their videos and work files are deleted first by
+    /// <see cref="Deletion.ConceptDeletion"/>.
     /// </summary>
     Task<int> DeletePermanentlyAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken);
 

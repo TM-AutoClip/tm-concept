@@ -76,6 +76,11 @@ public static class DesktopServices
         services.AddSingleton<Core.Media.IMediaTools, Engines.Media.FfmpegMedia>();
         services.AddSingleton<Core.Videos.VideoAssembler>();
         services.AddSingleton<Core.Videos.VideoPipeline>();
+        // 0.1.28: deleting something deletes everything it generated, for good (files first, the record after).
+        services.AddSingleton<Core.Deletion.VideoDeletion>();
+        services.AddSingleton<Core.Deletion.SampleImageDeletion>();
+        services.AddSingleton<Core.Deletion.ConceptDeletion>();
+        services.AddSingleton<Core.Deletion.ProfileDeletion>();
         services.AddSingleton<Core.Videos.IVideoQueueRunner, Core.Videos.VideoQueueRunner>();
         services.AddSingleton<Core.Videos.SceneNarrator>();
         services.AddSingleton<Core.Videos.VideoRemaker>();
@@ -368,13 +373,14 @@ public static class DesktopServices
         services.AddSingleton<Dialogs.IWhatsNewDialog, Dialogs.WhatsNewDialog>();
         services.AddSingleton<Components.ComponentReinstaller>();
 
-        // The storage manager (Settings → Storage): components and leftovers as rows, who uses them, and a removal through the recycle bin.
+        // The storage manager (Settings → Storage): components, leftovers and orphans as rows, who uses them, and a permanent removal.
         services.AddSingleton<Core.DiskSpace.IComponentUsage, Core.DiskSpace.ComponentUsage>();
         services.AddSingleton<Core.DiskSpace.IDiskItemSource, Core.DiskSpace.ComponentDiskSource>();
         services.AddSingleton<Core.DiskSpace.IDiskItemSource, DiskSpace.LeftoverDiskSource>();
         services.AddSingleton<Core.DiskSpace.IDiskItemSource, DiskSpace.DocumentDiskSource>();
-        services.AddSingleton<DiskSpace.RecycleBinDiscard>();
+        services.AddSingleton<Core.DiskSpace.IDiskItemSource, DiskSpace.LibraryOrphanSource>();
         services.AddSingleton<DiskSpace.PermanentDiscard>();
+        services.AddSingleton<Core.DiskSpace.IFolderDiscard>(sp => sp.GetRequiredService<DiskSpace.PermanentDiscard>());
         services.AddSingleton<DiskSpace.IDiskCleaner, DiskSpace.DiskCleaner>();
         services.AddSingleton<VersionCheck>();
         services.AddSingleton<WhatsNewCheck>();

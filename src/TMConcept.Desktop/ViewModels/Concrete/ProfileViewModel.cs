@@ -23,12 +23,15 @@ namespace TMConcept.Desktop.ViewModels;
 /// by Save, and Cancel (or starting another new profile) drops them without a trace. The photo of a saved profile is replaced or removed by
 /// Save too; its old copy is deleted then (unless another profile points at it; the copy's name carries the profile's id). A save copies
 /// every picked file before it writes the row, so one that fails writes nothing and removes its copies. Images of an unsaved profile cannot
-/// be described by a model yet (its model choice exists only after the first save). Saving with a required value missing is not possible. Deleting a profile is confirmed and
-/// permanent; video files and sample images stay on disk, the channel photo copy is deleted.
+/// be described by a model yet (its model choice exists only after the first save). Saving with a required value missing is not possible. Deleting a profile is confirmed
+/// (with what goes and its size) and permanent, with everything it generated: videos, sample images, the photo, documents and work files
+/// (<see cref="Core.Deletion.ProfileDeletion"/>; when a file is in use the profile stays and the files are listed). Removing a sample image
+/// deletes its file too (unless another profile's record uses the same file).
 /// </summary>
 public sealed partial class ProfileViewModel(AppSession session, IProfileStore profiles, ITemplateSource templates, IAppPaths paths, FileDialogs dialogs,
     IConfirmDialog confirm, IActivityLog activity, Localizer text, ILogger<ProfileViewModel> logger, StepPickerViewModel picker,
-    Core.Images.ImageDescriber describer, BackupService backup, Core.Documents.DocumentLibrary documents, DiskSpace.RecycleBinDiscard bin) : PageViewModelBase
+    Core.Images.ImageDescriber describer, BackupService backup, Core.Deletion.ProfileDeletion deletion, Core.Deletion.SampleImageDeletion imageDeletion)
+    : PageViewModelBase
 {
     /// <summary>The model that describes a sample image (this profile's last choice).</summary>
     public StepPickerViewModel Picker { get; } = picker;
@@ -380,6 +383,7 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
                 var folder = Path.Combine(paths.LibraryDirectory, LibraryPaths.SafeName(_editing.Name, "profile"), "images");
                 Directory.CreateDirectory(folder);
                 var target = Path.Combine(folder, hash[..10] + "-" + LibraryPaths.SafeName(Path.GetFileName(file), "image" + Path.GetExtension(file)));
+                var fresh = !File.Exists(target);
                 await File.WriteAllBytesAsync(target, bytes).ConfigureAwait(true);
                 var record = new ProfileImage
                 {
@@ -389,7 +393,17 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
                     Height = height,
                     Sha256 = hash,
                 };
-                await profiles.SaveImageAsync(record, CancellationToken.None).ConfigureAwait(true);
+                try
+                {
+                    await profiles.SaveImageAsync(record, CancellationToken.None).ConfigureAwait(true);
+                }
+                catch (Exception) when (fresh)
+                {
+                    // The record could not be written: the copy made for it goes again (one that was there already may be another profile's).
+                    DeleteCopies([target]);
+                    throw;
+                }
+
                 Images.Add(new ProfileImageViewModel(record, target));
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -470,7 +484,10 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
         }
     }
 
-    /// <summary>Removes a sample image record (the copied file stays in the folder; one picked on a new profile was never copied).</summary>
+    /// <summary>
+    /// Removes a sample image: its copied file for good, then its record (one picked on a new profile was never copied). A file that cannot
+    /// be removed keeps the image and the reason is shown.
+    /// </summary>
     [RelayCommand]
     private async Task RemoveImageAsync(ProfileImageViewModel? image)
     {
@@ -481,7 +498,23 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
 
         if (!image.Pending)
         {
-            await profiles.DeleteImageAsync(image.Image.Id, CancellationToken.None).ConfigureAwait(true);
+            try
+            {
+                var result = await imageDeletion.DeleteAsync([image.Image.Id], CancellationToken.None).ConfigureAwait(true);
+                if (!result.Complete)
+                {
+                    Status = text.Format("profile.images.remove_failed", result.Failed[0].Reason);
+                    activity.Add(ActivityLevel.Error, Status);
+                    return;
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(ex, "The sample image could not be removed");
+                Status = text.Format("profile.images.remove_failed", ex.Message);
+                activity.Add(ActivityLevel.Error, Status);
+                return;
+            }
         }
 
         Images.Remove(image);
@@ -549,8 +582,22 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
             return;
         }
 
-        var answer = await confirm.AskAsync(text["profile.delete.title"], text.Format("profile.delete.message", _editing.Name),
-            text["profile.delete.confirm"], danger: true).ConfigureAwait(true);
+        var name = _editing.Name;
+        var id = _editing.Id;
+        Core.Deletion.DeletionPlan plan;
+        try
+        {
+            plan = await deletion.PlanAsync(id, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "What a profile delete takes could not be counted");
+            Status = text.Format("error.generic", ex.Message);
+            return;
+        }
+
+        var answer = await confirm.AskAsync(text["profile.delete.title"], text.Format("profile.delete.message", name, plan.Concepts, plan.Videos, plan.Documents,
+            StorageSettingsViewModel.Size(plan.Bytes, text.Culture)), text["profile.delete.confirm"], danger: true).ConfigureAwait(true);
         if (!answer.Confirmed)
         {
             return;
@@ -558,7 +605,7 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
 
         try
         {
-            // Deleting a profile removes its concepts, queue and video records: a backup is taken first so they can come back.
+            // Deleting a profile removes its concepts, queue and video records: a backup of the database is taken first so they can come back.
             if (await backup.CreateBeforeChangeAsync("profile delete", CancellationToken.None).ConfigureAwait(true) is not null)
             {
                 activity.Add(ActivityLevel.Info, text["backup.before_change"]);
@@ -573,15 +620,19 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
 
         try
         {
-            await profiles.DeleteAsync(_editing.Id, CancellationToken.None).ConfigureAwait(true);
-            if (_storedPhoto is { } photo)
+            var result = await deletion.DeleteAsync(id, CancellationToken.None).ConfigureAwait(true);
+            if (!result.Complete)
             {
-                // The photo goes with the profile (the backup taken above holds it); sample images and videos stay on disk.
-                await DeletePhotoFileAsync(photo, _editing.Id).ConfigureAwait(true);
+                // Nothing becomes an orphan: the profile stays with what could not be removed, and a second try finishes it.
+                var files = string.Join("\n", result.Failed.Take(5).Select(f => "• " + Path.GetFileName(f.Path) + " (" + f.Reason + ")"));
+                Status = text.Format("profile.delete.in_use", files);
+                activity.Add(ActivityLevel.Error, Status);
+                await LoadImagesAsync().ConfigureAwait(true);
+                return;
             }
 
-            await DiscardDocumentsAsync(_editing.Id).ConfigureAwait(true);
-            activity.Add(ActivityLevel.Info, text.Format("profile.deleted", _editing.Name), text.Format("profile.deleted", ActivityPlaceholders.Name));
+            var freed = StorageSettingsViewModel.Size(result.Freed, text.Culture);
+            activity.Add(ActivityLevel.Info, text.Format("profile.deleted", name, freed), text.Format("profile.deleted", ActivityPlaceholders.Name, freed));
             _editing = null;
             HasProfile = false;
             var rest = await profiles.ListAsync(CancellationToken.None).ConfigureAwait(true);
@@ -766,24 +817,6 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
         {
             logger.LogWarning(ex, "The old channel photo copy could not be deleted");
             activity.Add(ActivityLevel.Warning, text.Format("profile.photo.delete_failed", ex.Message));
-        }
-    }
-
-    /// <summary>
-    /// The copies of a deleted profile's documents go to the recycle bin (the backup taken before the delete holds them too); a failure is
-    /// logged and shown, the profile stays deleted.
-    /// </summary>
-    private async Task DiscardDocumentsAsync(Guid profileId)
-    {
-        try
-        {
-            await documents.DiscardProfileAsync(profileId, bin, CancellationToken.None).ConfigureAwait(true);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException or InvalidOperationException)
-        {
-            logger.LogError(ex, "The document copies of the deleted profile could not be moved to the recycle bin");
-            Status = text.Format("profile.documents.delete_failed", ex.Message);
-            activity.Add(ActivityLevel.Warning, Status);
         }
     }
 

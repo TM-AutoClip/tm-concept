@@ -74,7 +74,7 @@ public sealed class ProfileTests
     }
 
     [AvaloniaFact]
-    public async Task SampleImagesAreCopiedAndDeletingTheProfileKeepsFiles()
+    public async Task SampleImagesAreCopiedAndDeletingTheProfileDeletesThem()
     {
         var confirm = new FakeConfirm();
         using var h = new DesktopHarness(s => s.AddSingleton<IConfirmDialog>(confirm));
@@ -100,7 +100,8 @@ public sealed class ProfileTests
         confirm.Answer = true;
         await page.DeleteAsync();
         (await h.Get<IProfileStore>().ListAsync(CancellationToken.None)).ShouldBeEmpty();
-        File.Exists(copied).ShouldBeTrue();
+        File.Exists(copied).ShouldBeFalse("0.1.28: deleting a profile deletes what it generated");
+        Directory.Exists(Path.Combine(h.Get<IAppPaths>().LibraryDirectory, "Lost Engineering")).ShouldBeFalse("its emptied folder goes too");
     }
 
     [Fact]

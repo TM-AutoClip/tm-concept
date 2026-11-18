@@ -4,7 +4,7 @@
              xmlns:views="using:TMConcept.Desktop.Views"
              x:Class="TMConcept.Desktop.Views.StorageSettingsView"
              x:DataType="vm:StorageSettingsViewModel">
-  <!-- What takes space on this computer and taking it away (to the recycle bin; refused while work runs). -->
+  <!-- What takes space on this computer and taking it away (for good, after a confirmation with the size; refused while work runs). -->
   <ScrollViewer>
     <StackPanel Spacing="12" Margin="0,12" MaxWidth="820" HorizontalAlignment="Left">
       <StackPanel Orientation="Horizontal">

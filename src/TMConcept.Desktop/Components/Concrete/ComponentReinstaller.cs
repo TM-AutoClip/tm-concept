@@ -1,9 +1,7 @@
 using Microsoft.Extensions.Logging;
 using TMConcept.Core.Activity;
 using TMConcept.Core.Components;
-using TMConcept.Desktop.Dialogs;
 using TMConcept.Desktop.Localization;
-using TMConcept.Desktop.Os;
 using TMConcept.Desktop.Paths;
 using TMConcept.Desktop.ViewModels;
 
@@ -18,14 +16,14 @@ namespace TMConcept.Desktop.Components;
 /// install window), what was installed before and is now missing or changed; nothing else is touched.</item>
 /// <item><see cref="ReinstallAsync"/> ends the idle speech workers (they keep the speech libraries and the Python voice's environment open
 /// for a minute after the last scene), renames the whole components folder (<c>&lt;data&gt;/tools</c>) aside in one step (a file in use makes
-/// the rename fail and nothing changes), installs again what was there into a new, empty folder, and only when that ended ready moves the old folder to the recycle bin
-/// (when that fails, a permanent delete only after its own confirmation that says so; declined, the old folder stays aside and the message
-/// says where). A declined, cancelled or failed install puts the old folder back in its place (0.1.16 removed it first, so a declined
+/// the rename fail and nothing changes), installs again what was there into a new, empty folder, and only when that ended ready deletes the
+/// old folder for good (0.1.28: no recycle bin, which frees nothing for a folder of gigabytes; the confirmation said so with the size; a
+/// failure is shown with where the folder stays). A declined, cancelled or failed install puts the old folder back in its place (0.1.16 removed it first, so a declined
 /// download left nothing installed and the next start did not ask again).</item>
 /// </list>
 /// The database, the profiles, the concepts and the videos are outside that folder and never touched.
 /// </summary>
-public sealed class ComponentReinstaller(ComponentPlanner planner, ComponentInstallFlow flow, IRecycleBin bin, IConfirmDialog confirm, AppPaths paths,
+public sealed class ComponentReinstaller(ComponentPlanner planner, ComponentInstallFlow flow, Core.DiskSpace.IFolderDiscard discard, AppPaths paths,
     Speech.Speech.SpeechWorkerClient speech, Speech.Python.PythonWorkerClient python, IActivityLog activity, Localizer text, TimeProvider clock, ILogger<ComponentReinstaller> logger)
 {
     /// <summary>The text of what an install confirmation says a cancel means here.</summary>
@@ -42,6 +40,9 @@ public sealed class ComponentReinstaller(ComponentPlanner planner, ComponentInst
     /// <c>~/.local/share/tm-concept/tools</c> on Linux (a portable data folder as it is).
     /// </summary>
     public string Location() => Location(paths.ToolsDirectory);
+
+    /// <summary>The components folder (its size goes into the reinstall confirmation).</summary>
+    public string Folder => paths.ToolsDirectory;
 
     /// <summary>A folder as the user knows it (<see cref="Location()"/>).</summary>
     public static string Location(string tools)
@@ -75,8 +76,7 @@ public sealed class ComponentReinstaller(ComponentPlanner planner, ComponentInst
     }
 
     /// <summary>
-    /// Sets the components folder aside, installs again what was installed into a new folder, then moves the old folder to the recycle bin
-    /// (a permanent delete only after its own confirmation). Not ready (declined, cancelled, failed) = the old folder is back in its place.
+    /// Sets the components folder aside, installs again what was installed into a new folder, then deletes the old folder for good. Not ready (declined, cancelled, failed) = the old folder is back in its place.
     /// </summary>
     public async Task<InstallOutcome> ReinstallAsync(CancellationToken cancellationToken)
     {
@@ -133,7 +133,7 @@ public sealed class ComponentReinstaller(ComponentPlanner planner, ComponentInst
 
         if (!outcome.Ready)
         {
-            return PutBack(tools, aside, outcome);
+            return await PutBackAsync(tools, aside, outcome).ConfigureAwait(true);
         }
 
         activity.Add(ActivityLevel.Info, text["components.reinstall.done"]);
@@ -142,54 +142,29 @@ public sealed class ComponentReinstaller(ComponentPlanner planner, ComponentInst
     }
 
     /// <summary>
-    /// The new install ended ready: the old folder goes to the recycle bin, or after its own confirmation is deleted for good. Declined or
-    /// failed, it stays aside (the new components work either way) and the activity line says where it is.
+    /// The new install ended ready: the old folder is deleted for good (0.1.28: no recycle bin; an old components folder is gigabytes, the
+    /// bin would free nothing). A failure is shown in the activity panel with where the folder stays (the new components work either way).
     /// </summary>
     private async Task RemoveOldAsync(string aside)
     {
         try
         {
-            await bin.MoveAsync(aside, CancellationToken.None).ConfigureAwait(true);
-            logger.LogInformation("The old components folder was moved to the recycle bin");
-            activity.Add(ActivityLevel.Info, text["components.reinstall.moved"]);
-            return;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException or InvalidOperationException
-            or OperationCanceledException)
-        {
-            logger.LogWarning(ex, "The old components folder could not be moved to the recycle bin");
-            var answer = await confirm.AskAsync(text["components.reinstall.bin_failed.title"],
-                text.Format("components.reinstall.bin_failed", ex.Message, Location(aside)), text["components.reinstall.delete"], danger: true).ConfigureAwait(true);
-            if (!answer.Confirmed)
-            {
-                logger.LogInformation("The permanent delete of the old components folder was declined; it stays aside");
-                activity.Add(ActivityLevel.Warning, text.Format("components.reinstall.old_kept", Location(aside)));
-                return;
-            }
-        }
-
-        try
-        {
-            if (Directory.Exists(aside))
-            {
-                await Task.Run(() => Directory.Delete(aside, recursive: true)).ConfigureAwait(true);
-            }
-
+            await discard.DiscardAsync(aside, CancellationToken.None).ConfigureAwait(true);
             logger.LogInformation("The old components folder was deleted permanently");
             activity.Add(ActivityLevel.Info, text["components.reinstall.deleted"]);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
             logger.LogError(LogEvents.OnScreen, ex, "The old components folder could not be deleted");
-            activity.Add(ActivityLevel.Error, text.Format("components.reinstall.failed", ex.Message));
+            activity.Add(ActivityLevel.Error, text.Format("components.reinstall.delete_failed", ex.Message, Location(aside)));
         }
     }
 
     /// <summary>
-    /// The new install did not end ready: what it left goes aside (then to the recycle bin when it can) and the old folder goes back in its
+    /// The new install did not end ready: what it left goes aside (then is deleted for good) and the old folder goes back in its
     /// place, so the components are as they were and the question comes again at the next start.
     /// </summary>
-    private InstallOutcome PutBack(string tools, string aside, InstallOutcome outcome)
+    private async Task<InstallOutcome> PutBackAsync(string tools, string aside, InstallOutcome outcome)
     {
         string? failed = null;
         try
@@ -213,23 +188,26 @@ public sealed class ComponentReinstaller(ComponentPlanner planner, ComponentInst
         logger.LogInformation("Components reinstall did not finish ({Reason}); the old folder is back in its place", outcome.Reason);
         if (failed is not null)
         {
-            _ = DiscardAsync(failed);
+            await DiscardFailedAsync(failed).ConfigureAwait(true);
         }
 
         return new InstallOutcome(false, Join(outcome.Reason, text["components.reinstall.kept"]));
     }
 
-    /// <summary>What an unfinished new install left: to the recycle bin, or left aside with a log line (it is only downloads).</summary>
-    private async Task DiscardAsync(string folder)
+    /// <summary>
+    /// Deletes what an unfinished new install left (only downloads) for good; a failure is shown in the activity panel with where it stays
+    /// (the storage page lists it as an old components folder).
+    /// </summary>
+    private async Task DiscardFailedAsync(string folder)
     {
         try
         {
-            await bin.MoveAsync(folder, CancellationToken.None).ConfigureAwait(true);
+            await discard.DiscardAsync(folder, CancellationToken.None).ConfigureAwait(true);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException or InvalidOperationException
-            or OperationCanceledException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
-            logger.LogWarning(ex, "The unfinished new components folder could not be moved to the recycle bin; it stays next to the components folder");
+            logger.LogError(LogEvents.OnScreen, ex, "The unfinished new components folder could not be deleted; it stays next to the components folder");
+            activity.Add(ActivityLevel.Error, text.Format("components.reinstall.delete_failed", ex.Message, Location(folder)));
         }
     }
 

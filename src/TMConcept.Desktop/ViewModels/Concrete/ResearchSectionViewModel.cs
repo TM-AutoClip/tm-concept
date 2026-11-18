@@ -21,8 +21,8 @@ namespace TMConcept.Desktop.ViewModels;
 /// the pages it WOULD fetch, ticked by the plan; nothing is fetched yet and no model is called. The button then fetches the ticked pages
 /// within the page, byte and time limits (cancellable, its steps in the activity panel), saves them into the profile's documents
 /// ("Belgelerim": passages, meaning search, citations) and writes the concepts from them alone, in the profile's language, through the
-/// documents prompt (everything fetched is data, never instructions). When the user does not keep the results, the pages this run added go
-/// to the recycle bin after the run, also when it was canceled or failed midway. The button writes only from what the last search found
+/// documents prompt (everything fetched is data, never instructions). When the user does not keep the results, the pages this run added are
+/// deleted after the run, also when it was canceled or failed midway. The button writes only from what the last search found
 /// for the subject, addresses and languages now in the boxes (a change asks for a new search), and at most "Pages" ticked pages. Like the
 /// other sections it only ADDS to the concept list and shares the page's one call at a time; the model may be online or local.
 /// </summary>

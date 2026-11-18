@@ -2,7 +2,6 @@ using Microsoft.Extensions.Logging;
 using TMConcept.Core.Components;
 using TMConcept.Core.DiskSpace;
 using TMConcept.Core.Models;
-using TMConcept.Desktop.Dialogs;
 using TMConcept.Desktop.Localization;
 using TMConcept.Desktop.Paths;
 using TMConcept.Desktop.Startup;
@@ -14,12 +13,12 @@ namespace TMConcept.Desktop.DiskSpace;
 /// <see cref="AppSession.WorkRunning"/>, <see cref="ComponentPlanner.Busy"/>, <see cref="Engines.Engines.SampleRender.Busy"/>, a document being added
 /// or vectorized: <see cref="Core.Documents.DocumentLibrary.Busy"/>) or while a worker
 /// is speaking; otherwise the idle speech and Python workers are ended (they hold the
-/// voice files open), the graphics card is freed and the app's own Ollama server is ended, then every row goes to the recycle bin. Rows the bin could not take are listed in one
-/// question; only a "Delete permanently" there deletes them for good, otherwise they stay. Failures are logged as errors with the reason.
+/// voice files open), the graphics card is freed and the app's own Ollama server is ended, then every row is deleted for good (0.1.28: no
+/// recycle bin; the page asked first with the size and "cannot be undone"). A row that fails is listed with its reason (logged as an error,
+/// shown by the page); the others go on. Library folders a removal emptied are removed too (<see cref="Core.Deletion.LibraryPruner"/>).
 /// </summary>
 public sealed class DiskCleaner(IEnumerable<IDiskItemSource> sources, IComponentUsage usage, ComponentPlanner planner, AppSession session,
-    Speech.Speech.SpeechWorkerClient speech, Speech.Python.PythonWorkerClient python, IGpuCoordinator gpu, RecycleBinDiscard bin, PermanentDiscard permanent,
-    IConfirmDialog confirm, AppPaths paths, Localizer text, Engines.Engines.SampleRender sample, Core.AppOllama.IAppOllamaServer appOllama,
+    Speech.Speech.SpeechWorkerClient speech, Speech.Python.PythonWorkerClient python, IGpuCoordinator gpu, IFolderDiscard discard, AppPaths paths, Localizer text, Engines.Engines.SampleRender sample, Core.AppOllama.IAppOllamaServer appOllama,
     Core.Documents.DocumentLibrary documents, ILogger<DiskCleaner> logger) : IDiskCleaner
 {
     /// <inheritdoc />
@@ -73,57 +72,25 @@ public sealed class DiskCleaner(IEnumerable<IDiskItemSource> sources, IComponent
         await appOllama.StopAsync(cancellationToken).ConfigureAwait(false);
         logger.LogInformation("Storage: removing {Count} item(s) ({Keys})", chosen.Count, string.Join(", ", chosen.Select(i => i.Key)));
         var removed = new List<IDiskItem>();
-        var noBin = new List<(IDiskItem Item, string Reason)>();
         foreach (var item in chosen)
         {
             try
             {
-                await item.RemoveAsync(bin, cancellationToken).ConfigureAwait(false);
+                await item.RemoveAsync(discard, cancellationToken).ConfigureAwait(false);
                 removed.Add(item);
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException
                 or OperationCanceledException { CancellationToken.IsCancellationRequested: false } && !cancellationToken.IsCancellationRequested)
             {
-                logger.LogWarning(ex, "Storage: {Key} could not be moved to the recycle bin", item.Key);
-                noBin.Add((item, ex.Message));
+                logger.LogError(ex, "Storage: {Key} could not be deleted", item.Key);
+                failed.Add((item, ex.Message));
             }
         }
 
-        var kept = new List<IDiskItem>();
-        if (noBin.Count > 0)
-        {
-            var list = string.Join("\n", noBin.Select(n => "• " + n.Item.Name + " (" + n.Reason + ")"));
-            var answer = await confirm.AskAsync(text["storage.bin_failed.title"], text.Format("storage.bin_failed", list), text["storage.delete_permanently"],
-                danger: true).ConfigureAwait(false);
-            foreach (var (item, _) in noBin)
-            {
-                if (!answer.Confirmed)
-                {
-                    kept.Add(item);
-                    continue;
-                }
-
-                try
-                {
-                    await item.RemoveAsync(permanent, cancellationToken).ConfigureAwait(false);
-                    removed.Add(item);
-                }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                {
-                    logger.LogError(ex, "Storage: {Key} could not be deleted", item.Key);
-                    failed.Add((item, ex.Message));
-                }
-            }
-
-            if (!answer.Confirmed)
-            {
-                logger.LogInformation("Storage: the permanent delete was declined; {Count} item(s) stay", kept.Count);
-            }
-        }
-
-        logger.LogInformation("Storage: {Removed} removed ({Megabytes} MB), {Kept} kept, {Failed} failed", removed.Count, removed.Sum(i => i.Bytes) >> 20,
-            kept.Count, failed.Count);
-        return new DiskRemoval(false, removed, kept, failed);
+        // Emptied library folders (a concept folder whose last version folder went, a profile folder) go too.
+        Core.Deletion.LibraryPruner.Prune(chosen.SelectMany(i => i.Paths), paths.LibraryDirectory);
+        logger.LogInformation("Storage: {Removed} removed ({Megabytes} MB), {Failed} failed", removed.Count, removed.Sum(i => i.Bytes) >> 20, failed.Count);
+        return new DiskRemoval(false, removed, failed);
     }
 
     /// <summary>
@@ -147,6 +114,12 @@ public sealed class DiskCleaner(IEnumerable<IDiskItemSource> sources, IComponent
         if (documents > 0)
         {
             totals.Add(new DiskAreaTotal(DiskArea.Documents, documents));
+        }
+
+        var library = items.Where(i => i.Area == DiskArea.Library).Sum(i => i.Bytes);
+        if (library > 0)
+        {
+            totals.Add(new DiskAreaTotal(DiskArea.Library, library));
         }
 
         return totals;

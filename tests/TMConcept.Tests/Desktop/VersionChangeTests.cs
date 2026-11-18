@@ -5,7 +5,6 @@ using Shouldly;
 using TMConcept.Core.Components;
 using TMConcept.Desktop.Dialogs;
 using TMConcept.Desktop.Localization;
-using TMConcept.Desktop.Os;
 using TMConcept.Desktop.Paths;
 using TMConcept.Desktop.Startup;
 using TMConcept.Desktop.ViewModels;
@@ -15,8 +14,8 @@ namespace TMConcept.Tests.Desktop;
 /// <summary>
 /// After a new app version (0.1.16): the installed components are updated, reinstalled from scratch or left for later; the version is recorded
 /// in preferences.json only after an update or a reinstall that ended ready, or when nothing is installed. What was installed comes from the
-/// install record (0.1.17, outside the components folder) and from folders that hold an install. Fake components, dialog and recycle bin:
-/// nothing is downloaded or moved to the real recycle bin.
+/// install record (0.1.17, outside the components folder) and from folders that hold an install. Fake components and dialog; the delete is the
+/// app's own (inside the test's folder only): nothing is downloaded.
 /// </summary>
 public sealed class VersionChangeTests
 {
@@ -48,7 +47,7 @@ public sealed class VersionChangeTests
     [AvaloniaFact]
     public async Task UpdateInstallsAgainOnlyWhatWasInstalledAndRecordsTheVersion()
     {
-        var (h, used, unused, dialog, bin, confirm) = Setup(UpdateChoice.Update);
+        var (h, used, unused, dialog, discard, confirm) = Setup(UpdateChoice.Update);
         using (h)
         {
             Preferences(h).Change(p => p.LastVersion = "0.1.15");
@@ -58,7 +57,7 @@ public sealed class VersionChangeTests
             dialog.Asked.ShouldBe([("0.1.15", "0.1.16")]);
             dialog.Folders.Single().ShouldEndWith("tools");
             (used.Installs, unused.Installs).ShouldBe((1, 0), "only what was installed before, nothing else");
-            bin.Moved.ShouldBeEmpty("an update moves nothing");
+            discard.Discarded.ShouldBeEmpty("an update deletes nothing");
             confirm.Messages.ShouldHaveSingleItem().ShouldContain(used.Name);
             Preferences(h).Read().LastVersion.ShouldBe("0.1.16");
 
@@ -71,7 +70,7 @@ public sealed class VersionChangeTests
     [AvaloniaFact]
     public async Task LaterChangesNothingAndAsksAgainAtTheNextStart()
     {
-        var (h, used, _, dialog, bin, _) = Setup(UpdateChoice.Later);
+        var (h, used, _, dialog, discard, _) = Setup(UpdateChoice.Later);
         using (h)
         {
             await h.Get<VersionCheck>().RunAsync("0.1.16", CancellationToken.None);
@@ -79,23 +78,23 @@ public sealed class VersionChangeTests
 
             dialog.Asked.ShouldBe([(string.Empty, "0.1.16"), (string.Empty, "0.1.16")], "coming from 0.1.15: no version was recorded, components are there");
             used.Installs.ShouldBe(0);
-            bin.Moved.ShouldBeEmpty();
+            discard.Discarded.ShouldBeEmpty();
             Preferences(h).Read().LastVersion.ShouldBeEmpty();
         }
     }
 
     [AvaloniaFact]
-    public async Task ReinstallSetsTheFolderAsideInstallsAgainAndOnlyThenMovesTheOldFolderToTheRecycleBin()
+    public async Task ReinstallSetsTheFolderAsideInstallsAgainAndOnlyThenDeletesTheOldFolderForGood()
     {
-        var (h, used, unused, dialog, bin, confirm) = Setup(UpdateChoice.Reinstall);
+        var (h, used, unused, dialog, discard, confirm) = Setup(UpdateChoice.Reinstall);
         using (h)
         {
             var database = h.Paths.DatabaseFile;
             var aside = string.Empty;
             used.OnInstall = () =>
             {
-                // The install runs while the old folder is set aside: nothing is in the recycle bin yet, the new folder starts empty.
-                bin.Moved.ShouldBeEmpty("the old folder is removed only after the new install ended ready");
+                // The install runs while the old folder is set aside: nothing is deleted yet, the new folder starts empty.
+                discard.Discarded.ShouldBeEmpty("the old folder is removed only after the new install ended ready");
                 aside = Directory.GetDirectories(h.Paths.DataDirectory, "tools" + TMConcept.Desktop.Components.ComponentReinstaller.AsidePrefix + "*").Single();
                 Directory.Exists(h.Paths.ToolsDirectory).ShouldBeFalse();
                 Directory.CreateDirectory(Path.Combine(h.Paths.ToolsDirectory, "sd-cpp", "new"));
@@ -106,7 +105,8 @@ public sealed class VersionChangeTests
 
             dialog.Asked.Count.ShouldBe(1);
             confirm.Asked.Count.ShouldBe(1, "one confirmation: the downloads");
-            bin.Moved.ShouldBe([aside]);
+            discard.Discarded.ShouldBe([aside]);
+            Directory.Exists(aside).ShouldBeFalse("deleted for good: an old components folder is gigabytes");
             File.Exists(Path.Combine(h.Paths.ToolsDirectory, "sd-cpp", "new", "sd-cli.exe")).ShouldBeTrue("the new install stays");
             (used.Installs, unused.Installs).ShouldBe((1, 0));
             Path.GetDirectoryName(database).ShouldBe(h.Paths.DataDirectory, "the database is outside the components folder");
@@ -117,7 +117,7 @@ public sealed class VersionChangeTests
     [AvaloniaFact]
     public async Task ADeclinedReinstallPutsTheOldFolderBackAndTheNextStartAsksAgain()
     {
-        var (h, used, _, dialog, bin, confirm) = Setup(UpdateChoice.Reinstall);
+        var (h, used, _, dialog, discard, confirm) = Setup(UpdateChoice.Reinstall);
         using (h)
         {
             var marker = Path.Combine(used.Folder!, "sd-cli.exe");
@@ -127,7 +127,7 @@ public sealed class VersionChangeTests
             await h.Get<VersionCheck>().RunAsync("0.1.16", CancellationToken.None);
 
             File.Exists(marker).ShouldBeTrue("declined: the old components are back in their place");
-            bin.Moved.ShouldBeEmpty();
+            discard.Discarded.ShouldBeEmpty();
             Directory.GetDirectories(h.Paths.DataDirectory).Where(d => Path.GetFileName(d).StartsWith("tools.", StringComparison.Ordinal)).ShouldBeEmpty();
             used.Installs.ShouldBe(0);
             Preferences(h).Read().LastVersion.ShouldBeEmpty();
@@ -145,7 +145,7 @@ public sealed class VersionChangeTests
     [AvaloniaFact]
     public async Task ALibraryTheAppLoadedFromTheFolderStopsTheReinstallAndTheRemovalWithARestartHint()
     {
-        var (h, used, _, _, bin, confirm) = Setup(UpdateChoice.Reinstall);
+        var (h, used, _, _, discard, confirm) = Setup(UpdateChoice.Reinstall);
         using (h)
         {
             var marker = Path.Combine(used.Folder!, "sd-cli.exe");
@@ -165,7 +165,7 @@ public sealed class VersionChangeTests
             var removal = await cleaner.RemoveAsync([cleaner.ItemOf(used)], CancellationToken.None);
             removal.Failed.ShouldHaveSingleItem().Reason.ShouldBe(expected);
             removal.Removed.ShouldBeEmpty();
-            bin.Moved.ShouldBeEmpty();
+            discard.Discarded.ShouldBeEmpty();
             confirm.Asked.ShouldBeEmpty("no offer to delete it for good either");
             File.Exists(marker).ShouldBeTrue();
         }
@@ -174,7 +174,7 @@ public sealed class VersionChangeTests
     [AvaloniaFact]
     public async Task AFailedReinstallPutsTheOldFolderBackAndDiscardsWhatTheNewInstallLeft()
     {
-        var (h, used, _, _, bin, _) = Setup(UpdateChoice.Reinstall);
+        var (h, used, _, _, discard, _) = Setup(UpdateChoice.Reinstall);
         using (h)
         {
             var marker = Path.Combine(used.Folder!, "sd-cli.exe");
@@ -187,39 +187,30 @@ public sealed class VersionChangeTests
             outcome.Reason.ShouldEndWith(h.Get<Localizer>()["components.reinstall.kept"]);
             File.Exists(marker).ShouldBeTrue();
             Directory.Exists(Path.Combine(h.Paths.ToolsDirectory, "downloads")).ShouldBeFalse("the unfinished new folder is not the components folder");
-            bin.Moved.ShouldHaveSingleItem().ShouldContain(TMConcept.Desktop.Components.ComponentReinstaller.FailedPrefix);
+            discard.Discarded.ShouldHaveSingleItem().ShouldContain(TMConcept.Desktop.Components.ComponentReinstaller.FailedPrefix,
+                Case.Sensitive, "awaited and deleted for good (until 0.1.28 it was sent to the bin without waiting)");
+            Directory.Exists(discard.Discarded[0]).ShouldBeFalse();
         }
     }
 
     [AvaloniaFact]
-    public async Task WhenTheRecycleBinFailsTheOldFolderIsDeletedOnlyAfterItsOwnConfirmation()
+    public async Task WhenTheOldFolderCannotBeDeletedTheNewComponentsStayAndTheFailureIsShown()
     {
-        var (h, used, _, _, bin, confirm) = Setup(UpdateChoice.Reinstall);
+        var (h, used, _, _, discard, confirm) = Setup(UpdateChoice.Reinstall);
         using (h)
         {
-            bin.Fail = true;
-            confirm.Answers.Enqueue(true);
-            confirm.Answers.Enqueue(false);
+            discard.FailWhen = p => Path.GetFileName(p).StartsWith("tools" + TMConcept.Desktop.Components.ComponentReinstaller.AsidePrefix, StringComparison.Ordinal);
             var text = h.Get<Localizer>();
 
             var outcome = await h.Get<TMConcept.Desktop.Components.ComponentReinstaller>().ReinstallAsync(CancellationToken.None);
 
             outcome.Ready.ShouldBeTrue("the new components are installed either way");
-            confirm.Asked.ShouldBe([text["install.title"], text["components.reinstall.bin_failed.title"]]);
+            confirm.Asked.ShouldBe([text["install.title"]], "no second question: the old folder is deleted for good or the failure is shown");
             var aside = Directory.GetDirectories(h.Paths.DataDirectory, "tools" + TMConcept.Desktop.Components.ComponentReinstaller.AsidePrefix + "*");
-            aside.ShouldHaveSingleItem("declined: the old folder stays aside, nothing is deleted");
+            aside.ShouldHaveSingleItem("it stays aside and the storage page lists it");
+            h.Get<TMConcept.Core.Activity.IActivityFeed>().Recent().ShouldContain(e => e.Level == TMConcept.Core.Activity.ActivityLevel.Error
+                && e.Text.Contains(TMConcept.Desktop.Components.ComponentReinstaller.Location(aside[0]), StringComparison.Ordinal));
             used.Installs.ShouldBe(1);
-
-            // Confirmed: the old folder is deleted for good.
-            used.Ready = false;
-            Directory.Delete(aside[0], recursive: true);
-            confirm.Answers.Enqueue(true);
-            confirm.Answers.Enqueue(true);
-            Directory.CreateDirectory(h.Paths.ToolsDirectory);
-            File.WriteAllText(Path.Combine(h.Paths.ToolsDirectory, "old.bin"), "x");
-            (await h.Get<TMConcept.Desktop.Components.ComponentReinstaller>().ReinstallAsync(CancellationToken.None)).Ready.ShouldBeTrue();
-            Directory.GetDirectories(h.Paths.DataDirectory).Where(d => Path.GetFileName(d).StartsWith("tools.", StringComparison.Ordinal)).ShouldBeEmpty();
-            used.Installs.ShouldBe(2);
         }
     }
 
@@ -314,26 +305,25 @@ public sealed class VersionChangeTests
     /// One component an earlier version installed (its folder is in the components folder, not ready now: a new pinned version) and one that
     /// was never installed; the dialog answers <paramref name="choice"/>, every download confirmation is accepted.
     /// </summary>
-    private static (DesktopHarness H, FakeComponent Used, FakeComponent Unused, FakeUpdateDialog Dialog, FakeBin Bin, FakeConfirm Confirm) Setup(UpdateChoice choice)
+    private static (DesktopHarness H, FakeComponent Used, FakeComponent Unused, FakeUpdateDialog Dialog, RecordingDiscard Discard, FakeConfirm Confirm) Setup(UpdateChoice choice)
     {
         var used = new FakeComponent("sd-cpp", ready: false);
         var unused = new FakeComponent("node", ready: false);
         var dialog = new FakeUpdateDialog(choice);
-        var bin = new FakeBin();
+        var discard = new RecordingDiscard();
         var confirm = new FakeConfirm();
         var h = new DesktopHarness(s =>
         {
             s.AddSingleton<IConfirmDialog>(confirm);
             s.AddSingleton<IUpdateDialog>(dialog);
-            s.RemoveAll<IRecycleBin>();
-            s.AddSingleton<IRecycleBin>(bin);
+            discard.Register(s);
             s.RemoveAll<IComponentSource>();
             s.AddSingleton<IComponentSource>(new FakeComponents(used, unused));
         });
         used.Folder = Path.Combine(h.Paths.ToolsDirectory, "sd-cpp", "master-old");
         Directory.CreateDirectory(used.Folder);
         File.WriteAllText(Path.Combine(used.Folder, "sd-cli.exe"), "old");
-        return (h, used, unused, dialog, bin, confirm);
+        return (h, used, unused, dialog, discard, confirm);
     }
 
     private sealed class FakeUpdateDialog(UpdateChoice choice) : IUpdateDialog
@@ -347,25 +337,6 @@ public sealed class VersionChangeTests
             Asked.Add((from, to));
             Folders.Add(toolsFolder);
             return Task.FromResult(choice);
-        }
-    }
-
-    private sealed class FakeBin : IRecycleBin
-    {
-        public List<string> Moved { get; } = [];
-
-        public bool Fail { get; set; }
-
-        public Task MoveAsync(string folder, CancellationToken cancellationToken)
-        {
-            if (Fail)
-            {
-                throw new IOException("the recycle bin is not available");
-            }
-
-            Moved.Add(folder);
-            Directory.Delete(folder, recursive: true);
-            return Task.CompletedTask;
         }
     }
 }
