@@ -1385,7 +1385,7 @@
   "documents.pages_box.hint": "all pages",
   "documents.pages_box.tip": "Only these pages of the ticked PDFs are used, e.g. 120-180 (the PDF's own page numbers). Empty means every page. Word, text and web documents are always used whole.",
   "documents.read_all": "Read everything",
-  "documents.read_all.tip": "Instead of only the best-matching passages, every passage of the chosen pages is read first: the concept model writes a short note on each part, then the concepts are written from the notes. Takes more calls (the line below says how many and what they cost) but covers the whole document; small local models work too.",
+  "documents.read_all.tip": "Instead of only the best-matching passages, every passage of the chosen pages is read first: the concept model writes a short note on each part, then the concepts are written from the notes. Takes more calls (the line below says how many and what they cost) but covers the whole document; small local models work too. Find topics reads everything too when this is ticked, with the topics model.",
   "documents.plan.best": "{0} document(s) · {1} pages · ≈ {2} tokens. Each concept reads only the best-matching passages.",
   "documents.plan.read_all": "Read everything: ≈ {0} tokens in about {1} calls ({2} summaries + {3} merges) with {4} · {5}, then the concepts (estimate).",
   "documents.plan.pages_invalid": "Write a page range like 120-180, or leave it empty for every page.",

@@ -19,7 +19,8 @@ namespace TMConcept.Tests.Desktop;
 
 /// <summary>
 /// 0.1.25 on the concept page: "Text from scanned pages" offers the local OCR (only there), a document row says which pages are read and
-/// reads only the missing ones with the chosen engine, and kept pages count in the storage manager. Fake models only.
+/// reads only the missing ones with the chosen engine, and "Find topics" reads everything first when "Read everything" is ticked. Fake
+/// models only.
 /// </summary>
 public sealed class ScannedPagesPageTests
 {
@@ -87,6 +88,34 @@ public sealed class ScannedPagesPageTests
         (now.HasMissing, now.Pages.Recognized).ShouldBe((false, 2));
         now.PagesLine.ShouldBe(text.Format("documents.pages.state", 4, 4) + text.Format("documents.pages.state_recognized", 2));
         (await h.Get<IRunStore>().ListAsync(DateTimeOffset.UtcNow.AddHours(-1), None)).ShouldContain(r => r.Kind == RunKind.DocumentText && r.Accepted == 2);
+    }
+
+    [AvaloniaFact]
+    public async Task FindTopicsReadsEverythingFirstWhenItIsTicked()
+    {
+        var fake = new FakeChat()
+            .Answer(_ => Answer("The walls of Theodosius had three lines and a moat."))
+            .Answer(_ => new ChatResponse("{\"topics\":[{\"topic\":\"The three lines of walls\",\"documents\":[1]}]}", new ChatUsage(900, 0, 0, 100), null,
+                "end_turn", "r"));
+        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
+        var page = await PageAsync(h);
+        var section = page.Documents;
+        var topics = page.Settings.Picker.Row(PipelineSteps.Topics)!;
+        topics.Selected = topics.Options.First(o => o.Model?.Id == "claude-haiku-5-5");
+        await section.Library.AddFilesAsync([LargePdfTests.WritePdf(h.Paths, "volume.pdf", 12, _ => true, lines: 12)]);
+        section.Pages = "2-4";
+        section.Count = 1;
+        section.ReadAll = true;
+        await Until(() => section.FindEstimate.Length > 0);
+        await section.FindTopicsAsync();
+
+        fake.Requests.Count.ShouldBe(2, "one summary of pages 2-4, then the topics call");
+        fake.Requests[0].System.ShouldContain("dense note");
+        fake.Requests[0].User.ShouldContain("[p. 2]");
+        fake.Requests[0].User.ShouldNotContain("[p. 5]", Case.Sensitive, "only the chosen pages are read");
+        fake.Requests[1].User.ShouldContain("three lines and a moat", Case.Sensitive, "the topics are found in the notes");
+        section.Topics.Select(t => t.Text).ShouldBe(["The three lines of walls"]);
+        (await h.Get<IRunStore>().ListAsync(DateTimeOffset.UtcNow.AddHours(-1), None)).ShouldContain(r => r.Kind == RunKind.DocumentDigest && r.Status == RunStatus.Succeeded);
     }
 
     [AvaloniaFact]

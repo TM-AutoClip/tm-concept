@@ -17,7 +17,9 @@ namespace TMConcept.Core.Documents;
 /// the asked number of topics in the interface language, each with the documents that cover it and search words in their language. Like
 /// "Suggest topics", a topic equal (folded, see <see cref="TurkishFold"/>) to a concept title of the profile or to a picked suggestion is
 /// dropped and counted. The call is a run of its own (<see cref="RunKind.DocumentTopics"/>), so the month's spending counts it, also when it
-/// fails after being billed. An unreadable answer is asked again (at most twice).
+/// fails after being billed. An unreadable answer is asked again (at most twice). 0.1.25: with the notes of "read everything"
+/// (<see cref="DocumentDigester"/>, <paramref name="digest"/> of <see cref="FindAsync"/>) the topics are looked for in the notes on every
+/// passage of the chosen pages instead of the passages that fit the call.
 /// </summary>
 public sealed class DocumentTopicFinder(DocumentGrounder grounder, IPromptMemorySource memory, IConceptStore concepts, ITopicSuggestionStore suggestions,
     IRunStore runs, IChatClientFactory chats, ICostCalculator costs, TimeProvider clock, ILogger<DocumentTopicFinder> logger)
@@ -52,12 +54,13 @@ public sealed class DocumentTopicFinder(DocumentGrounder grounder, IPromptMemory
 
     /// <summary>Finds <paramref name="count"/> topics; <paramref name="progress"/> gets the call's steps.</summary>
     public async Task<DocumentTopics> FindAsync(Profile profile, ResolvedModel model, string subject, IReadOnlyList<Guid> documents, int count, string language,
-        IProgress<ChatProgress>? progress, CancellationToken cancellationToken, DocumentPageRange? pages = null)
+        IProgress<ChatProgress>? progress, CancellationToken cancellationToken, DocumentPageRange? pages = null, IReadOnlyList<DocumentChunk>? digest = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(model);
         count = Clamp(count);
-        var (prompt, grounding, maxOutput, _) = await PromptAsync(profile, model.Model, subject, documents, count, language, false, cancellationToken, pages).ConfigureAwait(false);
+        var (prompt, grounding, maxOutput, _) = await PromptAsync(profile, model.Model, subject, documents, count, language, false, cancellationToken, pages, digest)
+            .ConfigureAwait(false);
         var run = new Run
         {
             ProfileId = profile.Id,
@@ -135,7 +138,8 @@ public sealed class DocumentTopicFinder(DocumentGrounder grounder, IPromptMemory
     }
 
     private async Task<(ConceptPrompt Prompt, DocumentGrounding Grounding, int MaxOutput, long EstimatedPassages)> PromptAsync(Profile profile, CatalogModel model, string subject,
-        IReadOnlyList<Guid> documents, int count, string language, bool estimate, CancellationToken cancellationToken, DocumentPageRange? pages)
+        IReadOnlyList<Guid> documents, int count, string language, bool estimate, CancellationToken cancellationToken, DocumentPageRange? pages,
+        IReadOnlyList<DocumentChunk>? digest = null)
     {
         var past = await memory.ReadAsync(profile, cancellationToken).ConfigureAwait(false);
         var input = new DocumentTopicPromptInput(profile, past, subject ?? string.Empty, DocumentGrounding.Empty, count, language);
@@ -158,7 +162,7 @@ public sealed class DocumentTopicFinder(DocumentGrounder grounder, IPromptMemory
 
         // Passages are counted for the documents' script, not the interface language (a Japanese article is not English text).
         var grounding = await grounder.GroundAsync(profile, documents, subject ?? string.Empty, budget, false, PassageTokens.For(costs, profile.ContentLanguage),
-            cancellationToken, pages: pages).ConfigureAwait(false);
+            cancellationToken, pages: pages, digest: digest).ConfigureAwait(false);
         return (ConceptPromptBuilder.BuildDocumentTopics(input with { Grounding = grounding }), grounding, lowered ?? maxOutput, 0);
     }
 

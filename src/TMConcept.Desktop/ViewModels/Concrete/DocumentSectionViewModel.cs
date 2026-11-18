@@ -27,6 +27,8 @@ namespace TMConcept.Desktop.ViewModels;
 /// 0.1.24: <see cref="Pages"/> keeps a run (and "Find topics") to a page range of the ticked PDFs; <see cref="ReadAll"/> reads every
 /// passage of the chosen pages first (<see cref="DocumentDigester"/>, map-reduce with the concept model) and writes the concepts from the
 /// notes; <see cref="Plan"/> says before a press what that is: pages, tokens, calls, price and a rough time, as an estimate.
+/// 0.1.25: "Find topics" reads everything too when <see cref="ReadAll"/> is ticked: the topics step's model summarises every passage of the
+/// chosen pages first and the topics are found in the notes; its price line adds the summaries.
 /// </summary>
 public sealed partial class DocumentSectionViewModel(AppSession session, DocumentTopicFinder finder, StepModelResolver resolver, IActivityLog activity,
     ICostCalculator costs, WorkStatus work, SpendingMeter spending, DocumentLibraryViewModel library, Localizer text, ILogger<DocumentSectionViewModel> logger,
@@ -191,8 +193,10 @@ public sealed partial class DocumentSectionViewModel(AppSession session, Documen
             var model = await resolver.ResolveAsync(PipelineSteps.Topics, picker.Choice(PipelineSteps.Topics), CancellationToken.None).ConfigureAwait(true);
             paid = model.Model;
             FindCall.Begin(model.Model.Name);
+            var digest = ReadAll ? await DigestForTopicsAsync(profile, model, cancel.Token).ConfigureAwait(true) : null;
             var result = await finder.FindAsync(profile, model, Subject, Library.Chosen, Asked(), Text.Language,
-                new Progress<Core.Chat.ChatProgress>(FindCall.Report), cancel.Token, PageRange()).ConfigureAwait(true);
+                new Progress<Core.Chat.ChatProgress>(FindCall.Report), cancel.Token, PageRange(), digest?.Notes).ConfigureAwait(true);
+            result = result with { CostUsd = result.CostUsd + (digest?.CostUsd ?? 0) };
             spending.Live(FindCall, result.CostUsd);
             if (session.Profile?.Id != profile.Id)
             {
@@ -240,6 +244,29 @@ public sealed partial class DocumentSectionViewModel(AppSession session, Documen
             Finding = false;
             Runner.Leave(this);
             await spending.EndAsync(FindCall).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>
+    /// "Read everything" before "Find topics" (0.1.25): every passage of the chosen pages summarised by the topics step's model; the progress
+    /// is shown like a run's, the cost counted (a failure or a cancel goes up to "Find topics", which says it).
+    /// </summary>
+    private async Task<DocumentDigest> DigestForTopicsAsync(Core.Profiles.Profile profile, ResolvedModel model, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var digest = await digester.RunAsync(profile, model, Library.Chosen, PageRange(), Subject, new Progress<DocumentDigestProgress>(p =>
+            {
+                FindStatus = Text.Format("documents.topics.read_all_progress", p.Done, p.Total);
+                work.Show(FindCall, FindStatus);
+            }), cancellationToken).ConfigureAwait(true);
+            FindStatus = string.Empty;
+            activity.Add(ActivityLevel.Info, Text.Format("documents.topics.read_all_done", digest.Notes.Count, digest.Calls, Text.Usd(digest.CostUsd)));
+            return digest;
+        }
+        finally
+        {
+            await spending.RefreshAsync().ConfigureAwait(true);
         }
     }
 
@@ -562,6 +589,14 @@ public sealed partial class DocumentSectionViewModel(AppSession session, Documen
             var (subject, chosen, asked, language, pages) = (Subject, Library.Chosen, Asked(), Text.Language, PageRange());
             var estimate = await Task.Run(() => finder.EstimateAsync(profile, model, subject, chosen, asked, language, CancellationToken.None, pages))
                 .ConfigureAwait(true);
+            if (ReadAll)
+            {
+                // "Read everything" for the topics (0.1.25): the summaries of the topics model come on top of the call.
+                _card ??= (await vram.MeasureAsync(null, CancellationToken.None).ConfigureAwait(true)).TotalBytes;
+                var plan = await digester.PlanAsync(profile, model, chosen, pages, _card.Value, CancellationToken.None).ConfigureAwait(true);
+                estimate = estimate.Plus(plan.Estimate.Cost);
+            }
+
             if (mine == _findEstimate)
             {
                 FindEstimate = Text.Format("concepts.estimate.tiny", Text.Usd(estimate.MinUsd), Text.Usd(estimate.MaxUsd));

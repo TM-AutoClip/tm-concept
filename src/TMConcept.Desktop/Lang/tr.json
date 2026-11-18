@@ -1385,7 +1385,7 @@
   "documents.pages_box.hint": "tüm sayfalar",
   "documents.pages_box.tip": "İşaretli PDF'lerin yalnız bu sayfaları kullanılır, ör. 120-180 (PDF'in kendi sayfa numaraları). Boşsa bütün sayfalar. Word, metin ve web belgeleri her zaman tamamen kullanılır.",
   "documents.read_all": "Hepsini oku",
-  "documents.read_all.tip": "Yalnız en uygun bölümler yerine seçili sayfaların hepsi önce okunur: konsept modeli her parça için kısa bir not yazar, konseptler bu notlardan yazılır. Daha çok çağrı yapar (kaç tane ve ne tutacağı aşağıda yazar) ama belgenin tamamını kapsar; küçük yerel modellerle de çalışır.",
+  "documents.read_all.tip": "Yalnız en uygun bölümler yerine seçili sayfaların hepsi önce okunur: konsept modeli her parça için kısa bir not yazar, konseptler bu notlardan yazılır. Daha çok çağrı yapar (kaç tane ve ne tutacağı aşağıda yazar) ama belgenin tamamını kapsar; küçük yerel modellerle de çalışır. Bu işaretliyken Konu bul da hepsini okur, konu modeliyle.",
   "documents.plan.best": "{0} belge · {1} sayfa · ≈ {2} token. Her konsept yalnız en uygun bölümleri okur.",
   "documents.plan.read_all": "Hepsini oku: ≈ {0} token, {4} ile yaklaşık {1} çağrı ({2} özet + {3} birleştirme) · {5}; sonra konseptler (tahmini).",
   "documents.plan.pages_invalid": "120-180 gibi bir sayfa aralığı yaz; bütün sayfalar için boş bırak.",
