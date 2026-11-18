@@ -17,4 +17,7 @@ public enum VideoStyleProblem
 
     /// <summary>An enum field holds a value this version does not know.</summary>
     UnknownValue = 4,
+
+    /// <summary>The template's own colours cannot be read well (<see cref="PaletteDesigner.Check"/>).</summary>
+    PaletteContrast = 5,
 }

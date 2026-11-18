@@ -13,7 +13,10 @@ namespace TMConcept.Core.Styles;
 public static class VideoStyleRules
 {
     /// <summary>The template's palette; the default one when there is no template or its id is unknown (a removed palette).</summary>
-    public static VideoPalette Palette(VideoStyle? style) => FindPalette(style?.PaletteId) ?? VideoPalettes.All[0];
+    public static VideoPalette Palette(VideoStyle? style) =>
+        style is { PaletteId: VideoPalettes.CustomId, CustomPalette: { } own } && PaletteDesigner.Check(own).Ok
+            ? own
+            : FindPalette(style?.PaletteId) ?? VideoPalettes.All[0];
 
     /// <summary>A palette by id; <c>null</c> when unknown.</summary>
     public static VideoPalette? FindPalette(string? id) => VideoPalettes.All.FirstOrDefault(p => p.Id == id);
@@ -161,7 +164,18 @@ public static class VideoStyleRules
             problems.Add(VideoStyleProblem.NameTooLong);
         }
 
-        if (FindPalette(style.PaletteId) is null)
+        if (style.PaletteId == VideoPalettes.CustomId)
+        {
+            if (style.CustomPalette is null)
+            {
+                problems.Add(VideoStyleProblem.UnknownPalette);
+            }
+            else if (!PaletteDesigner.Check(style.CustomPalette).Ok)
+            {
+                problems.Add(VideoStyleProblem.PaletteContrast);
+            }
+        }
+        else if (FindPalette(style.PaletteId) is null)
         {
             problems.Add(VideoStyleProblem.UnknownPalette);
         }

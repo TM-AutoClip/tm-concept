@@ -9,6 +9,12 @@ public static class VideoPalettes
     /// <summary>Id of the default palette (amber on navy).</summary>
     public const string DefaultId = "amber-navy";
 
+    /// <summary>
+    /// The palette id of a template with its own colours (0.1.24: <see cref="VideoStyle.CustomPalette"/>, made in the editor or taken from a
+    /// <see cref="SavedPalette"/>).
+    /// </summary>
+    public const string CustomId = "custom";
+
     /// <summary>Every palette, in the order of the template editor.</summary>
     public static readonly IReadOnlyList<VideoPalette> All =
     [

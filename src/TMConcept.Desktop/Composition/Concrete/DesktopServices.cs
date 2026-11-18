@@ -261,6 +261,7 @@ public static class DesktopServices
         services.AddSingleton<IVideoRatingStore, VideoRatingStore>();
         services.AddSingleton<IVideoRater, VideoRater>();
         services.AddSingleton<Core.Styles.IVideoStyleStore, VideoStyleStore>();
+        services.AddSingleton<Core.Styles.IVideoPaletteStore, VideoPaletteStore>();
         services.AddSingleton<IApiKeyStore, ApiKeyStore>();
         services.AddSingleton<IStepModelStore, StepModelStore>();
         services.AddSingleton<Core.Pronunciation.IPronunciationStore, PronunciationStore>();

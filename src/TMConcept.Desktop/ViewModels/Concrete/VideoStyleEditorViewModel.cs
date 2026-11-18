@@ -1,7 +1,9 @@
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using Avalonia.Layout;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using TMConcept.Core.Profiles;
 using TMConcept.Core.Styles;
 using TMConcept.Desktop.Localization;
@@ -20,16 +22,25 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
     private readonly Localizer _text;
     private bool _filling;
 
-    /// <summary>Fills the form from <paramref name="source"/> (a copy is edited; the source is not changed).</summary>
-    public VideoStyleEditorViewModel(VideoStyle source, bool isNew, Localizer text)
+    /// <summary>
+    /// Fills the form from <paramref name="source"/> (a copy is edited; the source is not changed); <paramref name="saved"/> are the user's
+    /// saved palettes, listed after the shipped ones and before the template's own colours.
+    /// </summary>
+    public VideoStyleEditorViewModel(VideoStyle source, bool isNew, Localizer text, IReadOnlyList<SavedPalette>? saved = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(text);
         _source = VideoStyleRules.Copy(source);
         _text = text;
         IsNew = isNew;
-        Palettes = VideoPalettes.All.Select(p => new PaletteOption(p, Label("style.palette." + p.Id, p.Id),
-            [Brush(p.Background), Brush(p.Surface), Brush(p.Accent), Brush(p.Accent2), Brush(p.Text), Brush(p.Muted)])).ToList();
+        Palettes = new ObservableCollection<PaletteOption>(VideoPalettes.All.Select(p => Option(p, Label("style.palette." + p.Id, p.Id))));
+        foreach (var palette in saved ?? [])
+        {
+            Palettes.Add(Option(palette.Colors, palette.Name, palette.Id));
+        }
+
+        var own = _source.CustomPalette ?? VideoStyleRules.Palette(_source) with { Id = VideoPalettes.CustomId };
+        Palettes.Add(Option(own, text["styles.own"], own: true));
         Fonts = VideoFonts.All.Concat(SystemFonts.Installed).Select(f => new FontOption(f, VideoFontPreview.For(f))).ToList();
         Emphases = Choices<FontEmphasis>("style.emphasis.");
         TitleStyles = Choices<TitleStyle>("style.title.");
@@ -50,7 +61,12 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         ReadableText = _source.ReadableText;
         Font = Fonts.FirstOrDefault(f => f.Font.Id == _source.FontId) ?? Fonts[0];
         Emphasis = Pick(Emphases, (int)_source.FontEmphasis);
-        Palette = Palettes.FirstOrDefault(p => p.Palette.Id == _source.PaletteId) ?? Palettes[0];
+        Palette = _source.PaletteId == VideoPalettes.CustomId
+            ? Palettes.FirstOrDefault(p => p.SavedId is not null && p.Label == _source.CustomPaletteName && p.Palette == _source.CustomPalette)
+                ?? Palettes[^1]
+            : Palettes.FirstOrDefault(p => !p.Editable && p.Palette.Id == _source.PaletteId) ?? Palettes[0];
+        Fill(Palette.Palette);
+        PaletteName = Palette.SavedId is not null ? Palette.Label : string.Empty;
         TitleStyle = Pick(TitleStyles, (int)_source.TitleStyle);
         DrawStyle = Pick(DrawStyles, (int)_source.DrawStyle);
         Motion = Pick(Motions, (int)_source.Motion);
@@ -72,8 +88,63 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
     /// <summary>The form differs from the template it was opened with (the change time aside): unsaved changes.</summary>
     public bool Changed => !VideoStyleRules.SameContent(ToStyle(), _source);
 
-    /// <summary>The colour palettes with their swatches.</summary>
-    public IReadOnlyList<PaletteOption> Palettes { get; }
+    /// <summary>The colour palettes with their swatches: the shipped ones, the saved ones, then the template's own colours.</summary>
+    public ObservableCollection<PaletteOption> Palettes { get; }
+
+    /// <summary>Own colours: background (#RRGGBB).</summary>
+    [ObservableProperty]
+    public partial string EditBackground { get; set; } = string.Empty;
+
+    /// <summary>Own colours: surface.</summary>
+    [ObservableProperty]
+    public partial string EditSurface { get; set; } = string.Empty;
+
+    /// <summary>Own colours: accent.</summary>
+    [ObservableProperty]
+    public partial string EditAccent { get; set; } = string.Empty;
+
+    /// <summary>Own colours: second accent.</summary>
+    [ObservableProperty]
+    public partial string EditAccent2 { get; set; } = string.Empty;
+
+    /// <summary>Own colours: text.</summary>
+    [ObservableProperty]
+    public partial string EditText { get; set; } = string.Empty;
+
+    /// <summary>Own colours: quiet text.</summary>
+    [ObservableProperty]
+    public partial string EditMuted { get; set; } = string.Empty;
+
+    /// <summary>The base colour a harmonious palette is made from.</summary>
+    [ObservableProperty]
+    public partial string BaseColour { get; set; } = "#2E86DE";
+
+    /// <summary>The generated palette is light (dark text on a light background).</summary>
+    [ObservableProperty]
+    public partial bool GenerateLight { get; set; }
+
+    /// <summary>The name the own colours are saved under.</summary>
+    [ObservableProperty]
+    public partial string PaletteName { get; set; } = string.Empty;
+
+    /// <summary>The colours of the form are edited (own colours or a saved palette is chosen).</summary>
+    [ObservableProperty]
+    public partial bool OwnColours { get; set; }
+
+    /// <summary>The chosen palette is a saved one (it can be deleted).</summary>
+    [ObservableProperty]
+    public partial bool SavedChosen { get; set; }
+
+    /// <summary>The contrast check of the own colours, in words.</summary>
+    [ObservableProperty]
+    public partial string PaletteStatus { get; set; } = string.Empty;
+
+    /// <summary>The own colours can be used (no blocking contrast problem).</summary>
+    [ObservableProperty]
+    public partial bool PaletteOk { get; set; } = true;
+
+    /// <summary>The chosen saved palette (it can be saved again under its name or deleted); <c>null</c> for any other.</summary>
+    public Guid? SavedPaletteId => Palette?.SavedId;
 
     /// <summary>The video fonts, each named in its own font.</summary>
     public IReadOnlyList<FontOption> Fonts { get; }
@@ -237,7 +308,20 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         style.ReadableText = ReadableText;
         style.FontId = Font.Font.Id;
         style.FontEmphasis = (FontEmphasis)Emphasis.Value;
-        style.PaletteId = Palette.Palette.Id;
+        if (Palette.Editable)
+        {
+            style.PaletteId = VideoPalettes.CustomId;
+            style.CustomPalette = OwnPalette() ?? new VideoPalette(VideoPalettes.CustomId, EditBackground, EditSurface, EditAccent, EditAccent2, EditText,
+                EditMuted, Light: false);
+            style.CustomPaletteName = Palette.SavedId is not null ? Palette.Label : string.Empty;
+        }
+        else
+        {
+            style.PaletteId = Palette.Palette.Id;
+            style.CustomPalette = null;
+            style.CustomPaletteName = string.Empty;
+        }
+
         style.TitleStyle = (TitleStyle)TitleStyle.Value;
         style.TitlePosition = Position;
         style.DrawStyle = (DrawStyle)DrawStyle.Value;
@@ -260,6 +344,31 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
             return;
         }
 
+        if (e.PropertyName is nameof(BaseColour) or nameof(GenerateLight) or nameof(PaletteName) or nameof(PaletteStatus) or nameof(PaletteOk)
+            or nameof(OwnColours) or nameof(SavedChosen))
+        {
+            return;
+        }
+
+        if (e.PropertyName == nameof(Palette))
+        {
+            // A palette chosen: its colours fill the form (shown for the own colours and a saved palette).
+            _filling = true;
+            Fill(Palette.Palette);
+            if (Palette.SavedId is not null)
+            {
+                PaletteName = Palette.Label;
+            }
+
+            _filling = false;
+        }
+        else if (e.PropertyName is nameof(EditBackground) or nameof(EditSurface) or nameof(EditAccent) or nameof(EditAccent2) or nameof(EditText)
+            or nameof(EditMuted))
+        {
+            // A colour typed: the form now shows the template's own colours (a saved palette stays as it was saved).
+            Edited();
+        }
+
         if (e.PropertyName == nameof(Platform))
         {
             // The sentences follow the platform's wording (subscribe / follow); the chosen sentence stays.
@@ -272,6 +381,107 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
 
         Refresh();
     }
+
+    /// <summary>The form's colours as a palette; <c>null</c> while one of them is not a colour.</summary>
+    public VideoPalette? OwnPalette()
+    {
+        var values = new[] { EditBackground, EditSurface, EditAccent, EditAccent2, EditText, EditMuted };
+        return values.All(v => PaletteDesigner.Normalize(v) is not null)
+            ? PaletteDesigner.Own(EditBackground, EditSurface, EditAccent, EditAccent2, EditText, EditMuted)
+            : null;
+    }
+
+    /// <summary>Fills the own colours with a harmonious palette made from <see cref="BaseColour"/> (nothing while it is not a colour).</summary>
+    [RelayCommand]
+    public void Generate()
+    {
+        if (PaletteDesigner.Normalize(BaseColour) is null)
+        {
+            PaletteStatus = _text["styles.own.base_invalid"];
+            PaletteOk = false;
+            return;
+        }
+
+        var palette = PaletteDesigner.FromBase(BaseColour, GenerateLight);
+        _filling = true;
+        Fill(palette);
+        _filling = false;
+        Edited();
+        Refresh();
+    }
+
+    /// <summary>The saved palettes changed (saved or deleted in the section): the list is rebuilt and <paramref name="select"/> chosen.</summary>
+    public void SetSaved(IReadOnlyList<SavedPalette> saved, Guid? select)
+    {
+        ArgumentNullException.ThrowIfNull(saved);
+        var colours = OwnPalette();
+        _filling = true;
+        for (var i = Palettes.Count - 2; i >= 0; i--)
+        {
+            if (Palettes[i].SavedId is not null)
+            {
+                Palettes.RemoveAt(i);
+            }
+        }
+
+        var at = VideoPalettes.All.Count;
+        foreach (var palette in saved)
+        {
+            Palettes.Insert(at++, Option(palette.Colors, palette.Name, palette.Id));
+        }
+
+        Palette = select is { } id ? Palettes.First(p => p.SavedId == id) : colours is null ? Palettes[^1] : ReplaceOwn(colours);
+        _filling = false;
+        Refresh();
+    }
+
+    /// <summary>A colour of the form changed: the own entry takes the colours and is chosen.</summary>
+    private void Edited()
+    {
+        if (_filling)
+        {
+            return;
+        }
+
+        _filling = true;
+        if (OwnPalette() is { } colours)
+        {
+            Palette = ReplaceOwn(colours);
+        }
+        else if (!Palette.Own)
+        {
+            Palette = Palettes[^1];
+        }
+
+        _filling = false;
+    }
+
+    private PaletteOption ReplaceOwn(VideoPalette colours)
+    {
+        var option = Option(colours, _text["styles.own"], own: true);
+        Palettes[^1] = option;
+        return option;
+    }
+
+    private void Fill(VideoPalette palette)
+    {
+        EditBackground = palette.Background;
+        EditSurface = palette.Surface;
+        EditAccent = palette.Accent;
+        EditAccent2 = palette.Accent2;
+        EditText = palette.Text;
+        EditMuted = palette.Muted;
+    }
+
+    private string Describe(PaletteCheckResult check)
+    {
+        var parts = new List<string> { _text.Format("styles.own.contrast", check.TextContrast.ToString("0.0", _text.Culture)) };
+        parts.AddRange(check.Errors.Concat(check.Warnings).Select(i => _text["palette.issue." + i.ToString().ToLowerInvariant()]));
+        return string.Join(" · ", parts);
+    }
+
+    private static PaletteOption Option(VideoPalette p, string label, Guid? saved = null, bool own = false) =>
+        new(p, label, [Brush(p.Background), Brush(p.Surface), Brush(p.Accent), Brush(p.Accent2), Brush(p.Text), Brush(p.Muted)], saved, own);
 
     private void OnCellChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -293,7 +503,13 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         }
 
         _filling = wasFilling;
-        var palette = Palette.Palette;
+        OwnColours = Palette.Editable;
+        SavedChosen = Palette.SavedId is not null;
+        var own = Palette.Editable ? OwnPalette() : null;
+        var check = own is null ? null : PaletteDesigner.Check(own);
+        PaletteOk = !Palette.Editable || check is { Ok: true };
+        PaletteStatus = !Palette.Editable ? string.Empty : check is null ? _text["palette.issue.invalidcolour"] : Describe(check);
+        var palette = check is { Ok: true } ? own! : Palette.Palette;
         var style = (TitleStyle)TitleStyle.Value;
         var chosen = ToStyle();
         PreviewTitleWeight = VideoStyleRules.TitleWeight(chosen) == 700 ? FontWeight.Bold : FontWeight.Normal;

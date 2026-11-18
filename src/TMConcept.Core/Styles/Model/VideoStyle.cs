@@ -44,8 +44,17 @@ public sealed class VideoStyle
     /// <summary>Where titles sit (3×3 grid).</summary>
     public TitlePosition TitlePosition { get; set; } = TitlePosition.TopCenter;
 
-    /// <summary>Colour palette id from <see cref="VideoPalettes"/>.</summary>
+    /// <summary>Colour palette id from <see cref="VideoPalettes"/>, or <see cref="VideoPalettes.CustomId"/> for the template's own colours.</summary>
     public string PaletteId { get; set; } = VideoPalettes.DefaultId;
+
+    /// <summary>
+    /// The template's own colours when <see cref="PaletteId"/> is <see cref="VideoPalettes.CustomId"/> (0.1.24); <c>null</c> otherwise. A
+    /// copy, also when they came from a saved palette.
+    /// </summary>
+    public VideoPalette? CustomPalette { get; set; }
+
+    /// <summary>The name of the saved palette the own colours came from (shown in the editor; empty when they were made here).</summary>
+    public string CustomPaletteName { get; set; } = string.Empty;
 
     /// <summary>Drawing style when there are no images (also steers the image prompt).</summary>
     public DrawStyle DrawStyle { get; set; } = DrawStyle.Flat;

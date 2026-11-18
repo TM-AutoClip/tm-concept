@@ -92,32 +92,73 @@
                         <TextBlock Text="{DynamicResource styles.palette}" VerticalAlignment="Center" />
                         <views:HelpTip Text="{DynamicResource styles.palette.tip}" />
                       </StackPanel>
-                      <ListBox Name="StylePalettes" Grid.Column="1" ItemsSource="{Binding Palettes}" SelectedItem="{Binding Palette}" Background="Transparent">
-                        <ListBox.ItemsPanel>
-                          <ItemsPanelTemplate>
-                            <WrapPanel />
-                          </ItemsPanelTemplate>
-                        </ListBox.ItemsPanel>
-                        <ListBox.ItemTemplate>
-                          <DataTemplate x:DataType="vm:PaletteOption">
-                            <StackPanel Spacing="4" Margin="2">
-                              <ItemsControl ItemsSource="{Binding Swatches}">
-                                <ItemsControl.ItemsPanel>
-                                  <ItemsPanelTemplate>
-                                    <StackPanel Orientation="Horizontal" />
-                                  </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                  <DataTemplate x:DataType="IBrush">
-                                    <Border Width="14" Height="22" Background="{Binding}" BorderBrush="{DynamicResource tm-border}" BorderThickness="0.5" />
-                                  </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                              </ItemsControl>
-                              <TextBlock Text="{Binding Label}" Classes="small" HorizontalAlignment="Center" />
-                            </StackPanel>
-                          </DataTemplate>
-                        </ListBox.ItemTemplate>
-                      </ListBox>
+                      <StackPanel Grid.Column="1" Spacing="8">
+                        <ListBox Name="StylePalettes" ItemsSource="{Binding Palettes}" SelectedItem="{Binding Palette}" Background="Transparent">
+                          <ListBox.ItemsPanel>
+                            <ItemsPanelTemplate>
+                              <WrapPanel />
+                            </ItemsPanelTemplate>
+                          </ListBox.ItemsPanel>
+                          <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:PaletteOption">
+                              <StackPanel Spacing="4" Margin="2">
+                                <ItemsControl ItemsSource="{Binding Swatches}">
+                                  <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                      <StackPanel Orientation="Horizontal" />
+                                    </ItemsPanelTemplate>
+                                  </ItemsControl.ItemsPanel>
+                                  <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="IBrush">
+                                      <Border Width="14" Height="22" Background="{Binding}" BorderBrush="{DynamicResource tm-border}" BorderThickness="0.5" />
+                                    </DataTemplate>
+                                  </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock Text="{Binding Label}" Classes="small" HorizontalAlignment="Center" />
+                              </StackPanel>
+                            </DataTemplate>
+                          </ListBox.ItemTemplate>
+                        </ListBox>
+                        <!-- The template's own colours (0.1.24): six #RRGGBB fields, a palette made from one base colour, the contrast check, save as a named palette. -->
+                        <Border Name="StyleOwnColours" Classes="inset" Padding="10" IsVisible="{Binding OwnColours}">
+                          <StackPanel Spacing="8">
+                            <Grid ColumnDefinitions="Auto,110,Auto,Auto,110,Auto" RowDefinitions="Auto,Auto,Auto" RowSpacing="6" ColumnSpacing="8">
+                              <TextBlock Text="{DynamicResource styles.own.background}" VerticalAlignment="Center" />
+                              <TextBox Name="OwnBackground" Grid.Column="1" Text="{Binding EditBackground}" MaxLength="7" />
+                              <Border Grid.Column="2" Width="18" Height="18" CornerRadius="3" Background="{Binding PreviewBackground}" BorderBrush="{DynamicResource tm-border}" BorderThickness="0.5" />
+                              <TextBlock Grid.Column="3" Text="{DynamicResource styles.own.surface}" VerticalAlignment="Center" Margin="8,0,0,0" />
+                              <TextBox Name="OwnSurface" Grid.Column="4" Text="{Binding EditSurface}" MaxLength="7" />
+                              <TextBlock Grid.Row="1" Text="{DynamicResource styles.own.accent}" VerticalAlignment="Center" />
+                              <TextBox Name="OwnAccent" Grid.Row="1" Grid.Column="1" Text="{Binding EditAccent}" MaxLength="7" />
+                              <Border Grid.Row="1" Grid.Column="2" Width="18" Height="18" CornerRadius="3" Background="{Binding PreviewAccent}" BorderBrush="{DynamicResource tm-border}" BorderThickness="0.5" />
+                              <TextBlock Grid.Row="1" Grid.Column="3" Text="{DynamicResource styles.own.accent2}" VerticalAlignment="Center" Margin="8,0,0,0" />
+                              <TextBox Name="OwnAccent2" Grid.Row="1" Grid.Column="4" Text="{Binding EditAccent2}" MaxLength="7" />
+                              <TextBlock Grid.Row="2" Text="{DynamicResource styles.own.text}" VerticalAlignment="Center" />
+                              <TextBox Name="OwnText" Grid.Row="2" Grid.Column="1" Text="{Binding EditText}" MaxLength="7" />
+                              <Border Grid.Row="2" Grid.Column="2" Width="18" Height="18" CornerRadius="3" Background="{Binding PreviewText}" BorderBrush="{DynamicResource tm-border}" BorderThickness="0.5" />
+                              <TextBlock Grid.Row="2" Grid.Column="3" Text="{DynamicResource styles.own.muted}" VerticalAlignment="Center" Margin="8,0,0,0" />
+                              <TextBox Name="OwnMuted" Grid.Row="2" Grid.Column="4" Text="{Binding EditMuted}" MaxLength="7" />
+                            </Grid>
+                            <TextBlock Name="OwnStatus" Text="{Binding PaletteStatus}" Classes="small muted" TextWrapping="Wrap" IsVisible="{Binding PaletteOk}" />
+                            <TextBlock Name="OwnProblem" Text="{Binding PaletteStatus}" Classes="small" TextWrapping="Wrap" IsVisible="{Binding !PaletteOk}"
+                                       Foreground="{DynamicResource tm-danger}" />
+                            <WrapPanel ItemSpacing="8" LineSpacing="6">
+                              <TextBlock Text="{DynamicResource styles.own.base}" VerticalAlignment="Center" />
+                              <TextBox Name="OwnBase" Text="{Binding BaseColour}" Width="110" MaxLength="7" />
+                              <CheckBox Name="OwnLight" IsChecked="{Binding GenerateLight}" Content="{DynamicResource styles.own.light}" />
+                              <Button Name="OwnGenerate" Content="{DynamicResource styles.own.generate}" Command="{Binding GenerateCommand}" />
+                              <views:HelpTip Text="{DynamicResource styles.own.tip}" />
+                            </WrapPanel>
+                            <WrapPanel ItemSpacing="8" LineSpacing="6">
+                              <TextBox Name="OwnName" Text="{Binding PaletteName}" Width="200" MaxLength="60" PlaceholderText="{DynamicResource styles.own.name}" />
+                              <Button Name="OwnSave" Content="{DynamicResource styles.own.save}"
+                                      Command="{Binding $parent[views:VideoStylesSettingsView].((vm:VideoStylesSettingsViewModel)DataContext).SavePaletteCommand}" />
+                              <Button Name="OwnDelete" Classes="danger" Content="{DynamicResource styles.own.delete}" IsVisible="{Binding SavedChosen}"
+                                      Command="{Binding $parent[views:VideoStylesSettingsView].((vm:VideoStylesSettingsViewModel)DataContext).DeletePaletteCommand}" />
+                            </WrapPanel>
+                          </StackPanel>
+                        </Border>
+                      </StackPanel>
 
                       <StackPanel Grid.Row="1" Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock Text="{DynamicResource styles.font}" VerticalAlignment="Center" />
