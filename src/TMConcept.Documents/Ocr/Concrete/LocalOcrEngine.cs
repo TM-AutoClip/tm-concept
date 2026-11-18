@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using TMConcept.Core.Models;
 using TMConcept.Core.Paths;
 using TMConcept.Core.Tools;
 
@@ -9,8 +10,12 @@ namespace TMConcept.Documents.Ocr;
 /// (a file is there only after its SHA-256 matched), downloaded after the user agreed (<see cref="InstallAsync"/>), and a new engine for
 /// each add or read (<see cref="Create"/>: the models are loaded for it, about 13 MB on disk and some 100 MB of memory while it works, and let
 /// go with it).
+/// 0.1.27: with the graphics card's parts (<paramref name="gpu"/>, <paramref name="card"/>, <paramref name="coordinator"/>), each page is read on
+/// the card when it can be had (<see cref="HybridOcrNetworkSource"/>), otherwise on the processor; without them (Linux, the tests) always on
+/// the processor.
 /// </summary>
-public sealed class LocalOcrEngine(IAppPaths paths, IArchiveDownloader downloader, IPageImageDecoder decoder, ILoggerFactory loggers)
+public sealed class LocalOcrEngine(IAppPaths paths, IArchiveDownloader downloader, IPageImageDecoder decoder, ILoggerFactory loggers,
+    OcrGpuModel? gpu = null, DirectMlOcrNetworkFactory? card = null, IGpuCoordinator? coordinator = null)
 {
     private readonly ILogger _logger = loggers.CreateLogger<LocalOcrEngine>();
 
@@ -45,18 +50,21 @@ public sealed class LocalOcrEngine(IAppPaths paths, IArchiveDownloader downloade
             throw new InvalidOperationException("The local OCR models are not installed.");
         }
 
-        IOcrNetwork? detector = null;
+        var processor = new CpuOcrNetworkFactory();
+        var onCard = gpu is not null && card is not null && coordinator is not null && gpu.Device == ModelDevice.Gpu;
         try
         {
-            detector = new OnnxOcrNetwork(Path.Combine(Folder, LocalOcrModels.DetectorFile));
-            var recognizer = new OnnxOcrNetwork(Path.Combine(Folder, LocalOcrModels.RecognizerFile));
-            _logger.LogInformation("Local OCR loaded ({Name}, {Threads} processor threads)", LocalOcrModels.Name,
-                Core.Documents.PageTextEngines.OcrThreads(Environment.ProcessorCount));
-            return new PaddleOcrRecognizer(decoder, detector, recognizer, OcrDictionary.Latin(), loggers.CreateLogger<PaddleOcrRecognizer>());
+            // The processor's networks are opened now unless the card will be tried first (then only when a page needs them).
+            var opened = onCard ? null : processor.Open(Folder);
+            IOcrNetworkSource source = gpu is not null && card is not null && coordinator is not null
+                ? new HybridOcrNetworkSource(Folder, processor, card, gpu, coordinator, loggers.CreateLogger<HybridOcrNetworkSource>(), opened)
+                : new FixedOcrNetworkSource(opened!.Detector, opened.Recognizer);
+            _logger.LogInformation("Local OCR loaded ({Name}, {Threads} processor threads, graphics card {Card})", LocalOcrModels.Name,
+                Core.Documents.PageTextEngines.OcrThreads(Environment.ProcessorCount), onCard ? "when free" : "not used");
+            return new PaddleOcrRecognizer(decoder, source, OcrDictionary.Latin(), loggers.CreateLogger<PaddleOcrRecognizer>());
         }
         catch (Exception ex) when (ex is InvalidDataException or TypeInitializationException or DllNotFoundException)
         {
-            detector?.Dispose();
             _logger.LogError(ex, "The local OCR models could not be loaded");
             throw new InvalidOperationException("The local OCR could not start: " + ex.Message, ex);
         }
