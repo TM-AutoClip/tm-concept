@@ -874,6 +874,39 @@ public sealed class VideoPageTests
     }
 
     [AvaloniaFact]
+    public async Task ALocalCodeModelWhoseCodeFailsTwiceGetsTheAppsOwnAnimationAndAnOnlineOneStillFails()
+    {
+        // 0.1.23, the developer's full local run: a small local model failed the check twice and no video was made. Now its prompt has the
+        // checklist, its repair the fix and a file that passes, and after a second failure the engine's own code is rendered. The check is
+        // the same: an online model's code that fails twice still stops the video.
+        var engine = new FakeEngine();
+        const string Bad = "(function(){const t={};document.body.innerHTML=\"<b>x</b>\";})();";
+        var chat = new FakeChat().Answer(_ => Code(Bad)).Answer(_ => Code(Bad));
+        using var h = Harness(chat, engine);
+        var (_, concept) = await PrepareAsync(h);
+        var local = new ResolvedModel(TMConcept.Core.AppOllama.AppModelRegistry.Entry(TMConcept.Core.AppOllama.AppModelAdvisor.Find("qwen3.5:4b-q8_0")!),
+            new ApiKey { Provider = ModelProviders.AppOllama, Label = string.Empty, Secret = string.Empty }, string.Empty);
+
+        var record = await RunAsync(h, concept, new VideoOptions { Engine = engine.Kind, Speech = false }, local);
+
+        chat.Requests.Count.ShouldBe(2);
+        chat.Requests[0].System.ShouldContain("Checklist before you answer");
+        chat.Requests[1].User.ShouldContain("Fix: create every element with document.createElement");
+        chat.Requests[1].User.ShouldContain(engine.SampleCode);
+        record.Warnings.ShouldContain(VideoWarnings.AppCode);
+        var folder = LibraryPaths.Resolve(h.Get<IAppPaths>().LibraryDirectory, record.Folder);
+        File.ReadAllText(Path.Combine(folder, VideoFolders.Source, engine.CodeFile)).Trim().ShouldBe(((IVideoEngine)engine).FallbackCode);
+        h.Get<TMConcept.Desktop.Localization.Localizer>()["produced.note." + VideoWarnings.AppCode].ShouldNotStartWith("produced.note.");
+
+        var second = new Concept { ProfileId = concept.ProfileId, Title = "Iron chain", Summary = "s", Content = Content, Language = "en", Status = ConceptStatus.Approved };
+        await h.Get<IConceptStore>().AddAsync([second], CancellationToken.None);
+        chat.Answer(_ => Code(Bad)).Answer(_ => Code(Bad));
+        var online = await Should.ThrowAsync<VideoException>(() => RunAsync(h, second, new VideoOptions { Engine = engine.Kind, Speech = false }));
+        online.Code.ShouldBe("code");
+        chat.Requests[2].System.ShouldNotContain("Checklist");
+    }
+
+    [AvaloniaFact]
     public async Task ARenderThatFailsTwiceStaysInTheQueueWithItsError()
     {
         var engine = new FakeEngine { FailRenders = 2 };
@@ -1218,11 +1251,14 @@ public sealed class VideoPageTests
         text["produced.note." + VideoWarnings.SamplesNone].ShouldNotStartWith("produced.note.");
     }
 
-    private static async Task<VideoRecord> RunAsync(DesktopHarness h, Concept concept, VideoOptions options, IProgress<VideoProgress>? progress = null)
+    private static Task<VideoRecord> RunAsync(DesktopHarness h, Concept concept, VideoOptions options, IProgress<VideoProgress>? progress = null) =>
+        RunAsync(h, concept, options, new ResolvedModel(h.Get<IModelCatalog>().Find("anthropic", "claude-sonnet-5-5")!,
+            new ApiKey { Provider = "anthropic", Label = "k", Secret = "fake-test-key-video-0123" }, string.Empty), progress);
+
+    private static async Task<VideoRecord> RunAsync(DesktopHarness h, Concept concept, VideoOptions options, ResolvedModel model,
+        IProgress<VideoProgress>? progress = null)
     {
         var profile = (await h.Get<IProfileStore>().GetAsync(concept.ProfileId, CancellationToken.None))!;
-        var model = new ResolvedModel(h.Get<IModelCatalog>().Find("anthropic", "claude-sonnet-5-5")!,
-            new ApiKey { Provider = "anthropic", Label = "k", Secret = "fake-test-key-video-0123" }, string.Empty);
         var stored = (await h.Get<IConceptStore>().GetAsync(concept.Id, CancellationToken.None))!;
         return await h.Get<VideoPipeline>().RunAsync(new VideoJob(stored, profile, options, model), progress, CancellationToken.None);
     }
