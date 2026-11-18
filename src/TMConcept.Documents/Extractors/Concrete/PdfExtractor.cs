@@ -11,7 +11,9 @@ namespace TMConcept.Documents.Extractors;
 /// again every <see cref="DocumentLimits.PdfReopenPages"/> pages so the memory stays about the same whatever the page count; only the asked
 /// page range is read; every page is reported and a cancel stops between pages; reading stops at <see cref="DocumentLimits.CharactersMax"/>
 /// characters. A page without text (a scan) is counted, or, when a text-extraction model was chosen, its images
-/// (<see cref="PdfPageImages"/>) are read by it. The document's own title is used when it has one.
+/// (<see cref="PdfPageImages"/>) are read by it; when that engine stops (<see cref="PageRecognitionStoppedException"/>: a wrong key, too many
+/// failures in a row) the rest of the pages are still read for their text layer and the document keeps what was read, with the reason's code
+/// (<see cref="ExtractedDocument.RecognitionStopped"/>: the provider's error code, or <c>error</c>; the details are in the log). The document's own title is used when it has one.
 /// </summary>
 public sealed class PdfExtractor : DocumentExtractorBase
 {
@@ -73,6 +75,7 @@ public sealed class PdfExtractor : DocumentExtractorBase
         var recognized = 0;
         var characters = 0L;
         var stopped = false;
+        var halted = string.Empty;
         FileStream? stream = null;
         PdfDocument? pdf = null;
         try
@@ -107,14 +110,25 @@ public sealed class PdfExtractor : DocumentExtractorBase
                 });
                 if (text.Length == 0 && options.Recognizer is { } recognizer)
                 {
-                    if (images.Count == 0)
+                    if (halted.Length > 0 || images.Count == 0)
                     {
                         // No image that can be sent (a vector drawing, or an image format that cannot be handed on): the page stays unread.
                         unread++;
                     }
                     else
                     {
-                        var result = await recognizer.RecognizeAsync(new PageImage(number, images), cancellationToken).ConfigureAwait(false);
+                        PageRecognition result;
+                        try
+                        {
+                            result = await recognizer.RecognizeAsync(new PageImage(number, images), cancellationToken).ConfigureAwait(false);
+                        }
+                        catch (PageRecognitionStoppedException ex)
+                        {
+                            // The engine logged why; the pages after this one are read for their text layer only.
+                            halted = ex.InnerException is Core.Providers.ProviderException provider ? provider.Code : "error";
+                            result = PageRecognition.Failure;
+                        }
+
                         unread += result.Failed ? 1 : 0;
                         if (!result.Failed && result.Text.Length > 0)
                         {
@@ -141,7 +155,13 @@ public sealed class PdfExtractor : DocumentExtractorBase
         }
 
         options.Progress?.Report(new DocumentProgress(options.Name, DocumentStage.Extracting, count, count));
-        return new ExtractedDocument(title, sections, count, empty) { PagesRecognized = recognized, PagesUnread = unread, StoppedAtLimit = stopped };
+        return new ExtractedDocument(title, sections, count, empty)
+        {
+            PagesRecognized = recognized,
+            PagesUnread = unread,
+            StoppedAtLimit = stopped,
+            RecognitionStopped = halted,
+        };
     }
 
     /// <inheritdoc />

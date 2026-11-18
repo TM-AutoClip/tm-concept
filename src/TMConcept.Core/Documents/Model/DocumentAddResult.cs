@@ -14,4 +14,7 @@ public sealed record DocumentAddResult(SourceDocument Document, string Embedding
 
     /// <summary>Scanned pages whose text extraction failed or had no image to send (0.1.24; the reasons are in the log).</summary>
     public int PagesUnread { get; init; }
+
+    /// <summary>Why the text extraction of scanned pages stopped before the end: the provider's error code or <c>error</c> (empty = it did not; the pages read before are kept).</summary>
+    public string RecognitionStopped { get; init; } = string.Empty;
 }

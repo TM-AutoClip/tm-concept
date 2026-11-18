@@ -28,6 +28,16 @@
         <TextBlock Name="FindEstimateLine" Grid.Column="3" Text="{Binding FindEstimate}" Classes="tiny" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
                    ToolTip.Tip="{Binding FindEstimate}" />
       </Grid>
+      <!-- 0.1.24: a page range of the ticked PDFs, "read everything" (summaries first) and what a press would read, with its estimate. -->
+      <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,120,Auto,*" ColumnSpacing="8" Margin="0,6,0,0">
+        <TextBlock Text="{DynamicResource documents.pages_box}" Classes="small" VerticalAlignment="Center" />
+        <TextBox Name="DocumentPagesBox" Grid.Column="1" Text="{Binding Pages}" PlaceholderText="{DynamicResource documents.pages_box.hint}" MinHeight="0"
+                 IsEnabled="{Binding !Running}" ToolTip.Tip="{DynamicResource documents.pages_box.tip}" />
+        <CheckBox Name="ReadAllBox" Grid.Column="2" IsChecked="{Binding ReadAll}" IsEnabled="{Binding !Running}" ToolTip.Tip="{DynamicResource documents.read_all.tip}"
+                  Content="{DynamicResource documents.read_all}" />
+      </Grid>
+      <TextBlock Name="DocumentPlanLine" DockPanel.Dock="Top" Text="{Binding Plan}" Classes="tiny" Classes.error="{Binding PlanIsError}" TextWrapping="Wrap"
+                 Margin="0,4,0,0" IsVisible="{Binding Plan, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
       <views:ConceptSectionFooter Name="DocumentFooter" DockPanel.Dock="Bottom" Margin="0,6,0,0" />
       <TextBlock Name="SearchLine" DockPanel.Dock="Bottom" Text="{Binding Library.SearchLine}" Classes="tiny" TextWrapping="Wrap" Margin="0,4,0,0" />
       <DockPanel Margin="0,6,0,0">

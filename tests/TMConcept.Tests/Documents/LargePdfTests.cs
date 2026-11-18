@@ -129,7 +129,7 @@ public sealed class LargePdfTests
     }
 
     [Fact]
-    public async Task FailingPagesAreCountedAndTooManyInARowOrAWrongKeyStopTheRead()
+    public async Task FailingPagesAreCountedAndTooManyInARowOrAWrongKeyStopTheExtractionButKeepTheText()
     {
         using var paths = new TempPaths();
         var file = WritePdf(paths, "scan.pdf", 6, page => page is 1 or 3);
@@ -140,14 +140,17 @@ public sealed class LargePdfTests
         (read.PagesRecognized, read.PagesUnread, read.PagesWithoutText).ShouldBe((3, 1, 1));
         (flaky.Recognized, flaky.Failed).ShouldBe((3, 1));
 
-        var broken = new FakeRecognizer(_ => throw new ProviderException("busy") { Code = "busy" });
-        var stopped = await Should.ThrowAsync<PageRecognitionStoppedException>(() => new PdfExtractor().ExtractAsync(file, new DocumentReadOptions(Recognizer: broken), None));
-        broken.Failed.ShouldBe(DocumentLimits.RecognitionFailuresInARowMax);
-        stopped.InnerException.ShouldBeOfType<ProviderException>();
+        var broken = new FakeRecognizer(_ => throw new ProviderException("the service is busy") { Code = "busy" });
+        var stopped = await new PdfExtractor().ExtractAsync(file, new DocumentReadOptions(Recognizer: broken), None);
+        broken.Failed.ShouldBe(DocumentLimits.RecognitionFailuresInARowMax, "no page is asked for after the stop");
+        stopped.RecognitionStopped.ShouldBe("busy", "the provider's error code: the page says it in the user's language");
+        stopped.PagesUnread.ShouldBe(4);
+        stopped.Sections.Select(s => s.Page).ShouldBe([1, 3], "the text pages are still read and kept");
 
         var key = new FakeRecognizer(_ => throw new ProviderException("bad key") { Code = "auth" });
-        await Should.ThrowAsync<PageRecognitionStoppedException>(() => new PdfExtractor().ExtractAsync(file, new DocumentReadOptions(Recognizer: key), None));
-        key.Failed.ShouldBe(1, "a wrong key fails every page: the read stops at once");
+        var wrong = await new PdfExtractor().ExtractAsync(file, new DocumentReadOptions(Recognizer: key), None);
+        key.Failed.ShouldBe(1, "a wrong key fails every page: the engine is not asked again");
+        wrong.RecognitionStopped.ShouldBe("auth");
     }
 
     [Fact]
@@ -173,7 +176,7 @@ public sealed class LargePdfTests
     /// A PDF of <paramref name="pages"/> pages: a page for which <paramref name="text"/> is true has a line of text, any other only an image
     /// (a scan).
     /// </summary>
-    internal static string WritePdf(TempPaths paths, string name, int pages, Func<int, bool> text, int lines = 1)
+    internal static string WritePdf(TMConcept.Core.Paths.IAppPaths paths, string name, int pages, Func<int, bool> text, int lines = 1)
     {
         var builder = new PdfDocumentBuilder();
         var font = builder.AddStandard14Font(Standard14Font.Helvetica);

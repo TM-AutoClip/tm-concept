@@ -292,6 +292,7 @@ public sealed class DocumentLibrary(IAppPaths paths, IDocumentStore store, IEnum
             IReadOnlyList<DocumentChunk> chunks;
             var recognized = 0;
             var unread = 0;
+            var halted = string.Empty;
             try
             {
                 progress?.Report(new DocumentProgress(name, DocumentStage.Extracting));
@@ -308,6 +309,7 @@ public sealed class DocumentLibrary(IAppPaths paths, IDocumentStore store, IEnum
 
                 recognized = extracted.PagesRecognized;
                 unread = extracted.PagesUnread;
+                halted = extracted.RecognitionStopped;
                 progress?.Report(new DocumentProgress(name, DocumentStage.Chunking));
                 chunks = DocumentChunker.Chunk(extracted);
                 document.ProfileId = profileId;
@@ -352,7 +354,7 @@ public sealed class DocumentLibrary(IAppPaths paths, IDocumentStore store, IEnum
             }
 
             progress?.Report(new DocumentProgress(name, DocumentStage.Done));
-            return new DocumentAddResult(document, error) { PagesRecognized = recognized, PagesUnread = unread };
+            return new DocumentAddResult(document, error) { PagesRecognized = recognized, PagesUnread = unread, RecognitionStopped = halted };
         }
         finally
         {

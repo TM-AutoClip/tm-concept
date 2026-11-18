@@ -12,6 +12,9 @@ public sealed record ExtractedDocument(string Title, IReadOnlyList<ExtractedSect
     /// <summary>Pages without a text layer whose text extraction failed (logged; 0.1.24).</summary>
     public int PagesUnread { get; init; }
 
+    /// <summary>Why the text extraction of scanned pages stopped before the end: the provider's error code or <c>error</c> (empty = it did not; 0.1.24).</summary>
+    public string RecognitionStopped { get; init; } = string.Empty;
+
     /// <summary>Whether reading stopped at <see cref="DocumentLimits.CharactersMax"/> before the last page (0.1.24: the rest is not even read).</summary>
     public bool StoppedAtLimit { get; init; }
 
