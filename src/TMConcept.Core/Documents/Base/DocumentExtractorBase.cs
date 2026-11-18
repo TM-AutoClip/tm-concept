@@ -4,8 +4,8 @@ using System.Text.RegularExpressions;
 namespace TMConcept.Core.Documents;
 
 /// <summary>
-/// The common part of reading a document file: a missing or too large file is refused before it is read (<see cref="DocumentLimits.FileBytesMax"/>);
-/// the kind's own reader runs off the calling thread; then the text is cleaned the same way for every kind: line ends unified, control
+/// The common part of reading a document file: a missing or too large file is refused before it is read (<see cref="MaxBytes"/>: by default
+/// <see cref="DocumentLimits.FileBytesMax"/>); the kind's own reader runs off the calling thread (a kind without pages ignores a page range); then the text is cleaned the same way for every kind: line ends unified, control
 /// characters and the invisible characters that hide or reorder text removed (zero-width, bidi, tag characters, soft hyphens: a PDF or a
 /// page cannot hide an instruction from the reader), a word broken over a line end with a hyphen joined again, runs of spaces made one, a header or footer line that
 /// repeats on most pages left out, empty pieces dropped, and the whole cut at <see cref="DocumentLimits.CharactersMax"/>.
@@ -19,7 +19,38 @@ public abstract partial class DocumentExtractorBase : IDocumentExtractor
     public abstract IReadOnlyList<string> Extensions { get; }
 
     /// <inheritdoc />
-    public async Task<ExtractedDocument> ExtractAsync(string file, CancellationToken cancellationToken)
+    public virtual long MaxBytes => DocumentLimits.FileBytesMax;
+
+    /// <inheritdoc />
+    public Task<ExtractedDocument> ExtractAsync(string file, CancellationToken cancellationToken) => ExtractAsync(file, DocumentReadOptions.All, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<ExtractedDocument> ExtractAsync(string file, DocumentReadOptions options, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        Check(file);
+        var read = await Task.Run(() => ReadAsync(file, options, cancellationToken), cancellationToken).ConfigureAwait(false);
+        return Clean(read);
+    }
+
+    /// <inheritdoc />
+    public async Task<DocumentProbe> ProbeAsync(string file, CancellationToken cancellationToken)
+    {
+        Check(file);
+        return await Task.Run(() => Probe(file, cancellationToken), cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Reads the kind's text (<see cref="InvalidDataException"/> when the file is not of this kind or is damaged).</summary>
+    protected abstract ExtractedDocument Read(string file, CancellationToken cancellationToken);
+
+    /// <summary>Reads the kind's text as <paramref name="options"/> says; a kind without pages reads everything (<see cref="Read(string, CancellationToken)"/>).</summary>
+    protected virtual Task<ExtractedDocument> ReadAsync(string file, DocumentReadOptions options, CancellationToken cancellationToken) =>
+        Task.FromResult(Read(file, cancellationToken));
+
+    /// <summary>The quick look of <see cref="ProbeAsync"/> (<see cref="DocumentProbe.None"/> for a kind without pages).</summary>
+    protected virtual DocumentProbe Probe(string file, CancellationToken cancellationToken) => DocumentProbe.None;
+
+    private void Check(string file)
     {
         ArgumentException.ThrowIfNullOrEmpty(file);
         var info = new FileInfo(file);
@@ -28,17 +59,11 @@ public abstract partial class DocumentExtractorBase : IDocumentExtractor
             throw new FileNotFoundException("The document file is not there.", file);
         }
 
-        if (info.Length > DocumentLimits.FileBytesMax)
+        if (info.Length > MaxBytes)
         {
-            throw new InvalidDataException($"The file is larger than {DocumentLimits.FileBytesMax >> 20} MB.");
+            throw new InvalidDataException($"The file is larger than {MaxBytes >> 20} MB.");
         }
-
-        var read = await Task.Run(() => Read(file, cancellationToken), cancellationToken).ConfigureAwait(false);
-        return Clean(read);
     }
-
-    /// <summary>Reads the kind's text (<see cref="InvalidDataException"/> when the file is not of this kind or is damaged).</summary>
-    protected abstract ExtractedDocument Read(string file, CancellationToken cancellationToken);
 
     /// <summary>The cleaned document (see the class summary).</summary>
     public static ExtractedDocument Clean(ExtractedDocument document)
@@ -71,7 +96,7 @@ public abstract partial class DocumentExtractorBase : IDocumentExtractor
     public static bool IsCut(ExtractedDocument document)
     {
         ArgumentNullException.ThrowIfNull(document);
-        return document.Characters >= DocumentLimits.CharactersMax;
+        return document.StoppedAtLimit || document.Characters >= DocumentLimits.CharactersMax;
     }
 
     /// <summary>One piece of text cleaned; lines in <paramref name="drop"/> are left out.</summary>

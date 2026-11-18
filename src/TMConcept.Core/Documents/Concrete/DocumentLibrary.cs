@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Security.Cryptography;
+using System.Text;
 using Microsoft.Extensions.Logging;
 using TMConcept.Core.DiskSpace;
 using TMConcept.Core.Paths;
@@ -49,25 +51,23 @@ public sealed class DocumentLibrary(IAppPaths paths, IDocumentStore store, IEnum
         return LibraryPaths.Resolve(Folder, document.StoredFile);
     }
 
-    /// <summary>Adds a file to the profile's documents.</summary>
-    public async Task<DocumentAddResult> AddFileAsync(Guid profileId, string file, IProgress<DocumentProgress>? progress, CancellationToken cancellationToken)
+    /// <summary>Adds a file to the profile's documents (every page, no text extraction).</summary>
+    public Task<DocumentAddResult> AddFileAsync(Guid profileId, string file, IProgress<DocumentProgress>? progress, CancellationToken cancellationToken) =>
+        AddFileAsync(profileId, file, DocumentReadOptions.All, progress, cancellationToken);
+
+    /// <summary>
+    /// Adds a file to the profile's documents as <paramref name="read"/> says (0.1.24): only a page range of a PDF, and the text of its scanned
+    /// pages read by a text-extraction model. A page range is a document of its own: its title names the pages and it may be added next to
+    /// the whole file or another range of it (the same range twice is refused like the same file twice).
+    /// </summary>
+    public async Task<DocumentAddResult> AddFileAsync(Guid profileId, string file, DocumentReadOptions read, IProgress<DocumentProgress>? progress,
+        CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrEmpty(file);
+        ArgumentNullException.ThrowIfNull(read);
+        var extractor = Extractor(file);
         var name = Path.GetFileName(file);
         var extension = Path.GetExtension(file).ToLowerInvariant();
-        var extractor = _extractors.FirstOrDefault(e => e.Extensions.Contains(extension, StringComparer.Ordinal))
-            ?? throw new DocumentRejectedException("type", "Only PDF, Word (.docx), text and Markdown files can be added.", name);
         var info = new FileInfo(file);
-        if (!info.Exists)
-        {
-            throw new FileNotFoundException("The file is not there.", file);
-        }
-
-        if (info.Length > DocumentLimits.FileBytesMax)
-        {
-            throw new DocumentRejectedException("size", $"The file is larger than {DocumentLimits.FileBytesMax >> 20} MB.", name);
-        }
-
         progress?.Report(new DocumentProgress(name, DocumentStage.Reading));
         string sha;
         await using (var stream = File.OpenRead(file))
@@ -75,15 +75,40 @@ public sealed class DocumentLibrary(IAppPaths paths, IDocumentStore store, IEnum
             sha = Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false));
         }
 
+        var title = Path.GetFileNameWithoutExtension(file);
+        if (read.Pages is { } pages)
+        {
+            // The range's own key: the copy is named by it, and the same range of the same file is found again.
+            sha = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(sha + ":pages:" + pages)));
+            title = DocumentTitle(title + " (p. " + pages.From.ToString(CultureInfo.InvariantCulture) + "–" + pages.To.ToString(CultureInfo.InvariantCulture) + ")");
+        }
+
         var document = new SourceDocument
         {
             Kind = extractor.Kind,
-            Title = Path.GetFileNameWithoutExtension(file),
+            Title = title,
             OriginalName = name,
             Bytes = info.Length,
         };
-        return await AddAsync(profileId, sha, extension, (target, token) => CopyAsync(file, target, token), extractor, document, progress, cancellationToken)
-            .ConfigureAwait(false);
+        return await AddAsync(profileId, sha, extension, (target, token) => CopyAsync(file, target, token), extractor, document, progress, cancellationToken,
+            read: read).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// A quick look at a file before it is added (0.1.24): its pages and how many of a few sampled pages have no text. The same refusals as an
+    /// add (<see cref="DocumentRejectedException"/>: <c>type</c>, <c>size</c>, <c>unreadable</c>).
+    /// </summary>
+    public async Task<DocumentProbe> ProbeAsync(string file, CancellationToken cancellationToken)
+    {
+        var extractor = Extractor(file);
+        try
+        {
+            return await extractor.ProbeAsync(file, cancellationToken).ConfigureAwait(false);
+        }
+        catch (InvalidDataException ex)
+        {
+            throw new DocumentRejectedException("unreadable", ex.Message, Path.GetFileName(file), ex);
+        }
     }
 
     /// <summary>Adds a web page (<see cref="DocumentKind.Web"/>) or a Wikipedia article (<see cref="DocumentKind.Wikipedia"/>, by address or title in <paramref name="language"/>).</summary>
@@ -207,8 +232,31 @@ public sealed class DocumentLibrary(IAppPaths paths, IDocumentStore store, IEnum
 
     private static string DocumentTitle(string title) => title.Length <= DocumentLimits.TitleMax ? title : title[..DocumentLimits.TitleMax].TrimEnd();
 
+    /// <summary>The reader of <paramref name="file"/>'s kind; refused when there is none, the file is not there or it is larger than the kind allows.</summary>
+    private IDocumentExtractor Extractor(string file)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(file);
+        var name = Path.GetFileName(file);
+        var extension = Path.GetExtension(file).ToLowerInvariant();
+        var extractor = _extractors.FirstOrDefault(e => e.Extensions.Contains(extension, StringComparer.Ordinal))
+            ?? throw new DocumentRejectedException("type", "Only PDF, Word (.docx), text and Markdown files can be added.", name);
+        var info = new FileInfo(file);
+        if (!info.Exists)
+        {
+            throw new FileNotFoundException("The file is not there.", file);
+        }
+
+        if (info.Length > extractor.MaxBytes)
+        {
+            throw new DocumentRejectedException("size", $"The file is larger than {extractor.MaxBytes >> 20} MB.", name);
+        }
+
+        return extractor;
+    }
+
     private async Task<DocumentAddResult> AddAsync(Guid profileId, string sha, string extension, Func<string, CancellationToken, Task> write,
-        IDocumentExtractor extractor, SourceDocument document, IProgress<DocumentProgress>? progress, CancellationToken cancellationToken, bool reuse = false)
+        IDocumentExtractor extractor, SourceDocument document, IProgress<DocumentProgress>? progress, CancellationToken cancellationToken, bool reuse = false,
+        DocumentReadOptions? read = null)
     {
         var name = document.OriginalName.Length > 0 ? document.OriginalName : document.Title;
         await EnterAsync(cancellationToken).ConfigureAwait(false);
@@ -242,19 +290,24 @@ public sealed class DocumentLibrary(IAppPaths paths, IDocumentStore store, IEnum
             }
 
             IReadOnlyList<DocumentChunk> chunks;
+            var recognized = 0;
+            var unread = 0;
             try
             {
                 progress?.Report(new DocumentProgress(name, DocumentStage.Extracting));
                 ExtractedDocument extracted;
                 try
                 {
-                    extracted = await extractor.ExtractAsync(target, cancellationToken).ConfigureAwait(false);
+                    extracted = await extractor.ExtractAsync(target, (read ?? DocumentReadOptions.All) with { Progress = progress, Name = name }, cancellationToken)
+                        .ConfigureAwait(false);
                 }
                 catch (InvalidDataException ex)
                 {
                     throw new DocumentRejectedException("unreadable", ex.Message, name, ex);
                 }
 
+                recognized = extracted.PagesRecognized;
+                unread = extracted.PagesUnread;
                 progress?.Report(new DocumentProgress(name, DocumentStage.Chunking));
                 chunks = DocumentChunker.Chunk(extracted);
                 document.ProfileId = profileId;
@@ -283,8 +336,9 @@ public sealed class DocumentLibrary(IAppPaths paths, IDocumentStore store, IEnum
                 throw;
             }
 
-            logger.LogInformation("Document {Id} added: {Kind}, {Pages} pages ({NoText} without text), {Characters} characters, {Chunks} passages, {Status}",
-                document.Id, document.Kind, document.Pages, document.PagesWithoutText, document.Characters, document.Chunks, document.Status);
+            logger.LogInformation("Document {Id} added: {Kind}, {Pages} pages ({NoText} without text, {Recognized} read by a text-extraction model, {Unread} unread), "
+                + "{Characters} characters, {Chunks} passages, {Status}", document.Id, document.Kind, document.Pages, document.PagesWithoutText, recognized, unread,
+                document.Characters, document.Chunks, document.Status);
             var error = string.Empty;
             try
             {
@@ -298,7 +352,7 @@ public sealed class DocumentLibrary(IAppPaths paths, IDocumentStore store, IEnum
             }
 
             progress?.Report(new DocumentProgress(name, DocumentStage.Done));
-            return new DocumentAddResult(document, error);
+            return new DocumentAddResult(document, error) { PagesRecognized = recognized, PagesUnread = unread };
         }
         finally
         {
