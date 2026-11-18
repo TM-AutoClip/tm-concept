@@ -942,6 +942,8 @@
   "logs.summary": "{1} kaydın {0} tanesi",
   "logs.summary.cut": "eşleşen {1} kaydın en yeni {0} tanesi (toplam {2})",
   "logs.note": "Programın ve ses işçisinin son 7 günlük günlük dosyaları. API anahtarı içermez; ev klasörün ~ olarak yazılır. Sorun bildirimi kendiliğinden hiçbir şey göndermez.",
+  "logs.hidden.title": "(başlık günlüğe yazılmaz)",
+  "logs.hidden.name": "(ad günlüğe yazılmaz)",
   "settings.storage": "Depolama",
   "storage.explain": "Programın bu bilgisayarda tuttukları: indirilen programlar ve modeller, iş önbellekleri, yedekler ve günlükler. Artık kullanmadığını kaldır; bir ayar ihtiyaç duyunca yeniden indirilir.",
   "storage.explain.more": "\"Kullanan\" bilgisi bütün profillerin kayıtlı model seçimlerinden (ve programın kendi ihtiyacından, ör. ffmpeg) gelir. Kaldırdığın her şey geri dönüşüm kutusuna gider; yalnız kutu alamazsa kalıcı silmek isteyip istemediğin sorulur. Video, üretim, seslendirme ya da kurulum sürerken hiçbir şey kaldırılmaz. Veritabanın, profillerin, konseptlerin, videoların, yedeklerin ve günlüklerin burada asla silinmez.",

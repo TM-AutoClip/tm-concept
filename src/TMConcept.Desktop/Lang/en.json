@@ -942,6 +942,8 @@
   "logs.summary": "{0} of {1} entries",
   "logs.summary.cut": "the newest {0} of {1} matching entries ({2} in all)",
   "logs.note": "The app's and the speech worker's log files of the last 7 days. They hold no API key; your home folder is written as ~. A problem report sends nothing by itself.",
+  "logs.hidden.title": "(title not kept in the log)",
+  "logs.hidden.name": "(name not kept in the log)",
   "settings.storage": "Storage",
   "storage.explain": "What the app keeps on this computer: downloaded programs and models, work caches, backups and logs. Remove what you no longer use; it is downloaded again when a setting needs it.",
   "storage.explain.more": "\"Used by\" comes from every profile's saved model choices (and what the app itself needs, such as ffmpeg). Everything you remove goes to the recycle bin; only when the bin cannot take it are you asked whether to delete it for good. Nothing is removed while a video, a generation, a narration or an install runs. Your database, profiles, concepts, videos, backups and logs are never removed here.",

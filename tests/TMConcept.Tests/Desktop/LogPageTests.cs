@@ -154,6 +154,36 @@ public sealed class LogPageTests : IDisposable
         window.Close();
     }
 
+    [AvaloniaFact]
+    public void ActivityLinesOfThisSessionShowTheirTitlesAndOlderOnesSayTheTitleIsNotKept()
+    {
+        // The developer (18 Nov 2026): "<title>: iptal edildi". The file keeps the placeholder; the page shows the title of this session's line.
+        using var h = new DesktopHarness();
+        var text = h.Get<Localizer>();
+        var clock = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(_now);
+        var activity = new ActivityLog(clock, NullLogger<ActivityLog>.Instance);
+        activity.Add(TMConcept.Core.Activity.ActivityLevel.Warning, "#3 Greek fire: canceled", TMConcept.Core.Activity.ActivityPlaceholders.Title + ": canceled");
+        activity.Add(TMConcept.Core.Activity.ActivityLevel.Info, "#4 Byzantium approved", TMConcept.Core.Activity.ActivityPlaceholders.Title + " approved");
+        var category = ActivityLoggerProvider.SkippedCategory;
+        Write(LogRules.AppKind, DateOnly.FromDateTime(_now.DateTime),
+            LogLine.Format(_now, LogLevel.Warning, category, default, "Activity: <title>: canceled", null),
+            LogLine.Format(_now, LogLevel.Information, category, default, "Activity: <title> approved", null),
+            LogLine.Format(_now.AddMinutes(-20), LogLevel.Warning, category, default, "Activity: <title>: canceled", null),
+            LogLine.Format(_now, LogLevel.Warning, category, default, "Activity: \"<name>\" saved", null));
+        var page = new LogViewerViewModel(new AppPaths(_folder, DesktopServices.CurrentOs), h.Get<IShellLauncher>(), text, TimeProvider.System,
+            NullLogger<LogViewerViewModel>.Instance, activity);
+
+        page.Load();
+
+        var messages = page.Lines.Select(l => l.Message).ToList();
+        messages.ShouldContain("Activity: #3 Greek fire: canceled");
+        messages.ShouldContain("Activity: #4 Byzantium approved");
+        messages.ShouldContain("Activity: " + text["logs.hidden.title"] + ": canceled", "a line of long ago has no kept title");
+        messages.ShouldContain("Activity: \"" + text["logs.hidden.name"] + "\" saved");
+        messages.ShouldNotContain(m => m.Contains("<title>", StringComparison.Ordinal) || m.Contains("<name>", StringComparison.Ordinal));
+        File.ReadAllText(Directory.GetFiles(Path.Combine(_folder, "logs")).Single()).ShouldNotContain("Greek fire", Case.Sensitive, "the file never gets the title");
+    }
+
     private LogViewerViewModel Page(DesktopHarness h) => new(new AppPaths(_folder, DesktopServices.CurrentOs), h.Get<IShellLauncher>(), h.Get<Localizer>(),
         TimeProvider.System, NullLogger<LogViewerViewModel>.Instance);
 
