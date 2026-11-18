@@ -88,8 +88,9 @@ $script:publishedReleases = $null
 function Get-PublishedReleases {
     if ($null -eq $script:publishedReleases) {
         try {
+            # Windows PowerShell 5.1 returns a JSON array as ONE object; ForEach-Object unrolls it into the releases.
             $script:publishedReleases = @(Invoke-RestMethod -Uri "https://api.github.com/repos/$repository/releases?per_page=50" `
-                -Headers @{ 'User-Agent' = 'tm-concept-publish'; 'Accept' = 'application/vnd.github+json' })
+                -Headers @{ 'User-Agent' = 'tm-concept-publish'; 'Accept' = 'application/vnd.github+json' } | ForEach-Object { $_ })
         } catch {
             throw "The published releases could not be read from GitHub ($($_.Exception.Message)); the delta package must be cut from the published full package. Use -NoDelta to build without one."
         }
