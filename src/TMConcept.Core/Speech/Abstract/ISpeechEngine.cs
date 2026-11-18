@@ -23,6 +23,12 @@ public interface ISpeechEngine
     /// <summary>The engine's own voices.</summary>
     IReadOnlyList<SpeechVoice> Voices(string language);
 
+    /// <summary>
+    /// Whether the engine speaks at <see cref="SpeechRequest.Speed"/> itself. An engine without a speed of its own gets its clip time-stretched
+    /// afterwards (<see cref="WaveTempo"/>), so the chosen speed reaches every voice.
+    /// </summary>
+    bool HandlesSpeed => true;
+
     /// <summary>Whether the engine can speak now (a local model is installed).</summary>
     bool Ready { get; }
 

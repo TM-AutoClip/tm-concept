@@ -792,6 +792,56 @@ public sealed class VideoPageTests
     }
 
     [AvaloniaFact]
+    public async Task TheSpeedChosenOnThePageReachesEveryVoiceRequest()
+    {
+        // The developer (18 Nov 2026): the chosen speed did not seem to reach the video. Picker -> saved choice -> narration -> the voice's request.
+        var engine = new FakeEngine();
+        var voice = new FakeVoice();
+        using var h = Harness(new FakeChat().Answer(_ => Code(engine.SampleCode)), engine, s =>
+        {
+            s.RemoveAll<TMConcept.Core.Speech.ISpeechEngine>();
+            s.AddSingleton<TMConcept.Core.Speech.ISpeechEngine>(voice);
+        });
+        var (page, concept) = await PrepareAsync(h);
+        var row = page.Picker.Row(PipelineSteps.Speech)!;
+        row.Selected = row.Options.First(o => o.Model?.Id == voice.Code);
+        row.Speed = 1.3m;
+        await page.Picker.SaveAsync();
+
+        var saved = await h.Get<IStepModelStore>().GetAsync(PipelineSteps.Speech, concept.ProfileId, CancellationToken.None);
+        StepModelResolver.Options(saved).Speed.ShouldBe(1.3, 1e-9);
+        await RunAsync(h, concept, new VideoOptions { Engine = engine.Kind, Speech = true });
+
+        voice.Requests.Count.ShouldBe(2, "one request per scene");
+        voice.Requests.ShouldAllBe(r => Math.Abs(r.Speed - 1.3) < 1e-9);
+    }
+
+    [AvaloniaFact]
+    public async Task AVoiceWithoutASpeedOfItsOwnIsStretchedToTheChosenSpeed()
+    {
+        var engine = new FakeEngine();
+        var voice = new FakeVoice { HandlesSpeed = false, Samples = 24_000 };
+        using var h = Harness(new FakeChat().Answer(_ => Code(engine.SampleCode)), engine, s =>
+        {
+            s.RemoveAll<TMConcept.Core.Speech.ISpeechEngine>();
+            s.AddSingleton<TMConcept.Core.Speech.ISpeechEngine>(voice);
+        });
+        var (_, concept) = await PrepareAsync(h);
+        var options = StepModelResolver.OptionsJson(new StepOptions { Speed = 1.5 });
+        await h.Get<IStepModelStore>().SaveAsync(new StepModelChoice { Step = PipelineSteps.Speech, ProfileId = concept.ProfileId, Provider = ModelProviders.Local,
+            Model = voice.Code, OptionsJson = options }, CancellationToken.None);
+
+        var record = await RunAsync(h, concept, new VideoOptions { Engine = engine.Kind, Speech = true });
+
+        var folder = LibraryPaths.Resolve(h.Get<IAppPaths>().LibraryDirectory, record.Folder);
+        foreach (var clip in Directory.GetFiles(Path.Combine(folder, VideoFolders.Audio), "*.wav"))
+        {
+            // One second spoken at 1.5 times its speed: about 667 ms.
+            TMConcept.Core.Speech.WaveFile.DurationMs(clip).ShouldBeInRange(640, 690, Path.GetFileName(clip));
+        }
+    }
+
+    [AvaloniaFact]
     public async Task AFailedVideoLeavesNoVersionFolderBehind()
     {
         var engine = new FakeEngine();
@@ -1568,6 +1618,12 @@ public sealed class VideoPageTests
 
         public bool Fail { get; init; }
 
+        /// <summary>Whether it speaks at the requested speed itself (false: like Pocket TTS, Chatterbox and the VoxCPM voices).</summary>
+        public bool HandlesSpeed { get; init; } = true;
+
+        /// <summary>A clip of this many samples at 24 kHz (a 220 Hz tone when longer than the default silence).</summary>
+        public int Samples { get; init; } = 2400;
+
         public Task<TMConcept.Core.Speech.SpeechClip> SynthesizeAsync(TMConcept.Core.Speech.SpeechRequest request, CancellationToken cancellationToken)
         {
             if (Fail)
@@ -1576,8 +1632,17 @@ public sealed class VideoPageTests
             }
 
             Requests.Add(request);
-            TMConcept.Core.Speech.WaveFile.WritePcm16(request.OutputWav, new float[2400], 24_000);
-            return Task.FromResult(new TMConcept.Core.Speech.SpeechClip(request.OutputWav, 100, request.Text.Length, 0, Code));
+            var samples = new float[Samples];
+            if (Samples > 2400)
+            {
+                for (var i = 0; i < samples.Length; i++)
+                {
+                    samples[i] = 0.5f * MathF.Sin(2 * MathF.PI * 220 * i / 24_000);
+                }
+            }
+
+            TMConcept.Core.Speech.WaveFile.WritePcm16(request.OutputWav, samples, 24_000);
+            return Task.FromResult(new TMConcept.Core.Speech.SpeechClip(request.OutputWav, Samples * 1000L / 24_000, request.Text.Length, 0, Code));
         }
     }
 }

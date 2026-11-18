@@ -42,6 +42,9 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
 
     private readonly IReadOnlyList<IVideoEngine> _engines = engines.OrderBy(e => e.Kind).ToList();
     private readonly Catalog.ModelNotes _notes = new(text);
+
+    // Never disposed: without AvailableWaitHandle it holds nothing unmanaged (a picker lives as long as its page).
+    private readonly SemaphoreSlim _saving = new(1, 1);
     private Guid? _profile;
     private string _language = ContentLanguages.English;
     private bool _languageFollowed;
@@ -311,6 +314,20 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
             return;
         }
 
+        // One save at a time: quick clicks on the speed's arrows start a save each, and an older one finishing last must not win.
+        await _saving.WaitAsync().ConfigureAwait(true);
+        try
+        {
+            await SaveRowsOnceAsync(rows, profile).ConfigureAwait(true);
+        }
+        finally
+        {
+            _saving.Release();
+        }
+    }
+
+    private async Task SaveRowsOnceAsync(IReadOnlyList<StepModelRowViewModel> rows, Guid profile)
+    {
         foreach (var row in rows.Where(r => Key(r) != r.Saved))
         {
             var choice = Desired(row);
@@ -1077,8 +1094,10 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
             { Model: { } m } => m.Provider + "/" + m.Id,
             _ => row.Step.Optional ? "nothing (off)" : "no model",
         };
+        // The speed of a voice too (0.1.23's log could not tell whether a changed speed was saved); never the voice, which may be the user's own.
         return model + " (effort " + (row.Effort?.Value is { Length: > 0 } effort ? effort : "automatic") + ", engine "
-            + (row.IsEngineStep ? row.Engine?.Kind.ToString() ?? "-" : "-") + ")";
+            + (row.IsEngineStep ? row.Engine?.Kind.ToString() ?? "-" : "-")
+            + (row.IsVoiceStep ? ", speed " + (row.Speed ?? 1).ToString("0.00", CultureInfo.InvariantCulture) : string.Empty) + ")";
     }
 
     /// <summary>Whether something the row needs is not on this computer (a component removed meanwhile, or a half-finished install).</summary>

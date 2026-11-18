@@ -23,6 +23,9 @@ public abstract class LocalSpeechEngineBase(IToolLocator tools, SpeechWorkerClie
     public bool IsLocal => true;
 
     /// <inheritdoc />
+    public virtual bool HandlesSpeed => true;
+
+    /// <inheritdoc />
     public bool Ready => ModelInstalled && tools.Status(ToolKind.SpeechRuntime).Ready;
 
     /// <summary>Whether the voice model itself is installed (the libraries may still be missing).</summary>
