@@ -137,7 +137,7 @@ gösterir. Kabaca (5 Kas 2026 fiyatları; güncelleri sayfalarda her tahminin ya
 
 ## Windows'a kurulum
 
-Windows 10 ya da 11, 64 bit. 0.1.26'dan beri özellikleri aynı iki tür var. İkisi de aynı veri klasörünü kullanır: birinin kurduğu
+Windows 10 ya da 11, 64 bit. Özellikleri aynı iki tür var. İkisi de aynı veri klasörünü kullanır: birinin kurduğu
 modeller ve ayarlar ötekinde de vardır, aynı anda tek kopya çalışır.
 
 | [Son sürümden](../../releases/latest) indir | Tür |
@@ -163,19 +163,12 @@ Sürümdeki `.nupkg` ve `releases.win-x64.json` dosyaları kurulu türün günce
 1. `TMConcept-Portable-win-x64.exe` dosyasını indir, SHA-256'sını aynı şekilde denetle.
 2. Dosyayı kalacağı yere koy, örneğin `%LOCALAPPDATA%\Programs\TM Concept\TMConcept-Portable-win-x64.exe`, ve çift tıkla (SmartScreen
    yukarıdaki gibi; Windows genelde yalnız ilk seferde sorar).
-3. İlk açılışta bir kez **"TM Concept kurulsun mu?"** diye sorar: *Kur* aynı sürümün kurulum dosyasını indirir, sürüm notlarındaki
-   SHA-256 ile karşılaştırır, çalıştırır ve taşınabilir kopyayı kapatır (dosya olduğu yerde kalır, istersen sil). *Taşınabilir kalsın*
-   cevabı hatırlanır; Ayarlar → Genel sonra da **TM Concept'i kur** düğmesini sunar. `--data-dir` ile açıldığında ya da TM Concept bilgisayarda
-   zaten kuruluysa bu soru sorulmaz (düğme de onun üstüne aynı ya da daha eski bir kurulum çalıştırmaz).
+3. Sonra kurulu türe geçmek için: Ayarlar → Genel → **TM Concept'i kur** aynı sürümün kurulum dosyasını indirir, sürüm notlarındaki
+   SHA-256 ile karşılaştırır, çalıştırır ve taşınabilir kopyayı kapatır (dosya olduğu yerde kalır, istersen sil). Kurulu bir TM Concept'in
+   üstüne aynı ya da daha eski bir kurulum hiç çalıştırmaz.
 
 İki türde de yönetici yetkisi gerekmez; sisteme bir şey kurulmaz, sistem PATH'i değişmez. Ayarlar → Genel → *Sürüm türü* hangisinin
-çalıştığını, sürümünü ve (kuruluysa) klasörünü gösterir; kurulu türde **Kısayolları yeniden oluştur** düğmesi de var.
-
-**0.1.25 ya da daha eskisinden geliyorsan:** onun güncelleyicisi yeni sürümdeki taşınabilir programı bulur ve eski dosyanın yerine,
-eski dosyanın adıyla koyar (yani `TMConcept-0.1.25-win-x64.exe` artık 0.1.26'yı çalıştırır: ad bir süre yanlış sürümü gösterir). Ondan
-sonraki güncelleme (0.1.27 ya da sonrası) yeni güncelleyiciyle yapılır ve dosyanın adını `TMConcept-Portable-win-x64.exe` yapar, çünkü
-içinde sürüm geçen bir ad her güncellemeden sonra yanlış kalırdı; eski ada kendin yaptığın bir kısayol o zaman çalışmaz olur. Hiç
-bozulmayan kısayollar için *Kur*'u seç ya da dosyanın adını kendin değiştir.
+çalıştığını, sürümünü ve (kuruluysa) klasörünü gösterir.
 
 **OneDrive notu:** videolar `Belgeler\TM Concept` altına kaydedilir. OneDrive Belgeler klasörünü yedekliyorsa her video buluta da
 yüklenir. İstemiyorsan klasörü OneDrive ayarlarından hariç tut.
@@ -186,7 +179,6 @@ Sıradan bilgisayarlarda `linux-x64`, 64 bit ARM bilgisayarlarda (ör. 64 bit ma
 Masaüstü oturumu gerekir.
 
 1. [Son sürümden](../../releases/latest) `tm-concept-portable-linux-x64.tar.gz` (ya da `tm-concept-portable-linux-arm64.tar.gz`) indir.
-   (0.1.25'e kadar adda sürüm vardı: `tm-concept-0.1.25-linux-x64.tar.gz`.)
 2. İsteğe bağlı: SHA-256 değerini denetle: `sha256sum tm-concept-portable-linux-x64.tar.gz`
 3. Kalacağı yere aç:
    ```sh

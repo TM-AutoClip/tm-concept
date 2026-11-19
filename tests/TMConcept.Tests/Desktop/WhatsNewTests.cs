@@ -13,8 +13,8 @@ using TMConcept.Tests.Architecture;
 namespace TMConcept.Tests.Desktop;
 
 /// <summary>
-/// "What's new" (0.1.23): after the app version changed, the notes of every version since the one that ran before, newest first, once, in
-/// the app's language, from the notes built into the app; nothing on a new install or when nothing changed; Settings → General opens it.
+/// "What's new" (0.1.23): after the app version changed, the notes of every version since the one a start recorded last, newest first, once,
+/// in the app's language, from the notes built into the app; nothing on a new install or when nothing changed; Settings → General opens it.
 /// </summary>
 public sealed class WhatsNewTests
 {
@@ -23,24 +23,17 @@ public sealed class WhatsNewTests
 
     [Fact]
     public void ComingFrom0117TheNotesOf0118To0123AreShownNewestFirst() =>
-        Shown(WhatsNewRange.Versions("0.1.17", null, "0.1.23", Available)).ShouldBe(["0.1.23", "0.1.22", "0.1.21", "0.1.20", "0.1.19", "0.1.18"]);
+        Shown(WhatsNewRange.Versions("0.1.17", "0.1.23", Available)).ShouldBe(["0.1.23", "0.1.22", "0.1.21", "0.1.20", "0.1.19", "0.1.18"]);
 
     [Theory]
-    [InlineData("0.1.23", "", "0.1.23")]
-    [InlineData("", "", "0.1.23")]
-    [InlineData(null, null, "0.1.23")]
-    [InlineData("not a version", "", "0.1.23")]
-    [InlineData("0.1.17", "0.1.23", "0.1.23")]
-    [InlineData("0.1.24", "", "0.1.23")]
-    public void NothingIsShownForTheSameVersionANewInstallOrNotesAlreadySeen(string? previous, string? seen, string current) =>
-        WhatsNewRange.Versions(previous, seen, current, Available).ShouldBeEmpty();
-
-    [Theory]
-    [InlineData("")]
-    [InlineData(null)]
-    [InlineData("not a version")]
-    public void WithoutLastVersionTheVersionRememberedAtTheLastStartIsTheStart(string? previous) =>
-        Shown(WhatsNewRange.Versions(previous, "0.1.22", "0.1.23", Available)).ShouldBe(["0.1.23"], "components never dealt with: LastVersion stays empty");
+    [InlineData("0.1.23", "0.1.23")]
+    [InlineData("", "0.1.23")]
+    [InlineData(null, "0.1.23")]
+    [InlineData("not a version", "0.1.23")]
+    [InlineData("0.1.24", "0.1.23")]
+    [InlineData("0.1.22", "not a version")]
+    public void NothingIsShownForTheSameVersionANewInstallOrNotesAlreadySeen(string? seen, string current) =>
+        WhatsNewRange.Versions(seen, current, Available).ShouldBeEmpty();
 
     [AvaloniaFact]
     public async Task GoingBackToAnOlderVersionAndForwardAgainShowsTheNotesOnce()
@@ -51,17 +44,18 @@ public sealed class WhatsNewTests
         var newer = BundledReleaseNotes.All[0].Version.ToString();
         var older = BundledReleaseNotes.All[1].Version.ToString();
 
-        await check.RunAsync(older, newer);
-        await check.RunAsync(newer, older);
+        await check.RunAsync(older);
+        await check.RunAsync(newer);
+        await check.RunAsync(older);
         h.Get<UiPreferencesFile>().Read().WhatsNewSeenVersion.ShouldBe(newer, "an older version never lowers what was remembered");
-        await check.RunAsync(older, newer);
+        await check.RunAsync(newer);
 
         dialog.Shown.Count.ShouldBe(1);
         Shown(dialog.Shown[0]).ShouldBe([newer]);
     }
 
     [AvaloniaFact]
-    public async Task AFreshInstallThatNeverRecordedLastVersionStillShowsTheNextUpdate()
+    public async Task AFreshInstallShowsTheNextUpdate()
     {
         var dialog = new FakeWhatsNewDialog();
         using var h = new DesktopHarness(s => s.AddSingleton<IWhatsNewDialog>(dialog));
@@ -69,15 +63,15 @@ public sealed class WhatsNewTests
 
         var newer = BundledReleaseNotes.All[0].Version.ToString();
 
-        await check.RunAsync(string.Empty, BundledReleaseNotes.All[1].Version.ToString());
-        await check.RunAsync(string.Empty, newer);
+        await check.RunAsync(BundledReleaseNotes.All[1].Version.ToString());
+        await check.RunAsync(newer);
 
         Shown(dialog.Shown.Single()).ShouldBe([newer]);
     }
 
     [Fact]
     public void NotesSeenAlreadyMoveTheStartForward() =>
-        Shown(WhatsNewRange.Versions("0.1.17", "0.1.21", "0.1.23", Available)).ShouldBe(["0.1.23", "0.1.22"]);
+        Shown(WhatsNewRange.Versions("0.1.21", "0.1.23", Available)).ShouldBe(["0.1.23", "0.1.22"]);
 
     [Fact]
     public void EveryReleaseNotesFileIsBuiltInAndReadInBothLanguages()
@@ -112,12 +106,13 @@ public sealed class WhatsNewTests
         var current = BundledReleaseNotes.All[0].Version.ToString();
         var previous = BundledReleaseNotes.All[2].Version.ToString();
 
-        await check.RunAsync(previous, current);
+        await check.RunAsync(previous);
+        await check.RunAsync(current);
 
         Shown(dialog.Shown.Single()).ShouldBe([current, BundledReleaseNotes.All[1].Version.ToString()]);
         h.Get<UiPreferencesFile>().Read().WhatsNewSeenVersion.ShouldBe(current);
 
-        await check.RunAsync(previous, current);
+        await check.RunAsync(current);
         dialog.Shown.Count.ShouldBe(1, "the same notes are shown once");
 
         var text = h.Get<Localizer>();
@@ -134,7 +129,7 @@ public sealed class WhatsNewTests
         var dialog = new FakeWhatsNewDialog();
         using var h = new DesktopHarness(s => s.AddSingleton<IWhatsNewDialog>(dialog));
 
-        await h.Get<WhatsNewCheck>().RunAsync(string.Empty, "0.1.23");
+        await h.Get<WhatsNewCheck>().RunAsync("0.1.23");
 
         dialog.Shown.ShouldBeEmpty();
         h.Get<UiPreferencesFile>().Read().WhatsNewSeenVersion.ShouldBe("0.1.23");

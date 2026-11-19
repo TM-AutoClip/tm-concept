@@ -12,9 +12,9 @@ namespace TMConcept.Desktop.DiskSpace;
 /// <summary>
 /// Files in the video library no record points at (0.1.28), as two storage rows that go only when ticked (<see cref="LibraryOrphanItem"/>):
 /// <list type="bullet">
-/// <item>video folders without a record: a version folder (<c>&lt;library&gt;/&lt;profile&gt;/&lt;concept&gt;/v&lt;N&gt;</c>), or an older
-/// single-folder video, that no video record points at and that holds ONLY the files the app writes there (video, thumbnail, subtitles,
-/// narration, the edited narration, <c>source/</c>, <c>audio/</c>): a delete before 0.1.28 left them when "also the files" was not ticked;</item>
+/// <item>video folders without a record: a version folder (<c>&lt;library&gt;/&lt;profile&gt;/&lt;concept&gt;/v&lt;N&gt;</c>) that no video
+/// record points at and that holds ONLY the files the app writes there (video, thumbnail, subtitles, narration, the edited narration,
+/// <c>source/</c>, <c>audio/</c>): a delete before 0.1.28 left them when "also the files" was not ticked;</item>
 /// <item>images no profile uses: a file in a profile's <c>channel/</c> folder whose name is one the app gives a copy and that no channel
 /// photo points at, and every sample image copy in a profile's <c>images/</c> folder (0.1.29 removed sample images, so nothing uses
 /// them).</item>
@@ -117,11 +117,6 @@ public sealed partial class LibraryOrphanSource(AppPaths paths, IVideoStore vide
 
             var versions = Directory.EnumerateDirectories(child).Select(Full).Where(d => VersionFolders.NumberOf(Path.GetFileName(d)) is not null).ToList();
             orphanFolders.AddRange(versions.Where(v => Unreferenced(v, records) && OnlyOwn(v)).Order(StringComparer.Ordinal));
-            if (versions.Count == 0 && Unreferenced(child, records) && OnlyOwn(child) && File.Exists(Path.Combine(child, VideoFolders.VideoFile)))
-            {
-                // An older video kept its files directly in its folder (no v1/).
-                orphanFolders.Add(child);
-            }
         }
     }
 

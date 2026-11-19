@@ -28,7 +28,6 @@ public sealed class WindowsOsModule : IOsModule
     public void Register(IServiceCollection services)
     {
         services.AddSingleton<IKeyProtector, DpapiKeyProtector>();
-        services.AddSingleton<IShortcutWriter, WindowsShortcutWriter>();
         services.AddSingleton<Core.Tools.IToolPlatform, Engines.Tools.WindowsToolPlatform>();
         services.AddSingleton<Core.Playback.IAudioOutputFactory, Playback.AudioOutputFactory<Playback.WaveOutAudioOutput>>();
         services.AddSingleton<Engines.Processes.ChildProcessGuardBase, Engines.Processes.WindowsChildProcessGuard>();

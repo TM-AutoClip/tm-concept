@@ -297,12 +297,9 @@ public sealed class VideoRemaker(IEnumerable<IVideoEngine> engines, SceneNarrato
         }
     }
 
-    /// <summary>
-    /// The warnings about the images of the version a new one starts from (the images are the same; an old video made without images by
-    /// 0.1.15 keeps its "no images" note in the new version).
-    /// </summary>
+    /// <summary>The warnings about the images of the version a new one starts from (the images are the same, so the note stays).</summary>
     private static IEnumerable<string> ImageWarnings(VideoRecord record) =>
-        record.Warnings.Split(',', StringSplitOptions.RemoveEmptyEntries).Where(w => w is VideoWarnings.SamplesNone or VideoWarnings.ImagesFailed);
+        record.Warnings.Split(',', StringSplitOptions.RemoveEmptyEntries).Where(w => w is VideoWarnings.SamplesNone);
 
     private void Ready(IVideoEngine engine)
     {

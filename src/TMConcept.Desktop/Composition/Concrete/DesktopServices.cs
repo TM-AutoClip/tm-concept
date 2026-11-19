@@ -362,7 +362,6 @@ public static class DesktopServices
         services.AddSingleton<Updates.ISetupLauncher, Updates.SetupLauncher>();
         services.AddSingleton<Updates.InstalledCopy>();
         services.AddSingleton<Updates.EditionInstaller>();
-        services.AddSingleton<Updates.InstallOffer>();
 
         // The repository's model catalog (0.1.26): checked, added at start from the kept copy, read again daily in the background.
         services.AddSingleton<Catalog.RemoteCatalogReader>();

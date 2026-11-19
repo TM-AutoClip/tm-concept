@@ -32,7 +32,7 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
     IActivityLog activity, PreferencesImageAcceleration acceleration, Engines.Images.ImageBackendSelector backends, ComponentInstallFlow installs,
     ILogger<GeneralSettingsViewModel> logger, ComponentReinstaller reinstaller, Updates.AppUpdater updater, IAppUpdateDialog updateDialog,
     DiskSpace.IDiskCleaner cleaner, WhatsNewCheck whatsNew, Updates.IAppEdition edition, Updates.EditionInstaller editionInstaller,
-    IShortcutWriter shortcuts, PreferencesOcrAcceleration ocrAcceleration, TMConcept.Documents.Ocr.OcrGpuModel ocrCard, Core.Models.IGpuCoordinator gpu)
+    PreferencesOcrAcceleration ocrAcceleration, TMConcept.Documents.Ocr.OcrGpuModel ocrCard, Core.Models.IGpuCoordinator gpu)
     : SettingsSectionBase
 {
     /// <summary>The "Text recognition" choices (0.1.27).</summary>
@@ -57,10 +57,7 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
     /// <summary>"Install TM Concept" is offered (the published portable program on Windows).</summary>
     public bool CanInstallEdition => editionInstaller.Available;
 
-    /// <summary>"Recreate shortcuts" is offered (the installed edition on Windows).</summary>
-    public bool CanRecreateShortcuts => edition.Kind == Updates.AppEditionKind.Installed && shortcuts.Supported;
-
-    /// <summary>What the install or the shortcuts did last (progress, done, why not).</summary>
+    /// <summary>What the install did last (progress, done, why not).</summary>
     [ObservableProperty]
     public partial string EditionStatus { get; set; } = string.Empty;
 
@@ -114,28 +111,6 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
         finally
         {
             InstallingEdition = false;
-        }
-    }
-
-    /// <summary>Writes the desktop and Start menu shortcuts of the installed edition again (one the user deleted comes back).</summary>
-    [RelayCommand]
-    public void RecreateShortcuts()
-    {
-        if (!CanRecreateShortcuts || Environment.ProcessPath is not { Length: > 0 } program)
-        {
-            return;
-        }
-
-        try
-        {
-            // The id the window gives itself (TaskbarIcon) and Setup gives its shortcuts (vpk --aumid): a pinned button and the window group.
-            var written = shortcuts.Write(program, TaskbarIcon.AppId);
-            EditionStatus = text.Format("edition.shortcuts.done", written.Count);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
-        {
-            logger.LogError(ex, "The shortcuts could not be written");
-            EditionStatus = text.Format("edition.shortcuts.failed", ex.Message);
         }
     }
 

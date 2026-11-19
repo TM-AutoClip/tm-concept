@@ -4,7 +4,7 @@
 
 The release folder defaults to artifacts/release-<version>.
 The portable files carry no version in their names (0.1.26): a downloaded copy keeps a true name after it updated itself. Their names
-still end with -<rid>.exe / -<rid>.tar.gz, which is what the updaters of 0.1.25 and older look for (exactly one such file per system
+still end with -<rid>.exe / -<rid>.tar.gz, which is what the portable updater looks for (exactly one such file per system
 in a release; tools/publish.ps1 checks it).
 win-x64: copies the single exe to <release folder>/TMConcept-Portable-win-x64.exe.
 linux-*: writes <release folder>/tm-concept-portable-<rid>.tar.gz with a tm-concept/ folder: the program (executable), an icon,

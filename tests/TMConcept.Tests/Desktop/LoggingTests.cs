@@ -30,8 +30,8 @@ public sealed class LoggingTests : IDisposable
     {
         var today = new DateOnly(2026, 11, 6);
         string[] kept = ["app-2026-10-31.log", "app-2026-10-30.log", "speech-worker-2026-11-06.log", "notes.txt", "other-2026-01-01.log",
-            "app-2026-13-45.log", "app-logs-20261001-1200.zip", "tmconcept-20261030.log"];
-        string[] deleted = ["app-2026-10-29.log", "speech-worker-2026-10-01.log", "tmconcept-20261028.log"];
+            "app-2026-13-45.log", "app-logs-20261001-1200.zip", "tmconcept-20261028.log"];
+        string[] deleted = ["app-2026-10-29.log", "speech-worker-2026-10-01.log"];
         foreach (var name in kept.Concat(deleted))
         {
             File.WriteAllText(Path.Combine(_folder, name), "x");

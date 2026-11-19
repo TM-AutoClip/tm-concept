@@ -27,8 +27,6 @@
       <StackPanel Orientation="Horizontal" Spacing="10">
         <Button Name="InstallEditionButton" Content="{DynamicResource edition.install}" Command="{Binding InstallEditionCommand}"
                 IsVisible="{Binding CanInstallEdition}" IsEnabled="{Binding !InstallingEdition}" />
-        <Button Name="RecreateShortcutsButton" Content="{DynamicResource edition.shortcuts}" Command="{Binding RecreateShortcutsCommand}"
-                IsVisible="{Binding CanRecreateShortcuts}" />
       </StackPanel>
       <TextBlock Name="EditionStatusLine" Text="{Binding EditionStatus}" Classes="muted" TextWrapping="Wrap" />
       <StackPanel Orientation="Horizontal" Margin="0,10,0,0"><TextBlock Text="{DynamicResource settings.drawing}" Classes="h2" VerticalAlignment="Center" /><views:HelpTip Text="{DynamicResource help.settings.drawing}" /></StackPanel>

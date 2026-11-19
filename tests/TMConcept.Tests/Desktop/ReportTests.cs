@@ -83,8 +83,8 @@ public sealed class ReportTests
             CancellationToken.None);
         var today = DateOnly.FromDateTime(DateTime.Now);
 
-        // An older (0.1.3) file still has names in its activity lines; an exception message names a library folder.
-        Append(Path.Combine(h.Paths.LogDirectory, "tmconcept-" + today.AddDays(-1).ToString("yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture) + ".log"),
+        // Yesterday's file has names in its activity lines; an exception message names a library folder.
+        Append(Path.Combine(h.Paths.LogDirectory, LogFileName.For(LogRules.AppKind, today.AddDays(-1))),
             "Activity: Profile \"Byzantium Chronicles\" created. Video \"Greek fire: the secret\" ready.");
         Append(Path.Combine(h.Paths.LogDirectory, LogFileName.For(LogRules.AppKind, today)), "Could not delete '"
             + Path.Combine(h.Paths.LibraryDirectory, "Byzantium Chronicles", "2026-11-06-1-Greek fire the secret", "video.mp4") + "': in use");

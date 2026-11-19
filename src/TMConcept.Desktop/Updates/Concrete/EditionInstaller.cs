@@ -6,8 +6,7 @@ using TMConcept.Desktop.Startup;
 namespace TMConcept.Desktop.Updates;
 
 /// <summary>
-/// Installs the installed edition from the portable program (0.1.26, the developer: "Install TM Concept?" at the first start of the portable
-/// program, and Settings → General): downloads Setup of the running version's own release (on the project's release page, its SHA-256 from
+/// Installs the installed edition from the portable program (Settings → General → Install TM Concept): downloads Setup of the running version's own release (on the project's release page, its SHA-256 from
 /// the release notes and GitHub's digest; missing or different = refused), starts it and closes this app so the installed copy can open the
 /// same data folder. The portable file stays where it is. Windows only: Linux keeps the portable archive.
 /// </summary>

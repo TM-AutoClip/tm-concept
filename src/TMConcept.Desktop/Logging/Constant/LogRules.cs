@@ -27,9 +27,6 @@ public static class LogRules
     /// <summary>File extension of a log file.</summary>
     public const string Extension = ".log";
 
-    /// <summary>Name prefix of the 0.1.0–0.1.3 files (<c>tmconcept-yyyyMMdd.log</c>); they are swept by the same date rule.</summary>
-    public const string LegacyPrefix = "tmconcept-";
-
     /// <summary>Every process kind that writes a log file.</summary>
     public static readonly IReadOnlyList<string> Kinds = [AppKind, SpeechWorkerKind];
 }

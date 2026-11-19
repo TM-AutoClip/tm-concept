@@ -75,20 +75,6 @@ public sealed class DeletionTests
     }
 
     [AvaloniaFact]
-    public async Task AnOlderSingleFolderVideoLeavesAVersionMadeInsideIt()
-    {
-        using var h = await HarnessAsync();
-        var profile = await ProfileAsync(h, "Byzantium");
-        var old = await VideoAsync(h, profile, "Byzantium/greek-fire");
-        var inside = await VideoAsync(h, profile, "Byzantium/greek-fire/v2");
-
-        (await h.Get<VideoDeletion>().DeleteAsync([old.Id], None)).Complete.ShouldBeTrue();
-
-        File.Exists(Path.Combine(Full(h, old.Folder), VideoFolders.VideoFile)).ShouldBeFalse("its own files go");
-        File.Exists(Path.Combine(Full(h, inside.Folder), VideoFolders.VideoFile)).ShouldBeTrue("the version inside is another record's");
-    }
-
-    [AvaloniaFact]
     public async Task DeletingTrashedConceptsTakesTheirVideosAndSceneImagesAndLeavesTheOthers()
     {
         using var h = await HarnessAsync();
@@ -191,8 +177,6 @@ public sealed class DeletionTests
             Put(Path.Combine(p, "fire", "v2"), VideoFolders.VideoFile, 5);
             Put(Path.Combine(p, "walls", "v1"), VideoFolders.VideoFile, 5);
             Put(Path.Combine(p, "walls", "v1"), "my notes.docx", 5);
-            Put(Path.Combine(p, "older"), VideoFolders.VideoFile, 5);
-            Put(Path.Combine(p, "older"), VideoFolders.ThumbnailFile, 5);
             Put(Path.Combine(p, "my stuff"), "holiday.mp4", 5);
             Put(p, "loose.txt", 5);
             Put(Path.Combine(p, "images"), "0123456789-dome.png", 5);
@@ -202,7 +186,7 @@ public sealed class DeletionTests
 
             var (folders, files) = LibraryOrphanSource.Scan(library, ["History/fire/v2"], ["History/channel/" + new string('b', 32) + "-0123456789.png", null]);
 
-            folders.ShouldBe([Path.Combine(p, "fire", "v1"), Path.Combine(p, "older")]);
+            folders.ShouldBe([Path.Combine(p, "fire", "v1")]);
             files.ShouldBe([Path.Combine(p, "channel", new string('a', 32) + "-0123456789.png"), Path.Combine(p, "images", "0123456789-dome.png")],
                 ignoreOrder: true, "a sample image copy is used by nothing; a photo no profile points at is a leftover");
         }

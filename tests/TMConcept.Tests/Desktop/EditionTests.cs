@@ -2,7 +2,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using TMConcept.Desktop.Instance;
-using TMConcept.Desktop.Paths;
 using TMConcept.Desktop.Updates;
 using TMConcept.Desktop.ViewModels;
 using TMConcept.Storage.Database;
@@ -11,8 +10,8 @@ namespace TMConcept.Tests.Desktop;
 
 /// <summary>
 /// Two editions (0.1.26, the developer): the installed one (Velopack Setup) and the portable program, the same data folder, one copy at a time.
-/// The release's file names keep the updaters of 0.1.25 and older on the portable program; a program file named by its release gets the
-/// versionless name at its next update; the portable program asks once whether to install.
+/// The release's file names keep the portable updater on the portable program; an update keeps the program's own name; Settings → General
+/// installs TM Concept from the portable program.
 /// </summary>
 public sealed class EditionTests
 {
@@ -38,11 +37,11 @@ public sealed class EditionTests
     [InlineData("win-x64", ReleaseAssetNames.PortableWindows)]
     [InlineData("linux-x64", ReleaseAssetNames.PortableLinuxX64)]
     [InlineData("linux-arm64", ReleaseAssetNames.PortableLinuxArm64)]
-    public void ExactlyOneFilePerSystemMatchesTheOldUpdatersAndItIsThePortableOne(string rid, string portable)
+    public void ExactlyOneFilePerSystemMatchesThePortableUpdaterAndItIsThePortableOne(string rid, string portable)
     {
-        // The rule of 0.1.25 and older (ReleaseNotes.AssetFor then): the first file ending with -<rid>.exe / -<rid>.tar.gz.
-        var oldSuffix = rid.StartsWith("win-", StringComparison.Ordinal) ? "-" + rid + ".exe" : "-" + rid + ".tar.gz";
-        Release0126.Where(n => n.EndsWith(oldSuffix, StringComparison.OrdinalIgnoreCase)).ShouldBe([portable]);
+        // The portable updater's rule (ReleaseNotes.AssetFor): the first file ending with -<rid>.exe / -<rid>.tar.gz.
+        var suffix = rid.StartsWith("win-", StringComparison.Ordinal) ? "-" + rid + ".exe" : "-" + rid + ".tar.gz";
+        Release0126.Where(n => n.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)).ShouldBe([portable]);
 
         var release = new GitHubRelease { Tag = "v0.1.26", Assets = [.. Release0126.Select(n => new GitHubAsset { Name = n })] };
         ReleaseNotes.AssetFor(release, rid)!.Name.ShouldBe(portable);
@@ -81,59 +80,29 @@ public sealed class EditionTests
         publish.ShouldNotContain("-Filter 'release-*'", Case.Sensitive, "no newest-older-package search over local folders");
     }
 
-    [Theory]
-    [InlineData("TMConcept-0.1.17-win-x64.exe", true)]
-    [InlineData("tmconcept-0.1.25-WIN-X64.EXE", true)]
-    [InlineData("TMConcept-0.2.0-rc.1-win-x64.exe", true)]
-    [InlineData("TMConcept-Portable-win-x64.exe", false)]
-    [InlineData("TMConcept.exe", false)]
-    [InlineData("TMConcept-win-x64-Setup.exe", false)]
-    [InlineData("tm-concept", false)]
-    public void AProgramNamedByItsReleaseIsRecognised(string name, bool versioned) =>
-        ReleaseAssetNames.VersionedWindowsProgram.IsMatch(name).ShouldBe(versioned);
-
     [Fact]
-    public void AProgramNamedByItsReleaseGetsTheVersionlessNameAndTheNextStartCleansUp()
+    public void TheNewVersionKeepsTheProgramsNameAndTheNextStartCleansUp()
     {
         var folder = Folder();
-        var versioned = Path.Combine(folder, "TMConcept-0.1.25-win-x64.exe");
-        File.WriteAllText(versioned, "old");
-        var replacer = new SelfReplacer(NullLogger<SelfReplacer>.Instance) { ProgramPath = versioned };
+        var program = Path.Combine(folder, "My TM Concept.exe");
+        File.WriteAllText(program, "old");
+        var replacer = new SelfReplacer(NullLogger<SelfReplacer>.Instance) { ProgramPath = program };
         Directory.CreateDirectory(replacer.Staging);
         var download = Path.Combine(replacer.Staging, ReleaseAssetNames.PortableWindows);
         File.WriteAllText(download, "new");
 
-        var started = replacer.Replace(download);
+        replacer.Replace(download).ShouldBe(program, "the program the user named keeps its name");
+        File.ReadAllText(program).ShouldBe("new");
 
-        var portable = Path.Combine(folder, ReleaseAssetNames.PortableWindows);
-        started.ShouldBe(portable);
-        File.ReadAllText(portable).ShouldBe("new");
-        File.Exists(versioned).ShouldBeFalse("the old name does not stay next to the new one");
-
-        // The next start runs as the portable name: the old file (Windows keeps it as .old) is the way back until the main window opens.
-        var next = new SelfReplacer(NullLogger<SelfReplacer>.Instance) { ProgramPath = portable };
+        // The old file (Windows keeps it as .old) is the way back until the main window opens.
         if (OperatingSystem.IsWindows())
         {
-            next.PreviousProgram.ShouldBe(versioned + UpdateRules.OldSuffix);
+            replacer.PreviousProgram.ShouldBe(program + UpdateRules.OldSuffix);
         }
 
-        next.CleanUp();
-        next.PreviousProgram.ShouldBeNull();
-        Directory.GetFiles(folder).Select(Path.GetFileName).ShouldBe([ReleaseAssetNames.PortableWindows]);
-    }
-
-    [Fact]
-    public void AVersionlessOrUnknownNameIsKeptAndATakenPortableNameIsNotOverwritten()
-    {
-        var folder = Folder();
-        var custom = Path.Combine(folder, "My TM Concept.exe");
-        File.WriteAllText(custom, "x");
-        new SelfReplacer(NullLogger<SelfReplacer>.Instance) { ProgramPath = custom }.TargetPath.ShouldBe(custom);
-
-        var versioned = Path.Combine(folder, "TMConcept-0.1.25-win-x64.exe");
-        File.WriteAllText(versioned, "x");
-        File.WriteAllText(Path.Combine(folder, ReleaseAssetNames.PortableWindows), "another copy");
-        new SelfReplacer(NullLogger<SelfReplacer>.Instance) { ProgramPath = versioned }.TargetPath.ShouldBe(versioned, "another copy keeps its file");
+        replacer.CleanUp();
+        replacer.PreviousProgram.ShouldBeNull();
+        Directory.GetFileSystemEntries(folder).Select(Path.GetFileName).ShouldBe(["My TM Concept.exe"]);
     }
 
     [Fact]
@@ -212,65 +181,19 @@ public sealed class EditionTests
     }
 
     [Fact]
-    public async Task ThePortableProgramAsksOnceWhetherToInstall()
+    public void TheInstalledEditionIsNeverOfferedTheInstall()
     {
-        var program = Path.Combine(Folder(), ReleaseAssetNames.PortableWindows);
-        File.WriteAllText(program, "the portable program");
-        var confirm = new FakeConfirm { Answer = false };
-        using var h = new DesktopHarness(s =>
-        {
-            s.AddSingleton<TMConcept.Desktop.Dialogs.IConfirmDialog>(confirm);
-            s.AddSingleton(new SelfReplacer(NullLogger<SelfReplacer>.Instance) { ProgramPath = program });
-        });
-        var offer = Offer(h, customDataFolder: false);
-
-        offer.Due.ShouldBeTrue();
-        (await offer.AskAsync()).ShouldBeFalse("No: stays portable");
-        confirm.Asked.Count.ShouldBe(1);
-        h.Get<UiPreferencesFile>().Read().InstallOfferAnswered.ShouldBeTrue();
-
-        offer.Due.ShouldBeFalse();
-        (await offer.AskAsync()).ShouldBeFalse();
-        confirm.Asked.Count.ShouldBe(1, "never asked again (Settings → General still offers it)");
-
-        // With a custom data folder (--data-dir) it is not asked at all.
-        using var other = new DesktopHarness(s =>
-        {
-            s.AddSingleton<TMConcept.Desktop.Dialogs.IConfirmDialog>(new FakeConfirm());
-            s.AddSingleton(new SelfReplacer(NullLogger<SelfReplacer>.Instance) { ProgramPath = program });
-        });
-        Offer(other, customDataFolder: true).Due.ShouldBeFalse();
-    }
-
-    [Fact]
-    public async Task YesIsRememberedTooAndTheInstalledEditionIsNeverAsked()
-    {
-        var program = Path.Combine(Folder(), ReleaseAssetNames.PortableWindows);
-        File.WriteAllText(program, "the portable program");
-        using var h = new DesktopHarness(s =>
-        {
-            s.AddSingleton<TMConcept.Desktop.Dialogs.IConfirmDialog>(new FakeConfirm { Answer = true });
-            s.AddSingleton(new SelfReplacer(NullLogger<SelfReplacer>.Instance) { ProgramPath = program });
-        });
-        (await Offer(h, customDataFolder: false).AskAsync()).ShouldBeTrue();
-        Offer(h, customDataFolder: false).Due.ShouldBeFalse();
-
         using var installed = new DesktopHarness(s =>
             s.AddSingleton<IAppEdition>(new VelopackEdition("0.1.26", false, Folder(), TMConcept.Desktop.Os.TaskbarIcon.AppId)));
         Installer(installed).Available.ShouldBeFalse("the installed edition is already installed");
     }
 
     [Fact]
-    public async Task AnInstalledEditionAlreadyOnThisComputerIsNeverOfferedNorInstalledOver()
+    public async Task AnInstalledEditionAlreadyOnThisComputerIsNeverInstalledOver()
     {
         var program = Path.Combine(Folder(), ReleaseAssetNames.PortableWindows);
         File.WriteAllText(program, "the portable program");
-        var confirm = new FakeConfirm { Answer = true };
-        using var h = new DesktopHarness(s =>
-        {
-            s.AddSingleton<TMConcept.Desktop.Dialogs.IConfirmDialog>(confirm);
-            s.AddSingleton(new SelfReplacer(NullLogger<SelfReplacer>.Instance) { ProgramPath = program });
-        });
+        using var h = new DesktopHarness(s => s.AddSingleton(new SelfReplacer(NullLogger<SelfReplacer>.Instance) { ProgramPath = program }));
         var root = h.Get<InstalledCopy>().Root;
         h.Get<InstalledCopy>().Version().ShouldBeNull("nothing installed yet");
 
@@ -282,9 +205,6 @@ public sealed class EditionTests
         var installer = Installer(h, current: "0.1.26");
 
         installer.InstalledVersion.ShouldBe("0.1.27");
-        Offer(h, customDataFolder: false).Due.ShouldBeFalse("already installed: not asked");
-        (await Offer(h, customDataFolder: false).AskAsync()).ShouldBeFalse();
-        confirm.Asked.ShouldBeEmpty();
         (await Should.ThrowAsync<AppUpdateException>(() => installer.InstallAsync(null, CancellationToken.None))).Code.ShouldBe("already_installed",
             "an older Setup is never run over a newer install");
 
@@ -312,13 +232,6 @@ public sealed class EditionTests
 
         code.ShouldNotBeNull().ShouldNotBe("already_installed");
     }
-
-    private static InstallOffer Offer(DesktopHarness h, bool customDataFolder) =>
-        new(Installer(h), h.Get<UiPreferencesFile>(), h.Get<AppPaths>(), h.Get<TMConcept.Desktop.Dialogs.IConfirmDialog>(),
-            h.Get<TMConcept.Desktop.Localization.Localizer>(), NullLogger<InstallOffer>.Instance)
-        {
-            CustomDataFolder = customDataFolder,
-        };
 
     private static EditionInstaller Installer(DesktopHarness h, string? current = null) =>
         new(h.Get<ReleaseFeed>(), h.Get<TMConcept.Engines.Tools.ToolDownloader>(), h.Get<SelfReplacer>(), h.Get<IAppEdition>(), h.Get<ISetupLauncher>(),

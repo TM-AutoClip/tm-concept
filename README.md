@@ -138,7 +138,7 @@ Rough numbers (prices of 5 Nov 2026; the pages show the current ones next to eac
 
 ## Install on Windows
 
-Windows 10 or 11, 64-bit. Since 0.1.26 there are two editions with the same features. Both use the same data folder, so models and
+Windows 10 or 11, 64-bit. There are two editions with the same features. Both use the same data folder, so models and
 settings one installed are there for the other, and only one copy runs at a time.
 
 | Download from the [latest release](../../releases/latest) | Edition |
@@ -164,19 +164,12 @@ The `.nupkg` and `releases.win-x64.json` files of a release are for the installe
 1. Download `TMConcept-Portable-win-x64.exe` and check its SHA-256 the same way.
 2. Put the file where it can stay, for example `%LOCALAPPDATA%\Programs\TM Concept\TMConcept-Portable-win-x64.exe`, and double-click it
    (SmartScreen as above; Windows usually asks only the first time).
-3. At its first start it asks once **"Install TM Concept?"**: *Install* downloads this version's Setup from the same release, checks it
-   against the release notes' SHA-256, runs it and closes the portable copy (the file stays where it is; delete it if you like). *Keep using
-   it portable* is remembered; Settings → General still offers **Install TM Concept** later. The question is not asked with `--data-dir`, nor when TM Concept is already installed on the
-   computer (then neither does the button run an older or the same Setup over it).
+3. To switch to the installed edition later: Settings → General → **Install TM Concept** downloads this version's Setup from the same
+   release, checks it against the release notes' SHA-256, runs it and closes the portable copy (the file stays where it is; delete it if
+   you like). It never runs an older or the same Setup over an installed TM Concept.
 
 No administrator rights are needed in either edition; nothing is installed system-wide and the system PATH is never changed. Settings →
-General → *Edition* shows which one runs, its version and (installed) its folder, with **Recreate shortcuts** for the installed one.
-
-**Coming from 0.1.25 or older:** its updater finds the portable program in the new release and puts it in place of the old file, under
-the old file's name (so `TMConcept-0.1.25-win-x64.exe` then runs 0.1.26: the name shows the wrong version for a while). The update after
-that (0.1.27 or later), made by the new updater, renames the file to `TMConcept-Portable-win-x64.exe`, because a name with a version would
-be wrong after every update; a shortcut you made yourself to the old name stops working then. Answer *Install* to get proper shortcuts
-that never break, or rename the file yourself.
+General → *Edition* shows which one runs, its version and (installed) its folder.
 
 **OneDrive note:** videos are saved in `Documents\TM Concept`. If OneDrive backs up your Documents folder, every video is uploaded to the
 cloud too. If you do not want that, exclude the folder in OneDrive's settings.
@@ -187,7 +180,7 @@ Use `linux-x64` on ordinary PCs and `linux-arm64` on 64-bit ARM computers (for e
 desktop session is required.
 
 1. Download `tm-concept-portable-linux-x64.tar.gz` (or `tm-concept-portable-linux-arm64.tar.gz`) from the
-   [latest release](../../releases/latest). (Until 0.1.25 the name carried the version: `tm-concept-0.1.25-linux-x64.tar.gz`.)
+   [latest release](../../releases/latest).
 2. Optional: check the SHA-256 value: `sha256sum tm-concept-portable-linux-x64.tar.gz`
 3. Unpack it where it can stay:
    ```sh
