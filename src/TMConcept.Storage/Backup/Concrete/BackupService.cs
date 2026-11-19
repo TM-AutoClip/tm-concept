@@ -181,6 +181,8 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
             {
                 source.Open();
                 destination.Open();
+                ConceptDatabase.WaitForLocks(source);
+                ConceptDatabase.WaitForLocks(destination);
                 source.BackupDatabase(destination);
             }
 

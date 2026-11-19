@@ -14,7 +14,8 @@ namespace TMConcept.Storage.Database;
 /// off so a closed database releases its file (restore replaces it). Foreign keys are on (cascades: deleting a profile removes its concepts,
 /// queue, image records, embeddings and video records; deleting a concept removes its embedding and queue entry and leaves its videos with
 /// an empty link). Secure delete (deleted content overwritten with zeros) is how SQLite3 Multiple Ciphers is built; it is checked whenever
-/// a file comes in. EF Core writes every statement (no SQL is written by hand).
+/// a file comes in. EF Core writes every statement (no SQL is written by hand). Every connection waits for another connection's lock
+/// (<see cref="WaitForLocks"/>) instead of failing at once with "database is locked".
 /// </summary>
 public sealed class ConceptDatabase(IAppPaths paths, DatabaseKey key)
 {
@@ -45,6 +46,7 @@ public sealed class ConceptDatabase(IAppPaths paths, DatabaseKey key)
         try
         {
             await db.Database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+            WaitForLocks((SqliteConnection)db.Database.GetDbConnection());
             return db;
         }
         catch
@@ -52,6 +54,20 @@ public sealed class ConceptDatabase(IAppPaths paths, DatabaseKey key)
             await db.DisposeAsync().ConfigureAwait(false);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Makes the open <paramref name="connection"/> wait up to <see cref="ConceptSchema.BusyWaitMilliseconds"/> for a lock another
+    /// connection holds (SQLite's busy timeout, set through its API). Without it a write fails at once with "database is locked" while
+    /// another piece of work reads or writes (0.1.28: a run's final update failed while the picked topics were being marked, so the run
+    /// stayed "running" and a saved concept run was reported as failed): Microsoft.Data.Sqlite retries a busy statement but not the commit
+    /// of an <c>UPDATE … RETURNING</c> (EF Core's update), which happens when the statement is reset.
+    /// </summary>
+    internal static void WaitForLocks(SqliteConnection connection)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        var result = SQLitePCL.raw.sqlite3_busy_timeout(connection.Handle, ConceptSchema.BusyWaitMilliseconds);
+        SqliteException.ThrowExceptionForRC(result, connection.Handle);
     }
 
     /// <summary>

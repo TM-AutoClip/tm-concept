@@ -10,6 +10,12 @@ internal static class ConceptSchema
     /// <summary>The value of <c>pragma_secure_delete</c> when deleted content is overwritten with zeros.</summary>
     public const long SecureDeleteOn = 1;
 
+    /// <summary>
+    /// How long a connection waits for another connection's lock before "database is locked" (ms). Pieces of work are short (a few ms to
+    /// tens of ms), so a wait this long only ends in an error when something is really stuck.
+    /// </summary>
+    public const int BusyWaitMilliseconds = 10_000;
+
     /// <summary>Money as stored (invariant text).</summary>
     public const string MoneyFormat = "0.0###########################";
 
