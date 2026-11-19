@@ -18,7 +18,10 @@ public static class VideoWarnings
     /// <summary>The code needed its one repair.</summary>
     public const string Repaired = "repaired";
 
-    /// <summary>The local code model's code failed the check after its repair: the app's own simple animation was rendered.</summary>
+    /// <summary>
+    /// The local code model's code could not be used (it failed the check, or its repair failed to render): the app's own simple animation was
+    /// rendered.
+    /// </summary>
     public const string AppCode = "app_code";
 
     /// <summary>
@@ -26,6 +29,12 @@ public static class VideoWarnings
     /// animation was rendered instead.
     /// </summary>
     public const string FrameCheck = "frame_check";
+
+    /// <summary>
+    /// The kept video has scenes that showed an empty frame or not their image (<see cref="FrameCheck"/>): fewer than most of an online model's
+    /// scenes, or the app's own animation (yellow; watch it before publishing).
+    /// </summary>
+    public const string FrameWeak = "frame_weak";
 
     /// <summary>No frame of the video that is not black was found for the thumbnail: the video may be empty (yellow).</summary>
     public const string NoThumbnail = "no_thumbnail";

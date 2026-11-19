@@ -47,7 +47,9 @@ public sealed class RevideoEngine(IAppPaths paths, ToolInstaller tools, ChromeLo
 
     /// <summary>
     /// The minimal file the repair request shows and the install check renders; also the app's own animation of this engine. 20 Nov 2026: it
-    /// shows each scene's image full frame (served from public/, so its address starts with "/") with a slow zoom.
+    /// shows each scene's image full frame (served from public/, so its address starts with "/") with a slow zoom. Only the video's longer side
+    /// is set, so the image keeps its proportions and covers the frame (the 0.1.30 review: width and height together stretched a 1024×1536
+    /// image in a 1080×1920 video by about 18 %); the image models make pictures close to the video's shape, never more elongated.
     /// </summary>
     public override string SampleCode => """
         import {Img, makeScene2D, Txt} from '@revideo/2d';
@@ -60,7 +62,9 @@ public sealed class RevideoEngine(IAppPaths paths, ToolInstaller tools, ChromeLo
           for (const scene of input.scenes) {
             if (scene.image) {
               const picture = createRef<Img>();
-              view.add(<Img ref={picture} src={'/' + scene.image} width={input.width} height={input.height} />);
+              view.add(input.width >= input.height
+                ? <Img ref={picture} src={'/' + scene.image} width={input.width} />
+                : <Img ref={picture} src={'/' + scene.image} height={input.height} />);
               yield* picture().scale(1.08, scene.durationSeconds);
               picture().remove();
             } else {

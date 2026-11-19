@@ -248,20 +248,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         // E + F. code (+ one repair after a rejected check), render (+ one repair with the error text)
         var rendered = await assembler.CodeAndRenderAsync(engine, job.CodeModel, options, input, work, id, steps, cancellationToken)
             .ConfigureAwait(false);
-        if (rendered.Repaired)
-        {
-            warnings.Add(VideoWarnings.Repaired);
-        }
-
-        if (rendered.AppCode)
-        {
-            warnings.Add(VideoWarnings.AppCode);
-        }
-
-        if (rendered.FrameFallback)
-        {
-            warnings.Add(VideoWarnings.FrameCheck);
-        }
+        warnings.AddRange(rendered.Warnings());
 
         // H + I. mux into the work folder, then the version folder gets only finished files; the record.
         var folder = Path.Combine(LibraryFolder(profile, job.Concept), VideoFolders.FirstVersion);
@@ -564,13 +551,13 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
     public static string SceneImageFolder(string workDirectory, Guid conceptId) => Path.Combine(workDirectory, "scene-images", conceptId.ToString("N"));
 
     /// <summary>
-    /// The key of a concept's kept image prompts and images: another channel, model, size, scene text or template drawing style makes new ones
-    /// (without a template the key is what it was before templates).
+    /// The key of a concept's kept image prompts and images: another channel, model, size, scene text, template drawing style or prompt format
+    /// (<see cref="ImagePromptBuilder.Version"/>) makes new ones.
     /// </summary>
     private static string CacheKey(string channel, CatalogModel model, int width, int height, IReadOnlyList<string> visuals, Styles.DrawStyle? drawStyle)
     {
-        var parts = new[] { channel, model.Provider, model.Id, width.ToString(CultureInfo.InvariantCulture), height.ToString(CultureInfo.InvariantCulture) }
-            .Concat(visuals);
+        var parts = new[] { "prompts:" + ImagePromptBuilder.Version, channel, model.Provider, model.Id, width.ToString(CultureInfo.InvariantCulture),
+            height.ToString(CultureInfo.InvariantCulture) }.Concat(visuals);
         if (drawStyle is { } style)
         {
             parts = parts.Append("style:" + RenderStyleBuilder.Name(style));

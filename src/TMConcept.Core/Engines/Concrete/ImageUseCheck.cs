@@ -6,8 +6,9 @@ namespace TMConcept.Core.Engines;
 /// <summary>
 /// The static check that a video's code shows its scene images (20 Nov 2026; a small local model copied the repair example, which drew no
 /// image, and the video showed only a coloured background although every scene had one). It runs only when the input has images and only
-/// asks for the engine's own way of reading <c>scene.image</c> and putting it on screen: HyperFrames an <c>img</c> element (or a CSS
-/// background) with the image as its source, Remotion <c>Img</c> / <c>staticFile</c>, Revideo <c>Img</c>. It is kept loose on purpose: a
+/// asks for the engine's own way of reading <c>scene.image</c> and putting it on screen: HyperFrames an <c>img</c> element, a CSS background
+/// (<c>backgroundImage</c>, or <c>url(…)</c> in <c>background</c> / <c>cssText</c>) or an SVG <c>image</c> with an <c>href</c> (the last two
+/// since the 0.1.30 review: valid designs were refused), Remotion <c>Img</c> / <c>staticFile</c>, Revideo <c>Img</c>. It is kept loose on purpose: a
 /// finding costs a repair, and the frame check after the render (<see cref="Videos.FrameCheck"/>) still sees what is really shown.
 /// </summary>
 public static partial class ImageUseCheck
@@ -53,7 +54,7 @@ public static partial class ImageUseCheck
     [GeneratedRegex(@"\.image\b|[{,]\s*image\s*[,}:]")]
     private static partial Regex ReadsImage();
 
-    [GeneratedRegex(@"createElement\s*\(\s*[""'`]img[""'`]|\.src\s*=|setAttribute\s*\(\s*[""'`]src|backgroundImage|background-image|\bsrc\s*:", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"createElement\s*\(\s*[""'`]img[""'`]|\.src\s*=|setAttribute(NS)?\s*\([^)]*?[""'`](xlink:)?(src|href)[""'`]|\.href\b|backgroundImage|background-image|\burl\s*\(|\bsrc\s*:", RegexOptions.IgnoreCase)]
     private static partial Regex HyperFramesPicture();
 
     [GeneratedRegex(@"<\s*(Img|img)\b|staticFile\s*\(")]

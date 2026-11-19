@@ -171,21 +171,8 @@ public sealed class VideoRemaker(IEnumerable<IVideoEngine> engines, SceneNarrato
             var rendered = await assembler.CodeAndRenderAsync(job.Engine, job.CodeModel, options, input, work, id, steps, cancellationToken)
                 .ConfigureAwait(false);
             var warnings = source.Record.Warnings.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                .Where(w => w is not (VideoWarnings.Repaired or VideoWarnings.AppCode or VideoWarnings.FrameCheck or VideoWarnings.NoThumbnail)).ToList();
-            if (rendered.Repaired)
-            {
-                warnings.Add(VideoWarnings.Repaired);
-            }
-
-            if (rendered.AppCode)
-            {
-                warnings.Add(VideoWarnings.AppCode);
-            }
-
-            if (rendered.FrameFallback)
-            {
-                warnings.Add(VideoWarnings.FrameCheck);
-            }
+                .Where(w => w != VideoWarnings.NoThumbnail && !RenderOutcome.Codes.Contains(w)).ToList();
+            warnings.AddRange(rendered.Warnings());
 
             options.Engine = job.Engine.Kind;
             options.CodeProvider = job.CodeModel.Model.Provider;

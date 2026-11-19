@@ -96,9 +96,10 @@ public sealed class ConceptSceneTests
         var turkish = ConceptPromptBuilder.Build(new ConceptPromptInput(Profile(ContentLanguages.Turkish), PromptMemory.Empty, string.Empty, 3));
 
         english.System.ShouldContain("write about 4 scenes (about one scene every 13.5 s; at least 3)");
-        english.System.ShouldContain("at most 65 words, about 25 s", Case.Sensitive, "25 s at 2.6 words a second");
+        english.System.ShouldContain("about 13.5 s of speech, never more than 65 words or 25 s", Case.Sensitive,
+            "25 s at 2.6 words a second is the most, the target per scene is 13.5 s (one figure only made a small model write long scenes)");
         turkish.System.ShouldContain("yaklaşık 4 sahne yaz (yaklaşık 13.5 sn'de bir sahne; en az 3)");
-        turkish.System.ShouldContain("en çok 57 kelime");
+        turkish.System.ShouldContain("yaklaşık 13.5 sn konuşma, asla 57 kelimeden ya da 25 sn'den uzun değil");
         english.User.ShouldContain("\"sahneler\":[{\"ekranda\":\"…\",\"seslendirme\":\"…\"}]");
         english.System.ShouldNotContain("{");
         var schema = english.Schema.ToJsonString();
@@ -116,15 +117,48 @@ public sealed class ConceptSceneTests
         IReadOnlyList<SceneProblem> problems = [new(SceneProblemKind.TooFew, 0, 1, 3, 4), new(SceneProblemKind.EmptyVisual, 1, 0, 0),
             new(SceneProblemKind.LongNarration, 2, 31, 25)];
 
-        var english = ConceptPromptBuilder.BuildRepair(Profile(ContentLanguages.English), [new ConceptRepairItem(concept, problems)], documents: false);
-        var turkish = ConceptPromptBuilder.BuildRepair(Profile(ContentLanguages.Turkish), [new ConceptRepairItem(concept, problems)], documents: true);
+        var english = ConceptPromptBuilder.BuildRepair(Profile(ContentLanguages.English), [new ConceptRepairItem(concept, problems)], grounding: null);
+        var turkish = ConceptPromptBuilder.BuildRepair(Profile(ContentLanguages.Turkish), [new ConceptRepairItem(concept, problems)], Grounding());
 
         english.ShouldContain("1. «Walls \"and\" towers»\nPROBLEMS: 1 scenes, at least 3 needed (write about 4 scenes); scene 1 has an empty \"ekranda\"; "
             + "scene 2 narration is about 31 s, at most 25 s allowed (split the scene)\nCURRENT TEXT:\n«Flat text.»");
         english.ShouldContain("Write the 1 corrected concepts in the same order");
         english.ShouldNotContain("kaynaklar");
+        english.ShouldNotContain("DOCUMENT");
+        english.ShouldContain("each one complete and with its title exactly as given");
         turkish.ShouldContain("SORUNLAR: 1 sahne var, en az 3 olmalı (yaklaşık 4 sahne yaz); 1. sahnenin \"ekranda\" alanı boş");
         turkish.ShouldContain("\"kaynaklar\":[1]", Case.Sensitive, "a documents run keeps its document numbers");
+        turkish.ShouldContain("YALNIZ aşağıdaki BELGE PARÇALARINDAKİ bilgileri kullan", Case.Sensitive,
+            "the passages are in the batch's user part, which the repair does not repeat: it gets them again with the rule");
+        turkish.ShouldContain("BELGELER (numara: başlık):\n1: «Chronicle»");
+        turkish.ShouldContain("[1] «p. 3»: «The chain closed the Golden Horn in 1453.»");
+    }
+
+    private static TMConcept.Core.Documents.DocumentGrounding Grounding() =>
+        new([new TMConcept.Core.Documents.GroundingDocument(1, Guid.NewGuid(), "Chronicle")], [new TMConcept.Core.Documents.GroundingPassage(1, "p. 3", "The chain closed the Golden Horn in 1453.")]);
+
+    [Fact]
+    public void RepairAnswersAreMatchedByTitleAndByPositionOnlyWhenTheCountsAgree()
+    {
+        static ParsedConcept C(string title) => new(title, "s", "text of " + title);
+        IReadOnlyList<ParsedConcept> sent = [C("Walls"), C("Fleet"), C("Fire")];
+
+        // One left out and the others swapped: matched by title, the left-out one gets nothing (never another concept's story).
+        var pairs = ConceptRepairMatch.Match(sent, [C("FIRE!"), C("fleet")]);
+        pairs[0].ShouldBeNull();
+        pairs[1]!.Content.ShouldBe("text of fleet");
+        pairs[2]!.Content.ShouldBe("text of FIRE!");
+
+        // The same count with one title reworded: the reworded one takes its own position; an answer whose title is another concept's never does.
+        pairs = ConceptRepairMatch.Match(sent, [C("The walls of the city"), C("Fleet"), C("Fire")]);
+        pairs[0]!.Title.ShouldBe("The walls of the city");
+        pairs = ConceptRepairMatch.Match(sent, [C("Fleet"), C("Something"), C("Fire")]);
+        pairs[0].ShouldBeNull();
+        pairs[1]!.Title.ShouldBe("Fleet");
+        pairs[2]!.Title.ShouldBe("Fire");
+
+        // Fewer answers than concepts and no title match: nothing is paired by position.
+        ConceptRepairMatch.Match(sent, [C("Other")]).ShouldAllBe(p => p == null);
     }
 
     [AvaloniaFact]
@@ -163,6 +197,47 @@ public sealed class ConceptSceneTests
         result.Accepted.ShouldHaveSingleItem().Content.ShouldBe("[on screen: ]\nAll in one.");
         result.ScenesMissing.ShouldBe(1);
         result.ErrorCode.ShouldBeEmpty();
+    }
+
+    [AvaloniaFact]
+    public async Task ARepairThatLeavesAConceptOutOrReordersThemNeverPutsOneConceptInPlaceOfAnother()
+    {
+        static string Flat(string title) => "{\"baslik\":\"" + title + "\",\"ozet\":\"" + Guid.NewGuid().ToString("N") + "\",\"icerik\":\"" + title + " told in one go.\"}";
+        static string Fixed(string title) => "{\"baslik\":\"" + title + "\",\"ozet\":\"" + Guid.NewGuid().ToString("N") + "\"," + FakeChat.SceneList(title) + "}";
+        var fake = new FakeChat().Answer(_ => Answer("{\"konseptler\":[" + Flat("Walls") + "," + Flat("Fleet") + "," + Flat("Fire") + "]}"))
+            .Answer(_ => Answer("{\"konseptler\":[" + Fixed("Fire") + "," + Fixed("Fleet") + "]}"));
+        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
+        var (profile, model) = await PrepareAsync(h);
+
+        var result = await h.Get<ConceptGenerator>().GenerateAsync(new ConceptRequest(profile, new IdeaBrief(string.Empty, 3), model), null, null, None);
+
+        fake.Requests[1].Stream.ShouldBeTrue("the repair is streamed like the batch: no single time limit cuts a slow model");
+        var byTitle = result.Accepted.ToDictionary(c => c.Title);
+        byTitle.Keys.ShouldBe(["Walls", "Fleet", "Fire"], ignoreOrder: true);
+        byTitle["Walls"].Content.ShouldBe("Walls told in one go.", "the model left it out: it keeps its own text");
+        byTitle["Fleet"].Content.ShouldStartWith("[on screen: Fleet 1]\nPart 1: Fleet.");
+        byTitle["Fire"].Content.ShouldStartWith("[on screen: Fire 1]\nPart 1: Fire.");
+        result.ScenesMissing.ShouldBe(1);
+    }
+
+    [AvaloniaFact]
+    public async Task ACutOffRepairStillGivesItsCompleteConceptsAndItsCostIsCounted()
+    {
+        static string Flat(string title) => "{\"baslik\":\"" + title + "\",\"ozet\":\"" + Guid.NewGuid().ToString("N") + "\",\"icerik\":\"" + title + " told in one go.\"}";
+        var cut = "{\"konseptler\":[{\"baslik\":\"Walls\",\"ozet\":\"One. Two.\"," + FakeChat.SceneList("Walls") + "},{\"baslik\":\"Fleet\",\"ozet\":\"On";
+        var fake = new FakeChat().Answer(_ => Answer("{\"konseptler\":[" + Flat("Walls") + "," + Flat("Fleet") + "]}"))
+            .Answer(_ => throw new TMConcept.Core.Providers.ProviderException("cut") { Code = "truncated", PartialText = cut, ChargedUsage = Usage });
+        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
+        var (profile, model) = await PrepareAsync(h);
+
+        var result = await h.Get<ConceptGenerator>().GenerateAsync(new ConceptRequest(profile, new IdeaBrief(string.Empty, 2), model), null, null, None);
+
+        var byTitle = result.Accepted.ToDictionary(c => c.Title);
+        byTitle["Walls"].Content.ShouldStartWith("[on screen: Walls 1]", Case.Sensitive, "the complete concept before the cut was paid for and is used");
+        byTitle["Fleet"].Content.ShouldBe("Fleet told in one go.");
+        result.ScenesMissing.ShouldBe(1);
+        result.ErrorCode.ShouldBeEmpty("a cut repair does not end the run");
+        result.Run.OutputTokens.ShouldBe(2 * Usage.Output, "what the cut repair charged is counted");
     }
 
     private static readonly ChatUsage Usage = new(600, 0, 0, 120);

@@ -23,7 +23,8 @@ namespace TMConcept.Tests.Desktop;
 /// The 19 Nov 2026 local run end to end, with fakes only (no model, no render, no network): a small local model writes a concept without
 /// scenes (one repair with the findings gives it scenes), numbered image prompts, then video code that never shows the images (the app's
 /// own animation is rendered at once, without a repair call). A local model whose rendered frames are empty is rendered again with the
-/// app's own animation and warned about; an online model's empty video stops with the reason and no paid repair.
+/// app's own animation and warned about; an online model's empty video stops with the reason and no paid repair, while one failing scene of
+/// three only warns. A local model's code that does not render even after its free repair falls back to the app's own animation.
 /// </summary>
 public sealed class LocalModelPipelineTests
 {
@@ -134,7 +135,7 @@ public sealed class LocalModelPipelineTests
         engine.Renders.ShouldBe(2);
         chat.Requests.Count.ShouldBe(2, "no repair call");
         record.Warnings.ShouldContain(VideoWarnings.FrameCheck);
-        record.Warnings.ShouldContain(VideoWarnings.AppCode);
+        record.Warnings.ShouldNotContain(VideoWarnings.AppCode, Case.Sensitive, "the frame fallback's own note says the app's animation was used");
 
         // An online model: the same empty frames stop the video with the reason; nothing more is paid.
         var second = new Concept { ProfileId = profile.Id, Title = "Iron chain", Summary = "s", Content = "[on screen: chain]\nThe chain.\n[on screen: harbour]\nThe harbour.", Language = "en" };
@@ -150,5 +151,54 @@ public sealed class LocalModelPipelineTests
         error.Message.ShouldContain("scene 1 shows an empty frame");
         chat.Requests.Count.ShouldBe(4, "the image prompts and one code call; no paid repair");
         engine.Renders.ShouldBe(3);
+    }
+
+    [AvaloniaFact]
+    public async Task AnOnlineVideoWithOneFailingSceneOfThreeIsKeptWithAWarning()
+    {
+        var engine = new FakeEngine();
+        var images = new FakeImages();
+        var chat = new FakeChat().Answer(_ => Answer(Prompts(3))).Answer(_ => Code(engine.SampleCode));
+        using var h = Harness(chat, engine, images);
+        var profile = await PrepareAsync(h);
+        var media = (FakeMedia)h.Get<IMediaTools>();
+        var frames = 0;
+        media.Pixels = (file, _) => file == "silent.mp4" && frames++ % 3 == 0 ? Flat() : Gradient();
+        var concept = new Concept
+        {
+            ProfileId = profile.Id, Title = "Iron chain", Summary = "s", Language = "en",
+            Content = "[on screen: a title card]\nThe chain.\n[on screen: harbour]\nThe harbour.\n[on screen: walls]\nThe walls.",
+        };
+        await h.Get<IConceptStore>().AddAsync([concept], None);
+        var online = new ResolvedModel(h.Get<IModelCatalog>().Find("anthropic", "claude-sonnet-5-5")!,
+            new ApiKey { Provider = "anthropic", Label = "k", Secret = "fake-test-key-video-0123" }, string.Empty);
+
+        var record = await VideoAsync(h, profile, concept, online);
+
+        engine.Renders.ShouldBe(1, "a paid online video is not thrown away for one scene (a title card, a split layout)");
+        chat.Requests.Count.ShouldBe(2);
+        record.Warnings.ShouldContain(VideoWarnings.FrameWeak);
+        record.Warnings.ShouldNotContain(VideoWarnings.FrameCheck);
+    }
+
+    [AvaloniaFact]
+    public async Task ALocalModelsRepairedCodeThatStillDoesNotRenderFallsBackToTheAppsAnimation()
+    {
+        var engine = new FakeEngine { FailRenders = 2 };
+        var images = new FakeImages();
+        var chat = new FakeChat().Answer(_ => Answer(Prompts(2))).Answer(_ => Code(engine.SampleCode)).Answer(_ => Code(engine.SampleCode));
+        using var h = Harness(chat, engine, images);
+        var profile = await PrepareAsync(h);
+        ((FakeMedia)h.Get<IMediaTools>()).Pixels = (_, _) => Gradient();
+        var concept = new Concept { ProfileId = profile.Id, Title = "Greek fire", Summary = "s", Content = "[on screen: map]\nThe siege.\n[on screen: ships]\nThe fire.", Language = "en" };
+        await h.Get<IConceptStore>().AddAsync([concept], None);
+
+        var record = await VideoAsync(h, profile, concept, Local());
+
+        chat.Requests.Count.ShouldBe(3, "the image prompts, the code and its one free repair");
+        engine.Renders.ShouldBe(1, "the app's own animation, after the code and its repair failed to render");
+        record.Warnings.ShouldContain(VideoWarnings.AppCode);
+        var folder = LibraryPaths.Resolve(h.Get<IAppPaths>().LibraryDirectory, record.Folder);
+        File.ReadAllText(Path.Combine(folder, VideoFolders.Source, engine.CodeFile)).Trim().ShouldBe(((IVideoEngine)engine).FallbackCode);
     }
 }

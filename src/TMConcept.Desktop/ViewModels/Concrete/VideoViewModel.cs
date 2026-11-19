@@ -959,6 +959,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
         (VideoWarnings.SpeechOff, "video.silent.off", ActivityLevel.Warning, "video.noted.speech_off"),
         (VideoWarnings.SpeechSkipped, "video.speech.skipped", ActivityLevel.Warning, "video.noted.speech_skipped"),
         (VideoWarnings.FrameCheck, "video.frames.fallback", ActivityLevel.Warning, "video.noted.frame_check"),
+        (VideoWarnings.FrameWeak, "video.frames.weak", ActivityLevel.Warning, "video.noted.frame_weak"),
         (VideoWarnings.NoThumbnail, "video.thumbnail.none", ActivityLevel.Warning, "video.noted.no_thumbnail"),
     ];
 

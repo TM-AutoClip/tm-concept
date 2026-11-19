@@ -38,7 +38,8 @@ veritabanını şifreli tutar.
 - **Konsept üret.** Dört ayrı bölüm, istediğin sırayla kullanılır; hepsi aynı listeye ekler. **Konu önererek üret**: 5–100 konu önert, beğendiklerini işaretle, **Seçilenleri üret**'e bas: her
   işaretli konudan tam bir konsept. İşaretlemediğin konu kötü sayılmaz: sonra yeniden önerilebilir; yalnız konsepti yapılan konu bir daha
   gelmez (0.1.18'den önce önerilen konular engelli kalır: o sürüm hangisinden konsept yapıldığını kaydetmiyordu). **Fikirden üret**: bir fikir yaz (ya da boş bırak), 1–100 konsept seç. Her basış listeye ekler. Her
-  düğmenin yanında küçük bir tahmini ücret görünür; sonra sağlayıcının bildirdiği kullanımdan kesin ücret gelir. Tekrar dört katmanda
+  konsept sahneleriyle gelir (hedef sürenin yaklaşık 13,5 saniyesinde bir sahne); sahnesi eksik konsept bir otomatik onarım alır, yine
+  eksikse işaretlenir ve onaylarken sorulur. Her düğmenin yanında küçük bir tahmini ücret görünür; sonra sağlayıcının bildirdiği kullanımdan kesin ücret gelir. Tekrar dört katmanda
   önlenir: istemde bütün konseptlerin geçmişi (önbellekli), ücretsiz yerel benzerlik denetimi, gömme modeliyle isteğe bağlı anlamsal
   denetim ve liste büyüyünce sıkıştırılmış geçmiş. Her satırda **Onayla** (A tuşu) ve **Sil** (D tuşu) var; tıklanan konsept listenin
   yanındaki detay panelinde açılır. Silinenler **Silinenler** sayfasında süresiz durur (tekrar denetiminde sayılmaya devam eder); oradan
@@ -94,7 +95,10 @@ veritabanını şifreli tutar.
   (yeni kurulumda boştur: kod modeli ve şablon seçilmeden video üretilmez). Video üretilirken her aşama
   süresi ve ücretiyle, kod modelinin jetonları ve o ana kadar harcanan görünür. Üretilen videolar sağda: önizleme oynatıcısı,
   **Oynatıcıda aç**, **Klasörü aç** ve **Konsepti düzelt, yeniden üret**. Model tek bir kod dosyası yazar; hiçbir şey çalıştırılmadan
-  önce güvenlik denetimi yapılır; denetim ya da render hatasında tek onarım istenir. Videolar en çok 3 dakikadır.
+  önce güvenlik denetimi yapılır (sahne görselleri varsa kod onları göstermek zorunda); denetim ya da render hatasında tek onarım istenir
+  (yerel kod modelinde onun yerine programın kendi animasyonu kullanılır). Render'dan sonra her sahneden bir kare denetlenir: yerel modelin
+  boş kare ya da görselini göstermeyen videosu programın kendi animasyonuyla yeniden render edilir; online modelin videosu yalnız sahnelerin
+  çoğu geçemezse durur (ücretli onarım yok), yoksa uyarıyla saklanır. Videolar en çok 3 dakikadır.
   **Bir video hata verirse sıranın tamamı durur** (hata sayfada, bildirimde ve etkinlik panelinde kırmızı görünür; sorunu düzeltince sırayı
   yeniden başlatırsın). **Gece modu** (**Sırayla üret**'in yanındaki kutu; her açılışta kapalıdır, sıra çalışırken de işaretlenebilir)
   bilgisayarın başında olmadığın zamanlar için: hata veren video bildirilir ve sıradaki videoya geçilir, videolar arasında 10 saniye

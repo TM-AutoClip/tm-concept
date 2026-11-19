@@ -67,10 +67,13 @@ public static partial class ConceptPromptBuilder
     /// <summary>
     /// The user part of the one repair request of a concept batch (Prompts/&lt;lang&gt;/concept-repair.txt; the system part is the batch's own,
     /// so the cache is read): every concept that failed <see cref="ConceptSceneCheck"/> with its concrete findings ("3 scenes, at least 5
-    /// needed; scene 2 has an empty on-screen line") and its current text as data, and the answer format of the batch (with "kaynaklar" for a
-    /// documents run).
+    /// needed; scene 2 has an empty on-screen line") and its current text as data, and the answer format of the batch. A documents run
+    /// (<paramref name="grounding"/>) gets the batch's documents and passages again with the rule to use only their facts and "kaynaklar" in
+    /// the format: they are in the batch's user part, which the repair does not repeat, and a concept split into more scenes must not be padded
+    /// with facts from elsewhere (the 0.1.30 review). Every title is asked back unchanged: the answers are matched to the concepts by it
+    /// (<see cref="ConceptRepairMatch"/>).
     /// </summary>
-    public static string BuildRepair(Profile profile, IReadOnlyList<ConceptRepairItem> items, bool documents)
+    public static string BuildRepair(Profile profile, IReadOnlyList<ConceptRepairItem> items, DocumentGrounding? grounding)
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(items);
@@ -89,7 +92,10 @@ public static partial class ConceptPromptBuilder
         {
             ["items"] = list.ToString(),
             ["count"] = items.Count.ToString(c),
-            ["json"] = documents ? words["json_documents"] : words["json"],
+            ["json"] = grounding is not null ? words["json_documents"] : words["json"],
+            ["documents_rule"] = grounding is not null ? words["documents_rule"] : null,
+            ["documents"] = grounding is not null ? DocumentLines(grounding) : null,
+            ["sources"] = grounding is not null ? PassageLines(grounding) : null,
         };
         Scenes(values, profile);
         return Fill(template, values);

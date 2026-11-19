@@ -15,6 +15,12 @@ namespace TMConcept.Core.Images;
 /// </summary>
 public static partial class ImagePromptBuilder
 {
+    /// <summary>
+    /// The version of the prompt format, part of the key of a concept's kept prompts and images (<c>VideoPipeline</c>): kept prompts of another
+    /// format are not reused, so they always went through this format's check (2: numbered prompts, checked and repaired once, 20 Nov 2026).
+    /// </summary>
+    public const string Version = "2";
+
     /// <summary>Longest prompt kept.</summary>
     public const int PromptMax = 400;
 

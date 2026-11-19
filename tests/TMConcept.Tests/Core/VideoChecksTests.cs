@@ -24,6 +24,10 @@ public sealed class VideoChecksTests
     [InlineData(EngineKind.HyperFrames, "const p = document.createElement(\"img\"); p.src = scene.image;", true)]
     [InlineData(EngineKind.HyperFrames, "box.style.backgroundImage = scene.image;", true)]
     [InlineData(EngineKind.HyperFrames, "const {image} = scene; picture.src = image;", true)]
+    [InlineData(EngineKind.HyperFrames, "layer.style.background = \"url(\" + scene.image + \") center/cover\";", true)]
+    [InlineData(EngineKind.HyperFrames, "layer.style.cssText = `background:url(${scene.image}) center/cover`;", true)]
+    [InlineData(EngineKind.HyperFrames, "const p = document.createElementNS(svg, \"image\"); p.setAttribute(\"href\", scene.image);", true)]
+    [InlineData(EngineKind.HyperFrames, "p.setAttributeNS(null, 'href', scene.image);", true)]
     [InlineData(EngineKind.HyperFrames, "box.textContent = scene.visual;", false)]
     [InlineData(EngineKind.HyperFrames, "const name = scene.image; box.textContent = name;", false)]
     [InlineData(EngineKind.Remotion, "<Img src={staticFile(scene.image)} />", true)]
@@ -118,6 +122,25 @@ public sealed class VideoChecksTests
         var score = FrameCheck.Score(2, other, image);
         score.Failed.ShouldBeTrue($"resemblance {score.Resemblance}");
         score.Finding.ShouldStartWith("scene 2 does not show its image");
+    }
+
+    [Fact]
+    public void AnImageInOneHalfOfTheFrameOrMidPanStillResemblesIt()
+    {
+        var image = Picture();
+        byte At(int x, int y) => image.Rgb.Span[((Math.Clamp(y, 0, 47) * 96) + Math.Clamp(x, 0, 95)) * 3];
+
+        // The middle half of the image covering the top half of the frame, a text card with lines below it.
+        var top = Pixels(96, 48, (x, y) => y < 24 ? At(x, 12 + y) : (byte)(y % 6 < 2 && x is > 10 and < 86 ? 220 : 25));
+        FrameCheck.Score(1, top, image).Failed.ShouldBeFalse($"resemblance {FrameCheck.Resemblance(top, image)}");
+
+        // A left/right split: the image's middle half on the right, a plain panel on the left.
+        var split = Pixels(96, 48, (x, y) => x >= 48 ? At(24 + (x - 48), y) : (byte)40);
+        FrameCheck.Score(1, split, image).Failed.ShouldBeFalse($"resemblance {FrameCheck.Resemblance(split, image)}");
+
+        // Mid-pan: zoomed in by a quarter and moved to the left edge (a translate, not a centred zoom).
+        var pan = Pixels(96, 48, (x, y) => At((int)(x * 0.8), (int)(y * 0.8)));
+        FrameCheck.Score(1, pan, image).Failed.ShouldBeFalse($"resemblance {FrameCheck.Resemblance(pan, image)}");
     }
 
     [Fact]

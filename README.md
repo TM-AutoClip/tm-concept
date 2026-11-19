@@ -39,7 +39,8 @@ needed) and narrates it with a **free local voice**. It runs on Windows and Linu
   press **Generate selected**: exactly one concept per ticked topic. A topic you did not tick is not a bad one: it may be suggested again
   later; only a topic that got a concept never comes back (topics suggested before 0.1.18 stay blocked: that version did not record which
   ones got a concept). **Generate from an idea**: write an idea (or leave it empty) and
-  choose 1–100 concepts. Every press adds to the list. Each button shows a small estimated price; the exact price from the provider's
+  choose 1–100 concepts. Every press adds to the list. Every concept comes with its scenes (about one every 13.5 s of the target
+  length); a concept with missing scenes gets one automatic repair and, when it still lacks them, is marked and asks before approval. Each button shows a small estimated price; the exact price from the provider's
   usage follows. Duplicates are prevented in four layers: the history of every concept in the prompt (cached), a free local similarity
   check, an optional semantic check with an embedding model, and a compressed history when the list grows. Every row has **Approve**
   (key A) and **Delete** (key D); a click opens the concept in the detail panel beside the list. Deleted concepts stay in **Trash**
@@ -94,7 +95,10 @@ needed) and narrates it with a **free local voice**. It runs on Windows and Linu
   **template** (empty on a new install: nothing is produced until a code model and a template are chosen). While a video
   is made, every step shows with its time and cost, the code model's tokens and what was paid so far. The made videos are on the right
   with a preview player, **Open in player**, **Open folder** and **Fix the concept, produce again**. The model writes one code file; a
-  safety check runs before anything is executed; a failed check or render gets one repair request. Videos are at most 3 minutes.
+  safety check runs before anything is executed (with scene images the code must show them); a failed check or render gets one repair
+  request (a local code model gets the app's own animation instead). After the render one frame of every scene is checked: a local
+  model's video that shows an empty frame or not its image is rendered again with the app's own animation; an online model's video stops
+  only when most scenes fail (no paid repair), otherwise it is kept with a warning. Videos are at most 3 minutes.
   **When a video fails, the whole queue stops** (the error is on the page, in a notification and in red in the activity panel; start the
   queue again when it is fixed). **Night mode** (the checkbox next to **Produce in order**, off at every start, may be ticked while the
   queue runs) is for when you are not at the computer: a failed video is reported and the next one is made, 10 seconds pass between videos,

@@ -19,6 +19,12 @@ public static class FrameCheckLimits
     /// </summary>
     public const double MinResemblance = 0.2;
 
+    /// <summary>
+    /// The share of the checked scenes that must fail before an online model's video is stopped (more than half; fewer keep the video with a
+    /// warning). A local model's video falls back to the app's own animation on any failing scene: that costs nothing.
+    /// </summary>
+    public const double StopShare = 0.5;
+
     /// <summary>Columns of the grey grid the frame and the image are compared on (small, so a zoom or a few pixels' shift do not matter).</summary>
     public const int GridWidth = 24;
 

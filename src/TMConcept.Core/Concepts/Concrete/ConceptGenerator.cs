@@ -24,7 +24,8 @@ namespace TMConcept.Core.Concepts;
 /// one concept per ticked topic, in order, each batch its own slice and no extra request; an <see cref="IdeaBrief"/> gives its count and its
 /// idea as the extra request, never topics. Every batch reports the topics that got a concept (<see cref="ConceptBatch.TopicsMade"/>).
 /// 20 Nov 2026: every concept of a batch goes through <see cref="ConceptSceneCheck"/> before the duplicate check; the ones that fail get ONE
-/// repair request together, with their concrete findings (<see cref="ConceptPromptBuilder.BuildRepair"/>, paid and counted like the batch). A
+/// repair request together, with their concrete findings (<see cref="ConceptPromptBuilder.BuildRepair"/>, paid and counted like the batch;
+/// its answers are matched to the concepts by title, <see cref="ConceptRepairMatch"/>). A
 /// concept that still fails is kept (it was paid for) and counted in <see cref="ConceptRunResult.ScenesMissing"/>: the page warns, and
 /// approving it asks first.
 /// </summary>
@@ -254,12 +255,7 @@ public sealed class ConceptGenerator(IConceptStore concepts, IRunStore runs, ICh
                     }
                     catch (OperationCanceledException)
                     {
-                        // Canceled while the call ran: the provider may bill the prompt (and what was written so far, which is not known here).
-                        // At least the prompt is counted, as an estimate, so the month's spending does not miss the call.
-                        var input = costs.Tokens(prompt.System, profile.ContentLanguage) + costs.Tokens(prompt.User, profile.ContentLanguage);
-                        run.InputTokens += input;
-                        run.ActualUsd += costs.Exact(request.Model.Model, new ChatUsage(input, 0, 0, 0));
-                        run.CostExact = false;
+                        ChargeCanceled(run, request, prompt.System, prompt.User);
                         throw;
                     }
 
@@ -278,7 +274,7 @@ public sealed class ConceptGenerator(IConceptStore concepts, IRunStore runs, ICh
                     return read.Concepts.Count > 0 ? read : null;
                 }, logger, cancellationToken).ConfigureAwait(false);
                 var checkedConcepts = await RepairScenesAsync(client, request, run, prompt, [.. parsed.Concepts.Take(sizes[index])],
-                    sourceBatch.Grounding is not null, maxTokens, label, cancellationToken).ConfigureAwait(false);
+                    sourceBatch.Grounding, maxTokens, label, cancellationToken).ConfigureAwait(false);
                 var batchCandidates = checkedConcepts
                     .Select(c => (Parsed: c, Subject: new DuplicateSubject(Guid.NewGuid(), 0, c.Title, c.Summary))).ToList();
                 var verdicts = request.LocalCheck
@@ -381,12 +377,15 @@ public sealed class ConceptGenerator(IConceptStore concepts, IRunStore runs, ICh
 
     /// <summary>
     /// The scene check of a batch's concepts (<see cref="ConceptSceneCheck"/>) and its one repair: the concepts that fail are sent back together
-    /// with their findings (the batch's own system part, so the cache is read; no stream), and a repaired concept replaces its original when it
-    /// has fewer findings (its document numbers kept when it names none). A failed repair call keeps the originals (what it charged is counted).
+    /// with their findings (the batch's own system part, so the cache is read; a documents run gets its documents and passages again,
+    /// <paramref name="grounding"/>), streamed like the batch so a slow model is not cut by a single time limit. The answers are matched to
+    /// the concepts by title (<see cref="ConceptRepairMatch"/>, never by position alone), and a repaired concept replaces its original when it
+    /// has fewer findings (its document numbers kept when it names none). A cut-off answer still gives its complete concepts; a failed call
+    /// keeps the originals; what either charged is counted, and a cancel counts the prompt as an estimate like the batch.
     /// Returns the concepts in their order.
     /// </summary>
     private async Task<IReadOnlyList<ParsedConcept>> RepairScenesAsync(IChatClient client, ConceptRequest request, Run run,
-        ConceptPrompt prompt, List<ParsedConcept> concepts, bool documents, int maxTokens, string label, CancellationToken cancellationToken)
+        ConceptPrompt prompt, List<ParsedConcept> concepts, DocumentGrounding? grounding, int maxTokens, string label, CancellationToken cancellationToken)
     {
         var profile = request.Profile;
         IReadOnlyList<SceneProblem> Check(ParsedConcept concept) => ConceptSceneCheck.Check(concept.Content, profile.ContentLanguage, profile.TargetSeconds);
@@ -400,22 +399,14 @@ public sealed class ConceptGenerator(IConceptStore concepts, IRunStore runs, ICh
         logger.LogWarning("Concept run {Run}: {Count} of {Total} concepts failed the scene check ({Problems}); asking for one repair", run.Id, failing.Count,
             concepts.Count, string.Join(" | ", failing.Select(f => (f.Index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture) + ": "
                 + string.Join("; ", f.Problems))));
+        var user = ConceptPromptBuilder.BuildRepair(profile, [.. failing.Select(f => new ConceptRepairItem(concepts[f.Index], f.Problems))], grounding);
+        string? answer = null;
         try
         {
-            var user = ConceptPromptBuilder.BuildRepair(profile, [.. failing.Select(f => new ConceptRepairItem(concepts[f.Index], f.Problems))], documents);
             var response = await client.SendAsync(new ChatRequest(prompt.System, user, CacheSystem: true, Schema: prompt.Schema, MaxOutputTokens: maxTokens,
-                Effort: request.Model.Effort), cancellationToken).ConfigureAwait(false);
+                Effort: request.Model.Effort, Stream: true), cancellationToken).ConfigureAwait(false);
             Charge(run, request, response.Usage, response.ReportedCostUsd);
-            var repaired = ConceptResponseParser.Parse(response.Text, label).Concepts;
-            for (var i = 0; i < failing.Count && i < repaired.Count; i++)
-            {
-                var original = concepts[failing[i].Index];
-                var fixedConcept = repaired[i];
-                if (Check(fixedConcept).Count < failing[i].Problems.Count)
-                {
-                    concepts[failing[i].Index] = fixedConcept.Sources.Count > 0 ? fixedConcept : fixedConcept with { Sources = original.Sources };
-                }
-            }
+            answer = response.Text;
         }
         catch (ProviderException ex)
         {
@@ -424,7 +415,46 @@ public sealed class ConceptGenerator(IConceptStore concepts, IRunStore runs, ICh
                 Charge(run, request, charged, null);
             }
 
-            logger.LogWarning("Concept run {Run}: the scene repair failed ({Code}); the concepts are kept as they are", run.Id, ex.Code);
+            if (ex.Code is "truncated" or "incomplete" && ex.PartialText.Length > 0)
+            {
+                logger.LogWarning("Concept run {Run}: the scene repair was cut off ({Code}); its complete concepts are used", run.Id, ex.Code);
+                answer = ex.PartialText;
+            }
+            else
+            {
+                logger.LogWarning("Concept run {Run}: the scene repair failed ({Code}); the concepts are kept as they are", run.Id, ex.Code);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            ChargeCanceled(run, request, prompt.System, user);
+            throw;
+        }
+
+        if (answer is not null)
+        {
+            var sent = failing.Select(f => concepts[f.Index]).ToList();
+            var pairs = ConceptRepairMatch.Match(sent, ConceptResponseParser.Parse(answer, label).Concepts);
+            var unmatched = 0;
+            for (var i = 0; i < failing.Count; i++)
+            {
+                if (pairs[i] is not { } fixedConcept)
+                {
+                    unmatched++;
+                    continue;
+                }
+
+                if (Check(fixedConcept).Count < failing[i].Problems.Count)
+                {
+                    concepts[failing[i].Index] = fixedConcept.Sources.Count > 0 ? fixedConcept : fixedConcept with { Sources = sent[i].Sources };
+                }
+            }
+
+            if (unmatched > 0)
+            {
+                logger.LogWarning("Concept run {Run}: {Unmatched} concepts got no matching answer in the scene repair; they are kept as they were", run.Id,
+                    unmatched);
+            }
         }
 
         var missing = concepts.Count(c => Check(c).Count > 0);
@@ -438,6 +468,18 @@ public sealed class ConceptGenerator(IConceptStore concepts, IRunStore runs, ICh
         }
 
         return concepts;
+    }
+
+    /// <summary>
+    /// A call canceled while it ran: the provider may bill the prompt (and what was written so far, which is not known here), so at least the
+    /// prompt is counted, as an estimate, and the month's spending does not miss the call.
+    /// </summary>
+    private void ChargeCanceled(Run run, ConceptRequest request, string system, string user)
+    {
+        var input = costs.Tokens(system, request.Profile.ContentLanguage) + costs.Tokens(user, request.Profile.ContentLanguage);
+        run.InputTokens += input;
+        run.ActualUsd += costs.Exact(request.Model.Model, new ChatUsage(input, 0, 0, 0));
+        run.CostExact = false;
     }
 
     /// <summary>

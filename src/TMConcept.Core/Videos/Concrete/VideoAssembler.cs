@@ -45,8 +45,12 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
     /// like the others). 20 Nov 2026: a model on this computer gets no repair after a failed check: the app's own animation is rendered at
     /// once (<see cref="IVideoEngine.FallbackCode"/>, until then only after a second failure). After the render one frame from the middle of
     /// every scene is checked (<see cref="FrameCheck"/>): a near-empty frame, or one that does not show its scene image, makes a local model's
-    /// video render again with the app's own animation (<see cref="RenderOutcome.FrameFallback"/>) and stops an online model's video with the
-    /// reason ("frames"; no paid repair, the developer's decision).
+    /// video render again with the app's own animation (<see cref="RenderOutcome.FrameFallback"/>). An online model's video stops with the
+    /// reason ("frames"; no paid repair, the developer's decision) only when most of its scenes fail (<see cref="FrameCheckLimits.StopShare"/>;
+    /// the 0.1.30 review: one title card or one split layout must not throw away a paid video while the limits are not tuned on real online
+    /// renders); fewer failing scenes keep the video with a warning (<see cref="RenderOutcome.FrameWeak"/>), as does the app's own animation
+    /// when it fails the check. A local model's code that fails to render gets its free repair, and when that fails too the app's own animation
+    /// is rendered (the decision that a local model falls back to it).
     /// </summary>
     public async Task<RenderOutcome> CodeAndRenderAsync(IVideoEngine engine, ResolvedModel codeModel, VideoOptions options, RenderInput input, string work,
         Guid id, VideoStepProgress steps, CancellationToken cancellationToken)
@@ -135,6 +139,18 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
                 request = Write(engine, request, style);
                 await engine.RenderAsync(request, engineProgress, cancellationToken).ConfigureAwait(false);
             }
+            catch (EngineException again) when (local)
+            {
+                // A free model on this computer: its repair did not pass the check or did not render either, so the app's own animation is used.
+                logger.LogWarning("The local model's repaired video code failed too ({Error}); the app's own animation is used", again.Message);
+                await File.WriteAllTextAsync(Path.Combine(work, Rejected + "2.txt"), code, cancellationToken).ConfigureAwait(false);
+                request = AppCode(engine, request, style) ?? throw new VideoException("Render failed after the repair: " + again.Message, again)
+                {
+                    Code = again.Code == "check" ? "code" : "render",
+                };
+                appCode = true;
+                await RenderAppCodeAsync(engine, request, engineProgress, cancellationToken).ConfigureAwait(false);
+            }
             catch (EngineException again)
             {
                 throw new VideoException("Render failed after the repair: " + again.Message, again) { Code = again.Code == "check" ? "code" : "render" };
@@ -147,57 +163,69 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
 
         // The frame check: what the video really shows.
         var frameFallback = false;
-        if (await FrameFindingsAsync(request, cancellationToken).ConfigureAwait(false) is { Count: > 0 } findings)
+        var frameWeak = false;
+        var (findings, seen) = await FrameFindingsAsync(request, cancellationToken).ConfigureAwait(false);
+        if (findings.Count > 0 && appCode)
         {
-            if (appCode || !local)
+            // The app's own animation is what it is: kept, with the warning.
+            logger.LogWarning("The app's own animation does not pass the frame check either ({Findings}); it is kept", string.Join(" · ", findings));
+            frameWeak = true;
+        }
+        else if (findings.Count > 0 && local)
+        {
+            logger.LogWarning("The local model's video does not show its scenes ({Findings}); it is rendered again with the app's own animation",
+                string.Join(" · ", findings));
+            request = AppCode(engine, request, style) ?? throw new VideoException("The rendered video does not show its scenes: " + string.Join("; ", findings))
             {
-                if (!appCode)
-                {
-                    logger.LogError(Activity.LogEvents.OnScreen, "The rendered video does not show its scenes ({Findings}); the video is stopped", string.Join(" · ", findings));
-                    throw new VideoException("The rendered video does not show its scenes: " + string.Join("; ", findings)) { Code = "frames" };
-                }
-
-                // The app's own animation is what it is: kept, with the warning.
-                logger.LogWarning("The app's own animation does not pass the frame check either ({Findings}); it is kept", string.Join(" · ", findings));
-                frameFallback = true;
-            }
-            else
-            {
-                logger.LogWarning("The local model's video does not show its scenes ({Findings}); it is rendered again with the app's own animation",
-                    string.Join(" · ", findings));
-                request = AppCode(engine, request, style) ?? throw new VideoException("The rendered video does not show its scenes: " + string.Join("; ", findings))
-                {
-                    Code = "frames",
-                };
-                try
-                {
-                    await engine.RenderAsync(request, engineProgress, cancellationToken).ConfigureAwait(false);
-                }
-                catch (EngineException ex)
-                {
-                    throw new VideoException("Render failed: " + ex.Message, ex) { Code = ex.Code == "check" ? "code" : "render" };
-                }
-
-                appCode = true;
-                frameFallback = true;
-            }
+                Code = "frames",
+            };
+            await RenderAppCodeAsync(engine, request, engineProgress, cancellationToken).ConfigureAwait(false);
+            appCode = true;
+            frameFallback = true;
+        }
+        else if (findings.Count > seen * FrameCheckLimits.StopShare)
+        {
+            logger.LogError(Activity.LogEvents.OnScreen, "The rendered video does not show {Failed} of its {Seen} scenes ({Findings}); the video is stopped",
+                findings.Count, seen, string.Join(" · ", findings));
+            throw new VideoException("The rendered video does not show its scenes: " + string.Join("; ", findings)) { Code = "frames" };
+        }
+        else if (findings.Count > 0)
+        {
+            logger.LogWarning(Activity.LogEvents.OnScreen, "The rendered video does not show {Failed} of its {Seen} scenes ({Findings}); it is kept with a warning",
+                findings.Count, seen, string.Join(" · ", findings));
+            frameWeak = true;
         }
 
         steps.Finish(VideoSteps.Render);
-        return new RenderOutcome(request, repaired, input) { AppCode = appCode, FrameFallback = frameFallback };
+        return new RenderOutcome(request, repaired, input) { AppCode = appCode, FrameFallback = frameFallback, FrameWeak = frameWeak };
+    }
+
+    /// <summary>Renders the app's own animation (no repair: the app's code is not sent to a model).</summary>
+    private static async Task RenderAppCodeAsync(IVideoEngine engine, EngineRenderRequest request, IProgress<EngineEvent> progress,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await engine.RenderAsync(request, progress, cancellationToken).ConfigureAwait(false);
+        }
+        catch (EngineException ex)
+        {
+            throw new VideoException("Render failed: " + ex.Message, ex) { Code = ex.Code == "check" ? "code" : "render" };
+        }
     }
 
     /// <summary>
     /// The frame check of a rendered silent video (<see cref="FrameCheck"/>): one frame from the middle of each scene and each scene's image
     /// from the project folder, sampled small by ffmpeg; every scene's scores are logged. Returns the findings of the scenes that fail (empty =
-    /// passed). A sample ffmpeg cannot read is logged and its scene is left out: the check never fails a video it could not see.
+    /// passed) and how many scenes were checked. A sample ffmpeg cannot read is logged and its scene is left out: the check never fails a
+    /// video it could not see.
     /// </summary>
-    private async Task<IReadOnlyList<string>> FrameFindingsAsync(EngineRenderRequest request, CancellationToken cancellationToken)
+    private async Task<(IReadOnlyList<string> Findings, int Seen)> FrameFindingsAsync(EngineRenderRequest request, CancellationToken cancellationToken)
     {
         var scenes = request.Input.Scenes;
         if (scenes.Count == 0 || !File.Exists(request.Output))
         {
-            return [];
+            return ([], 0);
         }
 
         IReadOnlyList<Media.FramePixels?> frames;
@@ -209,7 +237,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "The rendered video could not be sampled for the frame check; it is skipped");
-            return [];
+            return ([], 0);
         }
 
         var findings = new List<string>();
@@ -245,7 +273,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         }
 
         logger.LogInformation("Frame check: {Scores}", string.Join(" · ", scores));
-        return findings;
+        return (findings, scores.Count);
     }
 
     /// <summary>A model that runs on this computer (free; small ones often fail the video code check): the app's own, its Ollama copy or a local server.</summary>
