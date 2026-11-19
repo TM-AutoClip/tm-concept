@@ -159,12 +159,15 @@ public sealed class StyledVideoTests
         var media = (FakeMedia)h.Get<IMediaTools>();
 
         // The rendered video is as bright as the template's text behind every subtitle (generated frames, 0.1.25).
+        // (Bright but not one flat colour: a flat frame fails the frame check after the render.)
         media.Pixels = (file, _) => file == "silent.mp4"
-            ? new FramePixels(4, 2, Enumerable.Repeat((byte)250, 4 * 2 * 3).ToArray())
+            ? new FramePixels(4, 2, Enumerable.Range(0, 4 * 2 * 3).Select(i => (byte)(i / 3 % 2 == 0 ? 250 : 236)).ToArray())
             : null;
         await MakeAsync(h, Template(), photo: false);
 
-        var sample = media.Samples.Single(s => s.File == "silent.mp4");
+        var sample = media.Samples.Single(s => s.File == "silent.mp4" && s.Region != FrameRegion.Whole);
+        media.Samples.Single(s => s.File == "silent.mp4" && s.Region == FrameRegion.Whole).AtMs.Count.ShouldBe(engine.Input!.Scenes.Count,
+            "the frame check: one frame from the middle of each scene");
         sample.Region.ShouldBe(TextBackdrop.SubtitleRegion(engine.Input!.Width, engine.Input.Height));
         var ass = media.Overlays.Single().AssText.ShouldNotBeNull();
         sample.AtMs.Count.ShouldBe(ass.Split('\n').Count(l => l.StartsWith("Dialogue: 0,", StringComparison.Ordinal)), "one sample per subtitle");

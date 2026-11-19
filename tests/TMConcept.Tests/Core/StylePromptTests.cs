@@ -37,7 +37,7 @@ public sealed class StylePromptTests
 
         var text = VideoCodePrompt.System(engine, subtitles: true, Style(progressBar: true, closing: ClosingPlacement.Screen), ContentLanguages.English);
 
-        VideoCodePrompt.Version.ShouldBe("10", "9: the template block; 10: the checklist for local models");
+        VideoCodePrompt.Version.ShouldBe("11", "9: the template block; 10: the checklist for local models; 11: the images in the repair");
         text.ShouldContain("Template (the user's choice");
         text.ShouldContain("ONLY input.style.font (\"Anton\")");
         text.ShouldContain("Titles: band (on a full-width band in the surface colour), at the middle left of the safe area");
@@ -114,7 +114,7 @@ public sealed class StylePromptTests
         var plain = ImagePromptBuilder.User("Byzantium", ["a map"]);
         var styled = ImagePromptBuilder.User("Byzantium", ["a map"], DrawStyle.PaperCut);
 
-        plain.ShouldBe("Channel: «Byzantium»\nScenes:\n1. «a map»\nReturn 1 prompts.", "without a template the text is as before");
+        plain.ShouldBe("Channel: «Byzantium»\nScenes:\n1. «a map»\nReturn 1 prompts, one for each scene 1 to 1.", "without a template the text is as before");
         styled.ShouldContain("Illustration style of every image: layered paper cut-out illustration");
     }
 

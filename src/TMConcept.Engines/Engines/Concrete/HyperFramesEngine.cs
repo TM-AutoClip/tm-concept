@@ -46,25 +46,37 @@ public sealed class HyperFramesEngine(IAppPaths paths, ToolInstaller tools, Chro
         No network, no timers, no randomness that changes between frames, no external fonts or addresses.
         """;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// The minimal file the repair request shows (20 Nov 2026: it shows each scene's image full frame with a slow zoom; the old one drew only
+    /// a bar and the visual text, and a small local model copied it into a video without its image) and the install check renders.
+    /// </summary>
     public override string SampleCode => """
         (function () {
           const input = window.INPUT;
           const root = document.getElementById("root");
           root.style.background = input.theme.background;
           const tl = gsap.timeline({ paused: true });
-          const bar = document.createElement("div");
-          bar.style.cssText = "position:absolute;top:10%;left:10%;height:8px;width:0;background:" + input.theme.accent;
-          root.appendChild(bar);
-          tl.to(bar, { width: "80%", duration: 0.8 }, 0);
           input.scenes.forEach(function (scene) {
-            const box = document.createElement("div");
-            box.style.cssText = "position:absolute;left:8%;right:8%;top:40%;text-align:center;font-weight:700;opacity:0;color:" + input.theme.text +
-              ";font-size:" + Math.round(input.width * 0.06) + "px";
-            box.textContent = scene.visual;
-            root.appendChild(box);
-            tl.fromTo(box, { opacity: 0, y: 60 }, { opacity: 1, y: 0, duration: 0.4 }, scene.startSeconds);
-            tl.to(box, { opacity: 0, duration: 0.25 }, scene.startSeconds + scene.durationSeconds - 0.25);
+            const layer = document.createElement("div");
+            layer.style.cssText = "position:absolute;left:0;top:0;width:100%;height:100%;overflow:hidden;opacity:0";
+            layer.style.background = input.theme.background;
+            root.appendChild(layer);
+            tl.set(layer, { opacity: 1 }, scene.startSeconds);
+            if (scene.image) {
+              const picture = document.createElement("img");
+              picture.src = scene.image;
+              picture.style.cssText = "position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover";
+              layer.appendChild(picture);
+              tl.fromTo(picture, { scale: 1 }, { scale: 1.08, duration: scene.durationSeconds, ease: "none" }, scene.startSeconds);
+            } else {
+              const box = document.createElement("div");
+              box.style.cssText = "position:absolute;left:8%;right:8%;top:40%;text-align:center;font-weight:700";
+              box.style.color = input.theme.text;
+              box.style.fontSize = Math.round(input.width * 0.06) + "px";
+              box.textContent = scene.visual;
+              layer.appendChild(box);
+              tl.fromTo(box, { opacity: 0, y: 60 }, { opacity: 1, y: 0, duration: 0.4 }, scene.startSeconds);
+            }
           });
           window.__timelines = window.__timelines || {};
           window.__timelines["concept"] = tl;

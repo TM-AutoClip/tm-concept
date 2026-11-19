@@ -874,14 +874,14 @@ public sealed class VideoPageTests
     }
 
     [AvaloniaFact]
-    public async Task ALocalCodeModelWhoseCodeFailsTwiceGetsTheAppsOwnAnimationAndAnOnlineOneStillFails()
+    public async Task ALocalCodeModelWhoseCodeFailsTheCheckGetsTheAppsOwnAnimationAtOnceAndAnOnlineOneStillFails()
     {
-        // 0.1.23, the developer's full local run: a small local model failed the check twice and no video was made. Now its prompt has the
-        // checklist, its repair the fix and a file that passes, and after a second failure the engine's own code is rendered. The check is
-        // the same: an online model's code that fails twice still stops the video.
+        // 0.1.23, the developer's full local run: a small local model failed the check twice and no video was made. 20 Nov 2026: its repair
+        // copied the example rather than fixing the design, so a local model gets no repair: the engine's own code is rendered after the
+        // first failed check. The check is the same: an online model's code that fails twice still stops the video.
         var engine = new FakeEngine();
         const string Bad = "(function(){const t={};document.body.innerHTML=\"<b>x</b>\";})();";
-        var chat = new FakeChat().Answer(_ => Code(Bad)).Answer(_ => Code(Bad));
+        var chat = new FakeChat().Answer(_ => Code(Bad));
         using var h = Harness(chat, engine);
         var (_, concept) = await PrepareAsync(h);
         var local = new ResolvedModel(TMConcept.Core.AppOllama.AppModelRegistry.Entry(TMConcept.Core.AppOllama.AppModelAdvisor.Find("qwen3.5:4b-q8_0")!),
@@ -889,11 +889,9 @@ public sealed class VideoPageTests
 
         var record = await RunAsync(h, concept, new VideoOptions { Engine = engine.Kind, Speech = false }, local);
 
-        chat.Requests.Count.ShouldBe(2);
-        chat.Requests[0].System.ShouldContain("Checklist before you answer");
-        chat.Requests[1].User.ShouldContain("Fix: create every element with document.createElement");
-        chat.Requests[1].User.ShouldContain(engine.SampleCode);
+        chat.Requests.ShouldHaveSingleItem().System.ShouldContain("Checklist before you answer");
         record.Warnings.ShouldContain(VideoWarnings.AppCode);
+        record.Warnings.ShouldNotContain(VideoWarnings.Repaired);
         var folder = LibraryPaths.Resolve(h.Get<IAppPaths>().LibraryDirectory, record.Folder);
         File.ReadAllText(Path.Combine(folder, VideoFolders.Source, engine.CodeFile)).Trim().ShouldBe(((IVideoEngine)engine).FallbackCode);
         h.Get<TMConcept.Desktop.Localization.Localizer>()["produced.note." + VideoWarnings.AppCode].ShouldNotStartWith("produced.note.");
@@ -903,7 +901,9 @@ public sealed class VideoPageTests
         chat.Answer(_ => Code(Bad)).Answer(_ => Code(Bad));
         var online = await Should.ThrowAsync<VideoException>(() => RunAsync(h, second, new VideoOptions { Engine = engine.Kind, Speech = false }));
         online.Code.ShouldBe("code");
-        chat.Requests[2].System.ShouldNotContain("Checklist");
+        chat.Requests[1].System.ShouldNotContain("Checklist");
+        chat.Requests[2].User.ShouldContain("Fix: create every element with document.createElement");
+        chat.Requests[2].User.ShouldContain(engine.SampleCode, Case.Sensitive, "the online repair shows the engine's minimal file");
     }
 
     [AvaloniaFact]
@@ -1190,7 +1190,7 @@ public sealed class VideoPageTests
     }
 
     [AvaloniaFact]
-    public async Task ACutOffImagePromptAnswerFallsBackToTheSceneTextsAndTheVideoIsMade()
+    public async Task ACutOffImagePromptAnswerGetsOneRepairAndTheVideoIsMade()
     {
         var engine = new FakeEngine();
         var images = new FakeImages();
@@ -1198,8 +1198,10 @@ public sealed class VideoPageTests
             {
                 Code = "truncated",
                 ChargedUsage = new ChatUsage(100, 0, 0, 4000),
-                PartialText = "{\"prompts\":[\"a map\",\"burn",
+                PartialText = "{\"prompts\":[{\"scene\":1,\"prompt\":\"a map\"},{\"scene\":2,\"prompt\":\"burn",
             })
+            .Answer(_ => new ChatResponse("{\"prompts\":[{\"scene\":1,\"prompt\":\"a map\"},{\"scene\":2,\"prompt\":\"burning ships\"}]}",
+                new ChatUsage(100, 0, 0, 50), null, "end_turn", "r"))
             .Answer(_ => Code(engine.SampleCode));
         using var h = Harness(chat, engine, s =>
         {
@@ -1216,10 +1218,11 @@ public sealed class VideoPageTests
 
         await page.ProduceAllAsync();
 
-        // The cut is not "the video code was cut off": the scene texts stand in for the prompts and the video code step runs.
+        // The cut is not "the video code was cut off": its complete prompt is kept, the one repair names the missing scene, the code step runs.
         row.Failed.ShouldBeFalse(row.Error);
-        chat.Requests.Count.ShouldBe(2);
-        images.Prompts.Count.ShouldBe(2);
+        chat.Requests.Count.ShouldBe(3);
+        chat.Requests[1].User.ShouldContain("Your previous answer did not fit the scenes: 1 prompts for 2 scenes; scene 2 has no prompt.");
+        images.Prompts.ShouldBe(["a map", "burning ships"]);
         var made = (await h.Get<IVideoStore>().ListAsync(concept.ProfileId, CancellationToken.None)).ShouldHaveSingleItem();
         made.TotalUsd.ShouldBeGreaterThan(0m, "the cut-off prompt answer was paid for and is counted");
     }
@@ -1580,7 +1583,8 @@ public sealed class VideoPageTests
 
         public string Contract => "contract";
 
-        public string SampleCode => "window.__timelines = window.__timelines || {}; window.__timelines[\"concept\"] = gsap.timeline({ paused: true });";
+        public string SampleCode => "window.__timelines = window.__timelines || {}; window.__timelines[\"concept\"] = gsap.timeline({ paused: true });\n"
+            + "window.INPUT.scenes.forEach(function (scene) { const picture = document.createElement(\"img\"); picture.src = scene.image; });";
 
         public IReadOnlyList<string> Missing { get; set; } = [];
 

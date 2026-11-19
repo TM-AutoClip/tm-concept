@@ -958,6 +958,8 @@ public sealed partial class VideoViewModel : PageViewModelBase
     [
         (VideoWarnings.SpeechOff, "video.silent.off", ActivityLevel.Warning, "video.noted.speech_off"),
         (VideoWarnings.SpeechSkipped, "video.speech.skipped", ActivityLevel.Warning, "video.noted.speech_skipped"),
+        (VideoWarnings.FrameCheck, "video.frames.fallback", ActivityLevel.Warning, "video.noted.frame_check"),
+        (VideoWarnings.NoThumbnail, "video.thumbnail.none", ActivityLevel.Warning, "video.noted.no_thumbnail"),
     ];
 
     /// <summary>The warnings of a failed run as activity lines (Warning); returns their texts for the notification.</summary>

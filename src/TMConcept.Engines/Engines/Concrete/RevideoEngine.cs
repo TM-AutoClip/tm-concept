@@ -45,26 +45,31 @@ public sealed class RevideoEngine(IAppPaths paths, ToolInstaller tools, ChromeLo
         Never hard-code texts or durations. No network, no external fonts.
         """;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// The minimal file the repair request shows and the install check renders; also the app's own animation of this engine. 20 Nov 2026: it
+    /// shows each scene's image full frame (served from public/, so its address starts with "/") with a slow zoom.
+    /// </summary>
     public override string SampleCode => """
-        import {makeScene2D, Rect, Txt} from '@revideo/2d';
+        import {Img, makeScene2D, Txt} from '@revideo/2d';
         import {all, createRef, useScene, waitFor} from '@revideo/core';
         import type {ConceptInput} from './input';
 
         export default makeScene2D('scene', function* (view) {
           const input = useScene().variables.get<ConceptInput>('input', {} as ConceptInput)();
           view.fill(input.theme.background);
-          const bar = createRef<Rect>();
-          view.add(<Rect ref={bar} width={0} height={8} fill={input.theme.accent} y={-input.height * 0.4} />);
-          yield* bar().width(input.width * 0.8, 0.6);
           for (const scene of input.scenes) {
-            const title = createRef<Txt>();
-            view.add(<Txt ref={title} text={scene.visual} fill={input.theme.text} fontSize={input.width * 0.06} fontWeight={700} opacity={0} y={40} />);
-            const hold = Math.max(0, scene.durationSeconds - 0.65 - (scene.number === 1 ? 0.6 : 0));
-            yield* all(title().opacity(1, 0.4), title().y(0, 0.4));
-            yield* waitFor(hold);
-            yield* title().opacity(0, 0.25);
-            title().remove();
+            if (scene.image) {
+              const picture = createRef<Img>();
+              view.add(<Img ref={picture} src={'/' + scene.image} width={input.width} height={input.height} />);
+              yield* picture().scale(1.08, scene.durationSeconds);
+              picture().remove();
+            } else {
+              const title = createRef<Txt>();
+              view.add(<Txt ref={title} text={scene.visual} fill={input.theme.text} fontSize={input.width * 0.06} fontWeight={700} opacity={0} y={40} />);
+              yield* all(title().opacity(1, 0.4), title().y(0, 0.4));
+              yield* waitFor(Math.max(0, scene.durationSeconds - 0.4));
+              title().remove();
+            }
           }
         });
         """;

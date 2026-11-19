@@ -41,7 +41,12 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
     /// engine get the input without captions (<see cref="RenderInputBuilder.ForEngine"/>), so the code cannot draw the narration. With a
     /// template (<see cref="VideoOptions.Style"/>) the input gets its tokens (<see cref="RenderStyleBuilder"/>), the prompt its block, the project
     /// its font, and the code the template check after the safety check (<see cref="VideoStyleCheck"/>: a finding takes the same single repair;
-    /// colours outside the palette are replaced without one).
+    /// colours outside the palette are replaced without one). With scene images the code must show them (<see cref="ImageUseCheck"/>, a finding
+    /// like the others). 20 Nov 2026: a model on this computer gets no repair after a failed check: the app's own animation is rendered at
+    /// once (<see cref="IVideoEngine.FallbackCode"/>, until then only after a second failure). After the render one frame from the middle of
+    /// every scene is checked (<see cref="FrameCheck"/>): a near-empty frame, or one that does not show its scene image, makes a local model's
+    /// video render again with the app's own animation (<see cref="RenderOutcome.FrameFallback"/>) and stops an online model's video with the
+    /// reason ("frames"; no paid repair, the developer's decision).
     /// </summary>
     public async Task<RenderOutcome> CodeAndRenderAsync(IVideoEngine engine, ResolvedModel codeModel, VideoOptions options, RenderInput input, string work,
         Guid id, VideoStepProgress steps, CancellationToken cancellationToken)
@@ -69,6 +74,17 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         {
             request = Write(engine, request, style);
         }
+        catch (EngineException ex) when (ex.Code == "check" && local)
+        {
+            // A free model on this computer: its repair copied the example rather than fixing the design (19 Nov 2026), so the app's own
+            // simple animation is used at once (the same checks, nothing is weakened).
+            await File.WriteAllTextAsync(Path.Combine(work, Rejected + "1.txt"), code, cancellationToken).ConfigureAwait(false);
+            request = AppCode(engine, request, style) ?? throw new VideoException("The video code did not pass the check and the app's own animation "
+                + "did not either: " + string.Join(" · ", ex.Findings.Take(4))) { Code = "code" };
+            logger.LogWarning("The local model's video code failed the check ({Findings}); the app's own animation is used",
+                string.Join(" · ", ex.Findings.Take(4)));
+            appCode = true;
+        }
         catch (EngineException ex) when (ex.Code == "check")
         {
             await File.WriteAllTextAsync(Path.Combine(work, Rejected + "1.txt"), code, cancellationToken).ConfigureAwait(false);
@@ -84,22 +100,14 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
             catch (EngineException again) when (again.Code == "check")
             {
                 await File.WriteAllTextAsync(Path.Combine(work, Rejected + "2.txt"), code, cancellationToken).ConfigureAwait(false);
-                if (local && AppCode(engine, request, style) is { } own)
-                {
-                    // A free model on this computer: rather than no video, the app's own simple animation (the same checks, nothing is weakened).
-                    logger.LogWarning("The local model's video code failed the check again ({Findings}); the app's own animation is used",
-                        string.Join(" · ", again.Findings.Take(4)));
-                    request = own;
-                    appCode = true;
-                }
-                else
-                {
-                    // Named after what is left: the first answer may have broken the safety rules only, and the repair the template only.
-                    var what = again.Message.StartsWith(TemplateRejection, StringComparison.Ordinal)
-                        ? "The video code still did not follow the template after the repair and was not run: "
+
+                // Named after what is left: the first answer may have broken the safety rules only, and the repair the template only.
+                var what = again.Message.StartsWith(TemplateRejection, StringComparison.Ordinal)
+                    ? "The video code still did not follow the template after the repair and was not run: "
+                    : again.Message.StartsWith(ImageRejection, StringComparison.Ordinal)
+                        ? "The video code still did not show the scene images after the repair and was not run: "
                         : "The video code still did not pass the safety check after the repair and was not run: ";
-                    throw new VideoException(what + string.Join(" · ", again.Findings.Take(4))) { Code = "code" };
-                }
+                throw new VideoException(what + string.Join(" · ", again.Findings.Take(4))) { Code = "code" };
             }
         }
 
@@ -137,8 +145,107 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
             throw new VideoException("Render failed: " + ex.Message, ex) { Code = ex.Code == "check" ? "code" : "render" };
         }
 
+        // The frame check: what the video really shows.
+        var frameFallback = false;
+        if (await FrameFindingsAsync(request) is { Count: > 0 } findings)
+        {
+            if (appCode || !local)
+            {
+                if (!appCode)
+                {
+                    logger.LogError(Activity.LogEvents.OnScreen, "The rendered video does not show its scenes ({Findings}); the video is stopped", string.Join(" · ", findings));
+                    throw new VideoException("The rendered video does not show its scenes: " + string.Join("; ", findings)) { Code = "frames" };
+                }
+
+                // The app's own animation is what it is: kept, with the warning.
+                logger.LogWarning("The app's own animation does not pass the frame check either ({Findings}); it is kept", string.Join(" · ", findings));
+                frameFallback = true;
+            }
+            else
+            {
+                logger.LogWarning("The local model's video does not show its scenes ({Findings}); it is rendered again with the app's own animation",
+                    string.Join(" · ", findings));
+                request = AppCode(engine, request, style) ?? throw new VideoException("The rendered video does not show its scenes: " + string.Join("; ", findings))
+                {
+                    Code = "frames",
+                };
+                try
+                {
+                    await engine.RenderAsync(request, engineProgress, cancellationToken).ConfigureAwait(false);
+                }
+                catch (EngineException ex)
+                {
+                    throw new VideoException("Render failed: " + ex.Message, ex) { Code = ex.Code == "check" ? "code" : "render" };
+                }
+
+                appCode = true;
+                frameFallback = true;
+            }
+        }
+
         steps.Finish(VideoSteps.Render);
-        return new RenderOutcome(request, repaired, input) { AppCode = appCode };
+        return new RenderOutcome(request, repaired, input) { AppCode = appCode, FrameFallback = frameFallback };
+    }
+
+    /// <summary>
+    /// The frame check of a rendered silent video (<see cref="FrameCheck"/>): one frame from the middle of each scene and each scene's image
+    /// from the project folder, sampled small by ffmpeg; every scene's scores are logged. Returns the findings of the scenes that fail (empty =
+    /// passed). A sample ffmpeg cannot read is logged and its scene is left out: the check never fails a video it could not see.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> FrameFindingsAsync(EngineRenderRequest request)
+    {
+        var scenes = request.Input.Scenes;
+        if (scenes.Count == 0 || !File.Exists(request.Output))
+        {
+            return [];
+        }
+
+        IReadOnlyList<Media.FramePixels?> frames;
+        try
+        {
+            frames = await media.SampleAsync(request.Output, scenes.Select(s => (long)Math.Round((s.StartSeconds + (s.DurationSeconds / 2)) * 1000)).ToList(),
+                Media.FrameRegion.Whole, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "The rendered video could not be sampled for the frame check; it is skipped");
+            return [];
+        }
+
+        var findings = new List<string>();
+        var scores = new List<string>();
+        for (var i = 0; i < scenes.Count && i < frames.Count; i++)
+        {
+            if (frames[i] is not { } frame)
+            {
+                continue;
+            }
+
+            Media.FramePixels? image = null;
+            var file = scenes[i].Image.Length > 0 ? Path.Combine(request.Folder, scenes[i].Image) : null;
+            if (file is not null && File.Exists(file))
+            {
+                try
+                {
+                    image = (await media.SampleAsync(file, [0], Media.FrameRegion.Whole, CancellationToken.None).ConfigureAwait(false)).FirstOrDefault();
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogWarning(ex, "Scene {Number}'s image could not be sampled for the frame check", scenes[i].Number);
+                }
+            }
+
+            var score = FrameCheck.Score(scenes[i].Number, frame, image);
+            scores.Add(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                $"{score.Scene}: deviation {score.Deviation:0.0}{(score.Resemblance is { } r ? $", resemblance {r:0.00}" : string.Empty)}"));
+            if (score.Failed)
+            {
+                findings.Add(score.Finding);
+            }
+        }
+
+        logger.LogInformation("Frame check: {Scores}", string.Join(" · ", scores));
+        return findings;
     }
 
     /// <summary>A model that runs on this computer (free; small ones often fail the video code check): the app's own, its Ollama copy or a local server.</summary>
@@ -274,7 +381,8 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
             TotalUsd = save.Spent.Sum(c => c.Usd),
             CostExact = save.Spent.All(c => c.Exact),
             ElapsedMs = save.Watch.ElapsedMilliseconds,
-            Warnings = string.Join(',', save.Warnings.Distinct()),
+            // No frame that is not black for the thumbnail: a yellow warning (until 0.1.29 only a log line, and an empty video was "ready").
+            Warnings = string.Join(',', save.Warnings.Concat(thumbnail ? [] : [VideoWarnings.NoThumbnail]).Distinct()),
             CreatedAtUtc = clock.GetUtcNow(),
         };
         await videos.AddAsync(record, [.. save.ExtraCosts, .. save.Spent], CancellationToken.None).ConfigureAwait(false);
@@ -520,14 +628,16 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
     /// </summary>
     private EngineRenderRequest Write(IVideoEngine engine, EngineRenderRequest request, VideoStyle? style)
     {
+        var images = ImageUseCheck.Finding(engine.Kind, request.Code, request.Input);
         if (style is not null)
         {
             var result = VideoStyleCheck.Check(request.Code, style, request.Input.Language);
             var safety = EngineCodeCheck.Check(engine.Kind, result.Code);
-            if (safety.Count > 0 || result.Findings.Count > 0)
+            if (safety.Count > 0 || result.Findings.Count > 0 || images is not null)
             {
-                var findings = safety.Concat(result.Findings).ToList();
-                var message = safety.Count > 0 ? $"{engine.Name} code did not pass the safety check: " : TemplateRejection;
+                var findings = safety.Concat(result.Findings).Concat(images is null ? [] : [images]).ToList();
+                var message = safety.Count > 0 ? $"{engine.Name} code did not pass the safety check: "
+                    : result.Findings.Count > 0 ? TemplateRejection : ImageRejection;
                 throw new EngineException(message + string.Join(" · ", findings.Take(6))) { Code = "check", Findings = findings };
             }
 
@@ -539,9 +649,19 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
             }
         }
 
+        else if (images is not null)
+        {
+            var findings = EngineCodeCheck.Check(engine.Kind, request.Code).Append(images).ToList();
+            var message = findings.Count > 1 ? $"{engine.Name} code did not pass the safety check: " : ImageRejection;
+            throw new EngineException(message + string.Join(" · ", findings.Take(6))) { Code = "check", Findings = findings };
+        }
+
         engine.WriteProject(request);
         return request;
     }
+
+    /// <summary>The start of the message of a code that only fails to show the scene images.</summary>
+    private const string ImageRejection = "The video code does not show the scene images: ";
 
     /// <summary>
     /// What the mux draws over the video. A video without a template: the subtitles in the old look when they are on (exactly as before). With

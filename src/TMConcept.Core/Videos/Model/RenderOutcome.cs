@@ -13,4 +13,10 @@ public sealed record RenderOutcome(EngineRenderRequest Request, bool Repaired, R
     /// The engine's own code was rendered (<see cref="IVideoEngine.FallbackCode"/>): a local model's code failed the check after its repair.
     /// </summary>
     public bool AppCode { get; init; }
+
+    /// <summary>
+    /// The rendered video failed the frame check (<see cref="FrameCheck"/>) and the app's own animation was rendered instead (a local model),
+    /// or the app's own animation itself did not pass it and was kept.
+    /// </summary>
+    public bool FrameFallback { get; init; }
 }

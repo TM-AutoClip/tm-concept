@@ -22,6 +22,15 @@ public static class VideoWarnings
     public const string AppCode = "app_code";
 
     /// <summary>
+    /// The local model's video did not show its scenes (an empty frame, or not the scene image; <see cref="FrameCheck"/>): the app's own
+    /// animation was rendered instead.
+    /// </summary>
+    public const string FrameCheck = "frame_check";
+
+    /// <summary>No frame of the video that is not black was found for the thumbnail: the video may be empty (yellow).</summary>
+    public const string NoThumbnail = "no_thumbnail";
+
+    /// <summary>
     /// The sample images were chosen but the profile had none: the video was made without images. Written until 0.1.28 (sample images were
     /// removed in 0.1.29); read, never written.
     /// </summary>

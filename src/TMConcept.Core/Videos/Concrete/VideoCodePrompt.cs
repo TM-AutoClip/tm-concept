@@ -22,9 +22,10 @@ public static class VideoCodePrompt
     /// subtitles the narration is never drawn and the captions are left out; 9: the template block, see <see cref="VideoStylePrompt"/>:
     /// palette colours and the template font only, title style and place, drawing style, motion, ready helpers, and the app draws the
     /// progress bar, the subtitles and the closing card, so the code never draws a progress bar, timer or scene counter; 10: a model on this
-    /// computer gets a short checklist of the rules small models break most and the lines the file must end with, see <see cref="SmallModelChecklist"/>).
+    /// computer gets a short checklist of the rules small models break most and the lines the file must end with, see <see cref="SmallModelChecklist"/>;
+    /// 11: the repair shows a minimal file that puts each scene's image full frame, and a code that never shows the images is sent back).
     /// </summary>
-    public const string Version = "10";
+    public const string Version = "11";
 
     /// <summary>
     /// SVG: the check allows exactly the SVG (and xlink) namespace written as one whole literal; a model that only read "no web addresses"
@@ -210,6 +211,8 @@ public static class VideoCodePrompt
                 "rename the variable or property (no location, top, parent, opener) and never touch the page's location.",
             _ when finding.Contains("progress bar", StringComparison.Ordinal) =>
                 "remove it: the app draws the progress bar itself.",
+            _ when finding.StartsWith(Engines.ImageUseCheck.FindingStart, StringComparison.Ordinal) =>
+                "every scene with an image shows it full frame (cover) with a slow zoom, as the minimal file below does; put at most a few accents over it.",
             _ => string.Empty,
         };
     }

@@ -48,22 +48,29 @@ public sealed class RemotionEngine(IAppPaths paths, ToolInstaller tools, ChromeL
         Never hard-code texts or durations. No network, no external fonts, no randomness that changes between frames.
         """;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// The minimal file the repair request shows and the install check renders; also the app's own animation of this engine (there is no
+    /// other <see cref="IVideoEngine.FallbackCode"/>). 20 Nov 2026: it shows each scene's image full frame with a slow zoom.
+    /// </summary>
     public override string SampleCode => """
         import React from 'react';
-        import {AbsoluteFill, Sequence, interpolate, spring, useCurrentFrame, useVideoConfig} from 'remotion';
+        import {AbsoluteFill, Img, Sequence, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig} from 'remotion';
         import type {ConceptInput, ConceptScene} from './input';
 
         const Card: React.FC<{scene: ConceptScene; input: ConceptInput}> = ({scene, input}) => {
           const frame = useCurrentFrame();
           const {fps} = useVideoConfig();
           const enter = spring({frame, fps, config: {damping: 200}});
-          const leave = interpolate(frame, [scene.frameCount - 8, scene.frameCount], [1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
+          const zoom = interpolate(frame, [0, scene.frameCount], [1, 1.08], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
           return (
-            <AbsoluteFill style={{justifyContent: 'center', alignItems: 'center', opacity: leave}}>
-              <div style={{color: input.theme.text, fontSize: input.width * 0.06, fontWeight: 700, textAlign: 'center',
-                padding: '0 8%', transform: `translateY(${(1 - enter) * 60}px)`, opacity: enter}}>{scene.visual}</div>
-              <div style={{position: 'absolute', top: '10%', left: '10%', height: 8, width: `${enter * 80}%`, background: input.theme.accent}} />
+            <AbsoluteFill style={{background: input.theme.background, justifyContent: 'center', alignItems: 'center', overflow: 'hidden'}}>
+              {scene.image ? (
+                <Img src={staticFile(scene.image)} style={{position: 'absolute', width: '100%', height: '100%', objectFit: 'cover',
+                  transform: `scale(${zoom})`}} />
+              ) : (
+                <div style={{color: input.theme.text, fontSize: input.width * 0.06, fontWeight: 700, textAlign: 'center',
+                  padding: '0 8%', transform: `translateY(${(1 - enter) * 60}px)`, opacity: enter}}>{scene.visual}</div>
+              )}
             </AbsoluteFill>
           );
         };
