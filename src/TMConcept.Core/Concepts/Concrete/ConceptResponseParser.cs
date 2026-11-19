@@ -8,6 +8,11 @@ namespace TMConcept.Core.Concepts;
 /// still yields every complete item before the cut; a broken item is reported and skipped, the others are kept. English key names
 /// (<c>concepts</c>, <c>title</c>, <c>summary</c>, <c>content</c>) are accepted too. Thinking blocks are skipped and an item that is not valid JSON is read
 /// once more after <see cref="Chat.ModelJson.Repair"/> (0.1.17: small local models write raw line breaks inside the content).
+/// 20 Nov 2026: a generated concept comes with its scenes as a list (<c>"sahneler":[{"ekranda":"…","seslendirme":"…"}]</c>, English
+/// <c>scenes</c> / <c>on_screen</c> / <c>narration</c>); the program writes the stored text itself, one <c>[ekranda: …]</c> line (the scene
+/// label of the prompt's language, <see cref="SceneLabel"/>) before each scene's narration, so <see cref="TMConcept.Core.Scenes.SceneSplitter"/>, the editor
+/// and the storage stay as they were. An item without the list (an AI edit) still gives its <c>icerik</c>. Square brackets inside a scene's
+/// text become round ones: only the program writes scene lines.
 /// </summary>
 public static class ConceptResponseParser
 {
@@ -16,9 +21,19 @@ public static class ConceptResponseParser
     private static readonly string[] SummaryKeys = ["ozet", "summary"];
     private static readonly string[] ContentKeys = ["icerik", "content"];
     private static readonly string[] SourceKeys = ["kaynaklar", "sources"];
+    private static readonly string[] SceneKeys = ["sahneler", "scenes"];
+    private static readonly string[] VisualKeys = ["ekranda", "on_screen", "onScreen", "visual"];
+    private static readonly string[] NarrationKeys = ["seslendirme", "narration"];
 
-    /// <summary>Parses.</summary>
-    public static ConceptParseResult Parse(string? answer)
+    /// <summary>The label of the scene lines the program writes for a video in <paramref name="language"/> (the prompt's language).</summary>
+    public static string SceneLabel(string language) =>
+        Profiles.OutputLanguages.Of(language).PromptLanguage == Profiles.ContentLanguages.Turkish ? "ekranda" : "on screen";
+
+    /// <summary>Parses with the English scene label.</summary>
+    public static ConceptParseResult Parse(string? answer) => Parse(answer, "on screen");
+
+    /// <summary>Parses; scene lists become text with <paramref name="sceneLabel"/> lines.</summary>
+    public static ConceptParseResult Parse(string? answer, string sceneLabel)
     {
         var problems = new List<string>();
         var text = Chat.ModelJson.StripThinking(answer).Replace("\0", string.Empty, StringComparison.Ordinal);
@@ -40,7 +55,7 @@ public static class ConceptResponseParser
                 var root = document.RootElement;
                 var title = TextClean(Read(root, TitleKeys), ConceptLimits.TitleHardMax, oneLine: true);
                 var summary = TextClean(Read(root, SummaryKeys), ConceptLimits.SummaryMax, oneLine: true);
-                var content = TextClean(Read(root, ContentKeys), ConceptLimits.ContentMax, oneLine: false);
+                var content = SceneText(root, sceneLabel) ?? TextClean(Read(root, ContentKeys), ConceptLimits.ContentMax, oneLine: false);
                 if (title.Length == 0 || content.Length == 0)
                 {
                     problems.Add($"Item {number}: the title or the content is empty.");
@@ -109,6 +124,50 @@ public static class ConceptResponseParser
 
         return null;
     }
+
+    /// <summary>
+    /// The stored text of an item's scene list (null when it has none): "[label: on screen]" and the narration under it, scene after scene;
+    /// a scene with neither is skipped.
+    /// </summary>
+    private static string? SceneText(JsonElement root, string label)
+    {
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        foreach (var key in SceneKeys)
+        {
+            if (!root.TryGetProperty(key, out var list) || list.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            var text = new System.Text.StringBuilder();
+            foreach (var scene in list.EnumerateArray())
+            {
+                var visual = Unbracket(Text.TextClean.OneLine(Read(scene, VisualKeys), TMConcept.Core.Scenes.SceneSplitter.MaxVisual));
+                var narration = Unbracket(Text.TextClean.Clean(Read(scene, NarrationKeys), TMConcept.Core.Scenes.SceneSplitter.MaxNarration));
+                if (visual.Length == 0 && narration.Length == 0)
+                {
+                    continue;
+                }
+
+                text.Append('[').Append(label).Append(": ").Append(visual).Append("]\n");
+                if (narration.Length > 0)
+                {
+                    text.Append(narration).Append('\n');
+                }
+            }
+
+            var content = text.ToString().TrimEnd('\n');
+            return content.Length <= ConceptLimits.ContentMax ? content : content[..ConceptLimits.ContentMax];
+        }
+
+        return null;
+    }
+
+    private static string Unbracket(string text) => text.Replace('[', '(').Replace(']', ')');
 
     /// <summary>The whole numbers of the first of <paramref name="keys"/> that is a list (other items skipped); none = empty.</summary>
     private static List<int> Numbers(JsonElement root, string[] keys)

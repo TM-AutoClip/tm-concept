@@ -186,12 +186,20 @@ public sealed partial class ConceptsViewModel : PageViewModelBase
 
     /// <summary>Takes an approved concept back to the new ones (row button, key A in the approved list).</summary>
     [RelayCommand]
-    public Task UnapproveRowAsync(ConceptCardViewModel? card) => RowAsync(card, ConceptStatus.New, c => _actions.UnapproveAsync(c.Concept, this));
+    public Task UnapproveRowAsync(ConceptCardViewModel? card) => RowAsync(card, ConceptStatus.New, async c =>
+    {
+        await _actions.UnapproveAsync(c.Concept, this).ConfigureAwait(true);
+        return true;
+    });
 
     /// <summary>Deletes at once, without a reason (row button, key D or Delete); the detail panel's Delete asks why.</summary>
     [RelayCommand]
     public Task TrashRowAsync(ConceptCardViewModel? card) =>
-        RowAsync(card, ConceptStatus.Trashed, c => _actions.TrashAsync([c.Concept], TrashReason.None, this));
+        RowAsync(card, ConceptStatus.Trashed, async c =>
+        {
+            await _actions.TrashAsync([c.Concept], TrashReason.None, this).ConfigureAwait(true);
+            return true;
+        });
 
     /// <summary>Opens <paramref name="card"/> in the detail panel, after asking when unsaved edits would be lost; false when the user stays.</summary>
     public async Task<bool> ChooseAsync(ConceptCardViewModel? card)
@@ -301,7 +309,7 @@ public sealed partial class ConceptsViewModel : PageViewModelBase
         OnPropertyChanged(nameof(ShowNew));
     }
 
-    private async Task RowAsync(ConceptCardViewModel? card, ConceptStatus status, Func<ConceptCardViewModel, Task> change)
+    private async Task RowAsync(ConceptCardViewModel? card, ConceptStatus status, Func<ConceptCardViewModel, Task<bool>> change)
     {
         card ??= ShowApproved ? SelectedApproved : SelectedNew;
         if (card is null)
@@ -318,7 +326,10 @@ public sealed partial class ConceptsViewModel : PageViewModelBase
 
         try
         {
-            await change(card).ConfigureAwait(true);
+            if (!await change(card).ConfigureAwait(true))
+            {
+                return;
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

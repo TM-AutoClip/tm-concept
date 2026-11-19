@@ -298,6 +298,15 @@ public sealed class ConceptRunner(AppSession session, ConceptGenerator generator
         }
 
         var level = ActivityLevel.Info;
+        if (result.ScenesMissing > 0)
+        {
+            // Kept, paid for, but their scenes failed the check even after the repair: the user sees it now, and again when approving one.
+            var missing = text.Format("concepts.scenes.run", result.ScenesMissing);
+            activity.Add(ActivityLevel.Warning, missing);
+            extra += " · " + missing;
+            level = ActivityLevel.Warning;
+        }
+
         if (result.SemanticSkipped > 0)
         {
             var skipped = text.Format("concepts.semantic.failed", result.SemanticSkipped);

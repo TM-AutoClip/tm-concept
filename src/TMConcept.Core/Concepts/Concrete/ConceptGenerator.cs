@@ -23,6 +23,10 @@ namespace TMConcept.Core.Concepts;
 /// tells how many are missing. What is written comes from the <see cref="ConceptBrief"/> alone (0.1.13): a <see cref="TopicBrief"/> gives
 /// one concept per ticked topic, in order, each batch its own slice and no extra request; an <see cref="IdeaBrief"/> gives its count and its
 /// idea as the extra request, never topics. Every batch reports the topics that got a concept (<see cref="ConceptBatch.TopicsMade"/>).
+/// 20 Nov 2026: every concept of a batch goes through <see cref="ConceptSceneCheck"/> before the duplicate check; the ones that fail get ONE
+/// repair request together, with their concrete findings (<see cref="ConceptPromptBuilder.BuildRepair"/>, paid and counted like the batch). A
+/// concept that still fails is kept (it was paid for) and counted in <see cref="ConceptRunResult.ScenesMissing"/>: the page warns, and
+/// approving it asks first.
 /// </summary>
 public sealed class ConceptGenerator(IConceptStore concepts, IRunStore runs, IChatClientFactory chats, ICostCalculator costs,
     IPromptMemorySource memory, IEmbeddingStore embeddings, IEmbeddingService embedder, IEnumerable<IConceptSource> sources, TimeProvider clock,
@@ -174,6 +178,8 @@ public sealed class ConceptGenerator(IConceptStore concepts, IRunStore runs, ICh
         var errorCode = string.Empty;
         var errorDetail = string.Empty;
         var semanticSkipped = 0;
+        var scenesMissing = 0;
+        var label = ConceptResponseParser.SceneLabel(profile.ContentLanguage);
 
         // The offset of the next batch's topic slice. Concepts come back in topic order, so of a cut or short answer the first ones of the
         // slice got a concept; a concept thrown away as a duplicate still counts: its topic is among the concepts.
@@ -257,7 +263,7 @@ public sealed class ConceptGenerator(IConceptStore concepts, IRunStore runs, ICh
                         throw;
                     }
 
-                    var read = ConceptResponseParser.Parse(answer);
+                    var read = ConceptResponseParser.Parse(answer, label);
                     problems += read.Problems.Count;
                     foreach (var problem in read.Problems)
                     {
@@ -271,7 +277,9 @@ public sealed class ConceptGenerator(IConceptStore concepts, IRunStore runs, ICh
 
                     return read.Concepts.Count > 0 ? read : null;
                 }, logger, cancellationToken).ConfigureAwait(false);
-                var batchCandidates = parsed.Concepts.Take(sizes[index])
+                var checkedConcepts = await RepairScenesAsync(client, request, run, prompt, [.. parsed.Concepts.Take(sizes[index])],
+                    sourceBatch.Grounding is not null, maxTokens, label, cancellationToken).ConfigureAwait(false);
+                var batchCandidates = checkedConcepts
                     .Select(c => (Parsed: c, Subject: new DuplicateSubject(Guid.NewGuid(), 0, c.Title, c.Summary))).ToList();
                 var verdicts = request.LocalCheck
                     ? DuplicateCheck.Sift(batchCandidates.Select(c => c.Subject), subjects, profile.ContentLanguage)
@@ -287,6 +295,11 @@ public sealed class ConceptGenerator(IConceptStore concepts, IRunStore runs, ICh
                         rejected++;
                         logger.LogInformation("Concept run {Run}: a duplicate of #{Number} was thrown away", run.Id, verdict.Result.OtherNumber);
                         continue;
+                    }
+
+                    if (ConceptSceneCheck.Check(candidate.Parsed.Content, profile.ContentLanguage, profile.TargetSeconds).Count > 0)
+                    {
+                        scenesMissing++;
                     }
 
                     var cited = sourceBatch.Grounding is { } used ? used.Titles(candidate.Parsed.Sources) : [];
@@ -360,7 +373,71 @@ public sealed class ConceptGenerator(IConceptStore concepts, IRunStore runs, ICh
             await runs.UpdateAsync(run, CancellationToken.None).ConfigureAwait(false);
         }
 
-        return new ConceptRunResult(run, accepted, rejected, problems, errorCode, errorDetail, semanticSkipped);
+        return new ConceptRunResult(run, accepted, rejected, problems, errorCode, errorDetail, semanticSkipped)
+        {
+            ScenesMissing = scenesMissing,
+        };
+    }
+
+    /// <summary>
+    /// The scene check of a batch's concepts (<see cref="ConceptSceneCheck"/>) and its one repair: the concepts that fail are sent back together
+    /// with their findings (the batch's own system part, so the cache is read; no stream), and a repaired concept replaces its original when it
+    /// has fewer findings (its document numbers kept when it names none). A failed repair call keeps the originals (what it charged is counted).
+    /// Returns the concepts in their order.
+    /// </summary>
+    private async Task<IReadOnlyList<ParsedConcept>> RepairScenesAsync(IChatClient client, ConceptRequest request, Run run,
+        ConceptPrompt prompt, List<ParsedConcept> concepts, bool documents, int maxTokens, string label, CancellationToken cancellationToken)
+    {
+        var profile = request.Profile;
+        IReadOnlyList<SceneProblem> Check(ParsedConcept concept) => ConceptSceneCheck.Check(concept.Content, profile.ContentLanguage, profile.TargetSeconds);
+        var failing = concepts.Select((c, i) => (Index: i, Problems: Check(c))).Where(f => f.Problems.Count > 0).ToList();
+        if (failing.Count == 0)
+        {
+            return concepts;
+        }
+
+        // Only the numbers and the findings are logged: the titles come from the model.
+        logger.LogWarning("Concept run {Run}: {Count} of {Total} concepts failed the scene check ({Problems}); asking for one repair", run.Id, failing.Count,
+            concepts.Count, string.Join(" | ", failing.Select(f => (f.Index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture) + ": "
+                + string.Join("; ", f.Problems))));
+        try
+        {
+            var user = ConceptPromptBuilder.BuildRepair(profile, [.. failing.Select(f => new ConceptRepairItem(concepts[f.Index], f.Problems))], documents);
+            var response = await client.SendAsync(new ChatRequest(prompt.System, user, CacheSystem: true, Schema: prompt.Schema, MaxOutputTokens: maxTokens,
+                Effort: request.Model.Effort), cancellationToken).ConfigureAwait(false);
+            Charge(run, request, response.Usage, response.ReportedCostUsd);
+            var repaired = ConceptResponseParser.Parse(response.Text, label).Concepts;
+            for (var i = 0; i < failing.Count && i < repaired.Count; i++)
+            {
+                var original = concepts[failing[i].Index];
+                var fixedConcept = repaired[i];
+                if (Check(fixedConcept).Count < failing[i].Problems.Count)
+                {
+                    concepts[failing[i].Index] = fixedConcept.Sources.Count > 0 ? fixedConcept : fixedConcept with { Sources = original.Sources };
+                }
+            }
+        }
+        catch (ProviderException ex)
+        {
+            if (ex.ChargedUsage is { } charged)
+            {
+                Charge(run, request, charged, null);
+            }
+
+            logger.LogWarning("Concept run {Run}: the scene repair failed ({Code}); the concepts are kept as they are", run.Id, ex.Code);
+        }
+
+        var missing = concepts.Count(c => Check(c).Count > 0);
+        if (missing > 0)
+        {
+            logger.LogWarning("Concept run {Run}: {Missing} concepts still fail the scene check after the repair; they are kept with a warning", run.Id, missing);
+        }
+        else
+        {
+            logger.LogInformation("Concept run {Run}: the scene repair fixed every concept", run.Id);
+        }
+
+        return concepts;
     }
 
     /// <summary>

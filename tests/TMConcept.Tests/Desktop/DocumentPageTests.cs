@@ -62,8 +62,8 @@ public sealed class DocumentPageTests
     }
 
     private static ChatResponse Grounded(string title, params int[] sources) => new(
-        "{\"konseptler\":[{\"baslik\":\"" + title + "\",\"ozet\":\"" + Guid.NewGuid().ToString("N") + "\",\"icerik\":\"[on screen: walls]\\nThe story of " + title
-        + ".\",\"kaynaklar\":[" + string.Join(",", sources) + "]}]}", new ChatUsage(1000, 0, 0, 800), null, "end_turn", "r");
+        "{\"konseptler\":[{\"baslik\":\"" + title + "\",\"ozet\":\"" + Guid.NewGuid().ToString("N") + "\"," + FakeChat.SceneList("The story of " + title)
+        + ",\"kaynaklar\":[" + string.Join(",", sources) + "]}]}", new ChatUsage(1000, 0, 0, 800), null, "end_turn", "r");
 
     private static async Task Until(Func<bool> condition)
     {

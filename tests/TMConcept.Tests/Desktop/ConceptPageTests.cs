@@ -1282,7 +1282,7 @@ public sealed class ConceptPageTests
     {
         using var h = new DesktopHarness();
         var profile = await PrepareAsync(h);
-        var concepts = Enumerable.Range(1, 3).Select(i => new Concept { ProfileId = profile.Id, Title = "Concept " + i, Summary = "s", Content = "c", Language = "en" })
+        var concepts = Enumerable.Range(1, 3).Select(i => new Concept { ProfileId = profile.Id, Title = "Concept " + i, Summary = "s", Content = Scenes(6), Language = "en" })
             .ToList();
         await h.Get<IConceptStore>().AddAsync(concepts, CancellationToken.None);
         var page = await PageAsync(h);
@@ -1297,6 +1297,44 @@ public sealed class ConceptPageTests
         page.Detail.Card.ShouldBe(first, "the panel stays on the concept being read");
         page.SelectedNew.ShouldBe(first);
         page.NewConcepts.ShouldBe([first]);
+    }
+
+    /// <summary>A text of <paramref name="count"/> short scenes, each with its on-screen line.</summary>
+    private static string Scenes(int count) => string.Join("\n", Enumerable.Range(1, count).Select(n => $"[on screen: map {n}]\nPart {n}."));
+
+    [AvaloniaFact]
+    public async Task AConceptWithMissingScenesShowsAWarningAndApprovingItAsksFirst()
+    {
+        var confirm = new FakeConfirm();
+        using var h = new DesktopHarness(s => s.AddSingleton<IConfirmDialog>(confirm));
+        var profile = await PrepareAsync(h);
+        var flat = new Concept { ProfileId = profile.Id, Title = "Flat", Summary = "s", Content = "A whole story without one scene line.", Language = "en" };
+        var good = new Concept { ProfileId = profile.Id, Title = "Good", Summary = "s", Content = Scenes(6), Language = "en" };
+        await h.Get<IConceptStore>().AddAsync([flat, good], CancellationToken.None);
+        var page = await PageAsync(h);
+        var flatCard = page.NewConcepts.Single(c => c.Id == flat.Id);
+
+        await page.ChooseAsync(flatCard);
+        page.Detail.SceneWarning.ShouldStartWith("⚠");
+        page.Detail.SceneWarning.ShouldContain("1 scenes, at least 4 needed");
+        page.Detail.SceneWarning.ShouldContain("scene 1 does not say what is on screen");
+
+        // Declined: it stays new.
+        confirm.Answers.Enqueue(false);
+        await page.ApproveRowAsync(flatCard);
+        confirm.Messages.Single().ShouldContain("1 scenes, at least 4 needed");
+        (await h.Get<IConceptStore>().GetAsync(flat.Id, CancellationToken.None))!.Status.ShouldBe(ConceptStatus.New);
+        page.NewConcepts.ShouldContain(flatCard);
+
+        // A complete one is approved without a question.
+        await page.ApproveRowAsync(page.NewConcepts.Single(c => c.Id == good.Id));
+        confirm.Messages.Count.ShouldBe(1);
+        (await h.Get<IConceptStore>().GetAsync(good.Id, CancellationToken.None))!.Status.ShouldBe(ConceptStatus.Approved);
+
+        // Approved anyway after the question.
+        confirm.Answers.Enqueue(true);
+        await page.ApproveRowAsync(flatCard);
+        (await h.Get<IConceptStore>().GetAsync(flat.Id, CancellationToken.None))!.Status.ShouldBe(ConceptStatus.Approved);
     }
 
     [AvaloniaFact]

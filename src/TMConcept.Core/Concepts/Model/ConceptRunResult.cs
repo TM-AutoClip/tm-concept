@@ -14,4 +14,9 @@ public sealed record ConceptRunResult(Run Run, IReadOnlyList<Concept> Accepted, 
     /// a topic run does not need it: its unreached topics simply stay ticked.
     /// </summary>
     public int Missing => Math.Max(0, Run.Requested - Accepted.Count);
+
+    /// <summary>
+    /// Kept concepts whose scenes still fail <see cref="ConceptSceneCheck"/> after their one repair (the page warns; approving one asks first).
+    /// </summary>
+    public int ScenesMissing { get; init; }
 }

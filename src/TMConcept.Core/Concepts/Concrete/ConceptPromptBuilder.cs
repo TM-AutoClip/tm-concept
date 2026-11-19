@@ -24,6 +24,12 @@ namespace TMConcept.Core.Concepts;
 /// facts, the documents named in "kaynaklar", the concepts in the video's language whatever the documents' language; its passages are in
 /// the changing part, so the cached part stays the same for the whole run. Its version is the file's <c>@version</c> line
 /// (<see cref="DocumentPromptVersion"/>).
+/// 20 Nov 2026 (the developer: "get the scenes from the prompt as JSON so they can be checked"): a generated concept's answer gives its scenes
+/// as a list (<see cref="SceneSchema"/>); the scene count comes from the target length (<see cref="ConceptSceneCheck.Target"/>) and is stated in
+/// the fixed part (it depends on the profile only, so the cache holds). The count stays in the prompt, never in the schema (no minItems:
+/// Anthropic's structured outputs accept no minItems other than 0 or 1); <see cref="ConceptSceneCheck"/> checks it in code and a concept that
+/// fails gets one repair request (<see cref="BuildRepair"/>). An AI edit keeps its free text (<see cref="Schema"/>): the user's placeholders
+/// stay where they stand in it.
 /// </summary>
 public static partial class ConceptPromptBuilder
 {
@@ -55,7 +61,57 @@ public static partial class ConceptPromptBuilder
             return Make(template, values, DocumentSchema());
         }
 
-        return Make(template, values, Schema());
+        return Make(template, values, SceneSchema());
+    }
+
+    /// <summary>
+    /// The user part of the one repair request of a concept batch (Prompts/&lt;lang&gt;/concept-repair.txt; the system part is the batch's own,
+    /// so the cache is read): every concept that failed <see cref="ConceptSceneCheck"/> with its concrete findings ("3 scenes, at least 5
+    /// needed; scene 2 has an empty on-screen line") and its current text as data, and the answer format of the batch (with "kaynaklar" for a
+    /// documents run).
+    /// </summary>
+    public static string BuildRepair(Profile profile, IReadOnlyList<ConceptRepairItem> items, bool documents)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        ArgumentNullException.ThrowIfNull(items);
+        var (words, template) = Template(OutputLanguages.Of(profile.ContentLanguage).PromptLanguage, "concept-repair");
+        var c = CultureInfo.InvariantCulture;
+        var list = new StringBuilder();
+        for (var i = 0; i < items.Count; i++)
+        {
+            var problems = string.Join("; ", items[i].Problems.Select(p => Finding(words, p)));
+            list.Append(c, $"\n{i + 1}. «{PromptText.Line(items[i].Concept.Title, ConceptLimits.TitleHardMax)}»\n")
+                .Append(words["problems"]).Append(": ").Append(problems).Append('\n')
+                .Append(words["current"]).Append(":\n«").Append(PromptText.Data(items[i].Concept.Content, ConceptLimits.ContentMax)).Append('»');
+        }
+
+        var values = new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["items"] = list.ToString(),
+            ["count"] = items.Count.ToString(c),
+            ["json"] = documents ? words["json_documents"] : words["json"],
+        };
+        Scenes(values, profile);
+        return Fill(template, values);
+    }
+
+    /// <summary>One finding in the prompt's language (the template's @few / @empty / @long line with its numbers).</summary>
+    private static string Finding(Dictionary<string, string> words, SceneProblem problem) => problem.Kind switch
+    {
+        SceneProblemKind.TooFew => string.Format(CultureInfo.InvariantCulture, words["few"], problem.Have, problem.Need, problem.Target),
+        SceneProblemKind.EmptyVisual => string.Format(CultureInfo.InvariantCulture, words["empty"], problem.Scene),
+        _ => string.Format(CultureInfo.InvariantCulture, words["long"], problem.Scene, problem.Have, problem.Need),
+    };
+
+    /// <summary>The scene values of a prompt: the target count, the fewest accepted, seconds per scene and the most words of one scene.</summary>
+    private static void Scenes(Dictionary<string, string?> values, Profile profile)
+    {
+        var c = CultureInfo.InvariantCulture;
+        values["scenes"] = ConceptSceneCheck.Target(profile.TargetSeconds).ToString(c);
+        values["min_scenes"] = ConceptSceneCheck.Minimum(profile.TargetSeconds).ToString(c);
+        values["scene_seconds"] = SceneTargets.SecondsPerScene.ToString("0.#", c);
+        values["max_scene_seconds"] = SceneTargets.MaxSceneSeconds.ToString("0", c);
+        values["scene_words"] = ConceptSceneCheck.MaxSceneWords(profile.ContentLanguage).ToString(c);
     }
 
     /// <summary>
@@ -157,7 +213,7 @@ public static partial class ConceptPromptBuilder
     private static Dictionary<string, string?> Channel(Profile profile, Dictionary<string, string> words)
     {
         var language = OutputLanguages.Of(profile.ContentLanguage);
-        return new Dictionary<string, string?>(StringComparer.Ordinal)
+        var values = new Dictionary<string, string?>(StringComparer.Ordinal)
         {
             ["concept"] = PromptText.Data(profile.ConceptText, ProfileLimits.ConceptTextMax),
             // The output language by name in the prompt's language; the user's « » texts may be in another one (the language rule).
@@ -167,6 +223,8 @@ public static partial class ConceptPromptBuilder
             ["seconds"] = profile.TargetSeconds.ToString(CultureInfo.InvariantCulture),
             ["words"] = Words(profile.ContentLanguage, profile.TargetSeconds).ToString(CultureInfo.InvariantCulture),
         };
+        Scenes(values, profile);
+        return values;
     }
 
     /// <summary>The profile's past: covered (with its count), topic and telling dislikes, disliked and liked videos.</summary>
@@ -190,7 +248,57 @@ public static partial class ConceptPromptBuilder
     /// <summary>Narration words for a target length (estimated speaking rate of the output language).</summary>
     public static int Words(string language, int seconds) => (int)Math.Round(seconds * OutputLanguages.Of(language).WordsPerSecond);
 
-    /// <summary>The strict answer schema: every field required, no extra fields.</summary>
+    /// <summary>
+    /// The answer schema of generated concepts: title, summary and the scene list (<c>{"ekranda": "…", "seslendirme": "…"}</c> each); every
+    /// field required, no extra fields. No minItems (see the class summary).
+    /// </summary>
+    public static JsonObject SceneSchema() => List(SceneItem(false));
+
+    /// <summary>One generated concept of <see cref="SceneSchema"/>; <paramref name="sources"/>: with "kaynaklar" (a documents run).</summary>
+    private static JsonObject SceneItem(bool sources)
+    {
+        var scene = new JsonObject
+        {
+            ["type"] = "object",
+            ["properties"] = new JsonObject
+            {
+                ["ekranda"] = new JsonObject { ["type"] = "string" },
+                ["seslendirme"] = new JsonObject { ["type"] = "string" },
+            },
+            ["required"] = new JsonArray("ekranda", "seslendirme"),
+            ["additionalProperties"] = false,
+        };
+        var properties = new JsonObject
+        {
+            ["baslik"] = new JsonObject { ["type"] = "string" },
+            ["ozet"] = new JsonObject { ["type"] = "string" },
+            ["sahneler"] = new JsonObject { ["type"] = "array", ["items"] = scene },
+        };
+        var required = sources ? new JsonArray("baslik", "ozet", "sahneler", "kaynaklar") : new JsonArray("baslik", "ozet", "sahneler");
+        if (sources)
+        {
+            properties["kaynaklar"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "integer" } };
+        }
+
+        return new JsonObject
+        {
+            ["type"] = "object",
+            ["properties"] = properties,
+            ["required"] = required,
+            ["additionalProperties"] = false,
+        };
+    }
+
+    /// <summary>The answer object around a concept item: <c>{"konseptler": [item…]}</c>.</summary>
+    private static JsonObject List(JsonObject item) => new()
+    {
+        ["type"] = "object",
+        ["properties"] = new JsonObject { ["konseptler"] = new JsonObject { ["type"] = "array", ["items"] = item } },
+        ["required"] = new JsonArray("konseptler"),
+        ["additionalProperties"] = false,
+    };
+
+    /// <summary>The answer schema of an AI edit: title, summary and the free text with its placeholders; every field required, no extra fields.</summary>
     public static JsonObject Schema()
     {
         var item = new JsonObject
@@ -214,30 +322,8 @@ public static partial class ConceptPromptBuilder
         };
     }
 
-    /// <summary>The answer schema of a documents run: <see cref="Schema"/> with "kaynaklar", the numbers of the documents each concept uses.</summary>
-    public static JsonObject DocumentSchema()
-    {
-        var item = new JsonObject
-        {
-            ["type"] = "object",
-            ["properties"] = new JsonObject
-            {
-                ["baslik"] = new JsonObject { ["type"] = "string" },
-                ["ozet"] = new JsonObject { ["type"] = "string" },
-                ["icerik"] = new JsonObject { ["type"] = "string" },
-                ["kaynaklar"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "integer" } },
-            },
-            ["required"] = new JsonArray("baslik", "ozet", "icerik", "kaynaklar"),
-            ["additionalProperties"] = false,
-        };
-        return new JsonObject
-        {
-            ["type"] = "object",
-            ["properties"] = new JsonObject { ["konseptler"] = new JsonObject { ["type"] = "array", ["items"] = item } },
-            ["required"] = new JsonArray("konseptler"),
-            ["additionalProperties"] = false,
-        };
-    }
+    /// <summary>The answer schema of a documents run: <see cref="SceneSchema"/> with "kaynaklar", the numbers of the documents each concept uses.</summary>
+    public static JsonObject DocumentSchema() => List(SceneItem(true));
 
     /// <summary>
     /// The answer schema of "Find topics" in documents: <c>{"topics": [{"topic": "…", "documents": [1], "keywords": ["…"]}]}</c> (the keywords

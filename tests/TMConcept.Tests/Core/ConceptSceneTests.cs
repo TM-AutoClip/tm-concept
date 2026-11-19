@@ -1,0 +1,182 @@
+using Avalonia.Headless.XUnit;
+using Microsoft.Extensions.DependencyInjection;
+using Shouldly;
+using TMConcept.Core.Chat;
+using TMConcept.Core.Concepts;
+using TMConcept.Core.Keys;
+using TMConcept.Core.Models;
+using TMConcept.Core.Profiles;
+using TMConcept.Tests.Desktop;
+using TMConcept.Tests.Providers;
+
+namespace TMConcept.Tests.Core;
+
+/// <summary>
+/// The scenes of a concept come as JSON (20 Nov 2026): the prompt states the count the program computed from the target length, the program
+/// writes the stored [on screen: …] text, the deterministic scene check finds too few scenes, empty on-screen lines and long narration, and a
+/// failing concept gets one repair request with those findings. Fake model only.
+/// </summary>
+public sealed class ConceptSceneTests
+{
+    private static readonly CancellationToken None = CancellationToken.None;
+
+    private static Profile Profile(string language, int seconds = 60) => new()
+    {
+        Name = "Byzantium",
+        ContentLanguage = language,
+        Format = VideoFormat.Vertical,
+        TargetSeconds = seconds,
+        ConceptText = "A thousand years of Byzantium.",
+    };
+
+    private static string Scenes(int count, string label = "on screen") =>
+        string.Join("\n", Enumerable.Range(1, count).Select(n => $"[{label}: map {n}]\nPart {n} of the story."));
+
+    [Theory]
+    [InlineData(15, 1, 1)]
+    [InlineData(30, 2, 1)]
+    [InlineData(60, 4, 3)]
+    [InlineData(75, 6, 4)]
+    [InlineData(90, 7, 5)]
+    [InlineData(180, 13, 10)]
+    public void TheSceneCountComesFromTheTargetLengthWithASmallTolerance(int seconds, int target, int minimum)
+    {
+        ConceptSceneCheck.Target(seconds).ShouldBe(target);
+        ConceptSceneCheck.Minimum(seconds).ShouldBe(minimum);
+    }
+
+    [Fact]
+    public void AConceptWithEnoughScenesPasses() =>
+        ConceptSceneCheck.Check(Scenes(4), ContentLanguages.English, 60).ShouldBeEmpty();
+
+    [Fact]
+    public void AConceptWithoutSceneLinesFailsWithTooFewAndAnEmptyScreen()
+    {
+        var problems = ConceptSceneCheck.Check("The whole story told in one go, without any scene line.", ContentLanguages.English, 60);
+
+        problems.ShouldBe([new SceneProblem(SceneProblemKind.TooFew, 0, 1, 3, 4), new SceneProblem(SceneProblemKind.EmptyVisual, 1, 0, 0)]);
+        problems[0].ToString().ShouldBe("1 scenes, at least 3 needed");
+    }
+
+    [Fact]
+    public void AnEmptyOnScreenLineAndALongNarrationAreFound()
+    {
+        var talk = string.Join(" ", Enumerable.Repeat("word", 80));
+        var content = "[on screen: walls]\nShort.\n[on screen: ]\nAlso short.\n[on screen: fleet]\n" + talk;
+
+        var problems = ConceptSceneCheck.Check(content, ContentLanguages.English, 30);
+
+        problems.ShouldBe([new SceneProblem(SceneProblemKind.EmptyVisual, 2, 0, 0), new SceneProblem(SceneProblemKind.LongNarration, 3, 31, 25)],
+            "80 words at 2.6 words a second are about 31 s");
+    }
+
+    [Fact]
+    public void TheSceneListBecomesTheStoredTextWithTheLabelOfThePromptLanguage()
+    {
+        const string answer = """
+            {"konseptler":[{"baslik":"Surlar","ozet":"Bir. İki.","sahneler":[
+              {"ekranda":"Kara surları [harita]","seslendirme":"Surlar bin yıl dayandı."},
+              {"ekranda":"","seslendirme":"Sonra top geldi."},
+              {"ekranda":"","seslendirme":""}]}]}
+            """;
+
+        var concept = ConceptResponseParser.Parse(answer, ConceptResponseParser.SceneLabel(ContentLanguages.Turkish)).Concepts.ShouldHaveSingleItem();
+
+        concept.Content.ShouldBe("[ekranda: Kara surları (harita)]\nSurlar bin yıl dayandı.\n[ekranda: ]\nSonra top geldi.",
+            "brackets of the model become round ones; a scene with nothing is dropped");
+        ConceptResponseParser.SceneLabel(ContentLanguages.German).ShouldBe("on screen");
+        ConceptResponseParser.Parse("""{"konseptler":[{"baslik":"A","ozet":"s","icerik":"[x]\nHello"}]}""").Concepts.Single().Content
+            .ShouldBe("[x]\nHello", "an AI edit still answers with its free text");
+    }
+
+    [Fact]
+    public void ThePromptStatesTheSceneCountAndTheSchemaAsksForTheScenesWithoutACount()
+    {
+        var english = ConceptPromptBuilder.Build(new ConceptPromptInput(Profile(ContentLanguages.English), PromptMemory.Empty, string.Empty, 3));
+        var turkish = ConceptPromptBuilder.Build(new ConceptPromptInput(Profile(ContentLanguages.Turkish), PromptMemory.Empty, string.Empty, 3));
+
+        english.System.ShouldContain("write about 4 scenes (about one scene every 13.5 s; at least 3)");
+        english.System.ShouldContain("at most 65 words, about 25 s", Case.Sensitive, "25 s at 2.6 words a second");
+        turkish.System.ShouldContain("yaklaşık 4 sahne yaz (yaklaşık 13.5 sn'de bir sahne; en az 3)");
+        turkish.System.ShouldContain("en çok 57 kelime");
+        english.User.ShouldContain("\"sahneler\":[{\"ekranda\":\"…\",\"seslendirme\":\"…\"}]");
+        english.System.ShouldNotContain("{");
+        var schema = english.Schema.ToJsonString();
+        schema.ShouldContain("\"sahneler\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"ekranda\":{\"type\":\"string\"},\"seslendirme\":{\"type\":\"string\"}}");
+        schema.ShouldNotContain("icerik");
+        schema.ShouldNotContain("minItems", Case.Sensitive, "Anthropic accepts no minItems above 1: the count stays in the prompt");
+        ConceptPromptBuilder.DocumentSchema().ToJsonString().ShouldContain("\"required\":[\"baslik\",\"ozet\",\"sahneler\",\"kaynaklar\"]");
+        ConceptPromptBuilder.Schema().ToJsonString().ShouldContain("icerik", Case.Sensitive, "the AI edit keeps its free text");
+    }
+
+    [Fact]
+    public void TheRepairRequestNamesEveryFindingInThePromptLanguage()
+    {
+        var concept = new ParsedConcept("Walls «and» towers", "s", "Flat text.");
+        IReadOnlyList<SceneProblem> problems = [new(SceneProblemKind.TooFew, 0, 1, 3, 4), new(SceneProblemKind.EmptyVisual, 1, 0, 0),
+            new(SceneProblemKind.LongNarration, 2, 31, 25)];
+
+        var english = ConceptPromptBuilder.BuildRepair(Profile(ContentLanguages.English), [new ConceptRepairItem(concept, problems)], documents: false);
+        var turkish = ConceptPromptBuilder.BuildRepair(Profile(ContentLanguages.Turkish), [new ConceptRepairItem(concept, problems)], documents: true);
+
+        english.ShouldContain("1. «Walls \"and\" towers»\nPROBLEMS: 1 scenes, at least 3 needed (write about 4 scenes); scene 1 has an empty \"ekranda\"; "
+            + "scene 2 narration is about 31 s, at most 25 s allowed (split the scene)\nCURRENT TEXT:\n«Flat text.»");
+        english.ShouldContain("Write the 1 corrected concepts in the same order");
+        english.ShouldNotContain("kaynaklar");
+        turkish.ShouldContain("SORUNLAR: 1 sahne var, en az 3 olmalı (yaklaşık 4 sahne yaz); 1. sahnenin \"ekranda\" alanı boş");
+        turkish.ShouldContain("\"kaynaklar\":[1]", Case.Sensitive, "a documents run keeps its document numbers");
+    }
+
+    [AvaloniaFact]
+    public async Task AConceptWithoutScenesGetsOneRepairWithItsFindings()
+    {
+        const string flat = """{"konseptler":[{"baslik":"Greek fire","ozet":"One. Two.","icerik":"The fleet burned in one long story without scenes."}]}""";
+        var fake = new FakeChat().Answer(_ => Answer(flat))
+            .Answer(_ => Answer("{\"konseptler\":[{\"baslik\":\"Greek fire\",\"ozet\":\"One. Two.\"," + FakeChat.SceneList("The fleet") + "}]}"));
+        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
+        var (profile, model) = await PrepareAsync(h);
+
+        var result = await h.Get<ConceptGenerator>().GenerateAsync(new ConceptRequest(profile, new IdeaBrief(string.Empty, 1), model), null, null, None);
+
+        fake.Requests.Count.ShouldBe(2);
+        var repair = fake.Requests[1];
+        repair.System.ShouldBe(fake.Requests[0].System, "the cached system part is read again");
+        repair.User.ShouldContain("PROBLEMS: 1 scenes, at least 4 needed (write about 6 scenes); scene 1 has an empty \"ekranda\"");
+        repair.User.ShouldContain("«The fleet burned in one long story without scenes.»");
+        var concept = result.Accepted.ShouldHaveSingleItem();
+        concept.Content.ShouldStartWith("[on screen: The fleet 1]\nPart 1: The fleet.\n[on screen: The fleet 2]");
+        result.ScenesMissing.ShouldBe(0);
+        result.Run.OutputTokens.ShouldBe(2 * Usage.Output, "the repair is paid and counted");
+    }
+
+    [AvaloniaFact]
+    public async Task AConceptThatStillFailsAfterItsRepairIsKeptAndCounted()
+    {
+        const string flat = """{"konseptler":[{"baslik":"Greek fire","ozet":"One. Two.","sahneler":[{"ekranda":"","seslendirme":"All in one."}]}]}""";
+        var fake = new FakeChat().Answer(_ => Answer(flat)).Answer(_ => Answer(flat));
+        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
+        var (profile, model) = await PrepareAsync(h);
+
+        var result = await h.Get<ConceptGenerator>().GenerateAsync(new ConceptRequest(profile, new IdeaBrief(string.Empty, 1), model), null, null, None);
+
+        fake.Requests.Count.ShouldBe(2, "one repair, never a second");
+        result.Accepted.ShouldHaveSingleItem().Content.ShouldBe("[on screen: ]\nAll in one.");
+        result.ScenesMissing.ShouldBe(1);
+        result.ErrorCode.ShouldBeEmpty();
+    }
+
+    private static readonly ChatUsage Usage = new(600, 0, 0, 120);
+
+    private static ChatResponse Answer(string text) => new(text, Usage, null, "end_turn", "r");
+
+    private static async Task<(Profile Profile, ResolvedModel Model)> PrepareAsync(DesktopHarness h)
+    {
+        await FirstRunTests.CreateAsync(h);
+        var profile = new Profile { Name = "Byzantium", ContentLanguage = ContentLanguages.English, ConceptText = "Byzantine history." };
+        await h.Get<IProfileStore>().SaveAsync(profile, None);
+        await h.Get<IApiKeyStore>().SaveAsync(new ApiKey { Provider = "anthropic", Label = "mine", Secret = "fake-test-key-0123456789abcdef" }, None);
+        var catalog = h.Get<IModelCatalog>().Find("anthropic", "claude-haiku-5-5")!;
+        var key = (await h.Get<IApiKeyStore>().ListAsync("anthropic", None)).First();
+        return (profile, new ResolvedModel(catalog, key, string.Empty));
+    }
+}

@@ -24,6 +24,8 @@
                      ToolTip.Tip="{Binding SourcesLine}" IsVisible="{Binding SourcesLine, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
           <TextBlock Name="ReadOnlyLine" Text="{Binding ReadOnlyNote}" Classes="small warning" TextWrapping="Wrap"
                      IsVisible="{Binding ReadOnlyNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+          <TextBlock Name="SceneWarningLine" Text="{Binding SceneWarning}" Classes="small warning" TextWrapping="Wrap"
+                     IsVisible="{Binding SceneWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
           <TextBlock Name="NoticeLine" Text="{Binding Notice}" Classes="small warning" TextWrapping="Wrap"
                      IsVisible="{Binding Notice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
         </StackPanel>

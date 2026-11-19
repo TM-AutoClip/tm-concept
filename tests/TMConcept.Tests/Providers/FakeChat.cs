@@ -40,7 +40,14 @@ internal sealed class FakeChat : IChatClientFactory
 
     public static string Json(IEnumerable<string> titles) =>
         "{\"konseptler\":[" + string.Join(",", titles.Select(t =>
-            "{\"baslik\":\"" + t + "\",\"ozet\":\"" + Guid.NewGuid().ToString("N") + "\",\"icerik\":\"[on screen: map]\\nThe story of " + t + ".\"}")) + "]}";
+            "{\"baslik\":\"" + t + "\",\"ozet\":\"" + Guid.NewGuid().ToString("N") + "\"," + SceneList("The story of " + t) + "}")) + "]}";
+
+    /// <summary>
+    /// The <c>"sahneler"</c> member of a generated concept, with enough short scenes for any target length (so no scene repair is asked).
+    /// </summary>
+    public static string SceneList(string topic) => "\"sahneler\":[" + string.Join(",", Enumerable.Range(1, 14).Select(i =>
+        "{\"ekranda\":" + System.Text.Json.JsonSerializer.Serialize(topic + " " + i) + ",\"seslendirme\":"
+        + System.Text.Json.JsonSerializer.Serialize("Part " + i + ": " + topic + ".") + "}")) + "]";
 
     /// <summary>Titles that share no words or letter groups (so the local duplicate check keeps all of them).</summary>
     public static IReadOnlyList<string> Distinct(int count) =>

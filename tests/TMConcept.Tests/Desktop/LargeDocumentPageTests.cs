@@ -115,7 +115,7 @@ public sealed class LargeDocumentPageTests
         var fake = new FakeChat()
             .Answer(_ => Answer("The walls of Theodosius had three lines and a moat; they held for a thousand years."))
             .Answer(_ => new ChatResponse("{\"konseptler\":[{\"baslik\":\"Three lines of walls\",\"ozet\":\"" + Guid.NewGuid().ToString("N")
-                + "\",\"icerik\":\"[on screen: walls]\\nThe walls.\",\"kaynaklar\":[1]}]}", new ChatUsage(1000, 0, 0, 800), null, "end_turn", "r"));
+                + "\"," + FakeChat.SceneList("The walls") + ",\"kaynaklar\":[1]}]}", new ChatUsage(1000, 0, 0, 800), null, "end_turn", "r"));
         using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
         var page = await PageAsync(h);
         var section = page.Documents;

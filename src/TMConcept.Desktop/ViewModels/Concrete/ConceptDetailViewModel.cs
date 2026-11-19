@@ -118,6 +118,10 @@ public sealed partial class ConceptDetailViewModel(AppSession session, IConceptS
         _ => string.Empty,
     };
 
+    /// <summary>The yellow line of a concept whose scenes fail the scene check (empty when they pass).</summary>
+    [ObservableProperty]
+    public partial string SceneWarning { get; private set; } = string.Empty;
+
     /// <summary>A yellow note (the saved title looks like another concept) or why an action did not run.</summary>
     [ObservableProperty]
     public partial string Notice { get; set; } = string.Empty;
@@ -210,6 +214,7 @@ public sealed partial class ConceptDetailViewModel(AppSession session, IConceptS
         var mine = ++_load;
         DropWork();
         Notice = string.Empty;
+        SceneWarning = string.Empty;
         Card = card;
         Mode = card is null ? DetailMode.Empty : DetailMode.Viewing;
         MetaLine = string.Empty;
@@ -227,6 +232,7 @@ public sealed partial class ConceptDetailViewModel(AppSession session, IConceptS
 
         card.Concept.Status = full.Status;
         card.ShowContent(full.Content);
+        SceneWarning = SceneWarnings.Line(text, full.Content, full.Language, session.Profile);
         MetaLine = Meta(full);
         Notify();
     }
@@ -362,6 +368,7 @@ public sealed partial class ConceptDetailViewModel(AppSession session, IConceptS
 
         card.ShowContent(content);
         card.Concept.Content = content;
+        SceneWarning = SceneWarnings.Line(text, content, card.Concept.Language, session.Profile);
         var notice = string.Empty;
         if (retitled)
         {
@@ -617,9 +624,16 @@ public sealed partial class ConceptDetailViewModel(AppSession session, IConceptS
     [RelayCommand]
     public Task ApproveAsync() => ChangeAsync(ConceptStatus.Approved, card => actions.ApproveAsync(card.Concept, _owner));
 
+    /// <summary>A change that always goes ahead (it asks nothing).</summary>
+    private static Func<ConceptCardViewModel, Task<bool>> Always(Func<ConceptCardViewModel, Task> change) => async card =>
+    {
+        await change(card).ConfigureAwait(true);
+        return true;
+    };
+
     /// <summary>Takes the approved concept back to the new ones.</summary>
     [RelayCommand]
-    public Task UnapproveAsync() => ChangeAsync(ConceptStatus.New, card => actions.UnapproveAsync(card.Concept, _owner));
+    public Task UnapproveAsync() => ChangeAsync(ConceptStatus.New, Always(card => actions.UnapproveAsync(card.Concept, _owner)));
 
     /// <summary>Deletes because the topic was not liked: new concepts and topics stay away from it.</summary>
     [RelayCommand]
@@ -635,9 +649,9 @@ public sealed partial class ConceptDetailViewModel(AppSession session, IConceptS
 
     partial void OnAiInstructionChanged(string value) => _ = SafeAsync(AiEstimateAsync);
 
-    private Task TrashAsync(TrashReason reason) => ChangeAsync(ConceptStatus.Trashed, card => actions.TrashAsync([card.Concept], reason, _owner));
+    private Task TrashAsync(TrashReason reason) => ChangeAsync(ConceptStatus.Trashed, Always(card => actions.TrashAsync([card.Concept], reason, _owner)));
 
-    private async Task ChangeAsync(ConceptStatus status, Func<ConceptCardViewModel, Task> change)
+    private async Task ChangeAsync(ConceptStatus status, Func<ConceptCardViewModel, Task<bool>> change)
     {
         if (Card is not { } card)
         {
@@ -646,7 +660,10 @@ public sealed partial class ConceptDetailViewModel(AppSession session, IConceptS
 
         try
         {
-            await change(card).ConfigureAwait(true);
+            if (!await change(card).ConfigureAwait(true))
+            {
+                return;
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

@@ -138,7 +138,7 @@ public sealed class ScannedPagesPageTests
         var fake = new FakeChat()
             .Answer(r => Answer("Konstantinopolis surları " + r.User)).Answer(r => Answer("Konstantinopolis surları " + r.User))
             .Answer(_ => new ChatResponse("{\"konseptler\":[{\"baslik\":\"The land walls\",\"ozet\":\"" + Guid.NewGuid().ToString("N")
-                + "\",\"icerik\":\"[on screen: walls]\\nThe walls.\",\"kaynaklar\":[1]}]}", new ChatUsage(1000, 0, 0, 800), null, "end_turn", "r"));
+                + "\"," + FakeChat.SceneList("The walls") + ",\"kaynaklar\":[1]}]}", new ChatUsage(1000, 0, 0, 800), null, "end_turn", "r"));
         var confirm = Online();
         using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake).AddSingleton<IConfirmDialog>(confirm));
         var page = await PageAsync(h);
@@ -162,7 +162,7 @@ public sealed class ScannedPagesPageTests
     {
         var fake = new FakeChat()
             .Answer(_ => new ChatResponse("{\"konseptler\":[{\"baslik\":\"The land walls\",\"ozet\":\"" + Guid.NewGuid().ToString("N")
-                + "\",\"icerik\":\"[on screen: walls]\\nThe walls.\",\"kaynaklar\":[1]}]}", new ChatUsage(1000, 0, 0, 800), null, "end_turn", "r"));
+                + "\"," + FakeChat.SceneList("The walls") + ",\"kaynaklar\":[1]}]}", new ChatUsage(1000, 0, 0, 800), null, "end_turn", "r"));
         var confirm = new FakeConfirm { Answer = false };
         using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake).AddSingleton<IConfirmDialog>(confirm));
         var page = await PageAsync(h);

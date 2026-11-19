@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using TMConcept.Core.Activity;
 using TMConcept.Core.Concepts;
+using TMConcept.Desktop.Dialogs;
 using TMConcept.Desktop.Localization;
 using TMConcept.Desktop.Startup;
 
@@ -10,12 +11,36 @@ namespace TMConcept.Desktop.Concepts;
 /// Every status change of a concept the user makes by hand, in one place for every page (0.1.13; the concept page and the produced page
 /// had their own copies): approve, take back from approved (Approved → New), move to the trash with a reason, and produce again
 /// (Produced → Approved). Each one is saved, written to the activity log and told to the other pages (<see cref="ConceptEvents"/>, with the
-/// page that asked as the sender, so that page does not reload its own change).
+/// page that asked as the sender, so that page does not reload its own change). Approving a concept whose scenes fail
+/// <see cref="ConceptSceneCheck"/> (20 Nov 2026) asks first: an approved concept goes to the video.
 /// </summary>
-public sealed class ConceptActions(IConceptStore concepts, ConceptEvents events, IActivityLog activity, Localizer text, ILogger<ConceptActions> logger)
+public sealed class ConceptActions(IConceptStore concepts, ConceptEvents events, IActivityLog activity, IConfirmDialog confirm, AppSession session,
+    Localizer text, ILogger<ConceptActions> logger)
 {
-    /// <summary>Approves a new concept.</summary>
-    public Task ApproveAsync(Concept concept, object sender) => SetAsync(concept, ConceptStatus.Approved, "concepts.approved.done", sender);
+    /// <summary>Approves a new concept; false when its scenes are not complete and the user did not want it approved anyway.</summary>
+    public async Task<bool> ApproveAsync(Concept concept, object sender)
+    {
+        ArgumentNullException.ThrowIfNull(concept);
+        var content = concept.Content.Length > 0 ? concept.Content : (await concepts.GetAsync(concept.Id, CancellationToken.None).ConfigureAwait(true))?.Content;
+        var missing = SceneWarnings.Text(text, session.Profile is { } profile
+            ? ConceptSceneCheck.Check(content, concept.Language.Length > 0 ? concept.Language : profile.ContentLanguage, profile.TargetSeconds)
+            : []);
+        if (missing.Length > 0)
+        {
+            var answer = await confirm.AskAsync(text["concepts.scenes.ask.title"], text.Format("concepts.scenes.ask", Title(concept), missing),
+                text["concepts.scenes.ask.accept"], danger: false).ConfigureAwait(true);
+            if (!answer.Confirmed)
+            {
+                logger.LogInformation("A concept whose scenes are not complete was not approved");
+                return false;
+            }
+
+            logger.LogInformation("A concept whose scenes are not complete was approved anyway");
+        }
+
+        await SetAsync(concept, ConceptStatus.Approved, "concepts.approved.done", sender).ConfigureAwait(true);
+        return true;
+    }
 
     /// <summary>Takes an approved concept back to the new ones.</summary>
     public Task UnapproveAsync(Concept concept, object sender) => SetAsync(concept, ConceptStatus.New, "concepts.unapproved.done", sender);

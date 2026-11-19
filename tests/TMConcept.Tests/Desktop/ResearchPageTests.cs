@@ -47,7 +47,7 @@ public sealed class ResearchPageTests
     {
         var web = new Routed();
         var fake = new FakeChat().Concepts(["Greek fire"]).Answer(_ => new ChatResponse(
-            "{\"konseptler\":[{\"baslik\":\"Axes of the north\",\"ozet\":\"One. Two.\",\"icerik\":\"[on screen: axe]\\nBasil II formed the guard in 988.\",\"kaynaklar\":[1]}]}",
+            "{\"konseptler\":[{\"baslik\":\"Axes of the north\",\"ozet\":\"One. Two.\"," + FakeChat.SceneList("Basil II formed the guard in 988") + ",\"kaynaklar\":[1]}]}",
             new ChatUsage(1000, 0, 0, 800), null, "end_turn", "r"));
         using var h = new DesktopHarness(s =>
         {
