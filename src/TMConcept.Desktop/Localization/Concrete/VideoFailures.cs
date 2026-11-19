@@ -12,7 +12,7 @@ public static class VideoFailures
     public static bool IsTruncated(string code) => code == VideoException.ProviderPrefix + Truncated;
 
     /// <summary>
-    /// The reason of a failure. A cut-off answer here is the video code (the image prompts fall back to the scene texts): the shared provider
+    /// The reason of a failure. A cut-off answer here is the video code (a cut-off image prompt answer goes to its check and one repair): the shared provider
     /// text speaks of concepts kept before the cut, which means nothing for a video, so it has its own text with what was paid.
     /// </summary>
     public static string Reason(Localizer text, string code, string detail, decimal spentUsd)

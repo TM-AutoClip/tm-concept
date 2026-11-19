@@ -147,7 +147,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
 
         // The frame check: what the video really shows.
         var frameFallback = false;
-        if (await FrameFindingsAsync(request) is { Count: > 0 } findings)
+        if (await FrameFindingsAsync(request, cancellationToken).ConfigureAwait(false) is { Count: > 0 } findings)
         {
             if (appCode || !local)
             {
@@ -192,7 +192,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
     /// from the project folder, sampled small by ffmpeg; every scene's scores are logged. Returns the findings of the scenes that fail (empty =
     /// passed). A sample ffmpeg cannot read is logged and its scene is left out: the check never fails a video it could not see.
     /// </summary>
-    private async Task<IReadOnlyList<string>> FrameFindingsAsync(EngineRenderRequest request)
+    private async Task<IReadOnlyList<string>> FrameFindingsAsync(EngineRenderRequest request, CancellationToken cancellationToken)
     {
         var scenes = request.Input.Scenes;
         if (scenes.Count == 0 || !File.Exists(request.Output))
@@ -204,7 +204,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         try
         {
             frames = await media.SampleAsync(request.Output, scenes.Select(s => (long)Math.Round((s.StartSeconds + (s.DurationSeconds / 2)) * 1000)).ToList(),
-                Media.FrameRegion.Whole, CancellationToken.None).ConfigureAwait(false);
+                Media.FrameRegion.Whole, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -227,7 +227,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
             {
                 try
                 {
-                    image = (await media.SampleAsync(file, [0], Media.FrameRegion.Whole, CancellationToken.None).ConfigureAwait(false)).FirstOrDefault();
+                    image = (await media.SampleAsync(file, [0], Media.FrameRegion.Whole, cancellationToken).ConfigureAwait(false)).FirstOrDefault();
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {

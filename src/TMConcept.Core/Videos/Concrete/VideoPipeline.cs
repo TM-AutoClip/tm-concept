@@ -26,7 +26,7 @@ namespace TMConcept.Core.Videos;
 /// with the profile's narration step (<see cref="SceneNarrator"/>, the same as a new version; cached; off = silent video with a warning, a
 /// chosen voice that fails stops the video) · D images (the profile's images step: off = no image call at all, a failure stops the
 /// video before the code call, and an engine that cannot run here at all (<see cref="IImageEngine.Problem"/>) stops it at A, before the paid
-/// prompt call; the prompts are written by the video code model, a cut-off prompt answer falls back to the scene texts; generated
+/// prompt call; the prompts are written by the video code model, one prompt per scene with its number is checked and repaired once (a cut-off answer keeps its complete prompts); generated
 /// images and their prompts are kept per concept until the video is made, so a retry does not pay for them again) · C timing in C# after the
 /// clips and images (a pause lengthens its scene) · E
 /// video code from the model, safety check, one repair · F render (processor only), one repair with the error text · H mux into the work
