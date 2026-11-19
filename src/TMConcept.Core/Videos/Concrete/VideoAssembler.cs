@@ -682,7 +682,8 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         var strongest = TextBackdropNeed.Plain;
         foreach (var scene in input.Scenes.Where(s => s.Image.Length > 0))
         {
-            var file = Path.Combine(work, scene.Image);
+            // The images lie in the project folder (and its public/), not in the work folder itself: until 0.1.29 every sample failed.
+            var file = Path.Combine(work, "project", scene.Image);
             try
             {
                 var frames = await media.SampleAsync(file, [0], Media.FrameRegion.Whole, cancellationToken).ConfigureAwait(false);
