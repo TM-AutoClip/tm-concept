@@ -1,37 +1,20 @@
 namespace TMConcept.Desktop.Updates;
 
 /// <summary>
-/// Which versions the "What's new" window shows at start (0.1.23): every version after the one that ran before (exclusive) up to the running
-/// one (inclusive), newest first. The version that ran before is what the version check already kept (<c>LastVersion</c> of
-/// <c>preferences.json</c>, recorded since 0.1.16), read before this start changes it, and the newest version a start since 0.1.23 recorded
-/// (<c>WhatsNewSeenVersion</c>, written at every start that runs a newer version): the newer of the two is the start, so the notes show once.
-/// Nothing when neither is known (a new install, or 0.1.15 and earlier), when nothing changed, or when a version is not a version.
-/// <para>
-/// A limit of the first start of 0.1.23: before it only <c>LastVersion</c> was kept, and the version check records it only when the
-/// components were dealt with (updated, reinstalled, or none installed). Someone who always chose "Later" since an older version sees the
-/// notes from that older version on, once. From 0.1.23 on, every start records its version, so this does not happen again.
-/// </para>
+/// Which versions the "What's new" window shows at start: every version after the newest one a start recorded (<c>WhatsNewSeenVersion</c>
+/// of <c>preferences.json</c>, written at every start that runs a newer version; exclusive) up to the running one (inclusive), newest first,
+/// so the notes show once. Nothing when no version was recorded (a new install), when nothing changed, or when a version is not a version.
 /// </summary>
 public static class WhatsNewRange
 {
     /// <summary>
-    /// The versions of <paramref name="available"/> after <paramref name="previous"/> (and after <paramref name="seen"/>, the newest version
-    /// whose notes were shown) up to <paramref name="current"/>, newest first.
+    /// The versions of <paramref name="available"/> after <paramref name="seen"/> (the newest version a start recorded) up to
+    /// <paramref name="current"/>, newest first.
     /// </summary>
-    public static IReadOnlyList<VersionNotes> Versions(string? previous, string? seen, string current, IEnumerable<VersionNotes> available)
+    public static IReadOnlyList<VersionNotes> Versions(string? seen, string current, IEnumerable<VersionNotes> available)
     {
         ArgumentNullException.ThrowIfNull(available);
-        if (!AppVersion.TryParse(current, out var to))
-        {
-            return [];
-        }
-
-        var knowsPrevious = AppVersion.TryParse(previous, out var from);
-        if (AppVersion.TryParse(seen, out var shown) && (!knowsPrevious || shown > from))
-        {
-            from = shown;
-        }
-        else if (!knowsPrevious)
+        if (!AppVersion.TryParse(current, out var to) || !AppVersion.TryParse(seen, out var from))
         {
             return [];
         }

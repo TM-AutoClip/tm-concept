@@ -10,9 +10,6 @@ namespace TMConcept.Desktop.Updates;
 /// step fails the old name comes back. On Linux a rename over the running file is allowed (the running process keeps the old file open), and
 /// the other files of the release folder (icon, notices, licences) are replaced too. The new version starts from the same path, so
 /// shortcuts and the desktop entry keep working. Only the published single-file program replaces itself (a build from source does not).
-/// <para>0.1.26: a program file named by its release (<c>TMConcept-0.1.17-win-x64.exe</c>, as 0.1.25 and older were published) becomes
-/// <see cref="ReleaseAssetNames.PortableWindows"/> in the same folder (when that name is free): a name with a version would stay wrong after
-/// every update. A shortcut the user made to the old name stops working then; the release notes say so.</para>
 /// </summary>
 public sealed class SelfReplacer(ILogger<SelfReplacer> logger)
 {
@@ -118,33 +115,8 @@ public sealed class SelfReplacer(ILogger<SelfReplacer> logger)
     }
 
     /// <summary>
-    /// Where the new version goes: the running program's own path, or <see cref="ReleaseAssetNames.PortableWindows"/> next to it when the
-    /// running file is named by its release and that name is free.
-    /// </summary>
-    public string TargetPath
-    {
-        get
-        {
-            var name = Path.GetFileName(ProgramPath);
-            if (!ReleaseAssetNames.VersionedWindowsProgram.IsMatch(name))
-            {
-                return ProgramPath;
-            }
-
-            var target = Path.Combine(Path.GetDirectoryName(ProgramPath)!, ReleaseAssetNames.PortableWindows);
-            if (File.Exists(target))
-            {
-                logger.LogWarning("{Name} already exists next to the program; the new version keeps the name {Old}", ReleaseAssetNames.PortableWindows, name);
-                return ProgramPath;
-            }
-
-            return target;
-        }
-    }
-
-    /// <summary>
-    /// Puts <paramref name="newProgram"/> in the place of the running program (see the class) and returns the path it is at now
-    /// (<see cref="TargetPath"/>). The files next to an unpacked program are copied next to the running one first. On failure the running
+    /// Puts <paramref name="newProgram"/> in the place of the running program (see the class) and returns its path (the running one's,
+    /// <see cref="ProgramPath"/>). The files next to an unpacked program are copied next to the running one first. On failure the running
     /// program keeps its name and the exception goes up.
     /// </summary>
     public string Replace(string newProgram)
@@ -165,7 +137,6 @@ public sealed class SelfReplacer(ILogger<SelfReplacer> logger)
             }
         }
 
-        var target = TargetPath;
         if (OperatingSystem.IsWindows())
         {
             var old = ProgramPath + UpdateRules.OldSuffix;
@@ -177,7 +148,7 @@ public sealed class SelfReplacer(ILogger<SelfReplacer> logger)
             File.Move(ProgramPath, old);
             try
             {
-                File.Move(newProgram, target);
+                File.Move(newProgram, ProgramPath);
             }
             catch
             {
@@ -189,24 +160,11 @@ public sealed class SelfReplacer(ILogger<SelfReplacer> logger)
         {
             File.SetUnixFileMode(newProgram, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead
                 | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
-            File.Move(newProgram, target, overwrite: true);
-            if (!string.Equals(target, ProgramPath, StringComparison.Ordinal))
-            {
-                File.Delete(ProgramPath);
-            }
+            File.Move(newProgram, ProgramPath, overwrite: true);
         }
 
-        if (string.Equals(target, ProgramPath, StringComparison.Ordinal))
-        {
-            logger.LogInformation("The program file was replaced by the new version");
-        }
-        else
-        {
-            logger.LogInformation("The program file was replaced by the new version, now named {Name} (was {Old})", Path.GetFileName(target),
-                Path.GetFileName(ProgramPath));
-        }
-
-        return target;
+        logger.LogInformation("The program file was replaced by the new version");
+        return ProgramPath;
     }
 
     /// <summary>
@@ -217,12 +175,8 @@ public sealed class SelfReplacer(ILogger<SelfReplacer> logger)
     {
         get
         {
-            if (ProgramPath.Length == 0)
-            {
-                return null;
-            }
-
-            return File.Exists(ProgramPath + UpdateRules.OldSuffix) ? ProgramPath + UpdateRules.OldSuffix : RenamedPrograms().FirstOrDefault();
+            var old = ProgramPath + UpdateRules.OldSuffix;
+            return ProgramPath.Length > 0 && File.Exists(old) ? old : null;
         }
     }
 
@@ -239,7 +193,8 @@ public sealed class SelfReplacer(ILogger<SelfReplacer> logger)
 
         try
         {
-            foreach (var old in new[] { ProgramPath + UpdateRules.OldSuffix }.Where(File.Exists).Concat(RenamedPrograms()).ToList())
+            var old = ProgramPath + UpdateRules.OldSuffix;
+            if (File.Exists(old))
             {
                 File.Delete(old);
                 logger.LogInformation("The program file of the previous version was removed ({Name})", Path.GetFileName(old));
@@ -254,24 +209,5 @@ public sealed class SelfReplacer(ILogger<SelfReplacer> logger)
         {
             logger.LogWarning(ex, "What the last update left could not be removed; it is tried again at the next start");
         }
-    }
-
-    /// <summary>
-    /// The previous program files an update left under their old release name (<c>TMConcept-0.1.17-win-x64.exe.old</c> next to a
-    /// <see cref="ReleaseAssetNames.PortableWindows"/> that was renamed from it), newest first; none for any other program name.
-    /// </summary>
-    private List<string> RenamedPrograms()
-    {
-        var folder = Path.GetDirectoryName(ProgramPath);
-        if (folder is null || !string.Equals(Path.GetFileName(ProgramPath), ReleaseAssetNames.PortableWindows, StringComparison.OrdinalIgnoreCase)
-            || !Directory.Exists(folder))
-        {
-            return [];
-        }
-
-        return Directory.EnumerateFiles(folder, "TMConcept-*-win-x64.exe" + UpdateRules.OldSuffix)
-            .Where(f => ReleaseAssetNames.VersionedWindowsProgram.IsMatch(Path.GetFileName(f)[..^UpdateRules.OldSuffix.Length]))
-            .OrderByDescending(File.GetLastWriteTimeUtc)
-            .ToList();
     }
 }

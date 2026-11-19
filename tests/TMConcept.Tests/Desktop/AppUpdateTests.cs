@@ -183,19 +183,14 @@ public sealed class AppUpdateTests
 
         await updater.InstallAsync(offer, null, CancellationToken.None);
 
-        // 0.1.26: the program was named by its release (TMConcept-0.1.17-win-x64.exe); the new version gets the versionless portable name.
-        var portable = Path.Combine(Path.GetDirectoryName(program)!, ReleaseAssetNames.PortableWindows);
-        File.ReadAllBytes(portable).ShouldBe(NewProgram, "the new version keeps no misleading version in its name");
+        // The new version takes the running program's place and name.
+        File.ReadAllBytes(program).ShouldBe(NewProgram);
         if (OperatingSystem.IsWindows())
         {
             File.ReadAllText(program + UpdateRules.OldSuffix).ShouldBe("the old program", "the running file was renamed aside, not overwritten");
         }
-        else
-        {
-            File.Exists(program).ShouldBeFalse();
-        }
 
-        restarter.Started.ShouldBe([portable]);
+        restarter.Started.ShouldBe([program]);
 
         // The next start removes what the update left.
         h.Get<SelfReplacer>().CleanUp();
@@ -594,7 +589,7 @@ public sealed class AppUpdateTests
     {
         var folder = Path.Combine(TestFolders.Root, "program-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
-        var file = Path.Combine(folder, "TMConcept-0.1.17-win-x64.exe");
+        var file = Path.Combine(folder, ReleaseAssetNames.PortableWindows);
         File.WriteAllText(file, "the old program");
         program = file;
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 11, 16, 12, 0, 0, TimeSpan.Zero));

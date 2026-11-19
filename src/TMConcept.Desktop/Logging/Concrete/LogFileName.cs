@@ -2,7 +2,7 @@ using System.Globalization;
 
 namespace TMConcept.Desktop.Logging;
 
-/// <summary>Names of the daily log files: <c>&lt;kind&gt;-yyyy-MM-dd.log</c> (local date), and the older <c>tmconcept-yyyyMMdd.log</c>.</summary>
+/// <summary>Names of the daily log files: <c>&lt;kind&gt;-yyyy-MM-dd.log</c> (local date).</summary>
 public static class LogFileName
 {
     /// <summary>The file name of <paramref name="kind"/> on <paramref name="day"/>.</summary>
@@ -30,7 +30,7 @@ public static class LogFileName
             }
         }
 
-        return stem.Length == LogRules.LegacyPrefix.Length + 8 && stem.StartsWith(LogRules.LegacyPrefix, StringComparison.Ordinal)
-            && DateOnly.TryParseExact(stem[LogRules.LegacyPrefix.Length..], "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out day);
+        day = default;
+        return false;
     }
 }

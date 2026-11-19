@@ -23,8 +23,7 @@ public abstract class OwnerDeletionBase(IAppPaths paths, IFolderDiscard discard,
     protected IVideoStore Videos { get; } = videos;
 
     /// <summary>
-    /// The files of <paramref name="video"/>: its version folder, or, when another record's folder lies inside it (a version made inside an
-    /// older single-folder video), only the files the app wrote there. When another record has the very same folder (an old database or a
+    /// The files of <paramref name="video"/>: its version folder. When another record has the very same folder (an old database or a
     /// restored backup), nothing: the app's file names there are that record's files too, so only the record goes and the folder is left
     /// to the other record's delete (or to the orphan scan of the storage page).
     /// </summary>
@@ -37,20 +36,7 @@ public abstract class OwnerDeletionBase(IAppPaths paths, IFolderDiscard discard,
             return [];
         }
 
-        var others = all.Where(o => o.Id != video.Id).Select(o => Resolve(o.Folder)).OfType<string>().ToList();
-        if (others.Any(other => Same(other, folder)))
-        {
-            return [];
-        }
-
-        if (!others.Any(other => Inside(other, folder)))
-        {
-            return [folder];
-        }
-
-        string[] names = [video.FileName, video.ThumbnailName, VideoFolders.VideoFile, VideoFolders.ThumbnailFile, VideoFolders.SubtitlesFile,
-            VideoFolders.NarrationFile, VideoFolders.ScriptFile, VideoFolders.Source, VideoFolders.Audio];
-        return names.Where(n => n.Length > 0 && n == Path.GetFileName(n)).Distinct(StringComparer.Ordinal).Select(n => Path.Combine(folder, n)).ToList();
+        return all.Any(o => o.Id != video.Id && Resolve(o.Folder) is { } other && Same(other, folder)) ? [] : [folder];
     }
 
     /// <summary>
@@ -136,15 +122,6 @@ public abstract class OwnerDeletionBase(IAppPaths paths, IFolderDiscard discard,
     protected static bool Same(string a, string b) =>
         string.Equals(Path.TrimEndingDirectorySeparator(a), Path.TrimEndingDirectorySeparator(b),
             OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
-
-    /// <summary>Whether <paramref name="path"/> lies strictly inside <paramref name="folder"/>.</summary>
-    protected static bool Inside(string path, string folder)
-    {
-        ArgumentNullException.ThrowIfNull(path);
-        ArgumentNullException.ThrowIfNull(folder);
-        var root = Path.TrimEndingDirectorySeparator(folder) + Path.DirectorySeparatorChar;
-        return path.Length > root.Length && path.StartsWith(root, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
-    }
 
     /// <summary>The result of a finished delete.</summary>
     protected static DeletionResult Result(DeletionTally tally)

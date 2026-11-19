@@ -6,7 +6,7 @@
 # Two editions (0.1.26), the same features and the same data folder:
 # - Portable: the trimmed single-file program per system (tools/package.py): TMConcept-Portable-win-x64.exe,
 #   tm-concept-portable-linux-x64.tar.gz, tm-concept-portable-linux-arm64.tar.gz. No version in the names; they are the only files that end
-#   with -win-x64.exe / -linux-x64.tar.gz / -linux-arm64.tar.gz, which the updaters of 0.1.25 and older look for (checked below).
+#   with -win-x64.exe / -linux-x64.tar.gz / -linux-arm64.tar.gz, which the portable updater looks for (checked below).
 # - Installed (Velopack, vpk from .config/dotnet-tools.json): the trimmed program as a folder (not single-file: Velopack's delta packages
 #   patch file by file, and a compressed single file changes almost entirely with every build), packed by `vpk pack` into
 #   TMConcept-win-x64-Setup.exe, TMConcept-<version>-win-x64-full.nupkg, a delta package from the previous PUBLISHED version, and
@@ -222,7 +222,7 @@ foreach ($rid in $Rids) {
     }
 }
 
-# Exactly one file per system ends the way the updaters of 0.1.25 and older look for, and it is the portable one.
+# Exactly one file per system ends the way the portable updater (ReleaseNotes.AssetFor) looks for, and it is the portable one.
 $files = Get-ChildItem -File $releaseFolder
 foreach ($rid in $Rids) {
     $suffix = if ($rid.StartsWith('win')) { "-$rid.exe" } else { "-$rid.tar.gz" }
