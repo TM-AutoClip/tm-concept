@@ -69,3 +69,6 @@ Two versions that change the database in a row need two steps; a version that do
 - Every database file that comes in goes through the chain (first start, unlock, restore).
 - The chain is tested with fake steps (`FakeSchemaSteps`): several versions at once, a failed step leaves the file unchanged, a copy is kept
   before an upgrade, a newer or an unrecorded file is refused.
+- Every connection waits up to 10 s for another connection's lock (`ConceptDatabase.WaitForLocks`, SQLite's busy timeout set through
+  its API) instead of failing at once with "database is locked". `ConceptDatabase.OpenAsync` does it; code that opens its own
+  `SqliteConnection` (the backup copy) calls it right after opening. `DatabaseLockTests` checks a write next to another connection's read.
