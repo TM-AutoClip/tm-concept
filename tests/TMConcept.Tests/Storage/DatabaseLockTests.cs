@@ -18,35 +18,32 @@ public sealed class DatabaseLockTests
     private static readonly CancellationToken None = CancellationToken.None;
 
     [Fact]
-    public async Task ARunUpdateWaitsForAnotherConnectionsReadAndIsWritten()
+    public async Task AWriteWaitsForAnotherConnectionsWriteLockLongerThanTheDriversOwnRetry()
     {
         using var h = await StorageHarness.CreatedAsync();
         var profile = new Profile { Name = "Channel" };
         await new ProfileStore(h.Database).SaveAsync(profile, None);
-        await new ConceptStore(h.Database).AddAsync(
-            [.. Enumerable.Range(0, 3).Select(i => new Concept { ProfileId = profile.Id, Title = "T" + i, Summary = "s", Content = "c", Language = "en" })], None);
-        var runs = new RunStore(h.Database);
-        var run = new Run { ProfileId = profile.Id, Kind = RunKind.Concepts };
-        await runs.AddAsync(run, None);
 
-        // Another connection in the middle of a read holds the file's shared lock until the read ends.
+        // Another piece of work holds the write lock for 2.5 s (a transaction is BEGIN IMMEDIATE).
         await using var other = await ConceptDatabase.OpenAsync(h.ConnectionString, None);
-        var rows = other.Concepts.AsAsyncEnumerable().GetAsyncEnumerator(None);
-        (await rows.MoveNextAsync()).ShouldBeTrue();
+        var holding = await other.Database.BeginTransactionAsync(None);
         var release = Task.Run(async () =>
         {
-            await Task.Delay(300, None);
-            await rows.DisposeAsync();
+            await Task.Delay(2500, None);
+            await holding.CommitAsync(None);
+            await holding.DisposeAsync();
         }, None);
 
-        run.Accepted = 7;
-        run.Status = RunStatus.Succeeded;
-        await Should.NotThrowAsync(() => runs.UpdateAsync(run, None), "the update waits for the read instead of failing at once");
+        // Microsoft.Data.Sqlite's own retry of a busy statement gives up after the command timeout (1 s here), so the write only goes
+        // through when the connection itself waits for the lock (WaitForLocks; without it this throws "database is locked").
+        await using var db = await ConceptDatabase.OpenAsync(h.ConnectionString, None);
+        db.Database.SetCommandTimeout(1);
+        await Should.NotThrowAsync(
+            () => db.Profiles.Where(p => p.Id == profile.Id).ExecuteUpdateAsync(s => s.SetProperty(p => p.Name, "Renamed"), None),
+            "the write waits for the other connection's lock");
         await release;
 
-        var stored = (await runs.GetAsync(run.Id, None)).ShouldNotBeNull();
-        stored.Status.ShouldBe(RunStatus.Succeeded);
-        stored.Accepted.ShouldBe(7);
+        (await new ProfileStore(h.Database).GetAsync(profile.Id, None)).ShouldNotBeNull().Name.ShouldBe("Renamed");
     }
 
     [Fact]
