@@ -75,23 +75,19 @@ public sealed class ModelJsonTests
     public void ImagePromptsSurviveTextAfterTheJson()
     {
         // 0.1.16 read from the first brace to the END of the answer: one sentence after the JSON lost every prompt.
-        IReadOnlyList<string> visuals = ["a map", "a ship"];
-        var prompts = ImagePromptBuilder.Parse("{\"prompts\": [\"old map of Byzantium\", \"a dromon at sea\"]}\nThese prompts follow the rules.", visuals);
+        var items = ImagePromptBuilder.Read(
+            "{\"prompts\": [{\"scene\": 1, \"prompt\": \"old map of Byzantium\"}, {\"scene\": 2, \"prompt\": \"a dromon at sea\"}]}\nThese prompts follow the rules.");
 
-        prompts.ShouldBe(["old map of Byzantium", "a dromon at sea"]);
+        ImagePromptBuilder.Prompts(items, 2).ShouldBe(["old map of Byzantium", "a dromon at sea"]);
     }
 
     [Fact]
-    public void ACutPromptAnswerKeepsThePromptsBeforeTheCut()
+    public void ACutPromptAnswerKeepsThePromptsBeforeTheCutAndTheCheckNamesTheRest()
     {
-        IReadOnlyList<string> visuals = ["a map", "a ship", "a wall"];
-        var problems = new List<string>();
+        var items = ImagePromptBuilder.Read("```json\n{\"prompts\": [{\"scene\": 1, \"prompt\": \"old \\\"map\\\"\"}, {\"scene\": 2, \"prompt\": \"a dromon\"}, {\"scene\": 3, \"prompt\": \"the walls of");
 
-        var prompts = ImagePromptBuilder.Parse("```json\n{\"prompts\": [\"old map\", \"a dromon\", \"the walls of", visuals, problems.Add);
-
-        prompts.ShouldBe(["old map", "a dromon", "a wall"], "the cut third prompt falls back to its scene");
-        problems.ShouldHaveSingleItem().ShouldContain("2 of 3");
+        items.ShouldBe([new ImagePromptItem(1, "old \"map\""), new ImagePromptItem(2, "a dromon")]);
+        ImagePromptBuilder.Check(items, 3).ShouldBe(["2 prompts for 3 scenes", "scene 3 has no prompt"], "the cut third prompt goes to the one repair");
         ImagePromptBuilder.Read("no json at all").ShouldBeEmpty();
-        ImagePromptBuilder.Parse("no json at all", visuals).ShouldBe(visuals);
     }
 }

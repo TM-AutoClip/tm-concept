@@ -224,6 +224,16 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         if (imagesOn)
         {
             sceneImages = await ImagesAsync(job, imageModel, split.Scenes, work, steps, id, width, height, cancellationToken).ConfigureAwait(false);
+            if (sceneImages.Count < split.Scenes.Count)
+            {
+                // Chosen images and fewer pictures than scenes: a scene would show nothing (stopped before the paid code call).
+                logger.LogError(LogEvents.OnScreen, "{Images} scene images for {Scenes} scenes; the video is stopped", sceneImages.Count, split.Scenes.Count);
+                throw new VideoException(string.Create(CultureInfo.InvariantCulture, $"{sceneImages.Count} scene images were made for {split.Scenes.Count} scenes."))
+                {
+                    Code = "images",
+                };
+            }
+
             steps.Finish(VideoSteps.Images);
         }
 
@@ -412,8 +422,6 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         {
             if (imageModel is not null)
             {
-                // The video code model writes the image prompts (one model less to choose).
-                var promptModel = job.CodeModel;
                 var engine = images.FirstOrDefault(e => e.Code == imageModel.Model.Provider)
                     ?? throw new VideoException($"{imageModel.Model.Provider} has no image engine.") { Code = "images" };
                 var visuals = scenes.Select(s => s.Visual.Length > 0 ? s.Visual : s.Narration).ToList();
@@ -431,50 +439,8 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                 }
                 else
                 {
-                    var chat = chats.Create(promptModel.Model, promptModel.Key.Secret);
-
-                    // An answer without one readable prompt is asked again (at most twice; every attempt is paid and counted). A cut-off
-                    // answer is not asked again: the prompts before the cut are read and the scene descriptions fill in the rest.
-                    var read = await JsonAnswerRetry.RunAsync<IReadOnlyList<string>>("Scene image prompts", async (_, token) =>
-                    {
-                        string answerText;
-                        var cut = false;
-                        try
-                        {
-                            var answer = await chat.SendAsync(new ChatRequest(ImagePromptBuilder.System, ImagePromptBuilder.User(job.Profile.Name, visuals, drawStyle),
-                                Schema: ImagePromptBuilder.Schema(), MaxOutputTokens: 4000, Effort: promptModel.Effort), token).ConfigureAwait(false);
-                            steps.Spend(new VideoCost
-                            {
-                                VideoId = id,
-                                Step = PipelineSteps.ImagePromptCost,
-                                Usd = costs.Exact(promptModel.Model, answer.Usage, answer.ReportedCostUsd),
-                                Exact = true,
-                            });
-                            answerText = answer.Text;
-                        }
-                        catch (Providers.ProviderException ex) when (ex.Code is "truncated" or "incomplete")
-                        {
-                            // Letting a cut answer go up named the video code as cut off, a step that never ran (the 0.1.16 review).
-                            logger.LogWarning("The image prompt answer was cut off ({Code}); the scene descriptions fill in the missing prompts", ex.Code);
-                            if (ex.ChargedUsage is { } charged)
-                            {
-                                steps.Spend(new VideoCost { VideoId = id, Step = PipelineSteps.ImagePromptCost, Usd = costs.Exact(promptModel.Model, charged), Exact = true });
-                            }
-
-                            answerText = ex.PartialText;
-                            cut = true;
-                        }
-                        catch (Providers.ProviderException ex) when (ex.ChargedUsage is { } charged)
-                        {
-                            steps.Spend(new VideoCost { VideoId = id, Step = PipelineSteps.ImagePromptCost, Usd = costs.Exact(promptModel.Model, charged), Exact = true });
-                            throw;
-                        }
-
-                        return cut || ImagePromptBuilder.Read(answerText).Any(p => p.Length > 0) ? new[] { answerText } : null;
-                    }, logger, cancellationToken).ConfigureAwait(false);
-
-                    prompts = ImagePromptBuilder.Parse(read[0], visuals,
-                        problem => logger.LogWarning("The image prompts could not all be read ({Problem}); scene descriptions are used for the rest", problem));                    await File.WriteAllLinesAsync(promptFile, prompts.Select(p => p.ReplaceLineEndings(" ")), cancellationToken).ConfigureAwait(false);
+                    prompts = await ImagePromptsAsync(job, visuals, drawStyle, steps, id, cancellationToken).ConfigureAwait(false);
+                    await File.WriteAllLinesAsync(promptFile, prompts.Select(p => p.ReplaceLineEndings(" ")), cancellationToken).ConfigureAwait(false);
                 }
 
                 steps.Report(VideoSteps.Images, 0, done: 0, total: prompts.Count);
@@ -515,6 +481,76 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         }
 
         return names;
+    }
+
+    /// <summary>
+    /// The scene image prompts from the video code model (one model less to choose), one per scene with its number (20 Nov 2026). An answer
+    /// without one readable prompt is asked again as it was (at most twice, <see cref="JsonAnswerRetry"/>); an answer that does not fit the
+    /// scenes (<see cref="ImagePromptBuilder.Check"/>: the count, a scene without a prompt, a wrong number, an empty prompt) gets ONE repair
+    /// request with those findings, and when that does not fit either the video stops with them ("images"). A cut-off answer keeps its
+    /// complete items and goes to the same check. Every call is paid and counted.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> ImagePromptsAsync(VideoJob job, IReadOnlyList<string> visuals, Styles.DrawStyle? drawStyle,
+        VideoStepProgress steps, Guid id, CancellationToken cancellationToken)
+    {
+        var promptModel = job.CodeModel;
+        var chat = chats.Create(promptModel.Model, promptModel.Key.Secret);
+        async Task<string> AskAsync(string user, CancellationToken token)
+        {
+            try
+            {
+                var answer = await chat.SendAsync(new ChatRequest(ImagePromptBuilder.System, user, Schema: ImagePromptBuilder.Schema(), MaxOutputTokens: 4000,
+                    Effort: promptModel.Effort), token).ConfigureAwait(false);
+                steps.Spend(new VideoCost
+                {
+                    VideoId = id,
+                    Step = PipelineSteps.ImagePromptCost,
+                    Usd = costs.Exact(promptModel.Model, answer.Usage, answer.ReportedCostUsd),
+                    Exact = true,
+                });
+                return answer.Text;
+            }
+            catch (Providers.ProviderException ex) when (ex.Code is "truncated" or "incomplete")
+            {
+                // Letting a cut answer go up named the video code as cut off, a step that never ran (the 0.1.16 review).
+                logger.LogWarning("The image prompt answer was cut off ({Code}); its complete prompts go to the check", ex.Code);
+                if (ex.ChargedUsage is { } charged)
+                {
+                    steps.Spend(new VideoCost { VideoId = id, Step = PipelineSteps.ImagePromptCost, Usd = costs.Exact(promptModel.Model, charged), Exact = true });
+                }
+
+                return ex.PartialText;
+            }
+            catch (Providers.ProviderException ex) when (ex.ChargedUsage is { } charged)
+            {
+                steps.Spend(new VideoCost { VideoId = id, Step = PipelineSteps.ImagePromptCost, Usd = costs.Exact(promptModel.Model, charged), Exact = true });
+                throw;
+            }
+        }
+
+        var first = await JsonAnswerRetry.RunAsync("Scene image prompts", async (_, token) =>
+        {
+            var text = await AskAsync(ImagePromptBuilder.User(job.Profile.Name, visuals, drawStyle), token).ConfigureAwait(false);
+            return ImagePromptBuilder.Read(text).Count > 0 ? new[] { text } : null;
+        }, logger, cancellationToken).ConfigureAwait(false);
+        var items = ImagePromptBuilder.Read(first[0]);
+        var problems = ImagePromptBuilder.Check(items, visuals.Count);
+        if (problems.Count > 0)
+        {
+            logger.LogWarning("The image prompts do not fit the {Count} scenes ({Problems}); asking for one repair", visuals.Count, string.Join("; ", problems));
+            items = ImagePromptBuilder.Read(await AskAsync(ImagePromptBuilder.Repair(job.Profile.Name, visuals, drawStyle, problems), cancellationToken)
+                .ConfigureAwait(false));
+            problems = ImagePromptBuilder.Check(items, visuals.Count);
+            if (problems.Count > 0)
+            {
+                logger.LogError(LogEvents.OnScreen, "The image prompts still do not fit the scenes after the repair ({Problems}); the video is stopped",
+                    string.Join("; ", problems));
+                throw new VideoException("The image prompts still did not fit the scenes after one repair: " + string.Join("; ", problems)) { Code = "images" };
+            }
+        }
+
+        logger.LogInformation("Scene image prompts: {Count}, one per scene", items.Count);
+        return ImagePromptBuilder.Prompts(items, visuals.Count);
     }
 
     private string SceneImageRoot(Guid conceptId) => SceneImageFolder(paths.WorkDirectory, conceptId);

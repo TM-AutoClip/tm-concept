@@ -109,12 +109,25 @@ public sealed class ImageProviderTests
     }
 
     [Fact]
-    public void ImagePromptsFallBackToTheSceneDescription()
+    public void ImagePromptsAreCheckedAgainstTheScenesByTheirNumbers()
     {
-        string[] visuals = ["a map of the city", "the dome from inside"];
+        string[] visuals = ["a map of the city", "the dome from inside", "the walls"];
 
-        ImagePromptBuilder.Parse("""{"prompts":["Illustrated map, warm light"]}""", visuals).ShouldBe(["Illustrated map, warm light", "the dome from inside"]);
-        ImagePromptBuilder.Parse("not json", visuals).ShouldBe(visuals);
-        ImagePromptBuilder.User("Byzantium «x»", visuals).ShouldContain("Channel: «Byzantium \"x\"»");
+        var items = ImagePromptBuilder.Read("""{"prompts":[{"scene":2,"prompt":"The dome, warm light"},{"scene":1,"prompt":"Illustrated map"},{"scene":3,"prompt":"Walls"}]}""");
+        ImagePromptBuilder.Check(items, 3).ShouldBeEmpty();
+        ImagePromptBuilder.Prompts(items, 3).ShouldBe(["Illustrated map", "The dome, warm light", "Walls"], "in scene order, by number");
+
+        var wrong = ImagePromptBuilder.Read("""{"prompts":[{"scene":1,"prompt":"Map"},{"scene":1,"prompt":"Map again"},{"scene":7,"prompt":"?"},{"scene":3,"prompt":" "}]}""");
+        ImagePromptBuilder.Check(wrong, 3).ShouldBe(["4 prompts for 3 scenes", "scene number 7 does not exist", "scene 1 has 2 prompts", "scene 2 has no prompt",
+            "the prompt of scene 3 is empty"]);
+        ImagePromptBuilder.Check(ImagePromptBuilder.Read("not json"), 3).ShouldBe(["0 prompts for 3 scenes", "scene 1 has no prompt", "scene 2 has no prompt",
+            "scene 3 has no prompt"]);
+        ImagePromptBuilder.Read("""{"prompts":["Map","Dome"]}""").ShouldBe([new ImagePromptItem(1, "Map"), new ImagePromptItem(2, "Dome")],
+            "plain strings count as the scene of their place");
+
+        var repair = ImagePromptBuilder.Repair("Byzantium «x»", visuals, null, ["scene 2 has no prompt"]);
+        repair.ShouldContain("Channel: «Byzantium \"x\"»");
+        repair.ShouldContain("Your previous answer did not fit the scenes: scene 2 has no prompt. Write it again: exactly one item per scene, \"scene\" numbered 1 to 3");
+        ImagePromptBuilder.Schema().ToJsonString().ShouldContain("\"required\":[\"scene\",\"prompt\"]");
     }
 }
