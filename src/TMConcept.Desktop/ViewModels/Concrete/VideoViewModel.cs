@@ -876,7 +876,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
             LastLine = _text.Format("video.last.failed", row.Title, _text.Usd(ex.SpentUsd));
             _activity.Add(ActivityLevel.Error, _text.Format("video.failed", row.Title, reason, _text.Usd(ex.SpentUsd)),
                 _text.Format("video.failed", ActivityPlaceholders.Title, reason, _text.Usd(ex.SpentUsd)));
-            // The warnings gathered before the failure are still said (narration off, no samples…), after the failure itself.
+            // The warnings gathered before the failure are still said (narration off…), after the failure itself.
             var noted = Noted(row.Title, ex.Warnings);
 
             // The notification carries the reason and what was paid (the strip at the bottom shows the activity line too).
@@ -920,11 +920,8 @@ public sealed partial class VideoViewModel : PageViewModelBase
         return outcome;
     }
 
-    /// <summary>Where the scene images come from for a saved images choice: a model, the sample images, or none.</summary>
-    private static string ImageSourceOf(StepModelChoice? choice) =>
-        !StepModelResolver.IsOff(choice) ? ImageSources.Model
-        : choice is not null && StepModelResolver.Options(choice).ImageSource == ImageSources.Samples ? ImageSources.Samples
-        : ImageSources.None;
+    /// <summary>Where the scene images come from for a saved images choice: a model, or none.</summary>
+    private static string ImageSourceOf(StepModelChoice? choice) => StepModelResolver.IsOff(choice) ? ImageSources.None : ImageSources.Model;
 
     /// <summary>
     /// A made video: the last line of the page, one notification with the cost and the problems of the video (silent, no images…; they are
@@ -961,7 +958,6 @@ public sealed partial class VideoViewModel : PageViewModelBase
     [
         (VideoWarnings.SpeechOff, "video.silent.off", ActivityLevel.Warning, "video.noted.speech_off"),
         (VideoWarnings.SpeechSkipped, "video.speech.skipped", ActivityLevel.Warning, "video.noted.speech_skipped"),
-        (VideoWarnings.SamplesNone, "video.samples.none", ActivityLevel.Warning, "video.noted.samples_none"),
     ];
 
     /// <summary>The warnings of a failed run as activity lines (Warning); returns their texts for the notification.</summary>

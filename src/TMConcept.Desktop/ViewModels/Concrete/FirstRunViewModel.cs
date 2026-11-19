@@ -194,7 +194,7 @@ public sealed partial class FirstRunViewModel(Vault vault, BackupService backup,
         _ => "restore.stage.images",
     };
 
-    /// <summary>"2 profiles with their model choices, 3 sample images, 40 concepts, 5 video records, the settings, 2 API keys".</summary>
+    /// <summary>"2 profiles with their model choices, 3 channel photos, 40 concepts, 5 video records, the settings, 2 API keys".</summary>
     private string Describe(RestoreReport report)
     {
         var parts = new List<string>();

@@ -427,43 +427,6 @@ namespace TMConcept.Storage.Database
                     b.ToTable("profiles", (string)null);
                 });
 
-            modelBuilder.Entity("TMConcept.Core.Profiles.ProfileImage", b =>
-                {
-                    b.Property<string>("Id")
-                        .HasColumnType("TEXT");
-
-                    b.Property<long>("AddedAtUtc")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Caption")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("FileName")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("Height")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("ProfileId")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Sha256")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("Width")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ProfileId");
-
-                    b.ToTable("profile_images", (string)null);
-                });
-
             modelBuilder.Entity("TMConcept.Core.Pronunciation.PronunciationEntry", b =>
                 {
                     b.Property<string>("Id")
@@ -961,15 +924,6 @@ namespace TMConcept.Storage.Database
                 });
 
             modelBuilder.Entity("TMConcept.Core.Models.StepModelChoice", b =>
-                {
-                    b.HasOne("TMConcept.Core.Profiles.Profile", null)
-                        .WithMany()
-                        .HasForeignKey("ProfileId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("TMConcept.Core.Profiles.ProfileImage", b =>
                 {
                     b.HasOne("TMConcept.Core.Profiles.Profile", null)
                         .WithMany()

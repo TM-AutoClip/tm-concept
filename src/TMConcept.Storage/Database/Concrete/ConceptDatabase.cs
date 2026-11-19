@@ -12,7 +12,7 @@ namespace TMConcept.Storage.Database;
 /// (<see cref="ConceptDbContext"/>), opened for each piece of work and closed after it. The key goes in the connection string's Password
 /// (Microsoft.Data.Sqlite sends it as <c>PRAGMA key</c>; SQLite3 Multiple Ciphers encrypts with its default ChaCha20-Poly1305). Pooling is
 /// off so a closed database releases its file (restore replaces it). Foreign keys are on (cascades: deleting a profile removes its concepts,
-/// queue, image records, embeddings and video records; deleting a concept removes its embedding and queue entry and leaves its videos with
+/// queue, embeddings and video records; deleting a concept removes its embedding and queue entry and leaves its videos with
 /// an empty link). Secure delete (deleted content overwritten with zeros) is how SQLite3 Multiple Ciphers is built; it is checked whenever
 /// a file comes in. EF Core writes every statement (no SQL is written by hand). Every connection waits for another connection's lock
 /// (<see cref="WaitForLocks"/>) instead of failing at once with "database is locked".

@@ -157,7 +157,7 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
             var row = Row(step);
             var choice = saved.FirstOrDefault(s => s.Step == step.Code);
             var options = StepModelResolver.Options(choice);
-            row.Selected = Select(row, choice, options, out var stale);
+            row.Selected = Select(row, choice, out var stale);
             row.Effort = row.Efforts.FirstOrDefault(e => e.Value == options.Effort) ?? row.Efforts.FirstOrDefault();
             row.Engine = row.Engines.FirstOrDefault(e => e.Kind == options.Engine) ?? row.Engines.FirstOrDefault();
             row.Speed = (decimal)Math.Clamp(options.Speed, ProfileLimits.SpeedMin, ProfileLimits.SpeedMax);
@@ -487,10 +487,6 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
             text.Format("models.recommended", string.Join(" · ", recommended.Select(r => r.Model?.Name ?? r.Code))), text["models.effort.auto"],
             recommended.Select(r => r.Code).ToList());
         row.Options.Add(new StepOption(StepOptionKind.None, null, step.Optional ? text["step." + step.Code + ".off"] : text["models.none"]));
-        if (step.Code == PipelineSteps.Images)
-        {
-            row.Options.Add(new StepOption(StepOptionKind.Samples, null, text["step.images.samples"]));
-        }
 
         // What this card can run first, what it cannot run last (the developer, 18 Nov 2026); within each, the usual order.
         var options = catalog.With(step.Capability).Where(m => Usable(step, m))
@@ -513,14 +509,12 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
         return row;
     }
 
-    private StepOption Select(StepModelRowViewModel row, StepModelChoice? choice, StepOptions options, out bool stale)
+    private StepOption Select(StepModelRowViewModel row, StepModelChoice? choice, out bool stale)
     {
         stale = false;
         if (StepModelResolver.IsOff(choice))
         {
-            return choice is not null && options.ImageSource == ImageSources.Samples && row.Options.FirstOrDefault(o => o.Kind == StepOptionKind.Samples) is { } samples
-                ? samples
-                : row.Options[0];
+            return row.Options[0];
         }
 
         if (row.Options.FirstOrDefault(o => o.Model is { } m && m.Provider == choice!.Provider && m.Id == choice.Model) is { } found)
@@ -820,12 +814,6 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
             return;
         }
 
-        if (selected.Kind == StepOptionKind.Samples)
-        {
-            row.Note = text["step.images.samples.note"];
-            return;
-        }
-
         if (selected.Kind == StepOptionKind.Unavailable)
         {
             row.Note = row.Unavailable;
@@ -1071,7 +1059,6 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
             Engine = row.Engine?.Kind ?? EngineKind.HyperFrames,
             Voice = row.Voice?.Value ?? string.Empty,
             Speed = (double)Math.Clamp(row.Speed ?? 1, (decimal)ProfileLimits.SpeedMin, (decimal)ProfileLimits.SpeedMax),
-            ImageSource = row.Selected?.Kind == StepOptionKind.Samples ? ImageSources.Samples : string.Empty,
         };
         var choice = new StepModelChoice { Step = row.Step.Code, ProfileId = _profile, OptionsJson = StepModelResolver.OptionsJson(options) };
         switch (row.Selected?.Kind)
@@ -1083,7 +1070,6 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
                 choice.Provider = row.Selected.Model!.Provider;
                 choice.Model = row.Selected.Model.Id;
                 return choice;
-            case StepOptionKind.Samples:
             case StepOptionKind.None when row.Step.Optional:
                 choice.Provider = ModelProviders.Off;
                 return choice;
@@ -1104,7 +1090,6 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
         var label = text["steps.short." + row.Step.Code];
         var model = row.Selected switch
         {
-            { Kind: StepOptionKind.Samples } => text["step.images.samples"],
             { Kind: StepOptionKind.Unavailable } option => option.Label,
             { Model: { } m } => m.Name + (row.HasEfforts && row.Effort is { Value.Length: > 0 } effort ? " (" + effort.Label + ")" : string.Empty),
             _ => text[row.Step.Optional ? "steps.off" : "steps.none"],
@@ -1126,7 +1111,6 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
     {
         var model = row.Selected switch
         {
-            { Kind: StepOptionKind.Samples } => "the sample images",
             { Kind: StepOptionKind.Unavailable, Kept: { } kept } => kept.Provider + "/" + kept.Model + " (kept, not available now)",
             { Model: { } m } => m.Provider + "/" + m.Id,
             _ => row.Step.Optional ? "nothing (off)" : "no model",

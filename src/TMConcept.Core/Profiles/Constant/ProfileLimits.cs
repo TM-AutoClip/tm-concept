@@ -26,10 +26,4 @@ public static class ProfileLimits
 
     /// <summary>Fastest speech speed.</summary>
     public const double SpeedMax = 2.0;
-
-    /// <summary>Longest sample image caption.</summary>
-    public const int CaptionMax = 200;
-
-    /// <summary>Most sample images in a profile.</summary>
-    public const int ImagesMax = 24;
 }

@@ -20,7 +20,7 @@ namespace TMConcept.Tests.Desktop;
 
 /// <summary>
 /// 0.1.28 (the developer: deleting something deletes everything it generated; nothing leaks; big deletes free space for real; models only
-/// when chosen): a video, trashed concepts, a profile and a sample image take their files with them for good, files first and the record
+/// when chosen): a video, trashed concepts and a profile take their files with them for good, files first and the record
 /// after (a file in use keeps the record and is reported); a file another record still uses stays; the storage page finds library files
 /// without a record and takes them only when ticked; the clean-ups never take a model. Everything runs in the test's own temporary folders
 /// with the app's real permanent delete (it refuses any path outside them).
@@ -38,7 +38,7 @@ public sealed class DeletionTests
         var v2 = await VideoAsync(h, profile, "Byzantium/2026-11-05-1-greek-fire/v2");
         var deletion = h.Get<VideoDeletion>();
 
-        (await deletion.PlanAsync([v1.Id], None)).ShouldBe(new DeletionPlan(0, 1, 0, 0, 16 + 4));
+        (await deletion.PlanAsync([v1.Id], None)).ShouldBe(new DeletionPlan(0, 1, 0, 16 + 4));
         var first = await deletion.DeleteAsync([v1.Id], None);
 
         first.Complete.ShouldBeTrue();
@@ -103,7 +103,7 @@ public sealed class DeletionTests
         Put(keptImages, "1.png", 30);
         var deletion = h.Get<ConceptDeletion>();
 
-        (await deletion.PlanAsync([trashed.Id, kept.Id], None)).ShouldBe(new DeletionPlan(1, 1, 0, 0, 20 + 30), "only a concept in the trash counts");
+        (await deletion.PlanAsync([trashed.Id, kept.Id], None)).ShouldBe(new DeletionPlan(1, 1, 0, 20 + 30), "only a concept in the trash counts");
         var result = await deletion.DeleteAsync([trashed.Id, kept.Id], None);
 
         (result.Deleted, result.Complete).ShouldBe((1, true));
@@ -123,11 +123,6 @@ public sealed class DeletionTests
         var mine = await ProfileAsync(h, "History");
         var other = await ProfileAsync(h, "History");
         var profiles = h.Get<IProfileStore>();
-        Put(Path.Combine(h.Paths.LibraryDirectory, "History", "images"), "0123456789-shared.png", 10);
-        Put(Path.Combine(h.Paths.LibraryDirectory, "History", "images"), "abcdefabcd-mine.png", 11);
-        await profiles.SaveImageAsync(new ProfileImage { ProfileId = mine.Id, FileName = "History/images/0123456789-shared.png" }, None);
-        await profiles.SaveImageAsync(new ProfileImage { ProfileId = other.Id, FileName = "History/images/0123456789-shared.png" }, None);
-        await profiles.SaveImageAsync(new ProfileImage { ProfileId = mine.Id, FileName = "History/images/abcdefabcd-mine.png" }, None);
         var photo = mine.Id.ToString("N") + "-0123456789.png";
         Put(Path.Combine(h.Paths.LibraryDirectory, "History", "channel"), photo, 12);
         mine.ChannelPhoto = "History/channel/" + photo;
@@ -144,20 +139,18 @@ public sealed class DeletionTests
         var deletion = h.Get<ProfileDeletion>();
 
         var plan = await deletion.PlanAsync(mine.Id, None);
-        (plan.Concepts, plan.Videos, plan.Images, plan.Documents).ShouldBe((1, 1, 2, 1));
-        plan.Bytes.ShouldBe(20 + 11 + 12 + 30 + 15, "the shared image is not counted: it stays");
+        (plan.Concepts, plan.Videos, plan.Documents).ShouldBe((1, 1, 1));
+        plan.Bytes.ShouldBe(20 + 12 + 30 + 15, "the same-named profile's video is not counted: it stays");
         var result = await deletion.DeleteAsync(mine.Id, None);
 
         (result.Deleted, result.Complete).ShouldBe((1, true));
         (await profiles.GetAsync(mine.Id, None)).ShouldBeNull();
         Directory.Exists(Full(h, video.Folder)).ShouldBeFalse();
-        File.Exists(Path.Combine(h.Paths.LibraryDirectory, "History", "images", "abcdefabcd-mine.png")).ShouldBeFalse();
         File.Exists(Path.Combine(h.Paths.LibraryDirectory, "History", "channel", photo)).ShouldBeFalse();
         Directory.Exists(images).ShouldBeFalse();
         Directory.Exists(Path.Combine(documents.Folder, mine.Id.ToString("N"))).ShouldBeFalse();
-        File.Exists(Path.Combine(h.Paths.LibraryDirectory, "History", "images", "0123456789-shared.png")).ShouldBeTrue("the other profile's record uses it");
         Directory.Exists(Full(h, theirs.Folder)).ShouldBeTrue("the same-named profile's video is its own");
-        (await profiles.ImagesAsync(other.Id, None)).ShouldHaveSingleItem();
+        (await profiles.GetAsync(other.Id, None)).ShouldNotBeNull();
     }
 
     [AvaloniaFact]
@@ -186,28 +179,6 @@ public sealed class DeletionTests
         Directory.Exists(Full(h, video.Folder)).ShouldBeFalse();
     }
 
-    [AvaloniaFact]
-    public async Task RemovingASampleImageDeletesItsFileUnlessAnotherRecordUsesIt()
-    {
-        using var h = await HarnessAsync();
-        var first = await ProfileAsync(h, "History");
-        var second = await ProfileAsync(h, "History");
-        var profiles = h.Get<IProfileStore>();
-        Put(Path.Combine(h.Paths.LibraryDirectory, "History", "images"), "0123456789-a.png", 10);
-        var a = new ProfileImage { ProfileId = first.Id, FileName = "History/images/0123456789-a.png" };
-        var b = new ProfileImage { ProfileId = second.Id, FileName = "History/images/0123456789-a.png" };
-        await profiles.SaveImageAsync(a, None);
-        await profiles.SaveImageAsync(b, None);
-        var file = Path.Combine(h.Paths.LibraryDirectory, "History", "images", "0123456789-a.png");
-
-        (await h.Get<SampleImageDeletion>().DeleteAsync([a.Id], None)).Complete.ShouldBeTrue();
-        File.Exists(file).ShouldBeTrue("the second profile's record still uses it");
-        (await profiles.ImagesAsync(first.Id, None)).ShouldBeEmpty();
-
-        (await h.Get<SampleImageDeletion>().DeleteAsync([b.Id], None)).Complete.ShouldBeTrue();
-        File.Exists(file).ShouldBeFalse("the last record took it with it");
-    }
-
     [Fact]
     public void TheOrphanScanListsOnlyTheAppsOwnFilesThatNoRecordPointsAt()
     {
@@ -224,16 +195,16 @@ public sealed class DeletionTests
             Put(Path.Combine(p, "older"), VideoFolders.ThumbnailFile, 5);
             Put(Path.Combine(p, "my stuff"), "holiday.mp4", 5);
             Put(p, "loose.txt", 5);
-            Put(Path.Combine(p, "images"), "0123456789-unused.png", 5);
-            Put(Path.Combine(p, "images"), "0123456789-used.png", 5);
+            Put(Path.Combine(p, "images"), "0123456789-dome.png", 5);
             Put(Path.Combine(p, "images"), "my photo.png", 5);
             Put(Path.Combine(p, "channel"), new string('a', 32) + "-0123456789.png", 5);
+            Put(Path.Combine(p, "channel"), new string('b', 32) + "-0123456789.png", 5);
 
-            var (folders, files) = LibraryOrphanSource.Scan(library, ["History/fire/v2"], ["History/images/0123456789-used.png", null]);
+            var (folders, files) = LibraryOrphanSource.Scan(library, ["History/fire/v2"], ["History/channel/" + new string('b', 32) + "-0123456789.png", null]);
 
             folders.ShouldBe([Path.Combine(p, "fire", "v1"), Path.Combine(p, "older")]);
-            files.ShouldBe([Path.Combine(p, "channel", new string('a', 32) + "-0123456789.png"), Path.Combine(p, "images", "0123456789-unused.png")],
-                ignoreOrder: true);
+            files.ShouldBe([Path.Combine(p, "channel", new string('a', 32) + "-0123456789.png"), Path.Combine(p, "images", "0123456789-dome.png")],
+                ignoreOrder: true, "a sample image copy is used by nothing; a photo no profile points at is a leftover");
         }
         finally
         {
@@ -462,36 +433,6 @@ public sealed class DeletionTests
         trash.Status.ShouldBe(text["trash.delete.busy"]);
         (await h.Get<IConceptStore>().GetAsync(concept.Id, None)).ShouldNotBeNull();
         Directory.Exists(Full(h, video.Folder)).ShouldBeTrue();
-    }
-
-    [AvaloniaFact]
-    public async Task ASampleImageIsDeletedOnlyAfterAConfirmationWithItsSize()
-    {
-        var confirm = new FakeConfirm { Answer = false };
-        using var h = await HarnessAsync(confirm: confirm);
-        var profile = await ProfileAsync(h, "History");
-        Put(Path.Combine(h.Paths.LibraryDirectory, "History", "images"), "0123456789-a.png", 10);
-        await h.Get<IProfileStore>().SaveImageAsync(new ProfileImage { ProfileId = profile.Id, FileName = "History/images/0123456789-a.png" }, None);
-        var file = Path.Combine(h.Paths.LibraryDirectory, "History", "images", "0123456789-a.png");
-        await h.Get<AppSession>().SelectProfileAsync(profile, None);
-        var page = h.Get<ProfileViewModel>();
-        await page.ActivateAsync();
-        var image = page.Images.Single();
-        var text = h.Get<Localizer>();
-
-        await page.RemoveImageCommand.ExecuteAsync(image);
-
-        confirm.Messages.ShouldHaveSingleItem().ShouldBe(text.Format("profile.images.remove.message", "0123456789-a.png",
-            StorageSettingsViewModel.Size(10, text.Culture)));
-        confirm.Dangers.ShouldBe([true]);
-        File.Exists(file).ShouldBeTrue("declined: nothing is deleted");
-        page.Images.ShouldHaveSingleItem();
-
-        confirm.Answer = true;
-        await page.RemoveImageCommand.ExecuteAsync(image);
-        File.Exists(file).ShouldBeFalse();
-        page.Images.ShouldBeEmpty();
-        (await h.Get<IProfileStore>().ImagesAsync(profile.Id, None)).ShouldBeEmpty();
     }
 
     [AvaloniaFact]

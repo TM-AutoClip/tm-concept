@@ -141,9 +141,10 @@ public sealed class BackupTests
         var (source, _) = await BackupAsync();
         using var __ = source;
         var profile = (await new ProfileStore(source.Database).ListAsync(None)).Single();
-        Directory.CreateDirectory(Path.Combine(source.Paths.LibraryDirectory, "Kept channel", "images"));
-        await File.WriteAllBytesAsync(Path.Combine(source.Paths.LibraryDirectory, "Kept channel", "images", "a.png"), [1, 2, 3, 4], None);
-        await new ProfileStore(source.Database).SaveImageAsync(new ProfileImage { ProfileId = profile.Id, FileName = "Kept channel/images/a.png" }, None);
+        Directory.CreateDirectory(Path.Combine(source.Paths.LibraryDirectory, "Kept channel", "channel"));
+        await File.WriteAllBytesAsync(Path.Combine(source.Paths.LibraryDirectory, "Kept channel", "channel", "a.png"), [1, 2, 3, 4], None);
+        profile.ChannelPhoto = "Kept channel/channel/a.png";
+        await new ProfileStore(source.Database).SaveAsync(profile, None);
         await new StepModelStore(source.Database).SaveAsync(new TMConcept.Core.Models.StepModelChoice
         {
             Step = "concepts",
@@ -158,7 +159,7 @@ public sealed class BackupTests
         await service.CreateAsync(keysOnly, new BackupContents { Keys = true, Profiles = false, Concepts = false, Settings = false }, None);
         await Should.ThrowAsync<ArgumentException>(() => service.CreateAsync(keysOnly, new BackupContents { Profiles = false }, None));
 
-        // Everything with the keys: the restore says so first, then brings back keys, profile, its model choice and its image file.
+        // Everything with the keys: the restore says so first, then brings back keys, profile, its model choice and its photo file.
         using (var target = new StorageHarness())
         {
             var held = await Service(target).InspectAsync(withKeys, Password, None);
@@ -168,7 +169,7 @@ public sealed class BackupTests
             report.Keys.ShouldBe(1);
             (await new ApiKeyStore(target.Database).ListAsync("openai", None)).Single().Secret.ShouldBe("never-in-backup-1");
             (await new StepModelStore(target.Database).GetAsync("concepts", profile.Id, None))!.Model.ShouldBe("claude-haiku-5-5");
-            (await File.ReadAllBytesAsync(Path.Combine(target.Paths.LibraryDirectory, "Kept channel", "images", "a.png"), None)).ShouldBe([1, 2, 3, 4]);
+            (await File.ReadAllBytesAsync(Path.Combine(target.Paths.LibraryDirectory, "Kept channel", "channel", "a.png"), None)).ShouldBe([1, 2, 3, 4]);
         }
 
         // Only the keys: no profile comes back, no image file is written.
@@ -177,7 +178,7 @@ public sealed class BackupTests
             var report = await Service(target).RestoreAsync(keysOnly, Password, target.Protector, None);
             (report.Keys, report.Profiles, report.Images).ShouldBe((1, 0, 0));
             (await new ProfileStore(target.Database).ListAsync(None)).ShouldBeEmpty();
-            File.Exists(Path.Combine(target.Paths.LibraryDirectory, "Kept channel", "images", "a.png")).ShouldBeFalse();
+            File.Exists(Path.Combine(target.Paths.LibraryDirectory, "Kept channel", "channel", "a.png")).ShouldBeFalse();
         }
     }
 

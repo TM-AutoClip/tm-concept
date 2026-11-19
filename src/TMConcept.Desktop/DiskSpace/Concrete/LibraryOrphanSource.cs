@@ -15,8 +15,9 @@ namespace TMConcept.Desktop.DiskSpace;
 /// <item>video folders without a record: a version folder (<c>&lt;library&gt;/&lt;profile&gt;/&lt;concept&gt;/v&lt;N&gt;</c>), or an older
 /// single-folder video, that no video record points at and that holds ONLY the files the app writes there (video, thumbnail, subtitles,
 /// narration, the edited narration, <c>source/</c>, <c>audio/</c>): a delete before 0.1.28 left them when "also the files" was not ticked;</item>
-/// <item>images no profile uses: a file in a profile's <c>images/</c> or <c>channel/</c> folder whose name is one the app gives a copy and
-/// that no sample image record and no channel photo points at.</item>
+/// <item>images no profile uses: a file in a profile's <c>channel/</c> folder whose name is one the app gives a copy and that no channel
+/// photo points at, and every sample image copy in a profile's <c>images/</c> folder (0.1.29 removed sample images, so nothing uses
+/// them).</item>
 /// </list>
 /// Only the app's own layout is looked at: a loose file, a folder of another name, a folder that also holds anything else (the user put it
 /// there) is never listed, and nothing outside the library folder is. Nothing is listed while work runs (a video writes its version folder
@@ -129,9 +130,8 @@ public sealed partial class LibraryOrphanSource(AppPaths paths, IVideoStore vide
     private async Task<(IReadOnlyList<string> Folders, IReadOnlyList<string> Files)> ScanAsync(CancellationToken cancellationToken)
     {
         var records = await videos.AllAsync(cancellationToken).ConfigureAwait(false);
-        var images = await profiles.AllImagesAsync(cancellationToken).ConfigureAwait(false);
         var photos = (await profiles.ListAsync(cancellationToken).ConfigureAwait(false)).Select(p => p.ChannelPhoto);
-        return await Task.Run(() => Scan(paths.LibraryDirectory, records.Select(r => r.Folder), images.Select(i => i.FileName).Concat(photos)), cancellationToken)
+        return await Task.Run(() => Scan(paths.LibraryDirectory, records.Select(r => r.Folder), photos), cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -166,7 +166,7 @@ public sealed partial class LibraryOrphanSource(AppPaths paths, IVideoStore vide
 
     private static string Full(string path) => Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
 
-    /// <summary>A sample image copy (<c>&lt;10 hex&gt;-name</c>) or a channel photo copy (<c>&lt;32 hex&gt;-&lt;10 hex&gt;.ext</c>).</summary>
+    /// <summary>A sample image copy of 0.1.28 and earlier (<c>&lt;10 hex&gt;-name</c>) or a channel photo copy (<c>&lt;32 hex&gt;-&lt;10 hex&gt;.ext</c>).</summary>
     [GeneratedRegex(@"^(?:[0-9a-f]{10}-.+|[0-9a-f]{32}-[0-9a-f]{10}\.[a-z0-9]+)$")]
     private static partial Regex CopyName();
 }

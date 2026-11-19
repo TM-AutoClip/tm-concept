@@ -2,7 +2,7 @@ namespace TMConcept.Core.Paths;
 
 /// <summary>
 /// Where the app keeps its files. Data (encrypted database, key file, backups, logs, tools, work files) lives in one data folder
-/// (<c>%LOCALAPPDATA%\TM Concept</c> on Windows, <c>~/.local/share/tm-concept</c> on Linux, or <c>--data-dir</c>). Videos and sample images
+/// (<c>%LOCALAPPDATA%\TM Concept</c> on Windows, <c>~/.local/share/tm-concept</c> on Linux, or <c>--data-dir</c>). Videos and channel photos
 /// live unencrypted in the user's documents folder (<c>Documents/TM Concept</c>). Every path in the code comes from here.
 /// </summary>
 public interface IAppPaths
@@ -28,6 +28,6 @@ public interface IAppPaths
     /// <summary>Work files of the video pipeline (code, engine projects, intermediate audio); can be cleaned.</summary>
     string WorkDirectory { get; }
 
-    /// <summary>Videos and sample images (unencrypted, in the user's documents folder).</summary>
+    /// <summary>Videos and channel photos (unencrypted, in the user's documents folder).</summary>
     string LibraryDirectory { get; }
 }

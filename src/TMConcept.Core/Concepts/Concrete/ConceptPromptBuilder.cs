@@ -12,13 +12,13 @@ namespace TMConcept.Core.Concepts;
 /// edit: Turkish for Turkish videos, English for every other output language, which the prompt names (the user's texts may be in the
 /// interface language). Topics: the interface language, since the user reads and ticks the topics; a ticked topic later goes to the
 /// concept prompt as one line of its TOPICS block (one concept each, in order; see <see cref="TopicBrief"/>). The order follows the
-/// cache: the fixed part (rules + channel content + format + sample images) comes first and carries the cache mark; the changing part (the
+/// cache: the fixed part (rules + channel content + format) comes first and carries the cache mark; the changing part (the
 /// profile's past, see <see cref="PromptMemoryBuilder"/>, the wishes, the extra request, the topics, the count) comes last, so a new concept never
 /// changes the cached part (inside it the growing history made every call write a new cache entry at 1.25× and never read one). The
 /// channel's NAME is not sent (10 Nov 2026, the developer: "the name does not matter, the channel content does"): it is only the user's
 /// label; the channel content is the most important input and every concept and topic must stay inside it. User text is put inside « »
 /// with the guillemets themselves removed from it, so it cannot close the block (<see cref="PromptText"/>). A line whose value is empty is
-/// left out (no images, no history, no extra request). No placeholder ([pause 1 s], [soft transition]…) goes to the concept model: they are
+/// left out (no history, no extra request). No placeholder ([pause 1 s], [soft transition]…) goes to the concept model: they are
 /// put into a concept's text afterwards and applied by the program itself. The prompts are not shown to the user and cannot be edited.
 /// A documents run (0.1.21, a <see cref="ConceptPromptInput.Grounding"/>) uses its own prompt (concepts-documents.txt): only the passages'
 /// facts, the documents named in "kaynaklar", the concepts in the video's language whatever the documents' language; its passages are in
@@ -35,7 +35,7 @@ public static partial class ConceptPromptBuilder
         ArgumentNullException.ThrowIfNull(input);
         var (words, template) = Template(OutputLanguages.Of(input.Profile.ContentLanguage).PromptLanguage,
             input.Grounding is null ? "concepts" : "concepts-documents");
-        var values = Channel(input.Profile, input.Images, words);
+        var values = Channel(input.Profile, words);
         Memory(values, input.Memory);
         values["wishes"] = input.Memory.Wishes;
         values["extra"] = string.IsNullOrWhiteSpace(input.ExtraPrompt) ? null : PromptText.Data(input.ExtraPrompt, ConceptLimits.ExtraPromptMax);
@@ -115,7 +115,7 @@ public static partial class ConceptPromptBuilder
         var (words, template) = Template(OutputLanguages.Of(input.Profile.ContentLanguage).PromptLanguage, "concept-edit");
 
         // A "{concept}" typed into the content stays as typed (Fill does not search a value again).
-        var values = Channel(input.Profile, input.Images, words);
+        var values = Channel(input.Profile, words);
         values["title"] = PromptText.Data(input.Title, ConceptLimits.TitleHardMax);
         values["summary"] = PromptText.Data(input.Summary, ConceptLimits.SummaryMax);
         values["instruction"] = PromptText.Data(input.Instruction, ConceptLimits.ExtraPromptMax);
@@ -154,7 +154,7 @@ public static partial class ConceptPromptBuilder
         topics.Count == 0 ? null : string.Concat(topics.Select(s => "\n- " + PromptText.Line(s, TopicLimits.TopicMax)));
 
     /// <summary>The channel part of the concept and edit prompts (no name: see the class summary).</summary>
-    private static Dictionary<string, string?> Channel(Profile profile, IReadOnlyList<ProfileImage> images, Dictionary<string, string> words)
+    private static Dictionary<string, string?> Channel(Profile profile, Dictionary<string, string> words)
     {
         var language = OutputLanguages.Of(profile.ContentLanguage);
         return new Dictionary<string, string?>(StringComparer.Ordinal)
@@ -166,9 +166,6 @@ public static partial class ConceptPromptBuilder
             ["format"] = profile.Format == VideoFormat.Vertical ? words["vertical"] : words["horizontal"],
             ["seconds"] = profile.TargetSeconds.ToString(CultureInfo.InvariantCulture),
             ["words"] = Words(profile.ContentLanguage, profile.TargetSeconds).ToString(CultureInfo.InvariantCulture),
-            ["images"] = images.Count == 0
-                ? null
-                : string.Join("; ", images.Select((image, i) => string.Create(CultureInfo.InvariantCulture, $"{i + 1}: «{PromptText.Data(image.Caption, ProfileLimits.CaptionMax)}»"))),
         };
     }
 

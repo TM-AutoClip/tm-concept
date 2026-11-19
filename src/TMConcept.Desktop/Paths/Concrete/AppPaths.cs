@@ -5,7 +5,7 @@ namespace TMConcept.Desktop.Paths;
 
 /// <summary>
 /// Data folder: the given folder (portable mode), otherwise %LOCALAPPDATA%\TM Concept on Windows (not roaming, not synced) and
-/// $XDG_DATA_HOME/tm-concept (~/.local/share/tm-concept) on Linux. Videos and sample images: Documents/TM Concept (the operating system's
+/// $XDG_DATA_HOME/tm-concept (~/.local/share/tm-concept) on Linux. Videos and channel photos: Documents/TM Concept (the operating system's
 /// documents folder), or <c>library</c> inside the data folder in portable mode.
 /// </summary>
 public sealed class AppPaths : IAppPaths

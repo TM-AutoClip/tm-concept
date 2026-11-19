@@ -9,28 +9,26 @@ using TMConcept.Core.Videos;
 namespace TMConcept.Core.Deletion;
 
 /// <summary>
-/// Deletes a profile for good with everything it generated: its videos (files and records), its sample images and its channel photo (a file
+/// Deletes a profile for good with everything it generated: its videos (files and records) and its channel photo (a file
 /// another profile still uses stays: two profiles whose names give the same library folder share it, so the profile's library folder is
 /// never deleted as a whole, only what it owns and then the folders left empty), its document copies, the kept scene images of its
 /// concepts, and last the profile row (its concepts, queue and the rest go with it in the database). When a file cannot be removed (in use)
 /// the profile row STAYS with its document copies and the failures are reported; a second try finishes it.
 /// </summary>
 public sealed class ProfileDeletion(IAppPaths paths, IFolderDiscard discard, IVideoStore videos, IProfileStore profiles, IConceptStore concepts,
-    DocumentLibrary documents, SampleImageDeletion images, ILogger<ProfileDeletion> logger) : OwnerDeletionBase(paths, discard, videos, logger)
+    DocumentLibrary documents, ILogger<ProfileDeletion> logger) : OwnerDeletionBase(paths, discard, videos, logger)
 {
-    /// <summary>What deleting the profile <paramref name="profileId"/> takes: concepts, videos, sample images, documents and the bytes on disk.</summary>
+    /// <summary>What deleting the profile <paramref name="profileId"/> takes: concepts, videos, documents and the bytes on disk.</summary>
     public async Task<DeletionPlan> PlanAsync(Guid profileId, CancellationToken cancellationToken)
     {
         var all = await Videos.AllAsync(cancellationToken).ConfigureAwait(false);
         var theirs = all.Where(v => v.ProfileId == profileId).ToList();
-        var allImages = await profiles.AllImagesAsync(cancellationToken).ConfigureAwait(false);
-        var ownImages = allImages.Where(i => i.ProfileId == profileId).ToList();
         var conceptIds = await ConceptIdsAsync(profileId, cancellationToken).ConfigureAwait(false);
         var docs = await documents.ListAsync(profileId, cancellationToken).ConfigureAwait(false);
         var photo = await PhotoAsync(profileId, cancellationToken).ConfigureAwait(false);
-        var bytes = await Task.Run(() => Size(theirs.SelectMany(v => VideoPaths(v, all)).Concat(images.Files(ownImages, allImages)).Concat(photo)
+        var bytes = await Task.Run(() => Size(theirs.SelectMany(v => VideoPaths(v, all)).Concat(photo)
             .Append(DocumentFolder(profileId)).Concat(conceptIds.Select(SceneImages))), cancellationToken).ConfigureAwait(false);
-        return new DeletionPlan(conceptIds.Count, theirs.Count, ownImages.Count, docs.Count, bytes);
+        return new DeletionPlan(conceptIds.Count, theirs.Count, docs.Count, bytes);
     }
 
     /// <summary>Deletes the profile's files and then the profile; <see cref="DeletionResult.Deleted"/> is 1 when the profile went.</summary>
@@ -39,8 +37,6 @@ public sealed class ProfileDeletion(IAppPaths paths, IFolderDiscard discard, IVi
         var tally = new DeletionTally();
         var all = await Videos.AllAsync(cancellationToken).ConfigureAwait(false);
         var complete = await DeleteVideosAsync(all.Where(v => v.ProfileId == profileId).ToList(), all, tally, cancellationToken).ConfigureAwait(false);
-        var own = (await profiles.ImagesAsync(profileId, cancellationToken).ConfigureAwait(false)).Select(i => i.Id).ToList();
-        complete &= await images.DeleteImagesAsync(own, tally, cancellationToken).ConfigureAwait(false);
         complete &= await RemoveAsync(await PhotoAsync(profileId, cancellationToken).ConfigureAwait(false), tally, cancellationToken).ConfigureAwait(false);
         var conceptIds = await ConceptIdsAsync(profileId, cancellationToken).ConfigureAwait(false);
         complete &= await RemoveAsync(conceptIds.Select(SceneImages).ToList(), tally, cancellationToken).ConfigureAwait(false);

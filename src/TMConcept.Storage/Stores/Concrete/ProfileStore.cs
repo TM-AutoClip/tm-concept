@@ -53,33 +53,4 @@ public sealed class ProfileStore(ConceptDatabase database) : IProfileStore
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
         await db.Profiles.Where(p => p.Id == id).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
     }
-
-    /// <inheritdoc />
-    public async Task<IReadOnlyList<ProfileImage>> ImagesAsync(Guid profileId, CancellationToken cancellationToken)
-    {
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        return await db.ProfileImages.Where(i => i.ProfileId == profileId).OrderBy(i => i.AddedAtUtc).ToListAsync(cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <inheritdoc />
-    public async Task<IReadOnlyList<ProfileImage>> AllImagesAsync(CancellationToken cancellationToken)
-    {
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        return await db.ProfileImages.ToListAsync(cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <inheritdoc />
-    public async Task SaveImageAsync(ProfileImage image, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(image);
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        await db.UpsertAsync(image, i => i.Id == image.Id, cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <inheritdoc />
-    public async Task DeleteImageAsync(Guid id, CancellationToken cancellationToken)
-    {
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        await db.ProfileImages.Where(i => i.Id == id).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
-    }
 }

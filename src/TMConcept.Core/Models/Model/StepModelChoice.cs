@@ -3,7 +3,7 @@ namespace TMConcept.Core.Models;
 /// <summary>
 /// The model of a pipeline step for a profile: the last choice made on the page that uses the step. Empty until the user picks one (a paid
 /// model is never chosen automatically). Provider <see cref="ModelProviders.Off"/> = the step is turned off (no images, a silent video, no
-/// semantic check); an image step that is off can still use the profile's sample images (<see cref="StepOptions.ImageSource"/>).
+/// semantic check).
 /// </summary>
 public sealed class StepModelChoice
 {

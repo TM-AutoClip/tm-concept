@@ -1,6 +1,6 @@
 namespace TMConcept.Storage.Backup;
 
-/// <summary>A sample image file inside a backup: its path relative to the library folder, its length in the payload and its SHA-256.</summary>
+/// <summary>A file inside a backup (a channel photo or a document copy): its path relative to the library folder, its length in the payload and its SHA-256.</summary>
 public sealed class BackupImage
 {
     /// <summary>Path relative to the library folder (as the database stores it).</summary>

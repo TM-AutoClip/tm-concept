@@ -272,7 +272,7 @@ public sealed class ResearchTests
 
         var batch = await source.PrepareAsync(new ConceptSourceRequest(Turkish, brief, Paid, 0, 2, 3_000, 3_000, 64_000, false), None);
         var grounding = batch.Grounding.ShouldNotBeNull();
-        var prompt = ConceptPromptBuilder.Build(new ConceptPromptInput(Turkish, [], PromptMemory.Empty, batch.ExtraPrompt, 2, Grounding: grounding));
+        var prompt = ConceptPromptBuilder.Build(new ConceptPromptInput(Turkish, PromptMemory.Empty, batch.ExtraPrompt, 2, Grounding: grounding));
 
         grounding.Documents.ShouldHaveSingleItem().Title.ShouldBe("Varangian Guard");
         grounding.Documents.ShouldNotContain(d => d.Id == other.Id, "research reads only the pages it fetched");

@@ -11,7 +11,7 @@ namespace TMConcept.Storage.Database
     public partial class ConceptDbContextModel
     {
         private ConceptDbContextModel()
-            : base(skipDetectChanges: false, modelId: new Guid("47174184-33b6-4915-95ff-4af284fb3fc5"), entityTypeCount: 23)
+            : base(skipDetectChanges: false, modelId: new Guid("b94048ea-7705-4127-85fc-7470461e0dc3"), entityTypeCount: 22)
         {
         }
 
@@ -28,7 +28,6 @@ namespace TMConcept.Storage.Database
             var apiKey = ApiKeyEntityType.Create(this);
             var stepModelChoice = StepModelChoiceEntityType.Create(this);
             var profile = ProfileEntityType.Create(this);
-            var profileImage = ProfileImageEntityType.Create(this);
             var pronunciationEntry = PronunciationEntryEntityType.Create(this);
             var run = RunEntityType.Create(this);
             var voiceSample = VoiceSampleEntityType.Create(this);
@@ -50,7 +49,6 @@ namespace TMConcept.Storage.Database
             SourceDocumentEntityType.CreateForeignKey1(sourceDocument, profile);
             ConceptEmbeddingEntityType.CreateForeignKey1(conceptEmbedding, concept);
             StepModelChoiceEntityType.CreateForeignKey1(stepModelChoice, profile);
-            ProfileImageEntityType.CreateForeignKey1(profileImage, profile);
             QueueItemEntityType.CreateForeignKey1(queueItem, concept);
             QueueItemEntityType.CreateForeignKey2(queueItem, profile);
             VideoCostEntityType.CreateForeignKey1(videoCost, videoRecord);
@@ -70,7 +68,6 @@ namespace TMConcept.Storage.Database
             ApiKeyEntityType.CreateAnnotations(apiKey);
             StepModelChoiceEntityType.CreateAnnotations(stepModelChoice);
             ProfileEntityType.CreateAnnotations(profile);
-            ProfileImageEntityType.CreateAnnotations(profileImage);
             PronunciationEntryEntityType.CreateAnnotations(pronunciationEntry);
             RunEntityType.CreateAnnotations(run);
             VoiceSampleEntityType.CreateAnnotations(voiceSample);

@@ -34,7 +34,7 @@ public sealed partial class BackupSettingsViewModel(BackupService backup, IAppPa
     [ObservableProperty]
     public partial bool NowKeys { get; set; }
 
-    /// <summary>Back up now: profiles with their model choices and sample images.</summary>
+    /// <summary>Back up now: profiles with their model choices and channel photos.</summary>
     [ObservableProperty]
     public partial bool NowProfiles { get; set; } = true;
 

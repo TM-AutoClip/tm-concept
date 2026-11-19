@@ -24,7 +24,7 @@ namespace TMConcept.Core.Videos;
 /// Concept → video (plan §6.1): 0 the engine and ffmpeg must be installed (checked before anything is paid for) · A prepare (scenes, no
 /// model; the placeholders of the concept text are read: pauses and speed for the voice, transitions for the scenes) · B narration per scene
 /// with the profile's narration step (<see cref="SceneNarrator"/>, the same as a new version; cached; off = silent video with a warning, a
-/// chosen voice that fails stops the video) · D images (samples, or the profile's images step: off = no image call at all, a failure stops the
+/// chosen voice that fails stops the video) · D images (the profile's images step: off = no image call at all, a failure stops the
 /// video before the code call, and an engine that cannot run here at all (<see cref="IImageEngine.Problem"/>) stops it at A, before the paid
 /// prompt call; the prompts are written by the video code model, a cut-off prompt answer falls back to the scene texts; generated
 /// images and their prompts are kept per concept until the video is made, so a retry does not pay for them again) · C timing in C# after the
@@ -40,7 +40,7 @@ namespace TMConcept.Core.Videos;
 /// of the plan, the scenes done, the code call's tokens and what was paid so far (<see cref="VideoStepProgress"/>, the one list of the costs).
 /// </summary>
 public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechService speech, SceneNarrator narrator, IEnumerable<IImageEngine> images, StepModelResolver resolver,
-    IChatClientFactory chats, ICostCalculator costs, VideoAssembler assembler, IConceptStore concepts, IProfileStore profiles, IRunStore runs,
+    IChatClientFactory chats, ICostCalculator costs, VideoAssembler assembler, IConceptStore concepts, IRunStore runs,
     IAppPaths paths, IGpuCoordinator gpu, TimeProvider clock, ILogger<VideoPipeline> logger)
 {
     /// <summary>Work folders of runs older than this are removed by <see cref="CleanWork"/>.</summary>
@@ -80,10 +80,10 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         var speechChoice = options.Speech ? await resolver.ChoiceAsync(PipelineSteps.Speech, profile.Id, cancellationToken).ConfigureAwait(false) : null;
         var imageChoice = options.Images == ImageSources.Model ? await resolver.ChoiceAsync(PipelineSteps.Images, profile.Id, cancellationToken).ConfigureAwait(false) : null;
         var speechOn = !StepModelResolver.IsOff(speechChoice);
-        var imagesOn = options.Images == ImageSources.Samples || !StepModelResolver.IsOff(imageChoice);
+        var imagesOn = !StepModelResolver.IsOff(imageChoice);
         logger.LogInformation("Video {Id} started: concept {Concept}, {Engine}, code model {Provider}/{Model}, voice {Voice}, images {Images}", id, job.Concept.Id,
             engine.Name, job.CodeModel.Model.Provider, job.CodeModel.Model.Id, speechOn ? speechChoice!.Provider + "/" + speechChoice.Model : "off",
-            !StepModelResolver.IsOff(imageChoice) ? imageChoice!.Provider + "/" + imageChoice.Model : imagesOn ? options.Images : "off");
+            imagesOn ? imageChoice!.Provider + "/" + imageChoice.Model : "off");
         var work = assembler.WorkFolder(id);
         var target = new VersionTarget();
         var steps = new VideoStepProgress(
@@ -96,7 +96,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         }
         catch (VideoException ex) when (warnings.Count > 0)
         {
-            // The warnings gathered before the failure are still shown with it (narration off, no samples…).
+            // The warnings gathered before the failure are still shown with it (narration off…).
             throw new VideoException(ex.Message, ex.InnerException ?? ex) { Code = ex.Code, SpentUsd = ex.SpentUsd, Warnings = [.. warnings] };
         }
     }
@@ -223,7 +223,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         List<string> sceneImages = [];
         if (imagesOn)
         {
-            sceneImages = await ImagesAsync(job, imageModel, split.Scenes, work, warnings, steps, id, width, height, cancellationToken).ConfigureAwait(false);
+            sceneImages = await ImagesAsync(job, imageModel, split.Scenes, work, steps, id, width, height, cancellationToken).ConfigureAwait(false);
             steps.Finish(VideoSteps.Images);
         }
 
@@ -394,10 +394,9 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
     }
 
     /// <summary>
-    /// The scene images: the profile's samples, or the chosen model's. Only "samples chosen but the profile has none" is a warning; any other
-    /// failure stops the video (<see cref="VideoException"/> "images").
+    /// The scene images of the chosen model. Any failure stops the video (<see cref="VideoException"/> "images").
     /// </summary>
-    private async Task<List<string>> ImagesAsync(VideoJob job, ResolvedModel? imageModel, IReadOnlyList<Scene> scenes, string work, List<string> warnings,
+    private async Task<List<string>> ImagesAsync(VideoJob job, ResolvedModel? imageModel, IReadOnlyList<Scene> scenes, string work,
         VideoStepProgress steps, Guid id, int width, int height, CancellationToken cancellationToken)
     {
         var names = new List<string>();
@@ -411,46 +410,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
 
         try
         {
-            if (job.Options.Images == ImageSources.Samples)
-            {
-                var samples = await profiles.ImagesAsync(job.Profile.Id, cancellationToken).ConfigureAwait(false);
-                if (samples.Count == 0)
-                {
-                    // 0.1.6 made the video without images and said nothing: the sample images were chosen, so say why there are none.
-                    logger.LogWarning("The sample images were chosen but the profile has none; the video is made without images");
-                    warnings.Add(VideoWarnings.SamplesNone);
-                    return names;
-                }
-
-                var missing = 0;
-                for (var i = 0; i < scenes.Count; i++)
-                {
-                    var sample = samples[i % samples.Count];
-                    var name = "sample-" + (i % samples.Count + 1).ToString(CultureInfo.InvariantCulture) + Path.GetExtension(sample.FileName);
-
-                    // The stored name is relative to the library folder ("<profile>/images/<file>"), like every library path.
-                    var source = SampleFile(sample.FileName);
-                    if (source is not null && File.Exists(source))
-                    {
-                        Place(source, name);
-                        names.Add(name);
-                    }
-                    else
-                    {
-                        missing++;
-                        names.Add(string.Empty);
-                    }
-                }
-
-                if (missing > 0)
-                {
-                    // A sample image of the profile whose file is gone is not a choice: the video stops before anything is paid for.
-                    logger.LogError(LogEvents.OnScreen, "{Missing} scene(s) have no image: their sample image file is missing", missing);
-                    throw new VideoException(string.Create(CultureInfo.InvariantCulture,
-                        $"{missing} scene(s) have no image: their sample image file is missing from the library.")) { Code = "images" };
-                }
-            }
-            else if (imageModel is not null)
+            if (imageModel is not null)
             {
                 // The video code model writes the image prompts (one model less to choose).
                 var promptModel = job.CodeModel;
@@ -555,19 +515,6 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         }
 
         return names;
-    }
-
-    private string? SampleFile(string stored)
-    {
-        try
-        {
-            return LibraryPaths.Resolve(paths.LibraryDirectory, stored);
-        }
-        catch (InvalidOperationException ex)
-        {
-            logger.LogWarning(ex, "A sample image path is outside the library folder and is ignored");
-            return null;
-        }
     }
 
     private string SceneImageRoot(Guid conceptId) => SceneImageFolder(paths.WorkDirectory, conceptId);

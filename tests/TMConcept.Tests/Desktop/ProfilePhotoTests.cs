@@ -11,8 +11,8 @@ using TMConcept.Desktop.ViewModels;
 namespace TMConcept.Tests.Desktop;
 
 /// <summary>
-/// 0.1.19 profile page: a new profile takes sample images and a channel photo before its first save (they are copied by Save and dropped by
-/// Cancel), and the channel photo is saved, replaced, removed and deleted with the profile.
+/// 0.1.19 profile page: a new profile takes a channel photo before its first save (it is copied by Save and dropped by Cancel), and the
+/// channel photo is saved, replaced, removed and deleted with the profile.
 /// </summary>
 public sealed class ProfilePhotoTests
 {
@@ -23,25 +23,20 @@ public sealed class ProfilePhotoTests
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYGAAAAAEAAH2FzhVAAAAAElFTkSuQmCC");
 
     [AvaloniaFact]
-    public async Task ANewProfileTakesImagesAndAPhotoThatSaveCopiesAndCancelDrops()
+    public async Task ANewProfileTakesAPhotoThatSaveCopiesAndCancelDrops()
     {
         using var h = new DesktopHarness();
         await FirstRunTests.CreateAsync(h);
         var library = h.Get<IAppPaths>().LibraryDirectory;
-        var source = Path.Combine(h.Paths.DataDirectory, "dome.png");
         var photo = Path.Combine(h.Paths.DataDirectory, "avatar.png");
-        await File.WriteAllBytesAsync(source, Png, TestContext.Current.CancellationToken);
         await File.WriteAllBytesAsync(photo, OtherPng, TestContext.Current.CancellationToken);
         var page = h.Get<ProfileViewModel>();
 
         // Picked while new, then cancelled: nothing was copied or stored.
         page.StartNew();
-        await page.AddImageFilesAsync([source]);
         page.ChooseChannelPhoto(photo);
-        page.Images.ShouldHaveSingleItem().Pending.ShouldBeTrue();
         page.ChannelPhotoPath.ShouldBe(photo, "the round preview shows the picked file");
         await page.CancelNewAsync();
-        page.Images.ShouldBeEmpty();
         page.ChannelPhotoPath.ShouldBeNull();
         page.IsNew.ShouldBeTrue("with no profile yet, Cancel starts an empty new one");
         (Directory.Exists(library) && Directory.EnumerateFiles(library, "*", SearchOption.AllDirectories).Any()).ShouldBeFalse("nothing was copied");
@@ -49,22 +44,12 @@ public sealed class ProfilePhotoTests
         // Picked while new, then saved: copied under the saved name and stored with the profile.
         page.Name = "Lost Engineering";
         page.ConceptText = "Ancient machines.";
-        await page.AddImageFilesAsync([source, source]);
-        page.Images.Count.ShouldBe(1, "the same image twice is one");
-        page.Images[0].Caption = "dome from inside";
         page.ChooseChannelPhoto(photo);
         await page.SaveAsync();
 
         page.Status.ShouldBe(h.Get<Localizer>()["common.saved"]);
         page.IsNew.ShouldBeFalse();
         var saved = (await h.Get<IProfileStore>().ListAsync(CancellationToken.None)).ShouldHaveSingleItem();
-        var image = (await h.Get<IProfileStore>().ImagesAsync(saved.Id, CancellationToken.None)).ShouldHaveSingleItem();
-        image.Caption.ShouldBe("dome from inside");
-        (image.Width, image.Height).ShouldBe((2, 2));
-        image.FileName.ShouldStartWith("Lost Engineering/images/");
-        File.ReadAllBytes(LibraryPaths.Resolve(library, image.FileName)).ShouldBe(Png);
-        page.Images.ShouldHaveSingleItem().Pending.ShouldBeFalse();
-        page.Images[0].FullPath.ShouldBe(LibraryPaths.Resolve(library, image.FileName));
         saved.ChannelPhoto.ShouldNotBeNull().ShouldStartWith("Lost Engineering/channel/");
         File.ReadAllBytes(LibraryPaths.Resolve(library, saved.ChannelPhoto)).ShouldBe(OtherPng);
         page.ChannelPhotoPath.ShouldBe(LibraryPaths.Resolve(library, saved.ChannelPhoto));
@@ -166,23 +151,18 @@ public sealed class ProfilePhotoTests
     }
 
     [AvaloniaFact]
-    public async Task ANewProfileWhosePickedImageIsGoneIsNotSavedAtAllAndCancelDropsIt()
+    public async Task ANewProfileWhosePickedPhotoIsGoneIsNotSavedAtAllAndCancelDropsIt()
     {
         using var h = new DesktopHarness();
         await FirstRunTests.CreateAsync(h);
         var library = h.Get<IAppPaths>().LibraryDirectory;
-        var kept = Path.Combine(h.Paths.DataDirectory, "kept.png");
         var gone = Path.Combine(h.Paths.DataDirectory, "gone.png");
-        var photo = Path.Combine(h.Paths.DataDirectory, "avatar.png");
-        await File.WriteAllBytesAsync(kept, Png, TestContext.Current.CancellationToken);
         await File.WriteAllBytesAsync(gone, OtherPng, TestContext.Current.CancellationToken);
-        await File.WriteAllBytesAsync(photo, OtherPng, TestContext.Current.CancellationToken);
         var page = h.Get<ProfileViewModel>();
         page.StartNew();
         page.Name = "Lost Engineering";
         page.ConceptText = "Ancient machines.";
-        await page.AddImageFilesAsync([kept, gone]);
-        page.ChooseChannelPhoto(photo);
+        page.ChooseChannelPhoto(gone);
         File.Delete(gone);
 
         await page.SaveAsync();
@@ -190,7 +170,7 @@ public sealed class ProfilePhotoTests
         page.Status.ShouldContain("gone.png");
         page.IsNew.ShouldBeTrue("nothing was saved, so the page still offers Cancel");
         (await h.Get<IProfileStore>().ListAsync(CancellationToken.None)).ShouldBeEmpty();
-        (Directory.Exists(library) && Directory.EnumerateFiles(library, "*", SearchOption.AllDirectories).Any()).ShouldBeFalse("the copies made are removed");
+        (Directory.Exists(library) && Directory.EnumerateFiles(library, "*", SearchOption.AllDirectories).Any()).ShouldBeFalse("nothing was copied");
         await page.CancelNewAsync();
         (await h.Get<IProfileStore>().ListAsync(CancellationToken.None)).ShouldBeEmpty();
     }
@@ -225,23 +205,7 @@ public sealed class ProfilePhotoTests
     }
 
     [AvaloniaFact]
-    public async Task DescribingAnImageOfAnUnsavedProfileAsksToSaveFirst()
-    {
-        using var h = new DesktopHarness();
-        await FirstRunTests.CreateAsync(h);
-        var source = Path.Combine(h.Paths.DataDirectory, "dome.png");
-        await File.WriteAllBytesAsync(source, Png, TestContext.Current.CancellationToken);
-        var page = h.Get<ProfileViewModel>();
-        page.StartNew();
-        await page.AddImageFilesAsync([source]);
-
-        await page.DescribeImageCommand.ExecuteAsync(page.Images.Single());
-
-        page.Status.ShouldBe(h.Get<Localizer>()["profile.describe.save_first"]);
-    }
-
-    [AvaloniaFact]
-    public async Task TheAddImagesButtonWorksOnANewProfileAndThePhotoHasARoundPreview()
+    public async Task ANewProfileOffersCancelAndThePhotoHasARoundPreview()
     {
         using var h = new DesktopHarness();
         await FirstRunTests.CreateAsync(h);
@@ -254,7 +218,6 @@ public sealed class ProfilePhotoTests
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
 
         var controls = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(view).OfType<Avalonia.Controls.Control>().ToList();
-        controls.OfType<Avalonia.Controls.Button>().Single(b => b.Name == "AddImagesButton").IsEffectivelyEnabled.ShouldBeTrue("0.1.18 disabled it until the first save");
         controls.OfType<Avalonia.Controls.Button>().Single(b => b.Name == "CancelNewButton").IsVisible.ShouldBeTrue();
         var round = controls.OfType<Avalonia.Controls.Border>().Single(b => b.Name == "ChannelPhoto");
         round.CornerRadius.TopLeft.ShouldBe(round.Width / 2);

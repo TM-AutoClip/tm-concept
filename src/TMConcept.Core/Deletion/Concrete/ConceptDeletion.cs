@@ -22,7 +22,7 @@ public sealed class ConceptDeletion(IAppPaths paths, IFolderDiscard discard, IVi
         var theirs = all.Where(v => v.ConceptId is { } c && trashed.Contains(c)).ToList();
         var bytes = await Task.Run(() => Size(theirs.SelectMany(v => VideoPaths(v, all)).Concat(trashed.Select(SceneImages))), cancellationToken)
             .ConfigureAwait(false);
-        return new DeletionPlan(trashed.Count, theirs.Count, 0, 0, bytes);
+        return new DeletionPlan(trashed.Count, theirs.Count, 0, bytes);
     }
 
     /// <summary>Deletes the trashed concepts among <paramref name="ids"/>; <see cref="DeletionResult.Deleted"/> counts the concepts.</summary>

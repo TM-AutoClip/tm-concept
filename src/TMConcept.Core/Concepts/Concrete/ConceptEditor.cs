@@ -21,17 +21,18 @@ namespace TMConcept.Core.Concepts;
 /// <see cref="PromptMemoryLimits.WishesKept"/>) only when the page saves the edited text: new concepts apply it from the start (the
 /// developer, 10 Nov 2026), and an edit the user cancels or throws away leaves no wish behind.
 /// </summary>
-public sealed class ConceptEditor(IProfileStore profiles, IRunStore runs, IConceptWishStore wishes, IChatClientFactory chats, ICostCalculator costs,
+public sealed class ConceptEditor(IRunStore runs, IConceptWishStore wishes, IChatClientFactory chats, ICostCalculator costs,
     TimeProvider clock, ILogger<ConceptEditor> logger)
 {
     /// <summary>The estimate of one edit of <paramref name="concept"/> (its content read) with <paramref name="model"/> at <paramref name="effort"/>.</summary>
-    public async Task<CostEstimate> EstimateAsync(Profile profile, Concept concept, string instruction, CatalogModel model, string effort,
+    public Task<CostEstimate> EstimateAsync(Profile profile, Concept concept, string instruction, CatalogModel model, string effort,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(model);
-        var prompt = await PromptAsync(profile, concept, instruction, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        var prompt = Prompt(profile, concept, instruction);
         var (low, high) = OutputRange(profile, concept, model, effort);
-        return costs.EstimateChat(model, costs.Tokens(prompt.System + prompt.User, profile.ContentLanguage), 0, low, high);
+        return Task.FromResult(costs.EstimateChat(model, costs.Tokens(prompt.System + prompt.User, profile.ContentLanguage), 0, low, high));
     }
 
     /// <summary>Asks for the edited concept; <paramref name="progress"/> gets the call's steps (sent, thinking, writing, done).</summary>
@@ -41,7 +42,7 @@ public sealed class ConceptEditor(IProfileStore profiles, IRunStore runs, IConce
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(concept);
         ArgumentNullException.ThrowIfNull(model);
-        var prompt = await PromptAsync(profile, concept, instruction, cancellationToken).ConfigureAwait(false);
+        var prompt = Prompt(profile, concept, instruction);
         var (low, high) = OutputRange(profile, concept, model.Model, model.Effort);
         var estimate = costs.EstimateChat(model.Model, costs.Tokens(prompt.System + prompt.User, profile.ContentLanguage), 0, low, high);
         var run = new Run
@@ -141,12 +142,11 @@ public sealed class ConceptEditor(IProfileStore profiles, IRunStore runs, IConce
         return ((long)Math.Min(visible * low, roof), (long)Math.Min(visible * high, roof));
     }
 
-    private async Task<ConceptPrompt> PromptAsync(Profile profile, Concept concept, string instruction, CancellationToken cancellationToken)
+    private static ConceptPrompt Prompt(Profile profile, Concept concept, string instruction)
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(concept);
-        var images = await profiles.ImagesAsync(profile.Id, cancellationToken).ConfigureAwait(false);
-        return ConceptPromptBuilder.BuildEdit(new ConceptEditPromptInput(profile, images, concept.Title, concept.Summary, concept.Content, instruction ?? string.Empty));
+        return ConceptPromptBuilder.BuildEdit(new ConceptEditPromptInput(profile, concept.Title, concept.Summary, concept.Content, instruction ?? string.Empty));
     }
 
     /// <summary>

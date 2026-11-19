@@ -80,7 +80,7 @@ API kullanımı sohbet aboneliklerinden (Claude Pro, ChatGPT Plus…) ayrı ücr
 ## Özel sunucu (OpenAI uyumlu)
 
 OpenAI API'siyle konuşan her sunucu her metin adımında kullanılabilir: konu önerileri, konseptler, bir konseptin yapay zekâ
-düzenlemeleri, video kodu, görsel istemleri ve model görsel okuyorsa örnek görsel açıklama. Sunucu kendi bilgisayarında, ağındaki başka
+düzenlemeleri, video kodu ve görsel istemleri. Sunucu kendi bilgisayarında, ağındaki başka
 bir bilgisayarda ya da internette (kendi sunucun ya da OpenAI uyumlu adres veren bir hizmet) olabilir. API anahtarı isteğe bağlıdır:
 yalnız sunucu istiyorsa yaz. Program bu modellere ücret yazmaz; uzak bir hizmet ücret alıyorsa harcamayı o hizmetin panelinden izle.
 
@@ -157,5 +157,5 @@ adımlarında kendiliğinden çıkar; burada eklemen gereken bir şey yok. Kald�
 ## Anahtarı ekledikten sonra
 
 Ayarlar → **Modeller**: kullandığın her adım için bir model seç (konsept, video kodu, görsel istemi, görsel, online seslendirme, anlamsal
-tekrar denetimi, örnek görsel açıklama). Hiçbiri kendiliğinden seçilmez; "Önerilen" rozeti iyi seçenekleri gösterir. Değişen bir fiyat
+tekrar denetimi). Hiçbiri kendiliğinden seçilmez; "Önerilen" rozeti iyi seçenekleri gösterir. Değişen bir fiyat
 aynı sayfadan düzeltilir.

@@ -18,7 +18,10 @@ public enum RunKind
     /// <summary>Embeddings for the semantic duplicate check.</summary>
     Embedding = 4,
 
-    /// <summary>Describing a sample image with a vision model.</summary>
+    /// <summary>
+    /// Describing a sample image with a vision model. Not written since 0.1.29 (sample images were removed); the number stays taken, so the
+    /// runs of older data keep their kind and the other numbers do not move.
+    /// </summary>
     Describe = 5,
 
     /// <summary>Connection test of a key.</summary>

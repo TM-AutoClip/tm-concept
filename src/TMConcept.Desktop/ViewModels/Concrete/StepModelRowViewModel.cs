@@ -5,7 +5,7 @@ using TMConcept.Core.Pipeline;
 namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
-/// One step of a page's model pickers: what it is for, its picker (none / off first, the sample images for the images step, then the
+/// One step of a page's model pickers: what it is for, its picker (none / off first, then the
 /// models: local first), the effort (only for a model that takes one, never in the topics step; first entry "Automatic" sends no effort), the
 /// engine (video code step), voice and speed (narration step), a note (license, cost, graphics card memory) and the install progress. The
 /// "Recommended" chip is hidden while a recommended model is chosen (it would only repeat the choice).

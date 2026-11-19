@@ -58,11 +58,11 @@ public sealed class ScannedPagesPageTests
         await FirstRunTests.CreateAsync(h);
         var picker = h.Get<StepPickerViewModel>();
 
-        await picker.LoadAsync(null, ContentLanguages.Turkish, [PipelineSteps.DocumentText, PipelineSteps.DescribeImage]);
+        await picker.LoadAsync(null, ContentLanguages.Turkish, [PipelineSteps.DocumentText, PipelineSteps.Concepts]);
 
         var ocr = picker.Row(PipelineSteps.DocumentText)!.Options.Single(o => PageTextEngines.IsLocalOcr(o.Model));
         ocr.Model!.Name.ShouldContain("PaddleOCR");
-        picker.Row(PipelineSteps.DescribeImage)!.Options.ShouldNotContain(o => PageTextEngines.IsLocalOcr(o.Model), "it reads text, it cannot describe an image");
+        picker.Row(PipelineSteps.Concepts)!.Options.ShouldNotContain(o => PageTextEngines.IsLocalOcr(o.Model), "it only reads the text of pages");
         picker.Row(PipelineSteps.DocumentText)!.Options.ShouldContain(o => o.Model != null && o.Model.Id == "claude-haiku-5-5");
     }
 

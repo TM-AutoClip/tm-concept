@@ -24,7 +24,7 @@ namespace TMConcept.Core.Concepts;
 /// one concept per ticked topic, in order, each batch its own slice and no extra request; an <see cref="IdeaBrief"/> gives its count and its
 /// idea as the extra request, never topics. Every batch reports the topics that got a concept (<see cref="ConceptBatch.TopicsMade"/>).
 /// </summary>
-public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profiles, IRunStore runs, IChatClientFactory chats, ICostCalculator costs,
+public sealed class ConceptGenerator(IConceptStore concepts, IRunStore runs, IChatClientFactory chats, ICostCalculator costs,
     IPromptMemorySource memory, IEmbeddingStore embeddings, IEmbeddingService embedder, IEnumerable<IConceptSource> sources, TimeProvider clock,
     ILogger<ConceptGenerator> logger)
 {
@@ -56,7 +56,6 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
         ArgumentNullException.ThrowIfNull(model);
         var count = brief.Count;
         var source = SourceOf(brief);
-        var images = await profiles.ImagesAsync(profile.Id, cancellationToken).ConfigureAwait(false);
         var past = await memory.ReadAsync(profile, cancellationToken).ConfigureAwait(false);
         var (perConcept, band) = await OutputPerConceptAsync(profile, model, effort, cancellationToken).ConfigureAwait(false);
         var roof = ConceptOutputBudget.MaxOutputTokens(model);
@@ -68,7 +67,7 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
         while (offset < count)
         {
             var asked = Math.Min(planned, count - offset);
-            var (prompt, batch, batchRoof, size) = await BatchPromptAsync(source, new ConceptPromptInput(profile, images, past, brief.ExtraPrompt, asked, focus,
+            var (prompt, batch, batchRoof, size) = await BatchPromptAsync(source, new ConceptPromptInput(profile, past, brief.ExtraPrompt, asked, focus,
                 brief.Topics(offset, asked), brief.Grounded ? DocumentGrounding.Empty : null), brief, model, offset, high, true, null, cancellationToken)
                 .ConfigureAwait(false);
             planned = Math.Min(planned, size);
@@ -166,7 +165,6 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
         logger.LogInformation("Concept run {Run}: {Count} concepts with {Provider}/{Model} from the {Source} source{Topics}", run.Id, count, run.Provider,
             run.Model, source.Kind, brief.Topics(0, count) is { Count: > 0 } ? ", one per topic" : string.Empty);
 
-        var images = await profiles.ImagesAsync(profile.Id, cancellationToken).ConfigureAwait(false);
         var client = chats.Create(request.Model.Model, request.Model.Key.Secret);
         var accepted = new List<Concept>();
         var rejected = 0;
@@ -190,7 +188,7 @@ public sealed class ConceptGenerator(IConceptStore concepts, IProfileStore profi
                 cancellationToken.ThrowIfCancellationRequested();
                 var subjects = await concepts.HistoryAsync(profile.Id, cancellationToken).ConfigureAwait(false);
                 var past = await memory.ReadAsync(profile, cancellationToken).ConfigureAwait(false);
-                var (prompt, sourceBatch, maxTokens, fitted) = await BatchPromptAsync(source, new ConceptPromptInput(profile, images, past, brief.ExtraPrompt, sizes[index],
+                var (prompt, sourceBatch, maxTokens, fitted) = await BatchPromptAsync(source, new ConceptPromptInput(profile, past, brief.ExtraPrompt, sizes[index],
                     request.Focus, brief.Topics(topicsDone, sizes[index]), brief.Grounded ? DocumentGrounding.Empty : null), brief, request.Model.Model, topicsDone,
                     outputPerConcept * outputBand.High, false, sent, cancellationToken).ConfigureAwait(false);
                 if (fitted < sizes[index])

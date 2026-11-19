@@ -12,6 +12,6 @@ public enum RestoreStage
     /// <summary>The database is installed into the data folder and its key sealed again.</summary>
     Installing,
 
-    /// <summary>The sample image files are written into the library folder.</summary>
+    /// <summary>The channel photo files are written into the library folder.</summary>
     WritingImages,
 }

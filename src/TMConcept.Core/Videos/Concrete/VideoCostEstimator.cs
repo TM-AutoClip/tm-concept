@@ -13,7 +13,7 @@ namespace TMConcept.Core.Videos;
 /// The estimate of making videos before anything is paid for, with the models chosen on the page: the video code call (its real prompt is
 /// built from the concept's scenes; the answer is a range from <see cref="CodeOutputMin"/> tokens to the whole output budget of the call,
 /// <see cref="VideoCodeBudget.For"/>, and one repair may double it: the high end counts it), the image prompts and one image per scene when an image model is chosen, and the narration's
-/// characters for an online voice. Local models and the sample images cost nothing. The exact cost of a made video is its own record.
+/// characters for an online voice. Local models cost nothing. The exact cost of a made video is its own record.
 /// </summary>
 public sealed class VideoCostEstimator(ICostCalculator costs)
 {

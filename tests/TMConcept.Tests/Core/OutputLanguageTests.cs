@@ -24,7 +24,7 @@ public sealed class OutputLanguageTests
     [Fact]
     public void AGermanVideoGetsTheEnglishPromptThatNamesGermanAndAllowsTurkishNotes()
     {
-        var prompt = ConceptPromptBuilder.Build(new ConceptPromptInput(Profile(ContentLanguages.German, "Bizans tarihi, sakin bir anlatım."), [],
+        var prompt = ConceptPromptBuilder.Build(new ConceptPromptInput(Profile(ContentLanguages.German, "Bizans tarihi, sakin bir anlatım."),
             PromptMemoryBuilder.Build([new Concept { Number = 1, Title = "Der Nika-Aufstand" }], [], ContentLanguages.German), "Vikingler hakkında olsun", 5));
 
         prompt.System.ShouldStartWith("You write factually grounded video concepts for a video channel");
@@ -41,7 +41,7 @@ public sealed class OutputLanguageTests
     [Fact]
     public void ATurkishVideoKeepsTheTurkishPromptAndSaysTheNotesMayBeInAnotherLanguage()
     {
-        var prompt = ConceptPromptBuilder.Build(new ConceptPromptInput(Profile(ContentLanguages.Turkish, "Calm Byzantine history."), [], PromptMemory.Empty, string.Empty, 5));
+        var prompt = ConceptPromptBuilder.Build(new ConceptPromptInput(Profile(ContentLanguages.Turkish, "Calm Byzantine history."), PromptMemory.Empty, string.Empty, 5));
 
         prompt.System.ShouldStartWith("Bir video kanalı için doğru bilgiye dayanan");
         prompt.System.ShouldContain("satırının metnini Türkçe yaz");

@@ -28,9 +28,9 @@ public sealed class Profile
     public string? TemplateId { get; set; }
 
     /// <summary>
-    /// The channel photo (avatar): a copy in the library folder, relative to it like <see cref="ProfileImage.FileName"/> (never a full
-    /// path); <c>null</c> when none. The closing end card shows it as a circle next to the channel name. Backups and deletes handle it with
-    /// the sample images.
+    /// The channel photo (avatar): a copy in the library folder, relative to it like every library path (never a full path);
+    /// <c>null</c> when none. The closing end card shows it as a circle next to the channel name. Backups carry its file and deleting the
+    /// profile deletes it.
     /// </summary>
     public string? ChannelPhoto { get; set; }
 

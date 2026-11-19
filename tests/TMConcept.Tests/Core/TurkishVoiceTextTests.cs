@@ -65,7 +65,7 @@ public sealed class TurkishVoiceTextTests
     public void TheConceptPromptsAskForAnApproximateLengthAndNoCircumflex(string language, string circumflex, string approximate)
     {
         var profile = new Profile { Name = "p", ContentLanguage = language, Format = VideoFormat.Vertical, TargetSeconds = 75, ConceptText = "c" };
-        var prompt = ConceptPromptBuilder.Build(new ConceptPromptInput(profile, [], PromptMemory.Empty, string.Empty, 3));
+        var prompt = ConceptPromptBuilder.Build(new ConceptPromptInput(profile, PromptMemory.Empty, string.Empty, 3));
 
         prompt.System.ShouldContain(circumflex);
         prompt.System.ShouldContain(approximate);

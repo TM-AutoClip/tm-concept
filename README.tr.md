@@ -26,9 +26,9 @@ veritabanını şifreli tutar.
 
 - **Profil = kanal.** Kanal adı, video dili (Türkçe, İngilizce, Almanca, İspanyolca, Fransızca, İtalyanca, Portekizce, Felemenkçe,
   Lehçe, Rusça, İsveççe ya da Endonezce; notların kendi dilinde kalabilir, video bu dilde yazılır), dikey kısa ya da yatay video, hedef süre (15–180 sn), kanalın
-  konsepti, isteğe bağlı örnek görseller, isteğe bağlı kanal fotoğrafı (kapanış bitiş kartı için yuvarlak avatar) ve genel ayardan farklı
-  olmasını istediğin her adım için kendi modelleri (ses, görseller, motor…). Görseller ve fotoğraf profil daha yeniyken de eklenir;
-  kaydedince kopyalanır. Dört hazır profil şablonu alanları doldurur (tarih: Bizans, Osmanlı; teknoloji: antik, modern).
+  konsepti, isteğe bağlı kanal fotoğrafı (kapanış bitiş kartı için yuvarlak avatar) ve genel ayardan farklı
+  olmasını istediğin her adım için kendi modelleri (ses, görseller, motor…). Fotoğraf profil daha yeniyken de eklenir; kaydedince
+  kopyalanır. Dört hazır profil şablonu alanları doldurur (tarih: Bizans, Osmanlı; teknoloji: antik, modern).
 - **Video şablonları** (Ayarlar → **Şablonlar**, en çok 20, profile bağlı değil): videoların nasıl görüneceği ve nasıl biteceği. Altyazı
   açık ya da kapalı, programın çizdiği ilerleme çubuğu (varsayılan kapalı), Türkçe harfleri olan altı ücretsiz yazı tipinden biri, başlık
   biçimi ve 3×3 ızgarada yeri, renk paleti, görseli olmayan sahnelerin çizim tarzı, hareket miktarı ve kapanış çağrısı ("Diğer videolar
@@ -222,8 +222,8 @@ anlatan kısa bir açıklama açılır.
 
 Ayarlar'da model seçimi yok: her model onu kullanan sayfada seçilir ve son seçim **profil başına** saklanır (yeni profilde ücretli hiçbir
 şey seçili değildir; "Önerilen" önerilenleri gösterir). **Konsept üret** sayfasında konsept modeli ve anlamca tekrar denetimi;
-**Konseptten video**'da video kodu modeli ve motor, görseller ve seslendirme; **Profil** sayfasında örnek görseli açıklayan model var. Her
-adım ne işe yaradığını yazar:
+**Konseptten video**'da video kodu modeli ve motor, görseller ve seslendirme var. Her adım ne işe yaradığını
+yazar:
 
 - **Konsept üretimi** ve **Video kodu** — ücretini ödediğin online modeller. **Çaba** yalnız bunu alan modelde görünür; *Otomatik* çaba
   göndermez (sağlayıcının varsayılanı). **Video kodu**'nda **video motoru** da var: HyperFrames (varsayılan), Remotion (lisansını kabul
@@ -254,7 +254,6 @@ adım ne işe yaradığını yazar:
   Vulkan, kart yoksa ya da yalnız sanal bir kart varsa işlemci; Linux x64'te Vulkan ya da işlemci). Windows'ta her sürüm Microsoft Visual
   C++ 2015–2022 çalışma zamanını (x64) ister; onu bulamayan video hiçbir şey ödenmeden durur ve indirme adresini söyler. Linux ARM64 için
   sürüm yok.
-- **Görseller** profilin kendi örnek görsellerini de kullanabilir (ücretsiz).
 - **Seslendirme** — *Kapalı* (sessiz video, sarı uyarı), **Supertonic 3** (yerel, ücretsiz; bütün video dilleri; İngilizce
   dışındaki her dilin varsayılan sesi), **Kokoro 82M** (yerel, ücretsiz; İngilizcenin varsayılanı; yalnız İngilizce, Amerikan ve İngiliz sesleri; sözlüklü bir ses: bilmediği adları ve kelimeleri seste atlar, uyarı verir), **Ahenk Cep** (yerel, ücretsiz, yalnız
   Türkçe; tek sesin yedi okuma tarzı: düz, sakin, neşeli, şefkatli, hüzünlü, kızgın, şaşkın; 48 kHz, işlemcide çalışan 13 MB'lık bir
@@ -288,7 +287,7 @@ adım ne işe yaradığını yazar:
   Romen rakamları ("II. Mehmed" → "İkinci Mehmed"), kısaltmalar ("Prof. Dr.", "vb.", "MÖ") ve büyük harfli kısaltmalar ("NATO" kelime
   gibi, "TBMM" harf harf). Yalnız ses değişir; altyazı yazıldığı gibi kalır.
 - **Anlamca tekrar denetimi** — isteğe bağlı: yerel **Multilingual MiniLM** (ücretsiz, bu bilgisayarda, Türkçe dahil 50'den fazla dil) ya
-  da bir online model. **Örnek görsel açıklama** — isteğe bağlı, ucuz bir online yardımcı.
+  da bir online model.
 
 **Üret**'e ya da **Kuyruğu üret**'e bastığında önce seçimler hazırlanır: henüz API anahtarı olmayan sağlayıcının adı söylenir ve anahtarı
 oracıkta yapıştırabilirsin (ücretsiz bir istekle denenir, yalnız çalışırsa saklanır); sonra bir seçim bu bilgisayarda olmayan bir şey
@@ -368,9 +367,9 @@ profilin kullanmadığı görseller** (yalnız programın kendi dosyaları; yaln
 dinleme ve deneme çıktısı dosyaları.
 
 **Silme.** Bir şeyi silmek, ondan doğan her şeyi, boyutu gösteren bir onaydan sonra kalıcı olarak siler: video sürüm klasörünü (son sürümle
-birlikte konseptin klasörünü de) götürür; çöpten silinen konseptler videolarını ve sahne görsellerini götürür; profil videolarını, örnek
-görsellerini, kanal fotoğrafını, belge kopyalarını ve konseptlerinin sahne görsellerini götürür (başka bir profilin hâlâ kullandığı dosya
-kalır); kaldırılan örnek görsel dosyasını götürür; silinen ses örneği onunla önbelleğe alınan seslendirmeyi götürür. Önce dosyalar, sonra
+birlikte konseptin klasörünü de) götürür; çöpten silinen konseptler videolarını ve sahne görsellerini götürür; profil videolarını, kanal
+fotoğrafını, belge kopyalarını ve konseptlerinin sahne görsellerini götürür (başka bir profilin hâlâ kullandığı dosya kalır); silinen ses
+örneği onunla önbelleğe alınan seslendirmeyi götürür. Önce dosyalar, sonra
 kayıt gider: bir dosya kullanımdaysa kayıt kalır, nedeni gösterilir, tekrar deneyince iş biter. Yeni bir sürüm ya da video kuyruğu
 çalışırken video ya da çöpteki konsept silinmez. Modellere, sen işaretlemedikçe hiçbir silme ya da temizlik dokunmaz. Eski iş dosyaları (7 günden eski önbellekteki seslendirme ve iş klasörleri) açılışta ve video kuyruğunun
 sonunda temizlenir.
@@ -544,7 +543,7 @@ sunucu adı bulunamadı, bağlantı koptu, bir dakika boyunca veri gelmedi).
 | Günlükler (anahtarsız; ev ve program klasörleri gizli; 7 gün) | `…\TM Concept\logs\` | `~/.local/share/tm-concept/logs/` | hayır |
 | Hata bildirimi zip'leri (son 5) | `…\TM Concept\reports\` | `~/.local/share/tm-concept/reports/` | hayır |
 | Araçlar (Node, ffmpeg, motorlar, sesler, görsel modelleri) | `…\TM Concept\tools\` | `~/.local/share/tm-concept/tools/` | hayır |
-| Videolar ve örnek görseller | `Belgeler\TM Concept\` | `~/Documents/TM Concept/` (XDG belgeler klasörü) | hayır |
+| Videolar ve kanal fotoğrafları | `Belgeler\TM Concept\` | `~/Documents/TM Concept/` (XDG belgeler klasörü) | hayır |
 | Belgelerinin kopyaları ("Belgelerim"; parçaları veritabanında) | `…\TM Concept\documents\` | `~/.local/share/tm-concept/documents/` | hayır |
 | Model kataloğunun saklanan kopyası | `…\TM Concept\catalog\` | `~/.local/share/tm-concept/catalog/` | hayır |
 | Kurulu türün programı (veri değil; güncellemeyle değişir, kaldırınca silinir) | `%LOCALAPPDATA%\TMConcept\` | — | hayır |
@@ -565,7 +564,7 @@ program açılmayı reddeder.
   "Ahenk (github.com/ozguradmin/ahenk-turkish-tts), CC BY 4.0"). PyTorch'un ve seslerin paketlerinin kendi (açık) lisansları vardır.
 - **Ahenk Cep**: CC-BY-4.0. Yayınlarken sesin yapay zekâ ile üretildiğini belirt ve "Ahenk Cep (CC BY 4.0)" atfını yaz.
 - **Remotion**: açık kaynak değil; bireyler ve en çok 3 kişilik şirketler ücretsiz, daha büyük şirketler Remotion lisansı almalı.
-- **Örnek görseller**: kullanım hakkı sende olmalı.
+- **Kanal fotoğrafı**: kullanım hakkı sende olmalı.
 - **ffmpeg**: GPL, ayrı bir program olarak indirilir.
 - **Yerel görsel modelleri**: Z-Image Turbo, FLUX.2 klein 4B, Qwen-Image ve kullanılan bütün metin kodlayıcı / VAE'ler Apache-2.0
   (SDXL VAE'si MIT); **FLUX.2 klein 9B ve Qwen-Image 2.1 (Qwen Research Lisansı) ticari kullanıma kapalı**; FLUX.3 Image Klein (FLUX Kommunity Lisansı), Stable Diffusion 3.5 Medium

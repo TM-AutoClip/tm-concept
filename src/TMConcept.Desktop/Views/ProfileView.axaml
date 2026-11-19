@@ -83,46 +83,8 @@
                PlaceholderText="{DynamicResource profile.concept.placeholder}" />
       <TextBlock Name="ConceptShort" Text="{DynamicResource profile.concept.short}" Classes="warning" TextWrapping="Wrap" IsVisible="{Binding ConceptTextShort}" />
 
-      <Border Classes="card">
-        <StackPanel Spacing="8">
-          <StackPanel Orientation="Horizontal" Spacing="8">
-            <TextBlock Text="{DynamicResource profile.images}" FontWeight="SemiBold" VerticalAlignment="Center" />
-            <Button Name="AddImagesButton" Content="{DynamicResource profile.images.add}" Command="{Binding AddImagesCommand}" />
-          </StackPanel>
-          <StackPanel Orientation="Horizontal">
-            <TextBlock Text="{DynamicResource profile.images.warning}" Classes="warning" TextWrapping="Wrap" VerticalAlignment="Center" />
-            <views:HelpTip Text="{DynamicResource profile.images.warning.more}" />
-          </StackPanel>
-          <ItemsControl ItemsSource="{Binding Images}">
-            <ItemsControl.ItemTemplate>
-              <DataTemplate x:DataType="vm:ProfileImageViewModel">
-                <Grid ColumnDefinitions="96,*,Auto" ColumnSpacing="10" Margin="0,4">
-                  <Image Source="{Binding FullPath, Converter={x:Static c:FileBitmapConverter.Instance}, ConverterParameter=192}" Width="96" Height="64" Stretch="UniformToFill" />
-                  <StackPanel Grid.Column="1" Spacing="4">
-                    <TextBlock Text="{Binding FileName}" Classes="small" />
-                    <TextBox Text="{Binding Caption}" PlaceholderText="{DynamicResource profile.images.caption}" MaxLength="200" />
-                  </StackPanel>
-                  <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Top">
-                    <Button Content="{DynamicResource profile.describe}" ToolTip.Tip="{DynamicResource profile.describe.tip}"
-                            Command="{Binding $parent[ItemsControl].((vm:ProfileViewModel)DataContext).DescribeImageCommand}" CommandParameter="{Binding}" />
-                    <Button Content="✕" Command="{Binding $parent[ItemsControl].((vm:ProfileViewModel)DataContext).RemoveImageCommand}" CommandParameter="{Binding}" />
-                  </StackPanel>
-                </Grid>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
-          <StackPanel Spacing="4" IsVisible="{Binding !IsNew}">
-            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-              <TextBlock Text="{DynamicResource profile.models}" FontWeight="SemiBold" VerticalAlignment="Center" />
-              <views:HelpTip Text="{DynamicResource profile.models.hint}" />
-            </StackPanel>
-            <views:StepPickerView DataContext="{Binding Picker}" />
-          </StackPanel>
-        </StackPanel>
-      </Border>
-
       <StackPanel Orientation="Horizontal" Spacing="8">
-        <Button Classes="accent" Content="{DynamicResource common.save}" Command="{Binding SaveCommand}" IsEnabled="{Binding !Picker.Busy}" />
+        <Button Classes="accent" Content="{DynamicResource common.save}" Command="{Binding SaveCommand}" />
         <Button Name="CancelNewButton" Content="{DynamicResource common.cancel}" Command="{Binding CancelNewCommand}" IsVisible="{Binding IsNew}"
                 ToolTip.Tip="{DynamicResource profile.cancel_new.tip}" />
         <Button Classes="danger" Content="{DynamicResource profile.delete}" Command="{Binding DeleteCommand}" IsVisible="{Binding !IsNew}" />

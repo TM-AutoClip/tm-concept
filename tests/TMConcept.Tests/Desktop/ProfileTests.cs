@@ -74,7 +74,7 @@ public sealed class ProfileTests
     }
 
     [AvaloniaFact]
-    public async Task SampleImagesAreCopiedAndDeletingTheProfileDeletesThem()
+    public async Task TheChannelPhotoIsCopiedAndDeletingTheProfileDeletesIt()
     {
         var confirm = new FakeConfirm();
         using var h = new DesktopHarness(s => s.AddSingleton<IConfirmDialog>(confirm));
@@ -83,14 +83,13 @@ public sealed class ProfileTests
         page.StartNew();
         page.Name = "Lost Engineering";
         page.ConceptText = "Ancient machines.";
+        var source = Path.Combine(h.Paths.DataDirectory, "avatar.png");
+        await File.WriteAllBytesAsync(source, Png, TestContext.Current.CancellationToken);
+        page.ChooseChannelPhoto(source);
         await page.SaveAsync();
 
-        var source = Path.Combine(h.Paths.DataDirectory, "dome.png");
-        await File.WriteAllBytesAsync(source, Png, TestContext.Current.CancellationToken);
-        await page.AddImageFilesAsync([source, source]);
-        page.Images.Count.ShouldBe(1);
-        page.Images[0].Image.Width.ShouldBe(2);
-        var copied = LibraryPaths.Resolve(h.Get<IAppPaths>().LibraryDirectory, page.Images[0].Image.FileName);
+        var stored = (await h.Get<IProfileStore>().ListAsync(CancellationToken.None)).ShouldHaveSingleItem().ChannelPhoto.ShouldNotBeNull();
+        var copied = LibraryPaths.Resolve(h.Get<IAppPaths>().LibraryDirectory, stored);
         File.Exists(copied).ShouldBeTrue();
 
         confirm.Answer = false;

@@ -78,7 +78,6 @@ public static class DesktopServices
         services.AddSingleton<Core.Videos.VideoPipeline>();
         // 0.1.28: deleting something deletes everything it generated, for good (files first, the record after).
         services.AddSingleton<Core.Deletion.VideoDeletion>();
-        services.AddSingleton<Core.Deletion.SampleImageDeletion>();
         services.AddSingleton<Core.Deletion.ConceptDeletion>();
         services.AddSingleton<Core.Deletion.ProfileDeletion>();
         services.AddSingleton<Core.Videos.IVideoQueueRunner, Core.Videos.VideoQueueRunner>();
@@ -125,7 +124,6 @@ public static class DesktopServices
             s.GetRequiredService<ILogger<Engines.Images.LocalImageStore>>()));
         services.AddSingleton<Core.Hardware.ISystemMemory, Engines.Hardware.SystemMemory>();
         services.AddSingleton<Core.Images.IImageEngine, Engines.Images.SdCppImageEngine>();
-        services.AddSingleton<Core.Images.ImageDescriber>();
         // Package A (graphics cards, image builds): the card detector (its sources come from the OS module), the Image acceleration setting
         // of preferences.json and the image build choice the image engine and the stable-diffusion.cpp component share.
         services.AddSingleton<Engines.Hardware.IComputeRuntimeProbe, Engines.Hardware.NativeRuntimeProbe>();

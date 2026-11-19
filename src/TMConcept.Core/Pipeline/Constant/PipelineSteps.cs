@@ -5,8 +5,7 @@ namespace TMConcept.Core.Pipeline;
 /// <summary>
 /// The steps that call a model. Each is chosen on the page that uses it (there is no model setting in Settings): Generate concepts =
 /// concept model and the semantic duplicate check; Concept → video = video code model and engine, images, narration (and the concept model for
-/// editing an approved concept there); Profile = describing
-/// a sample image. The last choice is kept per profile and shown again next time.
+/// editing an approved concept there). The last choice is kept per profile and shown again next time.
 /// </summary>
 public static class PipelineSteps
 {
@@ -34,9 +33,6 @@ public static class PipelineSteps
     /// </summary>
     public const string DocumentText = "document-text";
 
-    /// <summary>Sample image description (optional).</summary>
-    public const string DescribeImage = "describe-image";
-
     /// <summary>
     /// Cost label of the image prompts (not a step of its own: the video code model writes them). Kept apart from the code cost so the
     /// cost details show what the prompts cost.
@@ -51,7 +47,6 @@ public static class PipelineSteps
         new(Images, ModelCapability.Image, ["local/flux2-klein-4b", "local/z-image-turbo", "fal/fal-ai/flux-2/flash"], Optional: true),
         new(Speech, ModelCapability.Speech, ["local/supertonic", "local/kokoro"], Optional: true),
         new(Embedding, ModelCapability.Embedding, ["local/paraphrase-multilingual-minilm", "openai/text-embedding-3-small"], Optional: true),
-        new(DescribeImage, ModelCapability.Vision, ["anthropic/claude-haiku-5-5"], Optional: true),
         new(Topics, ModelCapability.Chat, ["anthropic/claude-haiku-5-5", "zai/glm-5.3-flash", "deepseek/deepseek-flash"], Optional: true),
         new(DocumentText, ModelCapability.Vision, ["anthropic/claude-haiku-5-5"], Optional: true),
     ];
@@ -64,7 +59,4 @@ public static class PipelineSteps
     /// the AI edit of an approved concept uses there. A video is made only with the first three (production names them itself).
     /// </summary>
     public static readonly IReadOnlyList<string> VideoPage = [VideoCode, Images, Speech, Concepts];
-
-    /// <summary>The steps chosen on the Profile page (sample images).</summary>
-    public static readonly IReadOnlyList<string> ProfilePage = [DescribeImage];
 }

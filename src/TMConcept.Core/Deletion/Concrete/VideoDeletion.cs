@@ -20,7 +20,7 @@ public sealed class VideoDeletion(IAppPaths paths, IFolderDiscard discard, IVide
         var all = await Videos.AllAsync(cancellationToken).ConfigureAwait(false);
         var targets = all.Where(v => ids.Contains(v.Id)).ToList();
         var bytes = await Task.Run(() => Size(targets.SelectMany(v => VideoPaths(v, all))), cancellationToken).ConfigureAwait(false);
-        return new DeletionPlan(0, targets.Count, 0, 0, bytes);
+        return new DeletionPlan(0, targets.Count, 0, bytes);
     }
 
     /// <summary>Deletes <paramref name="ids"/> (files first, each record after its files).</summary>

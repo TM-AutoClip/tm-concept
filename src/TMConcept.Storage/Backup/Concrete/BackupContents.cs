@@ -10,7 +10,7 @@ public sealed class BackupContents
     /// <summary>API keys.</summary>
     public bool Keys { get; set; }
 
-    /// <summary>Profiles with their model choices, sample images and channel photos (the image files themselves).</summary>
+    /// <summary>Profiles with their model choices and channel photos (the photo files themselves).</summary>
     public bool Profiles { get; set; } = true;
 
     /// <summary>Concepts (also the trash), the queue, the video list, the cost history.</summary>

@@ -107,7 +107,6 @@ public sealed class StoreTests
         await concepts.AddAsync([c], None);
         await new QueueStore(h.Database).AddAsync(new QueueItem { ProfileId = p.Id, ConceptId = c.Id }, None);
         await new VideoStore(h.Database).AddAsync(new VideoRecord { ConceptId = c.Id, ProfileId = p.Id, Title = "A" }, [], None);
-        await new ProfileStore(h.Database).SaveImageAsync(new ProfileImage { ProfileId = p.Id, FileName = "a.png" }, None);
         await new TopicSuggestionStore(h.Database).AddAsync([new TopicSuggestion { ProfileId = p.Id, Text = "Greek fire" }], None);
         await new ConceptWishStore(h.Database).AddAsync(new ConceptWish { ProfileId = p.Id, Text = "Shorter sentences" }, None);
 
@@ -116,7 +115,6 @@ public sealed class StoreTests
         (await h.QueryAsync(db => db.Concepts.CountAsync())).ShouldBe(0);
         (await h.QueryAsync(db => db.QueueItems.CountAsync())).ShouldBe(0);
         (await h.QueryAsync(db => db.Videos.CountAsync())).ShouldBe(0);
-        (await h.QueryAsync(db => db.ProfileImages.CountAsync())).ShouldBe(0);
         (await h.QueryAsync(db => db.TopicSuggestions.CountAsync())).ShouldBe(0);
         (await h.QueryAsync(db => db.ConceptWishes.CountAsync())).ShouldBe(0);
     }

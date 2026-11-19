@@ -1254,41 +1254,23 @@ public sealed class VideoPageTests
         var (page, concept) = await OpenAsync(h);
         var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
 
-        // Sample images chosen, but the profile has none: an expected situation stays a warning; the render then fails twice.
-        await h.Get<IStepModelStore>().SaveAsync(new StepModelChoice { Step = PipelineSteps.Images, ProfileId = concept.ProfileId, Provider = ModelProviders.Off,
-            Model = string.Empty, OptionsJson = StepModelResolver.OptionsJson(new StepOptions { ImageSource = ImageSources.Samples }) }, CancellationToken.None);
+        // Narration off: an expected situation stays a warning; the render then fails twice.
         var direct = await Should.ThrowAsync<VideoException>(() => RunAsync(h, concept,
-            new VideoOptions { Engine = engine.Kind, Speech = false, Images = ImageSources.Samples }));
-        direct.Warnings.ShouldBe([VideoWarnings.SpeechOff, VideoWarnings.SamplesNone]);
+            new VideoOptions { Engine = engine.Kind, Speech = false, Images = ImageSources.None }));
+        direct.Warnings.ShouldBe([VideoWarnings.SpeechOff]);
 
         engine.FailRenders = 2;
         chat.Answer(_ => Code(engine.SampleCode)).Answer(_ => Code(engine.SampleCode));
         await page.ActivateAsync();
-        var imageRow = page.Picker.Row(PipelineSteps.Images)!;
-        imageRow.Selected = imageRow.Options.First(o => o.Kind == StepOptionKind.Samples);
+        var speechRow = page.Picker.Row(PipelineSteps.Speech)!;
+        speechRow.Selected = speechRow.Options[0];
         await page.EnqueueAsync(page.Approved.Single());
         await page.ProduceAllAsync();
 
         page.Queue.Single().Failed.ShouldBeTrue();
         var lines = h.Get<TMConcept.Core.Activity.IActivityFeed>().Recent();
         var title = page.Queue.Single().Title;
-        lines.ShouldContain(l => l.IsWarning && l.Text == text.Format("video.failed.noted", title, text["video.noted.samples_none"]));
         lines.ShouldContain(l => l.IsWarning && l.Text == text.Format("video.failed.noted", title, text["video.noted.speech_off"]));
-    }
-
-    [AvaloniaFact]
-    public async Task SampleImagesChosenWithoutAnySampleSayWhyTheVideoHasNoImages()
-    {
-        var engine = new FakeEngine();
-        using var h = Harness(new FakeChat().Answer(_ => Code(engine.SampleCode)), engine);
-        var (_, concept) = await PrepareAsync(h);
-
-        var record = await RunAsync(h, concept, new VideoOptions { Engine = engine.Kind, Speech = false, Images = ImageSources.Samples });
-
-        record.Warnings.ShouldContain(VideoWarnings.SamplesNone);
-        engine.Input!.Scenes.ShouldAllBe(s => s.Image.Length == 0);
-        var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
-        text["produced.note." + VideoWarnings.SamplesNone].ShouldNotStartWith("produced.note.");
     }
 
     private static Task<VideoRecord> RunAsync(DesktopHarness h, Concept concept, VideoOptions options, IProgress<VideoProgress>? progress = null) =>

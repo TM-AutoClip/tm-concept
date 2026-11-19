@@ -53,7 +53,7 @@ public sealed class RatingPromptTests
 
         foreach (var language in new[] { ContentLanguages.English, ContentLanguages.Turkish })
         {
-            var concepts = ConceptPromptBuilder.Build(new ConceptPromptInput(Profile(language), [], memory, string.Empty, 5));
+            var concepts = ConceptPromptBuilder.Build(new ConceptPromptInput(Profile(language), memory, string.Empty, 5));
             concepts.User.ShouldContain(language == ContentLanguages.English ? "DISLIKED VIDEOS" : "BEĞENİLMEYEN VİDEOLAR");
             concepts.User.ShouldContain(language == ContentLanguages.English ? "LIKED VIDEOS" : "BEĞENİLEN VİDEOLAR");
             concepts.System.ShouldContain(language == ContentLanguages.English ? "The LIKED VIDEOS are good examples" : "BEĞENİLEN VİDEOLAR iyi örnektir");

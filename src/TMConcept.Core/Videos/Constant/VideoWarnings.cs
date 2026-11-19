@@ -23,7 +23,10 @@ public static class VideoWarnings
     /// <summary>The local code model's code failed the check after its repair: the app's own simple animation was rendered.</summary>
     public const string AppCode = "app_code";
 
-    /// <summary>The sample images were chosen but the profile has none: the video was made without images.</summary>
+    /// <summary>
+    /// The sample images were chosen but the profile had none: the video was made without images. Written until 0.1.28 (sample images were
+    /// removed in 0.1.29); read, never written.
+    /// </summary>
     public const string SamplesNone = "samples_none";
 
     /// <summary>Written by 0.1.15 and earlier only: narration failed and the video was made silent (red). Read, never written.</summary>

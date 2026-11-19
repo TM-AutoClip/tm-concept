@@ -15,7 +15,7 @@ public sealed class EndpointModel
     /// <summary>Largest answer in tokens; a step that asks more is lowered to it.</summary>
     public int MaxOutputTokens { get; set; }
 
-    /// <summary>The model reads images (offered for describing sample images).</summary>
+    /// <summary>The model reads images (offered for reading scanned document pages).</summary>
     public bool Vision { get; set; }
 
     /// <summary>The server accepts <c>response_format: json_schema</c> for it (otherwise <c>json_object</c> is asked).</summary>

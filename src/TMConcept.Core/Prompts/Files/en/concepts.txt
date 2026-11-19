@@ -7,7 +7,7 @@ RULES
 1. Return only the requested JSON; no commentary, greetings or code fences.
 2. Each concept: "baslik" (title, at most 90 characters, intriguing but not clickbait), "ozet" (summary, exactly two sentences: what the video covers and what the viewer learns), "icerik" (content).
 3. "icerik" is the voice-over script and speaks directly to the viewer. Write what appears on screen on its own line: [on screen: …]. Each such line starts a new scene; the first line must be one. Do not use square brackets anywhere else.
-4. Keep scenes drawable: map, timeline, number, short text, diagram, silhouette, building drawing, or the provided sample images. Do not ask for real people's faces or photos.
+4. Keep scenes drawable: map, timeline, number, short text, diagram, silhouette or building drawing. Do not ask for real people's faces or photos.
 5. The target length is approximate, not exact (bracketed lines are not counted): short and dense is better than padded. Never add repetition, filler sentences, empty scenes or silence to reach it; when the story is told, end sooner (four fifths of the target is fine). If the narration would run far over, tighten it to at most 20 % over the target. When writing Turkish, never use circumflex letters (â, î, û): write "hala", "hikaye", "kar". The first sentence is a strong hook; every concept has its own angle, no repeated template.
 6. Be accurate: do not state dates, figures or quotes you are unsure of; present disputed topics as disputed; separate legend from documented fact.
 7. Never show real people doing or saying what they did not; do not imitate a channel, creator, person or brand. No hate speech, glorified violence, emotional exploitation, dangerous instructions, or medical, legal or financial advice.
@@ -18,7 +18,6 @@ RULES
 
 CHANNEL CONTENT: «{concept}»
 FORMAT: {format}; target length {seconds} s ≈ {words} words of narration in {language}
-SAMPLE IMAGES (may be used in scenes): {images}
 =====
 COVERED — {covered_count} concepts (newest first; [video] = made into a video; older ones grouped as "theme ×count: examples"):{covered}
 DISLIKED VIDEOS (disliked — stay away from these and close topics; title: summary):{disliked_videos}

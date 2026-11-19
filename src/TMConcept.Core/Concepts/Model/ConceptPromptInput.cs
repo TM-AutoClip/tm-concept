@@ -9,5 +9,5 @@ namespace TMConcept.Core.Concepts;
 /// come from the run's <see cref="ConceptBrief"/>: the topics of this batch, one concept each in order, or null for an idea run.
 /// <see cref="Grounding"/>: the document passages of a documents run (null = none; the documents prompt is used only with it).
 /// </summary>
-public sealed record ConceptPromptInput(Profile Profile, IReadOnlyList<ProfileImage> Images, PromptMemory Memory, string ExtraPrompt, int Count,
+public sealed record ConceptPromptInput(Profile Profile, PromptMemory Memory, string ExtraPrompt, int Count,
     string Focus = "", IReadOnlyList<string>? Topics = null, DocumentGrounding? Grounding = null);

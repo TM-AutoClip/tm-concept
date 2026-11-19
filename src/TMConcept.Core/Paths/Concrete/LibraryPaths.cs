@@ -3,7 +3,7 @@ using System.Text;
 namespace TMConcept.Core.Paths;
 
 /// <summary>
-/// Paths inside the library folder (videos and sample images). Records keep paths relative to the library folder; a stored path can never
+/// Paths inside the library folder (videos and channel photos). Records keep paths relative to the library folder; a stored path can never
 /// leave it (no rooted path, no "..").
 /// </summary>
 public static class LibraryPaths

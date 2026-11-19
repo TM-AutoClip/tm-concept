@@ -39,7 +39,9 @@ What happens at the start (`SchemaUpgrader`, called by `Vault.OpenAsync`, `Vault
 
    The script installs EF Core's `dotnet-ef` tool and the design package into a temporary folder (nothing of them stays in the repository),
    runs `dotnet ef migrations add`, renames the files to `Version0118.cs` / `Version0118.Designer.cs` (file name = type name), moves the
-   model snapshot next to the steps, and writes the compiled model again (`tools/compiled-model.ps1`).
+   model snapshot next to the steps, and writes the compiled model again (`tools/compiled-model.ps1`). When the change removes an entity,
+   the old compiled model still names its class and the storage does not build: move the `.cs` files of `Database/Concrete/CompiledModel/`
+   aside first (the script writes all of them again).
 3. Read the generated `Up` method. EF Core rebuilds SQLite tables where SQLite cannot alter them; check that data is kept. When the change
    needs data moved (for example a column split in two), add it inside the step with EF Core's migration operations, still no SQL text.
    When the rows already there need another value than the new column's default (and the generated step must stay as the tool wrote it),
@@ -56,6 +58,8 @@ What happens at the start (`SchemaUpgrader`, called by `Vault.OpenAsync`, `Vault
    `FileSha256` and `FirstPage` columns) needs none either: a document added before has no kept pages, and the empty file key and page 0
    mark it as such (its pages are simply read again when it is added again). A step name may carry a word after the version number when two
    branches of one version add a step each.
+   `Version0129` (0.1.29: the profiles' sample images were removed) drops the `profile_images` table and needs no data step: nothing
+   reads those rows any more.
 4. Build and run the tests: `SchemaUpgradeTests.TheAppsStepsMatchItsMappingAndANewFileRecordsThem` fails while the mapping and the steps
    differ (EF Core would also refuse to upgrade with pending model changes), and `CompiledModelTests` fails while the compiled model is old.
 5. Add a test that upgrades a file of the previous step with real data (see `SchemaUpgradeTests` for the pattern) when the step moves data.
@@ -71,4 +75,5 @@ Two versions that change the database in a row need two steps; a version that do
   before an upgrade, a newer or an unrecorded file is refused.
 - Every connection waits up to 10 s for another connection's lock (`ConceptDatabase.WaitForLocks`, SQLite's busy timeout set through
   its API) instead of failing at once with "database is locked". `ConceptDatabase.OpenAsync` does it; code that opens its own
-  `SqliteConnection` (the backup copy) calls it right after opening. `DatabaseLockTests` checks a write next to another connection's read.
+  `SqliteConnection` (the backup copy) calls it right after opening. `DatabaseLockTests` checks a write while another connection holds the write lock (it fails without the wait), and concurrent writes
+  and reads.

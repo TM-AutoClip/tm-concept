@@ -79,8 +79,8 @@ API use is billed separately from chat subscriptions (Claude Pro, ChatGPT Plus�
 
 ## Custom server (OpenAI-compatible)
 
-Any server that speaks the OpenAI API can be used in every text step: topic suggestions, concepts, AI edits of a concept, video code,
-image prompts, and describing a sample image when the model reads images. It can run on your own computer, on another computer on your
+Any server that speaks the OpenAI API can be used in every text step: topic suggestions, concepts, AI edits of a concept, video code
+and image prompts. It can run on your own computer, on another computer on your
 network, or anywhere on the internet (your own server, or a service that offers an OpenAI-compatible address). The API key is optional:
 type it only if the server asks for one. The app records no price for these models; if a remote service charges, watch the spending
 in its own dashboard.
@@ -155,5 +155,5 @@ themselves; there is nothing to add here. Remove them in Settings → **Storage*
 ## After adding a key
 
 Settings → **Models**: choose a model for every step you use (concepts, video code, image prompt, image, online narration, semantic
-duplicate check, describe a sample image). Nothing is chosen automatically; the "Recommended" badge shows good choices. A price that
+duplicate check). Nothing is chosen automatically; the "Recommended" badge shows good choices. A price that
 changed can be corrected on the same page.

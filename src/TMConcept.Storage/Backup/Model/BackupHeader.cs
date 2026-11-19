@@ -18,7 +18,7 @@ public sealed class BackupHeader
     /// <summary>Length of the encrypted database copy.</summary>
     public long DatabaseLength { get; set; }
 
-    /// <summary>The sample image files after the database, in order.</summary>
+    /// <summary>The channel photo files after the database, in order.</summary>
     public List<BackupImage> Images { get; set; } = [];
 
     /// <summary>

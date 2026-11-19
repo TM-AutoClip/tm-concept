@@ -25,9 +25,9 @@ needed) and narrates it with a **free local voice**. It runs on Windows and Linu
 
 - **Profiles = channels.** Channel name, video language (Turkish, English, German, Spanish, French, Italian, Portuguese, Dutch, Polish,
   Russian, Swedish or Indonesian; your notes may stay in your own language, the video is written in this one), vertical short or horizontal video, target length
-  (15–180 s), the channel's concept in your words, optional sample images, an optional channel photo (a round avatar for the closing
-  end card), and its own models for any step (voice, images, engine…) where it should differ from the general setting. Images and the
-  photo can be added while the profile is new; they are copied when you save. Four ready profile templates fill the fields
+  (15–180 s), the channel's concept in your words, an optional channel photo (a round avatar for the closing
+  end card), and its own models for any step (voice, images, engine…) where it should differ from the general setting. The photo
+  can be added while the profile is new; it is copied when you save. Four ready profile templates fill the fields
   (history: Byzantine, Ottoman; technology: ancient, modern).
 - **Video templates** (Settings → **Templates**, at most 20, not tied to a profile): how videos look and end. Subtitles on or off, a
   progress bar drawn by the app (off by default), one of six free fonts with Turkish letters, the title style and its place on a 3×3
@@ -223,8 +223,8 @@ and how to use it.
 
 There is no model setting in Settings: every model is chosen on the page that uses it, and the last choice is kept **per profile** (a
 new profile starts with nothing paid chosen; "Recommended" shows the suggested ones). **Generate concepts** has the concept model and the
-duplicate check by meaning; **Concept → video** has the video code model with the engine, images and narration; the **Profile** page has
-the model that describes a sample image. Each step says what it is for:
+duplicate check by meaning; **Concept → video** has the video code model with the engine, images and narration. Each step says what it is
+for:
 
 - **Concept generation** and **Video code** — the online models you pay for. **Effort** appears only for a model that takes one; *Automatic*
   sends no effort (the provider's default). **Video code** also has the **video engine**: HyperFrames (default), Remotion (asks you to
@@ -255,7 +255,6 @@ the model that describes a sample image. Each step says what it is for:
   Vulkan for AMD and Intel cards, the processor without a card or with only a virtual one; Linux x64 uses Vulkan or the processor). On
   Windows every build needs the Microsoft Visual C++ 2015–2022 runtime (x64); a video that would need it and does not find it stops before
   anything is paid for and names the download. There is no build for Linux ARM64.
-- **Images** can also use the profile's own sample images (free).
 - **Narration** — *Off* (silent video, yellow warning), **Supertonic 3** (local, free; every video language; the default
   voice of every language but English), **Kokoro 82M** (local, free; the default for English;
   English only, American and British voices; a dictionary voice: names and words it does not know are left out of the audio, with a
@@ -293,7 +292,7 @@ the model that describes a sample image. Each step says what it is for:
   ("Prof. Dr.", "vb.", "MÖ") and capital abbreviations ("NATO" as a word, "TBMM" letter by letter). Only the voice changes;
   subtitles keep the written text.
 - **Duplicate check by meaning** — optional: the local **Multilingual MiniLM** (free, on this computer, 50+ languages including Turkish)
-  or an online embedding model. **Describe a sample image** — optional, a cheap online helper.
+  or an online embedding model.
 
 When you press **Generate** or **Produce**, the choices are made ready first: a provider with no API key yet is named and you can paste a
 key right there (it is tested with a free request and kept only when it works); then, when a choice needs something this computer does
@@ -374,8 +373,8 @@ when ticked), the scene images of deleted concepts, and the listen and sample re
 
 **Deleting.** Deleting something deletes everything it made, for good, after a confirmation with the size: a video takes its version
 folder (and its concept's folder with the last version); concepts deleted from the Trash take their videos and scene images; a profile
-takes its videos, sample images, channel photo, document copies and its concepts' scene images (a file another profile still uses stays);
-a removed sample image takes its file; a deleted voice sample takes the narration cached with it. Files go first and the record after:
+takes its videos, channel photo, document copies and its concepts' scene images (a file another profile still uses stays); a deleted
+voice sample takes the narration cached with it. Files go first and the record after:
 when a file is in use, the record stays, the reason is shown, and trying again finishes it. A video or a concept in the Trash is not
 deleted while a new version or a video queue is running. Models are never touched by a delete or a clean-up unless you tick them. Old work files (cached narration and work folders older than 7 days) are cleaned at start and at the end
 of a video queue.
@@ -549,7 +548,7 @@ broken, no data for a minute).
 | Logs (no keys; home and app folders masked; 7 days) | `…\TM Concept\logs\` | `~/.local/share/tm-concept/logs/` | no |
 | Problem report zips (last 5) | `…\TM Concept\reports\` | `~/.local/share/tm-concept/reports/` | no |
 | Tools (Node, ffmpeg, engines, voices, image models) | `…\TM Concept\tools\` | `~/.local/share/tm-concept/tools/` | no |
-| Videos and sample images | `Documents\TM Concept\` | `~/Documents/TM Concept/` (XDG documents folder) | no |
+| Videos and channel photos | `Documents\TM Concept\` | `~/Documents/TM Concept/` (XDG documents folder) | no |
 | Copies of your documents ("My documents"; their passages are in the database) | `…\TM Concept\documents\` | `~/.local/share/tm-concept/documents/` | no |
 | The kept copy of the model catalog | `…\TM Concept\catalog\` | `~/.local/share/tm-concept/catalog/` | no |
 | The installed edition's program (not data; replaced by updates, removed by uninstall) | `%LOCALAPPDATA%\TMConcept\` | — | no |
@@ -570,7 +569,7 @@ refuses to start if Setup was pointed at the data folder.
   (credit "Ahenk (github.com/ozguradmin/ahenk-turkish-tts), CC BY 4.0"). PyTorch and the voices' packages have their own (open) licences.
 - **Ahenk Cep**: CC-BY-4.0. Say that the voice is AI-generated and credit "Ahenk Cep (CC BY 4.0)" when you publish.
 - **Remotion**: not open source; free for individuals and companies of up to 3 people, larger companies need a Remotion license.
-- **Sample images**: you must have the right to use them.
+- **Channel photo**: you must have the right to use it.
 - **ffmpeg**: GPL, downloaded as a separate program.
 - **Local image models**: Z-Image Turbo, FLUX.2 klein 4B, Qwen-Image and every text encoder / VAE used are Apache-2.0 (the SDXL VAE MIT);
   **FLUX.2 klein 9B and Qwen-Image 2.1 (Qwen Research License) are non-commercial**; FLUX.3 Image Klein (FLUX Kommunity License), Stable Diffusion 3.5 Medium (Stability AI Community
