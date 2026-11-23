@@ -188,6 +188,7 @@ public static class DesktopServices
             s.GetRequiredService<TimeProvider>(), s.GetRequiredService<ILogger<Components.InstallRecordFile>>()));
         services.AddSingleton<Core.Components.ComponentPlanner>();
         services.AddSingleton<Components.ComponentInstallFlow>();
+        services.AddSingleton<Components.IComponentWorkGate, Components.ComponentWorkGate>();
         AddDocuments(services);
         AddDesktop(services);
         overrides?.Invoke(services);
@@ -384,6 +385,8 @@ public static class DesktopServices
         services.AddSingleton<Core.DiskSpace.IDiskItemSource, DiskSpace.LibraryOrphanSource>();
         services.AddSingleton<DiskSpace.PermanentDiscard>();
         services.AddSingleton<Core.DiskSpace.IFolderDiscard>(sp => sp.GetRequiredService<DiskSpace.PermanentDiscard>());
+        services.AddSingleton<Core.DiskSpace.ILeftoverSweep, Core.DiskSpace.LeftoverSweep>();
+        services.AddSingleton<DiskSpace.ILeftoverSweeper, DiskSpace.LeftoverSweeper>();
         services.AddSingleton<DiskSpace.IDiskCleaner, DiskSpace.DiskCleaner>();
         services.AddSingleton<VersionCheck>();
         services.AddSingleton<WhatsNewCheck>();

@@ -24,16 +24,17 @@ namespace TMConcept.Desktop.Components;
 /// The database, the profiles, the concepts and the videos are outside that folder and never touched.
 /// </summary>
 public sealed class ComponentReinstaller(ComponentPlanner planner, ComponentInstallFlow flow, Core.DiskSpace.IFolderDiscard discard, AppPaths paths,
-    Speech.Speech.SpeechWorkerClient speech, Speech.Python.PythonWorkerClient python, IActivityLog activity, Localizer text, TimeProvider clock, ILogger<ComponentReinstaller> logger)
+    Speech.Speech.SpeechWorkerClient speech, Speech.Python.PythonWorkerClient python, IActivityLog activity, Localizer text, TimeProvider clock, IComponentWorkGate gate,
+    ILogger<ComponentReinstaller> logger)
 {
     /// <summary>The text of what an install confirmation says a cancel means here.</summary>
     public const string PurposeKey = "install.purpose.update";
 
     /// <summary>The start of the name the old components folder gets while the new one is installed (<c>tools.old-20261116-120000</c>).</summary>
-    public const string AsidePrefix = ".old-";
+    public const string AsidePrefix = Core.DiskSpace.LeftoverSweep.OldInfix;
 
     /// <summary>The start of the name a new components folder gets when its install did not finish and the old one goes back.</summary>
-    public const string FailedPrefix = ".failed-";
+    public const string FailedPrefix = Core.DiskSpace.LeftoverSweep.FailedInfix;
 
     /// <summary>
     /// Where the components live, as the user knows the folder: <c>%LOCALAPPDATA%\TM Concept\tools</c> on Windows,
@@ -104,6 +105,8 @@ public sealed class ComponentReinstaller(ComponentPlanner planner, ComponentInst
             return new InstallOutcome(false, reason);
         }
 
+        // 0.1.37: while this runs (and, through its marker file, after a crash in the middle) the start-up sweep leaves the old folders alone.
+        using var hold = gate.Reinstall();
         var aside = Path.TrimEndingDirectorySeparator(tools) + AsidePrefix + Stamp();
         try
         {

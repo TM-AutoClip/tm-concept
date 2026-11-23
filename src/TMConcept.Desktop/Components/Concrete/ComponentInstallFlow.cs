@@ -19,7 +19,7 @@ namespace TMConcept.Desktop.Components;
 /// downloaded without the confirmation. A cancellation during the install is an outcome, not an error. Every step goes to the log file.
 /// </summary>
 public sealed class ComponentInstallFlow(ComponentPlanner planner, IConfirmDialog confirm, IInstallDialog window, IActivityLog activity, Localizer text,
-    Work.WorkStatus work, Core.Paths.IAppPaths paths, ILogger<ComponentInstallFlow> logger)
+    Work.WorkStatus work, Core.Paths.IAppPaths paths, IComponentWorkGate gate, ILogger<ComponentInstallFlow> logger)
 {
     /// <summary>The planner.</summary>
     public ComponentPlanner Planner => planner;
@@ -57,6 +57,9 @@ public sealed class ComponentInstallFlow(ComponentPlanner planner, IConfirmDialo
         var names = string.Join(", ", plan.Missing.Select(c => c.Name));
         activity.Add(ActivityLevel.Info, text.Format("install.started", names));
         using var model = new InstallViewModel(plan.Missing, text);
+
+        // 0.1.37: the start-up sweep does not touch the components folder while this install writes into it.
+        using var hold = gate.Install();
         var cancelled = false;
         string error;
         try

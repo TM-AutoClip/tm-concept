@@ -19,15 +19,10 @@ namespace TMConcept.Tests.Providers;
 /// </summary>
 public sealed class OnlineVoiceTests : IDisposable
 {
-    private readonly string _folder = Path.Combine(Path.GetTempPath(), "tmc-voices-" + Guid.NewGuid().ToString("N"));
+    // 0.1.37: under the run's one test folder (a crashed run's folder is swept by the next run), never loose in the system's temp folder.
+    private readonly string _folder = TestFolders.New("voices-");
 
-    public void Dispose()
-    {
-        if (Directory.Exists(_folder))
-        {
-            Directory.Delete(_folder, recursive: true);
-        }
-    }
+    public void Dispose() => TestFolders.Delete(_folder);
 
     private static ResolvedModel Model(string provider, string id, decimal perMillion) =>
         new(new CatalogModel { Provider = provider, Id = id, Name = id, Capabilities = ModelCapability.Speech, SpeechUsdPerMillionCharacters = perMillion },

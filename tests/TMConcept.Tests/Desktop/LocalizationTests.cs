@@ -34,7 +34,8 @@ public sealed partial class LocalizationTests
     {
         var en = Localizer.Keys("en").ToHashSet(StringComparer.Ordinal);
         var prefixes = string.Join('|', en.Select(k => k.Split('.')[0]).Distinct(StringComparer.Ordinal).Select(Regex.Escape));
-        var pattern = new Regex("\"((?:" + prefixes + ")\\.[a-z0-9_.]*[a-z0-9_])\"");
+        // A step timer's name (0.1.36: "page.concepts.library", "profile.select") is a log line, not a text key.
+        var pattern = new Regex("(?<!Step\\()\"((?:" + prefixes + ")\\.[a-z0-9_.]*[a-z0-9_])\"");
         var used = Directory.EnumerateFiles(Path.Combine(RepositoryFiles.Root, "src", "TMConcept.Desktop"), "*.cs", SearchOption.AllDirectories)
             .Where(f => !f.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar, StringComparison.Ordinal))
             .SelectMany(f => pattern.Matches(File.ReadAllText(f)).Select(m => m.Groups[1].Value))

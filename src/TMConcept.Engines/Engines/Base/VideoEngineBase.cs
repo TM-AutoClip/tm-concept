@@ -157,6 +157,7 @@ public abstract class VideoEngineBase(EnginePackage package, ChromeLocator chrom
         var temp = Path.Combine(workFolder, "tmp");
         Directory.CreateDirectory(temp);
         var environment = EnginePackage.Environment(temp);
+        environment[EnginePackage.NpmCacheVariable] = Package.NpmCache;
         var ffmpeg = tools.Require(ToolKind.Ffmpeg);
         environment["PATH"] = Path.GetDirectoryName(ffmpeg) + Path.PathSeparator + (System.Environment.GetEnvironmentVariable("PATH") ?? string.Empty);
         foreach (var (name, value) in extra ?? new Dictionary<string, string>())

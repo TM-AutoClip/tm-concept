@@ -11,15 +11,28 @@ namespace TMConcept.Engines.Engines;
 /// The npm packages of an engine: package.json + package-lock.json (pinned, only registry.npmjs.org) and the app's scripts are embedded and
 /// unpacked into <c>&lt;tools&gt;/engines/&lt;name&gt;</c>. Install = <c>npm ci --ignore-scripts</c> with the app's own Node (package install
 /// scripts never run). A marker keeps the SHA-256 of the lock file the install was made with; a new app version with a new lock needs a
-/// new install.
+/// new install. 0.1.37: npm's cache is the package's own <c>npm-cache</c> folder (not <c>%LOCALAPPDATA%/npm-cache</c>), so the storage page
+/// counts it and the full delete takes it; the package's <c>tmp</c> folder is deleted when an install or a Node script of it ends.
 /// </summary>
 public sealed class EnginePackage(string name, IAppPaths paths, ToolInstaller tools, IProcessRunner runner, ILogger logger)
 {
+    /// <summary>The name of npm's cache folder inside a package folder.</summary>
+    public const string NpmCacheFolder = "npm-cache";
+
+    /// <summary>The variable that moves npm's cache.</summary>
+    public const string NpmCacheVariable = "npm_config_cache";
+
     private const string Marker = ".installed";
     private static readonly string[] FileNames = ["package.json", "package-lock.json", "render.mjs"];
 
     /// <summary>Package folder.</summary>
-    public string Root => Path.Combine(paths.ToolsDirectory, "engines", name);
+    public string Root => Path.Combine(paths.ToolsDirectory, Core.DiskSpace.LeftoverSweep.EnginesFolder, name);
+
+    /// <summary>npm's cache of this package (inside <see cref="Root"/>).</summary>
+    public string NpmCache => Path.Combine(Root, NpmCacheFolder);
+
+    /// <summary>The temporary folder of an install or a Node script of this package (inside <see cref="Root"/>).</summary>
+    public string TempFolder => Path.Combine(Root, Core.DiskSpace.LeftoverSweep.TempFolder);
 
     /// <summary>Embedded files (name → resource).</summary>
     public IReadOnlyDictionary<string, string> Files { get; } = FileNames
@@ -58,13 +71,21 @@ public sealed class EnginePackage(string name, IAppPaths paths, ToolInstaller to
         var node = tools.Require(ToolKind.Node);
         var npm = NpmCli(node) ?? throw new ToolInstallException("npm was not found next to Node.") { Code = "npm" };
         Extract();
-        var temp = Path.Combine(Root, "tmp");
-        Directory.CreateDirectory(temp);
+        Directory.CreateDirectory(TempFolder);
         progress?.Report(new ToolProgress(0.05, "npm ci " + name));
-        var result = await runner.RunAsync(new ProcessStart(node, [npm, "ci", "--ignore-scripts", "--no-audit", "--no-fund", "--loglevel=error"], Root)
+        ProcessResult result;
+        try
         {
-            Environment = Environment(temp),
-        }, line => logger.LogDebug("npm {Engine}: {Line}", name, Short(line)), cancellationToken).ConfigureAwait(false);
+            result = await runner.RunAsync(new ProcessStart(node, [npm, "ci", "--ignore-scripts", "--no-audit", "--no-fund", "--loglevel=error"], Root)
+            {
+                Environment = PackageEnvironment(),
+            }, line => logger.LogDebug("npm {Engine}: {Line}", name, Short(line)), cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            RemoveTemp();
+        }
+
         if (result.ExitCode != 0)
         {
             throw new ToolInstallException($"npm ci failed ({result.ExitCode}): {Core.Processes.ChildOutput.Summary(result.LastLines)}") { Code = "npm" };
@@ -78,10 +99,24 @@ public sealed class EnginePackage(string name, IAppPaths paths, ToolInstaller to
     public async Task<ProcessResult> RunNodeAsync(IReadOnlyList<string> arguments, Action<string>? onLine, CancellationToken cancellationToken)
     {
         var node = tools.Require(ToolKind.Node);
-        var temp = Path.Combine(Root, "tmp");
-        Directory.CreateDirectory(temp);
-        return await runner.RunAsync(new ProcessStart(node, arguments, Root) { Environment = Environment(temp) }, onLine, cancellationToken)
-            .ConfigureAwait(false);
+        Directory.CreateDirectory(TempFolder);
+        try
+        {
+            return await runner.RunAsync(new ProcessStart(node, arguments, Root) { Environment = PackageEnvironment() }, onLine, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            RemoveTemp();
+        }
+    }
+
+    /// <summary>The environment of this package's npm and Node runs: <see cref="Environment"/> on its <see cref="TempFolder"/>, npm's cache in <see cref="NpmCache"/>.</summary>
+    public Dictionary<string, string> PackageEnvironment()
+    {
+        var environment = Environment(TempFolder);
+        environment[NpmCacheVariable] = NpmCache;
+        return environment;
     }
 
     /// <summary>The environment of engine processes: temp inside the folder, telemetry and update checks off.</summary>
@@ -117,6 +152,22 @@ public sealed class EnginePackage(string name, IAppPaths paths, ToolInstaller to
             Path.Combine(folder, "..", "lib", "node_modules", "npm", "bin", "npm-cli.js"),
         ];
         return candidates.Select(Path.GetFullPath).FirstOrDefault(File.Exists);
+    }
+
+    /// <summary>Deletes the package's tmp folder (what the run left there is of no use); a file still held stays for the start-up sweep.</summary>
+    private void RemoveTemp()
+    {
+        try
+        {
+            if (Directory.Exists(TempFolder))
+            {
+                Directory.Delete(TempFolder, recursive: true);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            logger.LogDebug(ex, "The tmp folder of the engine packages {Engine} could not be deleted; the start-up sweep takes it", name);
+        }
     }
 
     private static byte[] Read(string resource)

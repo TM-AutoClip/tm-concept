@@ -15,7 +15,9 @@ namespace TMConcept.Speech.Python;
 /// nothing else, from PyPI and PyTorch's own index only (<c>--torch-backend</c>), nothing newer than the lock's date. PyTorch's build follows
 /// the computer (<see cref="Backend"/>): CUDA 12.8 when an NVIDIA card and its driver are there, otherwise the processor build. The
 /// environment's marker holds a fingerprint of Python, build and lock; when any of them changes (a new app version, a new card) the
-/// environment counts as missing and is installed again. uv's own settings files and package index variables are ignored.
+/// environment counts as missing and is installed again. uv's own settings files and package index variables are ignored. 0.1.37: uv's
+/// cache (<c>tools/speech-py/cache</c>, inside the app's data folder) is pruned after each install that ended well (<c>uv cache prune</c>:
+/// what no environment needs any more goes; a failure only writes a warning).
 /// </summary>
 public sealed class PythonInstaller(PythonLayout layout, IToolLocator tools, IProcessRunner runner, IGpuInfo gpu, ILogger<PythonInstaller> logger)
 {
@@ -157,6 +159,9 @@ public sealed class PythonInstaller(PythonLayout layout, IToolLocator tools, IPr
         PythonPins.PackageIndex, "--no-config", "--no-python-downloads",
     ];
 
+    /// <summary><c>uv cache prune</c>: removes the cache entries nothing uses any more (old versions, unpacked leftovers).</summary>
+    public static IReadOnlyList<string> PruneArguments() => ["cache", "prune"];
+
     /// <summary>Installs the pinned Python (uv must be installed).</summary>
     public async Task InstallPythonAsync(IProgress<ToolProgress>? progress, CancellationToken cancellationToken)
     {
@@ -170,6 +175,7 @@ public sealed class PythonInstaller(PythonLayout layout, IToolLocator tools, IPr
             ?? throw new ToolInstallException("uv installed Python but could not find it afterwards.") { Code = "extract" };
         await File.WriteAllTextAsync(layout.PythonMarker, interpreter, cancellationToken).ConfigureAwait(false);
         logger.LogInformation("Python {Version} installed for the Python voices", PythonPins.PythonVersion);
+        await PruneCacheAsync(uv, cancellationToken).ConfigureAwait(false);
         progress?.Report(new ToolProgress(1, "Python " + PythonPins.PythonVersion));
     }
 
@@ -196,7 +202,34 @@ public sealed class PythonInstaller(PythonLayout layout, IToolLocator tools, IPr
         await RunAsync(uv, SyncArguments(lockFile, layout.EnvironmentPython(environment.Key), backend), progress, 0.1, cancellationToken).ConfigureAwait(false);
         await File.WriteAllTextAsync(marker, Fingerprint(environment, backend), cancellationToken).ConfigureAwait(false);
         logger.LogInformation("The Python environment {Environment} is installed (PyTorch {Backend})", environment.Key, backend);
+        await PruneCacheAsync(uv, cancellationToken).ConfigureAwait(false);
         progress?.Report(new ToolProgress(1, environment.Name));
+    }
+
+    /// <summary>
+    /// <c>uv cache prune</c> with the same variables as the install (the cache is the app's own): the install has ended well already, so a
+    /// failure or a cancel here only writes a warning.
+    /// </summary>
+    private async Task PruneCacheAsync(string uv, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await runner.RunAsync(new ProcessStart(uv, PruneArguments(), layout.Root) { Environment = UvEnvironment() }, null, cancellationToken)
+                .ConfigureAwait(false);
+            if (result.ExitCode == 0)
+            {
+                logger.LogInformation("uv cache pruned");
+            }
+            else
+            {
+                logger.LogWarning("uv cache prune failed (exit code {Code}): {Output}", result.ExitCode, ChildOutput.Summary(result.LastLines));
+            }
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or IOException or UnauthorizedAccessException or InvalidOperationException
+            or System.ComponentModel.Win32Exception)
+        {
+            logger.LogWarning(ex, "uv cache prune could not run; the install is not affected");
+        }
     }
 
     /// <summary>Whether uv's output tells of a passing Windows file lock (a virus scanner on a just-written file); worth one more try.</summary>

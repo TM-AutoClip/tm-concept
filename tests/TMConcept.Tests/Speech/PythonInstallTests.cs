@@ -97,8 +97,9 @@ public sealed class PythonInstallTests
         await installer.InstallEnvironmentAsync(PythonEnvironments.Xtts, null, CancellationToken.None);
         installer.EnvironmentReady(PythonEnvironments.Xtts).ShouldBeTrue();
 
-        runner.Runs.Select(r => string.Join(' ', r.Arguments.Take(2))).ShouldBe(["python install", "python find", $"venv {layout.EnvironmentFolder("xtts")}", "pip sync"]);
-        var sync = runner.Runs[^1];
+        runner.Runs.Select(r => string.Join(' ', r.Arguments.Take(2))).ShouldBe(
+            ["python install", "python find", "cache prune", $"venv {layout.EnvironmentFolder("xtts")}", "pip sync", "cache prune"]);
+        var sync = runner.Runs[^2];
         sync.Arguments[sync.Arguments.ToList().IndexOf("--torch-backend") + 1].ShouldBe("cu128");
         File.ReadAllText(sync.Arguments[2]).ShouldBe(PythonFiles.Lock(PythonEnvironments.Xtts, "cu128"));
         foreach (var run in runner.Runs)
@@ -128,6 +129,38 @@ public sealed class PythonInstallTests
         var home = Path.GetDirectoryName(installer.Interpreter!)!;
         File.WriteAllText(Path.Combine(layout.EnvironmentFolder("xtts"), "pyvenv.cfg"), "home = " + home + "\n");
         installer.EnvironmentReady(PythonEnvironments.Xtts).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task UvsCacheIsPrunedAfterAnInstallAndAFailedPruneDoesNotUndoTheInstall()
+    {
+        PythonInstaller.PruneArguments().ShouldBe(["cache", "prune"]);
+
+        using var paths = new TempPaths();
+        var layout = new PythonLayout(paths);
+        var uv = Path.Combine(paths.ToolsDirectory, "uv", "uv.exe");
+        var runner = new FakeUv(layout) { FailOn = "cache prune" };
+        var installer = new PythonInstaller(layout, new FakeTools(uv), runner, new FakeGpu(Amd), NullLogger<PythonInstaller>.Instance);
+
+        await installer.InstallPythonAsync(null, CancellationToken.None);
+        await installer.InstallEnvironmentAsync(PythonEnvironments.Mms, null, CancellationToken.None);
+
+        installer.PythonReady.ShouldBeTrue("a failed prune only writes a warning");
+        installer.EnvironmentReady(PythonEnvironments.Mms).ShouldBeTrue();
+        var prunes = runner.Runs.Where(r => r.Arguments.SequenceEqual(PythonInstaller.PruneArguments())).ToList();
+        prunes.Count.ShouldBe(2, "once after the Python, once after the environment");
+        foreach (var prune in prunes)
+        {
+            prune.Program.ShouldBe(uv, "the app's own uv");
+            prune.Environment["UV_CACHE_DIR"].ShouldBe(layout.CacheFolder, "the app's own cache, inside its data folder");
+            prune.Environment["UV_NO_CONFIG"].ShouldBe("1");
+            Path.GetFullPath(prune.Environment["UV_CACHE_DIR"]).ShouldStartWith(Path.GetFullPath(paths.DataDirectory), Case.Insensitive);
+        }
+
+        // A prune that cannot run at all (the program is gone) does not undo the install either.
+        var throwing = new PythonInstaller(layout, new FakeTools(uv), new ThrowingPrune(runner), new FakeGpu(Amd), NullLogger<PythonInstaller>.Instance);
+        await throwing.InstallEnvironmentAsync(PythonEnvironments.Mms, null, CancellationToken.None);
+        throwing.EnvironmentReady(PythonEnvironments.Mms).ShouldBeTrue();
     }
 
     [Fact]
@@ -202,6 +235,15 @@ public sealed class PythonInstallTests
 
             return Task.FromResult(new ProcessResult(0, string.Empty));
         }
+    }
+
+    /// <summary>Passes every run to <paramref name="inner"/> except <c>uv cache prune</c>, which throws as a missing program would.</summary>
+    private sealed class ThrowingPrune(IProcessRunner inner) : IProcessRunner
+    {
+        public Task<ProcessResult> RunAsync(ProcessStart start, Action<string>? onLine, CancellationToken cancellationToken) =>
+            start.Arguments.SequenceEqual(PythonInstaller.PruneArguments())
+                ? throw new System.ComponentModel.Win32Exception(2, "The system cannot find the file specified.")
+                : inner.RunAsync(start, onLine, cancellationToken);
     }
 
     private sealed class FakeTools(string uv) : IToolLocator

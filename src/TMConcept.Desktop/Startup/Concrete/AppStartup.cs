@@ -22,7 +22,7 @@ namespace TMConcept.Desktop.Startup;
 /// <summary>
 /// Startup flow: first run (language → new start or restore → protection and backup password) · unlock (automatic keyring, or master
 /// password; an older database goes through the schema steps it lacks after a copy of it is kept; one this version cannot open is not
-/// changed: the unlock window says why, and for one made before upgrades were recorded offers to set it aside and start fresh) · main window. After the main window opens: old work files are cleaned and the daily backup runs. Closing the main window
+/// changed: the unlock window says why, and for one made before upgrades were recorded offers to set it aside and start fresh) · main window. After the main window opens: old work files are cleaned, leftover install folders are swept in the background and the daily backup runs. Closing the main window
 /// ends the app; while a page works (a generation, a video render) it asks first and stops the work (its Node / Chrome / ffmpeg processes
 /// are ended with it) before the app closes. An exception that reaches the interface thread is logged and shown instead of ending the app.
 /// Every step until the daily backup writes its time to the log (<c>startup.&lt;step&gt; &lt;ms&gt;</c>, <see cref="IStepTimer"/>);
@@ -273,6 +273,24 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
         {
             logger.LogError(ex, "The components could not be checked after the version change");
         }
+
+        // 0.1.37: what a cut-short "Reinstall from scratch" left next to the components folder and the engines' leftover tmp folders, in the
+        // background (gigabytes take a while; the window never waits). After the version check, so the reinstall it may start has ended.
+        var sweeper = services.GetRequiredService<DiskSpace.ILeftoverSweeper>();
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using (timer.Step("startup.leftover_sweep"))
+                {
+                    await sweeper.SweepAsync(CancellationToken.None).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                logger.LogWarning(ex, "The start-up sweep of leftover folders failed; it is tried again at the next start");
+            }
+        });
 
         // What changed since the version whose notes a start recorded last (once, from the notes built into the app); never holds the start up.
         _ = ShowWhatsNewAsync();
