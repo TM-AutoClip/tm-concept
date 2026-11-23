@@ -53,8 +53,14 @@ public sealed class RenderStyle
     /// <summary>Title anchor inside the safe area, 0 = top, 0.5 = middle, 1 = bottom.</summary>
     public double TitleY { get; set; }
 
-    /// <summary>The drawing style for scenes without an image: flat, stick-figure, line-art, paper-cut, infographic or neon.</summary>
+    /// <summary>The drawing style (<see cref="Styles.DrawStyleDefinition.Key"/>: flat, stick-figure, line-art, … or auto).</summary>
     public string DrawStyle { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The texture the app lays over the picture (0.1.32: paper, grain, scanlines, halftone or grid; empty = none). The app's page draws it,
+    /// the code never does.
+    /// </summary>
+    public string Texture { get; set; } = string.Empty;
 
     /// <summary>How much moves: calm, normal or lively.</summary>
     public string Motion { get; set; } = string.Empty;

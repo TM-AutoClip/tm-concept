@@ -23,9 +23,11 @@ public static class VideoCodePrompt
     /// palette colours and the template font only, title style and place, drawing style, motion, ready helpers, and the app draws the
     /// progress bar, the subtitles and the closing card, so the code never draws a progress bar, timer or scene counter; 10: a model on this
     /// computer gets a short checklist of the rules small models break most and the lines the file must end with, see <see cref="SmallModelChecklist"/>;
-    /// 11: the repair shows a minimal file that puts each scene's image full frame, and a code that never shows the images is sent back).
+    /// 11: the repair shows a minimal file that puts each scene's image full frame, and a code that never shows the images is sent back;
+    /// 12 (0.1.32): motion that tells (two thirds of the scenes, entrance length caps, an effect budget, a moving hook) and the template's look
+    /// lines from <see cref="Styles.DrawStyles"/>: drawing, craft and texture of the style).
     /// </summary>
-    public const string Version = "11";
+    public const string Version = "12";
 
     /// <summary>
     /// SVG: the check allows exactly the SVG (and xlink) namespace written as one whole literal; a model that only read "no web addresses"
@@ -52,6 +54,9 @@ public static class VideoCodePrompt
         fractions of width and height, never as hand-tuned pixel coordinates. Write one shared set of helpers and one layout used by every
         scene; no separate drawing function per scene. Keep the whole file under about 400 lines. Do not plan exact geometry at length:
         prefer simple, robust layouts.
+        Motion that tells: at least two thirds of the scenes move in a way that belongs to their idea (a path drawing on, an object travelling,
+        a number counting, a part being revealed), never decoration that ignores the picture. Entrances stay short (a pop at most 0.45 s, a
+        fade at most 0.8 s, a slide at most 0.9 s), at most three accent effects per scene, and the first 3 seconds already move.
         """;
 
     /// <summary>

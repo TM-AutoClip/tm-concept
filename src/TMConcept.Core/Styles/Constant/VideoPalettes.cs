@@ -24,5 +24,10 @@ public static class VideoPalettes
         new("forest", "#0E1F17", "#183226", "#5BD17A", "#F2C94C", "#F4FFF6", "#A4BBAA", Light: false),
         new("mono", "#111111", "#222222", "#FFFFFF", "#9E9E9E", "#F5F5F5", "#8A8A8A", Light: false),
         new("paper", "#F6F1E7", "#FFFFFF", "#D9480F", "#1C7ED6", "#1F1F1F", "#6B6259", Light: true),
+        // 0.1.32: the palettes the drawing styles suggest (DrawStyleDefinition.PaletteId).
+        new("blueprint", "#0B3D91", "#134FA8", "#FFD166", "#8FC7FF", "#E8F4FF", "#A9C4EA", Light: false),
+        new("hologram", "#04151F", "#0A2633", "#49E8FF", "#FFB03A", "#E6FBFF", "#6FB7CB", Light: false),
+        new("terminal", "#0A0A0A", "#161616", "#33FF66", "#FFB000", "#C8FFD4", "#6FAE7E", Light: false),
+        new("sketch", "#F2EAD8", "#FFFDF6", "#B85C3F", "#3F6FAE", "#2A2420", "#6F6A63", Light: true),
     ];
 }

@@ -23,6 +23,9 @@ public interface IConceptStore
     /// <summary>Replaces the text of a concept (edited by the user: a fix, placeholders); title, summary and status stay.</summary>
     Task UpdateContentAsync(Guid id, string content, CancellationToken cancellationToken);
 
+    /// <summary>Records the drawing style a concept is now written for (0.1.32: an AI edit adapted it; null = none).</summary>
+    Task SetDrawStyleAsync(Guid id, Styles.DrawStyle? style, CancellationToken cancellationToken);
+
     /// <summary>
     /// Replaces title, summary and text of a concept (an AI edit saved by the user); status and number stay. The concept's stored vectors of
     /// the meaning check are deleted with it (they were made from the old title and summary; the next meaning check embeds it again).

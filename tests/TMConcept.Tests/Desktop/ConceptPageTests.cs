@@ -576,6 +576,30 @@ public sealed class ConceptPageTests
     }
 
     [AvaloniaFact]
+    public async Task ConceptsWrittenForTheStickFigureNarratorCarryItsGuidanceAndAreMarkedWithTheStyle()
+    {
+        var fake = new FakeChat().Concepts(FakeChat.Distinct(2));
+        using var h = new DesktopHarness(s => s.AddSingleton<IChatClientFactory>(fake));
+        await PrepareAsync(h);
+        var page = await PageAsync(h);
+        TopicsModel(page);
+        page.Settings.StyleOptions[0].Value.ShouldBeEmpty("not set first");
+        page.Settings.SelectedStyleOption.ShouldBe(page.Settings.StyleOptions[0]);
+        page.Settings.SelectedStyleOption = page.Settings.StyleOptions.Single(o => o.Value == nameof(TMConcept.Core.Styles.DrawStyle.StickFigure));
+        page.Settings.FineTuneSummary.ShouldContain(h.Get<TMConcept.Desktop.Localization.Localizer>()["style.draw.stickfigure"]);
+        page.Ideas.Idea = "How a CPU is made";
+        page.Ideas.Count = 2;
+
+        await page.Ideas.GenerateAsync();
+
+        var user = fake.Requests[^1].User;
+        user.ShouldContain("DRAWING STYLE");
+        user.ShouldContain("stick-figure narrator");
+        var stored = await h.Get<IConceptStore>().ListAsync(page.NewConcepts[0].Concept.ProfileId, [ConceptStatus.New], false, CancellationToken.None);
+        stored.ShouldAllBe(c => c.DrawStyle == TMConcept.Core.Styles.DrawStyle.StickFigure);
+    }
+
+    [AvaloniaFact]
     public async Task IdeaPressesAppendToTheListAndDoNotClearIt()
     {
         var fake = new FakeChat().Concepts(["Greek fire"]).Concepts(["The Nika riots"]);
@@ -1127,14 +1151,14 @@ public sealed class ConceptPageTests
         var model = h.Get<TMConcept.Core.Models.IModelCatalog>().Find("anthropic", "claude-sonnet-5-5")!;
         static IdeaBrief Of(int count) => new(string.Empty, count);
 
-        var first = await generator.EstimateAsync(profile, Of(5), string.Empty, model, "high", CancellationToken.None);
+        var first = await generator.EstimateAsync(profile, Of(5), string.Empty, model, "high", null, CancellationToken.None);
         var guess = ConceptOutputBudget.TokensPerConcept(profile.ContentLanguage, profile.TargetSeconds) * 5;
         var share = ConceptOutputBudget.ThinkingShare(model, "high");
         first.OutputTokensMax.ShouldBeInRange((long)(guess * share.High) - 1, (long)(guess * share.High) + 1);
         share.High.ShouldBeGreaterThanOrEqualTo(6, "Sonnet 5.5 at effort high spent 4–6× the visible text (8 Nov 2026)");
-        var low = await generator.EstimateAsync(profile, Of(5), string.Empty, model, "low", CancellationToken.None);
+        var low = await generator.EstimateAsync(profile, Of(5), string.Empty, model, "low", null, CancellationToken.None);
         low.MaxUsd.ShouldBeLessThan(first.MaxUsd, "a lower effort thinks less");
-        var many = await generator.EstimateAsync(profile, Of(20), string.Empty, model, "max", CancellationToken.None);
+        var many = await generator.EstimateAsync(profile, Of(20), string.Empty, model, "max", null, CancellationToken.None);
         var size = await generator.BatchSizeAsync(profile, model, "max", CancellationToken.None);
         (size * guess / 5.0 * ConceptOutputBudget.ThinkingShare(model, "max").High).ShouldBeLessThanOrEqualTo(ConceptOutputBudget.Ceiling,
             "a batch is sized so its high end fits its max_tokens");
@@ -1149,7 +1173,7 @@ public sealed class ConceptPageTests
             OutputTokens = 20 * 2_000,
             StartedAtUtc = DateTimeOffset.UtcNow,
         }, CancellationToken.None);
-        var measured = await generator.EstimateAsync(profile, Of(20), string.Empty, model, string.Empty, CancellationToken.None);
+        var measured = await generator.EstimateAsync(profile, Of(20), string.Empty, model, string.Empty, null, CancellationToken.None);
         measured.OutputTokensMin.ShouldBeInRange((long)(20 * 2_000 * ConceptGenerator.MeasuredBand.Low) - 1, (long)(20 * 2_000 * ConceptGenerator.MeasuredBand.Low) + 1);
         measured.OutputTokensMax.ShouldBeInRange((long)(20 * 2_000 * ConceptGenerator.MeasuredBand.High) - 1, (long)(20 * 2_000 * ConceptGenerator.MeasuredBand.High) + 1);
     }

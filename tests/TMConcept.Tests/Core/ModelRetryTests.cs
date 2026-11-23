@@ -122,7 +122,7 @@ public sealed class ModelRetryTests
         var concept = new Concept { ProfileId = profile.Id, Title = "Greek fire", Summary = "s", Content = "The story.", Language = "en" };
         await h.Get<IConceptStore>().AddAsync([concept], None);
 
-        var result = await h.Get<ConceptEditor>().EditAsync(profile, concept, "shorter", model, null, None);
+        var result = await h.Get<ConceptEditor>().EditAsync(profile, concept, "shorter", model, null, null, None);
 
         result.Concept.ShouldBeNull();
         result.ErrorCode.ShouldBe("parse");

@@ -1,6 +1,7 @@
 using Avalonia.Headless.XUnit;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
+using TMConcept.Core.Speech;
 using TMConcept.Core.Styles;
 using TMConcept.Desktop.Dialogs;
 using TMConcept.Desktop.Localization;
@@ -103,6 +104,37 @@ public sealed class StyleSettingsTests
         (await h.Get<IVideoStyleStore>().ListAsync(CancellationToken.None)).ShouldBeEmpty();
         section.Editor.ShouldBeNull();
         section.Empty.ShouldBeTrue();
+    }
+
+    [AvaloniaFact]
+    public async Task ANewTemplateLetsTheAiChooseTheStyleAndEveryStyleIsDescribedWithItsPalette()
+    {
+        using var h = new DesktopHarness();
+        await FirstRunTests.CreateAsync(h);
+        var text = h.Get<Localizer>();
+        var section = (await h.Get<SettingsViewModel>().ShowAsync<VideoStylesSettingsViewModel>()).ShouldNotBeNull();
+        section.Add();
+        var editor = section.Editor.ShouldNotBeNull();
+
+        // 0.1.32: the AI choice first and chosen; every style has its description under the list.
+        editor.DrawStyles[0].Value.ShouldBe((int)DrawStyle.Auto);
+        editor.DrawStyle.Value.ShouldBe((int)DrawStyle.Auto);
+        editor.DrawStyleNote.ShouldBe(text["style.draw.auto.desc"]);
+        editor.DrawStyles.Select(c => c.Value).ShouldBe(DrawStyles.All.Select(d => (int)d.Style));
+
+        // A style with a palette of its own suggests it; taking it hides the suggestion.
+        editor.DrawStyle = editor.DrawStyles.Single(c => c.Value == (int)DrawStyle.Blueprint);
+        editor.DrawStyleNote.ShouldBe(text["style.draw.blueprint.desc"]);
+        editor.HasSuggestedPalette.ShouldBeTrue();
+        editor.SuggestedPaletteText.ShouldContain(text["style.palette.blueprint"]);
+        editor.ApplySuggestedPalette();
+        editor.Palette.Palette.Id.ShouldBe("blueprint");
+        editor.HasSuggestedPalette.ShouldBeFalse();
+
+        // A style that needs an image model says so.
+        editor.DrawStyle = editor.DrawStyles.Single(c => c.Value == (int)DrawStyle.Cartoon);
+        editor.DrawStyleNote.ShouldEndWith(text["styles.draw.prefers_images"]);
+        editor.ToStyle().DrawStyle.ShouldBe(DrawStyle.Cartoon);
     }
 
     [AvaloniaFact]
@@ -225,6 +257,8 @@ public sealed class StyleSettingsTests
                 .Concat(Enum.GetNames<TitleStyle>().Select(n => "style.title." + n.ToLowerInvariant()))
                 .Concat(Enum.GetNames<TitlePosition>().Select(n => "style.position." + n.ToLowerInvariant()))
                 .Concat(Enum.GetNames<DrawStyle>().Select(n => "style.draw." + n.ToLowerInvariant()))
+                .Concat(Enum.GetNames<DrawStyle>().Select(n => "style.draw." + n.ToLowerInvariant() + ".desc"))
+                .Concat(Enum.GetNames<NarrationTempo>().Select(n => "style.tempo." + n.ToLowerInvariant()))
                 .Concat(Enum.GetNames<MotionIntensity>().Select(n => "style.motion." + n.ToLowerInvariant()))
                 .Concat(Enum.GetNames<ClosingPlacement>().Select(n => "style.closing." + n.ToLowerInvariant()))
                 .Concat(Enum.GetNames<ClosingPlatform>().Select(n => "style.platform." + n.ToLowerInvariant()))

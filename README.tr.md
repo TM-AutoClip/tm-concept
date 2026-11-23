@@ -466,7 +466,13 @@ Bir şablonla (Ayarlar → Şablonlar) üretilen video, modelin iyi niyetine kal
   *Seste*: cümle, seslendirilmeden önce son sahnenin anlatımının sonuna eklenir; böylece altyazıda ve `narration.txt`'de de olur.
   *Ekranda*: videonun sonuna birkaç sessiz saniye eklenir ve orada profilin kanal fotoğrafı (profilde varsa, yuvarlak), kanal adı, cümle
   ve bir düğmeyle bir kapanış kartı çıkar; kart son sahneyi ya da anlatımını hiç örtmez. Seslendirme kapalıysa sesli kapanış kartta gösterilir.
-- **Çizim tarzı:** görseli olmayan sahneler şablonun tarzında çizilir, üretilen görseller de aynı tarzda istenir.
+- **Çizim tarzı:** görseli olmayan sahneler şablonun tarzında çizilir, üretilen görseller de aynı tarzda istenir. Düzenleyicide her
+  biri açıklamalı on dört seçenek: *Yapay zekâ seçsin* (yeni şablonun varsayılanı: her videoda konuya uyan görünüşü model seçer), düz
+  şekiller, çöp adam anlatıcı, çizgi çizim, kâğıt kesme, infografik, neon, kara kalem, animasyon (çizgi film), teknik çizim (blueprint),
+  hologram, eski terminal, izometrik ve suluboya. Her tarzın kendi hareket kuralları var (kâğıt kayarak gelir, blueprint çizgileri
+  çizilerek belirir, terminal yazısı harf harf yazılır); bazılarında programın resmin üstüne koyduğu hafif bir doku (kâğıt, gren, tarama
+  çizgisi, ızgara) ve önerilen bir palet var. **Çöp adam anlatıcı** konseptin yazılışını da değiştirir: Konseptler sayfasında İnce ayar →
+  Çizim tarzı'ndan seç ya da sonradan Yapay zekâyla düzenle → Tarza uyarla ile uyarla.
 - **Anlatım temposu:** seslendirme cümle cümle okunur; her cümleden sonra bir duraklama, sahneler arasında daha uzun bir ara olur:
   *Sıkı*, *Doğal* (varsayılan) ya da *Rahat*. Kendi duraklama yer tutucuların bunun üstüne eklenir.
 - Saklanan koddan yapılan yeni bir sürüm, videonun üretildiği şablonu korur.

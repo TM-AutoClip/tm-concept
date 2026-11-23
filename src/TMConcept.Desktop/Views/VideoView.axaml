@@ -29,6 +29,7 @@
             </ComboBox.ItemTemplate>
           </ComboBox>
           <views:HelpTip Name="StyleHelp" Text="{DynamicResource video.style.tip}" Margin="0" />
+          <views:HelpTip Name="StyleConceptHelp" Text="{Binding StyleConceptNote}" Margin="0" IsVisible="{Binding HasStyleConceptNote}" />
           <TextBlock Name="NoStylesHint" Text="{DynamicResource video.style.empty}" Classes="small warning" VerticalAlignment="Center"
                      IsVisible="{Binding NoStyles}" />
         </StackPanel>

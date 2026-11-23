@@ -56,8 +56,18 @@ public sealed class VideoStyle
     /// <summary>The name of the saved palette the own colours came from (shown in the editor; empty when they were made here).</summary>
     public string CustomPaletteName { get; set; } = string.Empty;
 
-    /// <summary>Drawing style when there are no images (also steers the image prompt).</summary>
-    public DrawStyle DrawStyle { get; set; } = DrawStyle.Flat;
+    /// <summary>
+    /// The look of the video (<see cref="DrawStyles"/>): how scenes without an image are drawn and how images are asked for. A new template
+    /// starts on <see cref="DrawStyle.Auto"/> (0.1.32: no style given = the model chooses one that fits each video's topic).
+    /// </summary>
+    public DrawStyle DrawStyle { get; set; } = DrawStyle.Auto;
+
+    /// <summary>
+    /// The style the model chose for this video when <see cref="DrawStyle"/> is <see cref="DrawStyle.Auto"/> and no preset fitted: its own short
+    /// description (0.1.32). Only ever set on a video's snapshot (<see cref="Videos.VideoOptions.Style"/>), never on a saved template; a chosen
+    /// preset is written into <see cref="DrawStyle"/> of the snapshot instead. Empty otherwise.
+    /// </summary>
+    public string ChosenStyle { get; set; } = string.Empty;
 
     /// <summary>How much things move.</summary>
     public MotionIntensity Motion { get; set; } = MotionIntensity.Normal;

@@ -148,9 +148,9 @@ public sealed class TopicGenerationTests
         var (profile, model) = await PrepareAsync(h);
         var generator = h.Get<ConceptGenerator>();
 
-        var idea = await generator.EstimateAsync(profile, new IdeaBrief(string.Empty, 45), string.Empty, model.Model, string.Empty, None);
-        var topics = await generator.EstimateAsync(profile, new TopicBrief(Topics(45)), string.Empty, model.Model, string.Empty, None);
-        var fewer = await generator.EstimateAsync(profile, new TopicBrief(Topics(3)), string.Empty, model.Model, string.Empty, None);
+        var idea = await generator.EstimateAsync(profile, new IdeaBrief(string.Empty, 45), string.Empty, model.Model, string.Empty, null, None);
+        var topics = await generator.EstimateAsync(profile, new TopicBrief(Topics(45)), string.Empty, model.Model, string.Empty, null, None);
+        var fewer = await generator.EstimateAsync(profile, new TopicBrief(Topics(3)), string.Empty, model.Model, string.Empty, null, None);
 
         topics.MaxUsd.ShouldBeGreaterThan(idea.MaxUsd, "45 concepts either way, and every batch's prompt also carries its topics");
         topics.MinUsd.ShouldBeGreaterThan(idea.MinUsd);

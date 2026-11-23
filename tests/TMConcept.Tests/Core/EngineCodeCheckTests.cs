@@ -98,7 +98,7 @@ public sealed class EngineCodeCheckTests
         text.ShouldContain("createElementNS(\"" + EngineCodeCheck.SvgNamespace + "\"");
         text.ShouldContain("DOMParser");
         text.ShouldContain("comments included");
-        VideoCodePrompt.Version.ShouldBe("11", "10: the checklist of a local code model; 11: the repair example shows the images");
+        VideoCodePrompt.Version.ShouldBe("12", "10: the checklist of a local code model; 11: the repair example shows the images; 12: motion and style look");
     }
 
     [Theory]

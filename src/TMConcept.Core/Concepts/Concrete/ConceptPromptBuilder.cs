@@ -49,6 +49,9 @@ public static partial class ConceptPromptBuilder
         // Names from the app's own focus lists (not free text), in the prompt's language.
         values["focus"] = string.IsNullOrWhiteSpace(input.Focus) ? null : PromptText.Data(input.Focus, ConceptLimits.ExtraPromptMax);
 
+        // 0.1.32: the drawing style the concepts are written for (the app's own text, never the user's): no style = no line.
+        values["style"] = string.IsNullOrWhiteSpace(input.Style) ? null : input.Style;
+
         // The ticked topics of this batch, numbered in order (one concept each); an idea brief has none, so no line.
         values["topics"] = input.Topics is not { Count: > 0 } topics
             ? null
@@ -182,6 +185,7 @@ public static partial class ConceptPromptBuilder
         values["summary"] = PromptText.Data(input.Summary, ConceptLimits.SummaryMax);
         values["instruction"] = PromptText.Data(input.Instruction, ConceptLimits.ExtraPromptMax);
         values["content"] = PromptText.Data(input.Content, ConceptLimits.ContentMax);
+        values["style"] = string.IsNullOrWhiteSpace(input.Style) ? null : input.Style;
         return Make(template, values, Schema());
     }
 

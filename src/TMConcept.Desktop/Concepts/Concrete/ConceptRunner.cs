@@ -155,7 +155,7 @@ public sealed class ConceptRunner(AppSession session, ConceptGenerator generator
                 Show();
             });
             var result = await generator.GenerateAsync(new ConceptRequest(profile, brief, model, Settings.LocalCheck, embedding,
-                Settings.Focus(profile.ContentLanguage)), batches, steps, cancellationToken).ConfigureAwait(true);
+                Settings.Focus(profile.ContentLanguage), Settings.Style), batches, steps, cancellationToken).ConfigureAwait(true);
 
             // The batches are reported from the generator's thread and posted here: they are all on the page (and the topics they made off
             // section A's list) before the run's end is reported.
@@ -216,7 +216,7 @@ public sealed class ConceptRunner(AppSession session, ConceptGenerator generator
         }
 
         var effort = Settings.ConceptEffort();
-        var estimate = await generator.EstimateAsync(profile, brief, Settings.Focus(profile.ContentLanguage), model, effort, CancellationToken.None)
+        var estimate = await generator.EstimateAsync(profile, brief, Settings.Focus(profile.ContentLanguage), model, effort, Settings.Style, CancellationToken.None)
             .ConfigureAwait(true);
         var backfill = 0;
         if (picker.Model(PipelineSteps.Embedding) is { } embedding)

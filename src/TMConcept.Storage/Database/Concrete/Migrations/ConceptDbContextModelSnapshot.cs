@@ -31,6 +31,9 @@ namespace TMConcept.Storage.Database
                     b.Property<long?>("DecidedAtUtc")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int?>("DrawStyle")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("DuplicateNote")
                         .IsRequired()
                         .HasColumnType("TEXT");

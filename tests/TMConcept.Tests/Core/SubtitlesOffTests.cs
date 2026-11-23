@@ -30,7 +30,7 @@ public sealed class SubtitlesOffTests
         var on = VideoCodePrompt.System(engine, subtitles: true);
         on.ShouldContain("Subtitles are burned into the bottom of the finished video afterwards: NEVER draw the caption (narration) text yourself");
         on.ShouldContain("bottom 22 %");
-        VideoCodePrompt.Version.ShouldBe("11");
+        VideoCodePrompt.Version.ShouldBe("12");
     }
 
     [Fact]

@@ -16,6 +16,14 @@ TM Concept is MIT licensed. It includes or uses the following third-party materi
 
 The font license texts are shipped as files next to the program and in the Linux archive (`licenses/`). Fonts installed on the user's computer (for example Times New Roman) are never shipped: a template may use one, and a video made on that computer copies its files into the video's work folder only.
 
+## Ideas read, not copied
+
+The drawing styles of 0.1.32 (`src/TMConcept.Core/Styles/Concrete/DrawStyles.cs`) were written for TM Concept after reading the
+documentation of these MIT-licensed projects as recipes; no code, prompt text or asset of theirs is included: ersinkoc/AI-Video-Factory
+(entrance length limits, paper slide-in with a fixed shadow, isometric outline-then-fill, texture layers, a moving hook),
+deenukhan/animation-styles and cth9191/animate (blueprint, hologram, terminal and pencil-sketch looks) and kaomei/stickman-video-director
+(a stick-figure presenter, setup → action → reaction, a visual change every two to three seconds).
+
 ## Libraries bundled into the program
 
 The release files are self-contained: they carry the .NET runtime and these libraries. Each keeps its own license.

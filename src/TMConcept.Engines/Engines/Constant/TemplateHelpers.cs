@@ -66,8 +66,10 @@ public static class TemplateHelpers
             think: [[50, 75, 25, 115], [50, 75, 74, 96], [74, 96, 58, 50], [50, 125, 30, 190], [50, 125, 70, 190]]
           };
 
+          var glowing = ["neon", "hologram", "terminal"].indexOf(style.drawStyle) >= 0;
+
           function figure(pose) {
-            var stroke = style.drawStyle === "neon" ? color("accent") : color("text");
+            var stroke = glowing ? color("accent") : color("text");
             var svg = document.createElementNS(SVG, "svg");
             svg.setAttribute("viewBox", "0 0 100 200");
             svg.setAttribute("fill", "none");
@@ -77,7 +79,7 @@ public static class TemplateHelpers
             svg.setAttribute("stroke-linejoin", "round");
             svg.style.position = "absolute";
             svg.style.height = Math.round(height * 0.3) + "px";
-            if (style.drawStyle === "neon") svg.style.filter = "drop-shadow(0 0 8px " + stroke + ")";
+            if (glowing) svg.style.filter = "drop-shadow(0 0 8px " + stroke + ")";
             var head = document.createElementNS(SVG, "circle");
             head.setAttribute("cx", "50");
             head.setAttribute("cy", "30");

@@ -424,16 +424,27 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                 var cache = Path.Combine(SceneImageRoot(job.Concept.Id), CacheKey(job.Profile.Name, imageModel.Model, width, height, visuals, drawStyle));
                 Directory.CreateDirectory(cache);
                 var promptFile = Path.Combine(cache, "prompts.txt");
+                var styleFile = Path.Combine(cache, "style.txt");
                 IReadOnlyList<string> prompts;
                 if (File.Exists(promptFile) && (await File.ReadAllLinesAsync(promptFile, cancellationToken).ConfigureAwait(false)) is { } kept && kept.Length == visuals.Count)
                 {
                     prompts = kept;
                     logger.LogInformation("Scene image prompts reused from an earlier attempt");
+                    if (drawStyle is Styles.DrawStyle.Auto && File.Exists(styleFile))
+                    {
+                        Choose(job.Options, await File.ReadAllTextAsync(styleFile, cancellationToken).ConfigureAwait(false));
+                    }
                 }
                 else
                 {
-                    prompts = await ImagePromptsAsync(job, visuals, drawStyle, steps, id, cancellationToken).ConfigureAwait(false);
+                    var (made, chosen) = await ImagePromptsAsync(job, visuals, drawStyle, steps, id, cancellationToken).ConfigureAwait(false);
+                    prompts = made;
                     await File.WriteAllLinesAsync(promptFile, prompts.Select(p => p.ReplaceLineEndings(" ")), cancellationToken).ConfigureAwait(false);
+                    if (drawStyle is Styles.DrawStyle.Auto)
+                    {
+                        await File.WriteAllTextAsync(styleFile, chosen, cancellationToken).ConfigureAwait(false);
+                        Choose(job.Options, chosen);
+                    }
                 }
 
                 steps.Report(VideoSteps.Images, 0, done: 0, total: prompts.Count);
@@ -481,18 +492,21 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
     /// without one readable prompt is asked again as it was (at most twice, <see cref="JsonAnswerRetry"/>); an answer that does not fit the
     /// scenes (<see cref="ImagePromptBuilder.Check"/>: the count, a scene without a prompt, a wrong number, an empty prompt) gets ONE repair
     /// request with those findings, and when that does not fit either the video stops with them ("images"). A cut-off answer keeps its
-    /// complete items and goes to the same check. Every call is paid and counted.
+    /// complete items and goes to the same check. Every call is paid and counted. 0.1.32: a template without a style
+    /// (<see cref="Styles.DrawStyle.Auto"/>) lets this call choose one; the second value is the chosen preset's key or the model's own words
+    /// (empty otherwise; a repair answer that names one replaces the first).
     /// </summary>
-    private async Task<IReadOnlyList<string>> ImagePromptsAsync(VideoJob job, IReadOnlyList<string> visuals, Styles.DrawStyle? drawStyle,
+    private async Task<(IReadOnlyList<string> Prompts, string Style)> ImagePromptsAsync(VideoJob job, IReadOnlyList<string> visuals, Styles.DrawStyle? drawStyle,
         VideoStepProgress steps, Guid id, CancellationToken cancellationToken)
     {
         var promptModel = job.CodeModel;
+        var choose = drawStyle is Styles.DrawStyle.Auto;
         var chat = chats.Create(promptModel.Model, promptModel.Key.Secret);
         async Task<string> AskAsync(string user, CancellationToken token)
         {
             try
             {
-                var answer = await chat.SendAsync(new ChatRequest(ImagePromptBuilder.System, user, Schema: ImagePromptBuilder.Schema(), MaxOutputTokens: 4000,
+                var answer = await chat.SendAsync(new ChatRequest(ImagePromptBuilder.System, user, Schema: ImagePromptBuilder.Schema(choose), MaxOutputTokens: 4000,
                     Effort: promptModel.Effort), token).ConfigureAwait(false);
                 steps.Spend(new VideoCost
                 {
@@ -527,12 +541,18 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
             return ImagePromptBuilder.Read(text).Count > 0 ? new[] { text } : null;
         }, logger, cancellationToken).ConfigureAwait(false);
         var items = ImagePromptBuilder.Read(first[0]);
+        var style = choose ? StyleWords(first[0]) : string.Empty;
         var problems = ImagePromptBuilder.Check(items, visuals.Count);
         if (problems.Count > 0)
         {
             logger.LogWarning("The image prompts do not fit the {Count} scenes ({Problems}); asking for one repair", visuals.Count, string.Join("; ", problems));
-            items = ImagePromptBuilder.Read(await AskAsync(ImagePromptBuilder.Repair(job.Profile.Name, visuals, drawStyle, problems), cancellationToken)
-                .ConfigureAwait(false));
+            var repaired = await AskAsync(ImagePromptBuilder.Repair(job.Profile.Name, visuals, drawStyle, problems), cancellationToken).ConfigureAwait(false);
+            items = ImagePromptBuilder.Read(repaired);
+            if (choose && StyleWords(repaired) is { Length: > 0 } again)
+            {
+                style = again;
+            }
+
             problems = ImagePromptBuilder.Check(items, visuals.Count);
             if (problems.Count > 0)
             {
@@ -543,7 +563,38 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         }
 
         logger.LogInformation("Scene image prompts: {Count}, one per scene", items.Count);
-        return ImagePromptBuilder.Prompts(items, visuals.Count);
+        return (ImagePromptBuilder.Prompts(items, visuals.Count), style);
+    }
+
+    /// <summary>The style an answer chose: a preset's key, or the model's own words.</summary>
+    private static string StyleWords(string answer)
+    {
+        var (preset, words) = ImagePromptBuilder.ReadStyle(answer);
+        return preset is { } chosen ? Styles.DrawStyles.Of(chosen).Key : words;
+    }
+
+    /// <summary>
+    /// Writes the style chosen for a template without one into this video's snapshot (0.1.32): a preset's key becomes its
+    /// <see cref="Styles.VideoStyle.DrawStyle"/> (so the code gets its drawing, craft and texture), the model's own words go to
+    /// <see cref="Styles.VideoStyle.ChosenStyle"/>. Nothing chosen leaves the snapshot on Auto (the code then chooses).
+    /// </summary>
+    private void Choose(VideoOptions options, string chosen)
+    {
+        if (options.Style is not { } snapshot || chosen.Trim().Length == 0)
+        {
+            return;
+        }
+
+        if (Styles.DrawStyles.FindKey(chosen) is { } preset)
+        {
+            snapshot.DrawStyle = preset.Style;
+            logger.LogInformation("The style chosen for this video: {Style}", preset.Key);
+        }
+        else
+        {
+            snapshot.ChosenStyle = Text.TextClean.OneLine(chosen, ImagePromptBuilder.StyleMax);
+            logger.LogInformation("The style chosen for this video: its own description ({Length} characters)", snapshot.ChosenStyle.Length);
+        }
     }
 
     private string SceneImageRoot(Guid conceptId) => SceneImageFolder(paths.WorkDirectory, conceptId);

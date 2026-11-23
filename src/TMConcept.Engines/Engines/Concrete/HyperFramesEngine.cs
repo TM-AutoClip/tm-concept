@@ -156,6 +156,9 @@ public sealed class HyperFramesEngine(IAppPaths paths, ToolInstaller tools, Chro
         var head = style is null ? string.Empty : TemplateHead(input, style);
         var helper = style is null ? string.Empty : "<script src=\"" + HelperFile + "\"></script>\n";
         var rootFont = style is null ? "sans-serif" : "var(--tm-font)";
+        // 0.1.32: the style's texture, the app's own still layer over the whole picture (nothing for a video without a template).
+        var textureCss = StyleTextureCss.Css(style?.Texture);
+        var texture = StyleTextureCss.Element(style?.Texture);
         return $$"""
             <!doctype html>
             <!-- The app's file (TM Concept); not changed by the model. The model's code is only in scene.js. -->
@@ -169,11 +172,11 @@ public sealed class HyperFramesEngine(IAppPaths paths, ToolInstaller tools, Chro
             * { margin: 0; padding: 0; box-sizing: border-box; }
             html, body { width: {{width}}px; height: {{height}}px; overflow: hidden; background: #000; }
             #root { position: relative; width: 100%; height: 100%; overflow: hidden; font-family: {{rootFont}}; }
-            {{head}}</style>
+            {{head}}{{textureCss}}</style>
             </head>
             <body>
             <div id="root" data-composition-id="concept" data-start="0" data-duration="{{input.DurationSeconds.ToString("0.###", c)}}" data-fps="{{input.Fps.ToString(c)}}" data-width="{{width}}" data-height="{{height}}"></div>
-            <script>window.INPUT = {{RenderInputBuilder.ToHtmlSafeJson(input)}};</script>
+            {{texture}}<script>window.INPUT = {{RenderInputBuilder.ToHtmlSafeJson(input)}};</script>
             {{helper}}<script src="scene.js"></script>
             </body>
             </html>

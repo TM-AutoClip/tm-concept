@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
 using TMConcept.Core.Concepts;
+using TMConcept.Core.Styles;
 
 #pragma warning disable 219, 612, 618
 #nullable disable
@@ -20,7 +21,7 @@ namespace TMConcept.Storage.Database
                 "TMConcept.Core.Concepts.Concept",
                 typeof(Concept),
                 baseEntityType,
-                propertyCount: 16,
+                propertyCount: 17,
                 foreignKeyCount: 1,
                 unnamedIndexCount: 2,
                 keyCount: 1);
@@ -55,6 +56,13 @@ namespace TMConcept.Storage.Database
                 fieldInfo: typeof(Concept).GetField("<DecidedAtUtc>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
                 nullable: true,
                 valueConverter: new UtcTicksConverter());
+
+            var drawStyle = runtimeEntityType.AddProperty(
+                "DrawStyle",
+                typeof(DrawStyle?),
+                propertyInfo: typeof(Concept).GetProperty("DrawStyle", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(Concept).GetField("<DrawStyle>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true);
 
             var duplicateNote = runtimeEntityType.AddProperty(
                 "DuplicateNote",

@@ -37,11 +37,11 @@ public sealed class StylePromptTests
 
         var text = VideoCodePrompt.System(engine, subtitles: true, Style(progressBar: true, closing: ClosingPlacement.Screen), ContentLanguages.English);
 
-        VideoCodePrompt.Version.ShouldBe("11", "9: the template block; 10: the checklist for local models; 11: the images in the repair");
+        VideoCodePrompt.Version.ShouldBe("12", "9: the template block; 10: the checklist for local models; 11: the images in the repair; 12: motion that tells, style look lines");
         text.ShouldContain("Template (the user's choice");
         text.ShouldContain("ONLY input.style.font (\"Anton\")");
         text.ShouldContain("Titles: band (on a full-width band in the surface colour), at the middle left of the safe area");
-        text.ShouldContain("simple stick figures");
+        text.ShouldContain("stick-figure presenter");
         text.ShouldContain("Motion: calm");
         text.ShouldContain("NEVER draw a progress bar, timeline bar, timer, countdown or scene counter");
         text.ShouldContain("the app itself draws the progress bar along the top edge, the subtitles, a closing card over the last 3.5 s");

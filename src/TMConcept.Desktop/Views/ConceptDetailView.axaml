@@ -20,6 +20,7 @@
             </Border>
           </Grid>
           <TextBlock Name="MetaLine" Text="{Binding MetaLine}" Classes="tiny" />
+          <TextBlock Name="StyleWrittenLine" Text="{Binding StyleLine}" Classes="tiny" IsVisible="{Binding StyleLine, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
           <TextBlock Name="SourcesLine" Text="{Binding SourcesLine}" Classes="tiny" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"
                      ToolTip.Tip="{Binding SourcesLine}" IsVisible="{Binding SourcesLine, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
           <TextBlock Name="ReadOnlyLine" Text="{Binding ReadOnlyNote}" Classes="small warning" TextWrapping="Wrap"
@@ -84,6 +85,18 @@
                 </StackPanel>
                 <TextBox Name="AiInstructionBox" Text="{Binding AiInstruction}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="70"
                          MaxLength="{Binding AiInstructionMax}" PlaceholderText="{DynamicResource detail.ai_hint}" IsEnabled="{Binding AiIdle}" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <TextBlock Text="{DynamicResource concepts.ai.style}" VerticalAlignment="Center" />
+                  <ComboBox Name="AiStyleBox" ItemsSource="{Binding AiStyleOptions}" SelectedItem="{Binding AiStyleOption}" MinWidth="220"
+                            IsEnabled="{Binding AiIdle}">
+                    <ComboBox.ItemTemplate>
+                      <DataTemplate x:DataType="vm:ChoiceOption">
+                        <TextBlock Text="{Binding Label}" />
+                      </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                  </ComboBox>
+                  <views:HelpTip Text="{DynamicResource concepts.ai.style.tip}" />
+                </StackPanel>
               </StackPanel>
               <TextBlock Name="SummaryLine" Text="{Binding Summary}" Classes="muted" TextWrapping="Wrap" />
               <ItemsControl Name="TextLines" ItemsSource="{Binding Lines}">

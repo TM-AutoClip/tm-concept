@@ -45,7 +45,8 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         Fonts = VideoFonts.All.Concat(SystemFonts.Installed).Select(f => new FontOption(f, VideoFontPreview.For(f))).ToList();
         Emphases = Choices<FontEmphasis>("style.emphasis.");
         TitleStyles = Choices<TitleStyle>("style.title.");
-        DrawStyles = Choices<DrawStyle>("style.draw.");
+        // 0.1.32: in the catalog's order (the AI choice first), each with its description under the list.
+        DrawStyles = Core.Styles.DrawStyles.All.Select(d => new NumberChoice((int)d.Style, Label("style.draw." + Key(d.Style), d.Key))).ToList();
         Motions = Choices<MotionIntensity>("style.motion.");
         Tempos = Choices<NarrationTempo>("style.tempo.");
         Placements = Choices<ClosingPlacement>("style.closing.");
@@ -71,6 +72,7 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         PaletteName = Palette.SavedId is not null ? Palette.Label : string.Empty;
         TitleStyle = Pick(TitleStyles, (int)_source.TitleStyle);
         DrawStyle = Pick(DrawStyles, (int)_source.DrawStyle);
+        ShowDrawStyle();
         Motion = Pick(Motions, (int)_source.Motion);
         Tempo = Pick(Tempos, (int)_source.Tempo);
         Closing = Pick(Placements, (int)_source.Closing);
@@ -232,6 +234,31 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
     [ObservableProperty]
     public partial NumberChoice DrawStyle { get; set; }
 
+    /// <summary>What the chosen drawing style looks like (0.1.32, shown under the list).</summary>
+    [ObservableProperty]
+    public partial string DrawStyleNote { get; set; } = string.Empty;
+
+    /// <summary>The built-in palette the chosen style suggests (null = none, or it is already chosen).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSuggestedPalette), nameof(SuggestedPaletteText))]
+    public partial PaletteOption? SuggestedPalette { get; set; }
+
+    /// <summary>Whether a palette is suggested.</summary>
+    public bool HasSuggestedPalette => SuggestedPalette is not null;
+
+    /// <summary>"Suggested palette for this style: Blueprint".</summary>
+    public string SuggestedPaletteText => SuggestedPalette is { } palette ? _text.Format("styles.draw.palette", palette.Label) : string.Empty;
+
+    /// <summary>Takes the palette the style suggests.</summary>
+    [RelayCommand]
+    public void ApplySuggestedPalette()
+    {
+        if (SuggestedPalette is { } palette)
+        {
+            Palette = palette;
+        }
+    }
+
     /// <summary>Motion intensity.</summary>
     [ObservableProperty]
     public partial NumberChoice Motion { get; set; }
@@ -356,9 +383,15 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         }
 
         if (e.PropertyName is nameof(BaseColour) or nameof(GenerateLight) or nameof(PaletteName) or nameof(PaletteStatus) or nameof(PaletteOk)
-            or nameof(OwnColours) or nameof(SavedChosen))
+            or nameof(OwnColours) or nameof(SavedChosen) or nameof(DrawStyleNote) or nameof(SuggestedPalette) or nameof(HasSuggestedPalette)
+            or nameof(SuggestedPaletteText))
         {
             return;
+        }
+
+        if (e.PropertyName is nameof(DrawStyle) or nameof(Palette))
+        {
+            ShowDrawStyle();
         }
 
         if (e.PropertyName == nameof(Palette))
@@ -569,6 +602,23 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         where T : struct, Enum => value.ToString().ToLowerInvariant();
 
     private static NumberChoice Pick(IReadOnlyList<NumberChoice> choices, int value) => choices.FirstOrDefault(c => c.Value == value) ?? choices[0];
+
+    /// <summary>The description of the chosen drawing style and the palette it suggests (none when that palette is already chosen).</summary>
+    private void ShowDrawStyle()
+    {
+        if (DrawStyle is null)
+        {
+            return;
+        }
+
+        var definition = Core.Styles.DrawStyles.Of((DrawStyle)DrawStyle.Value);
+        var key = "style.draw." + Key(definition.Style) + ".desc";
+        var note = _text.Has(key) ? _text[key] : string.Empty;
+        DrawStyleNote = definition.PrefersImages && note.Length > 0 ? note + " " + _text["styles.draw.prefers_images"] : note;
+        SuggestedPalette = definition.PaletteId.Length == 0 || (Palette is { Editable: false } current && current.Palette.Id == definition.PaletteId)
+            ? null
+            : Palettes.FirstOrDefault(p => !p.Editable && p.SavedId is null && p.Palette.Id == definition.PaletteId);
+    }
 
     private static SolidColorBrush Brush(string hex) => new(Color.Parse(hex));
 }

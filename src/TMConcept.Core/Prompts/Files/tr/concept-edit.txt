@@ -25,4 +25,5 @@ BAŞLIK: «{title}»
 İÇERİK:
 «{content}»
 DEĞİŞİKLİK: «{instruction}»
+ÇİZİM TARZI (video bu tarzda çizilecek; konsepti ve "ekranda" satırlarını buna göre yaz): {style}
 Düzenlenmiş konsepti yaz: tam 1 konsept. JSON: {"konseptler":[{"baslik":"…","ozet":"…","icerik":"…"}]}

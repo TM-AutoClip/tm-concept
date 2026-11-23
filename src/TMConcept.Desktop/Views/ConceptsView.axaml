@@ -127,6 +127,18 @@
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
+        <Grid Name="StyleRow" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Margin="0,4,16,4" IsVisible="{Binding Settings.FineTuneOpen}">
+          <TextBlock Text="{DynamicResource concepts.style}" VerticalAlignment="Center" />
+          <ComboBox Name="ConceptStyle" Grid.Column="1" ItemsSource="{Binding Settings.StyleOptions}" SelectedItem="{Binding Settings.SelectedStyleOption}"
+                    HorizontalAlignment="Stretch">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:ChoiceOption">
+                <TextBlock Text="{Binding Label}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+          <views:HelpTip Grid.Column="2" Text="{DynamicResource concepts.style.tip}" />
+        </Grid>
       </StackPanel>
     </Border>
 

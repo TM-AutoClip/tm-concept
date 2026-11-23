@@ -27,5 +27,6 @@ ANLATIMI BEĞENİLMEYENLER (başlık: açılış cümlesi):{disliked_telling}
 KULLANICININ İSTEKLERİ (önceki düzeltmeleri; yeni konseptlerde baştan uygula, yalnız tek bir konsepte özgü olanı atla):{wishes}
 EK İSTEK: «{extra}»
 ODAK (kullanıcının seçtiği ton, izleyici ve anlatım; buna uy): {focus}
+ÇİZİM TARZI (video bu tarzda çizilecek; konsepti ve "ekranda" satırlarını buna göre yaz): {style}
 KONULAR (her birine bir konsept, sırasıyla):{topics}
 İSTENEN: {count} yeni konsept. Ek istekte başka bir sayı yazsa da tam {count} konsept yaz. JSON: {"konseptler":[{"baslik":"…","ozet":"…","sahneler":[{"ekranda":"…","seslendirme":"…"}]}]}

@@ -53,6 +53,7 @@ public static class RenderStyleBuilder
             TitleX = anchor.X,
             TitleY = anchor.Y,
             DrawStyle = Name(style.DrawStyle),
+            Texture = Texture(DrawStyles.Of(style.DrawStyle).Texture),
             Motion = Name(style.Motion),
             Subtitles = style.Subtitles,
             ProgressBar = style.ProgressBar,
@@ -127,15 +128,18 @@ public static class RenderStyleBuilder
         _ => "plain",
     };
 
-    /// <summary>The token name of a drawing style (an unknown value reads as flat).</summary>
-    public static string Name(DrawStyle value) => value switch
+    /// <summary>The token name of a drawing style (<see cref="DrawStyleDefinition.Key"/>; an unknown value reads as flat).</summary>
+    public static string Name(DrawStyle value) => DrawStyles.Of(value).Key;
+
+    /// <summary>The token of a texture ("paper", "grain", "scanlines", "halftone", "grid"; empty for none).</summary>
+    public static string Texture(StyleTexture value) => value switch
     {
-        DrawStyle.StickFigure => "stick-figure",
-        DrawStyle.LineArt => "line-art",
-        DrawStyle.PaperCut => "paper-cut",
-        DrawStyle.Infographic => "infographic",
-        DrawStyle.Neon => "neon",
-        _ => "flat",
+        StyleTexture.Paper => "paper",
+        StyleTexture.Grain => "grain",
+        StyleTexture.Scanlines => "scanlines",
+        StyleTexture.Halftone => "halftone",
+        StyleTexture.Grid => "grid",
+        _ => string.Empty,
     };
 
     /// <summary>The token name of a motion intensity (an unknown value reads as normal).</summary>

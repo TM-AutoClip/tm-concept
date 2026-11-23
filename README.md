@@ -474,6 +474,12 @@ A video made with a template (Settings → Templates) follows it without relying
   photo (round, when the profile has one), the channel name, the sentence and a button, so the card never covers the last scene or its
   narration. With narration off a spoken closing is shown on the card instead.
 - **Drawing style:** scenes without an image are drawn in the template's style, and generated images are asked for in the same style.
+  Fourteen choices, each described in the editor: *Let the AI choose* (the default of a new template: the model picks the look that fits
+  each video), flat shapes, stick-figure narrator, line art, paper cut-out, infographic, neon, pencil sketch, animation (cartoon),
+  blueprint, hologram, retro terminal, isometric and watercolour. Each style brings its own motion rules (paper slides in, blueprint lines
+  draw on, terminal text types in) and, for some, a faint texture the app lays over the picture (paper, grain, scanlines, grid) and a
+  suggested palette. The **stick-figure narrator** also changes how concepts are written: choose it on the Concepts page (Fine-tuning →
+  Drawing style) or adapt a concept later (AI edit → Adapt to a style).
 - **Narration tempo:** the narration is spoken sentence by sentence with a pause after every sentence and a longer one between scenes:
   *Tight*, *Natural* (default) or *Relaxed*. Your own pause placeholders are added on top.
 - A new version made from the kept code keeps the template the video was made with.

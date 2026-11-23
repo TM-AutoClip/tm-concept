@@ -65,7 +65,7 @@ public sealed class StorageFormatTests
 
         (await h.QueryAsync(db => db.SchemaObjects.CountAsync(o => o.Type == "index" && o.Name.StartsWith("IX_")))).ShouldBe(20, "10 (0.1.29 dropped the profile index of the sample images), the concept index of the runs (0.1.25: an AI edit names its concept), the language index of the pronunciations, the profile index of the topic suggestions (by time), the profile index of the AI-edit wishes, the concept and profile (by time) indexes of the video ratings and the four of the documents (profile and content, passages by document and by profile, vectors by profile and model)");
         (await h.QueryAsync(db => db.SchemaObjects.CountAsync(o => o.Type == ConceptSchema.TableType && !o.Name.StartsWith("__EFMigrations")))).ShouldBe(20, "0.1.25 added the kept page texts (document_pages), 0.1.29 dropped profile_images");
-        (await h.QueryAsync(db => db.Database.GetAppliedMigrationsAsync())).Select(SchemaUpgrader.Name).ShouldBe(["Version0117", "Version0118", "Version0119", "Version0120", "Version0125Costs", "Version0125Documents", "Version0129"],
+        (await h.QueryAsync(db => db.Database.GetAppliedMigrationsAsync())).Select(SchemaUpgrader.Name).ShouldBe(["Version0117", "Version0118", "Version0119", "Version0120", "Version0125Costs", "Version0125Documents", "Version0129", "Version0132"],
             "the file records the schema steps it went through");
 
         // Opening again leaves a current schema alone.

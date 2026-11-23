@@ -31,7 +31,7 @@ public static class VideoStylePrompt
             .Append(Readable(engine, tokens))
             .Append(c, $"- Titles: {tokens.TitleStyle} ({TitleWords(style.TitleStyle)}), at the {RenderStyleBuilder.Words(style.TitlePosition)} of the safe area")
             .Append(" (input.style.titleX / titleY, 0–1).\n")
-            .Append(c, $"- Scenes without an image are drawn as {DrawWords(style.DrawStyle)}.\n")
+            .Append(Look(style))
             .Append(c, $"- Motion: {tokens.Motion}, {MotionWords(style.Motion)}.\n")
             .Append(c, $"- Safe area: {StyleLayout.SafeMargin * 100:0} % margin on every side")
             .Append(style.Subtitles ? string.Create(c, $"; the bottom {StyleLayout.SubtitleBottom * 100:0} % stays free for the subtitles.\n") : ".\n")
@@ -86,16 +86,41 @@ public static class VideoStylePrompt
         _ => string.Empty,
     };
 
-    /// <summary>The image prompt's drawing style, so the images match the code's drawings.</summary>
-    public static string ImageStyle(DrawStyle style) => style switch
+    /// <summary>
+    /// The image prompt's drawing style, so the images match the code's drawings (<see cref="DrawStyles"/>). <see cref="DrawStyle.Auto"/> has
+    /// none: the image prompt step chooses one (<see cref="Images.ImagePromptBuilder"/>); a style it chose in its own words is
+    /// <see cref="VideoStyle.ChosenStyle"/>.
+    /// </summary>
+    public static string ImageStyle(DrawStyle style) => DrawStyles.Of(style).ImagePrompt;
+
+    /// <summary>
+    /// The look lines of the template block (0.1.32): how scenes are drawn, the style's craft rules and the texture the app lays over the
+    /// picture. <see cref="DrawStyle.Auto"/>: the style chosen for this video in its own words (<see cref="VideoStyle.ChosenStyle"/>), or,
+    /// before any choice (a video without images), one style the code chooses for the topic and keeps in every scene.
+    /// </summary>
+    internal static string Look(VideoStyle style)
     {
-        DrawStyle.StickFigure => "minimal stick-figure illustration, simple line characters on a plain background",
-        DrawStyle.LineArt => "clean line art, thin ink lines, minimal shading",
-        DrawStyle.PaperCut => "layered paper cut-out illustration, soft shadows, craft paper texture",
-        DrawStyle.Infographic => "clean infographic-style illustration with simple icons and diagrams (no text)",
-        DrawStyle.Neon => "neon glow illustration, glowing lines on a dark background",
-        _ => "flat vector illustration, solid colours, simple shapes",
-    };
+        if (style.DrawStyle == DrawStyle.Auto)
+        {
+            return style.ChosenStyle.Length > 0
+                ? "- Look of every scene (chosen for this video): «" + Text.TextClean.OneLine(style.ChosenStyle, 200)
+                    + "»; draw scenes without an image in the same look.\n"
+                : "- Look: choose ONE drawing style that fits the topic (for example line art, pencil sketch, blueprint, paper cut-out or flat shapes) "
+                    + "and keep it in every scene.\n";
+        }
+
+        var definition = DrawStyles.Of(style.DrawStyle);
+        var text = new StringBuilder();
+        text.Append("- Scenes without an image are drawn as ").Append(definition.Drawing).Append(".\n")
+            .Append("- Craft: ").Append(definition.Craft).Append('\n');
+        if (definition.Texture != StyleTexture.None)
+        {
+            text.Append("- The app lays a faint ").Append(RenderStyleBuilder.Texture(definition.Texture))
+                .Append(" texture over the whole picture: never draw a texture, grain or scanlines yourself.\n");
+        }
+
+        return text.ToString();
+    }
 
     private static string TitleWords(TitleStyle style) => style switch
     {
@@ -104,16 +129,6 @@ public static class VideoStylePrompt
         TitleStyle.Underline => "text with a short accent line under it",
         TitleStyle.Boxed => "text in a rounded box in the accent colour, the text in the background colour",
         _ => "plain text in the text colour",
-    };
-
-    private static string DrawWords(DrawStyle style) => style switch
-    {
-        DrawStyle.StickFigure => "simple stick figures (round head, line body) acting out the idea",
-        DrawStyle.LineArt => "thin one-colour line drawings without fills",
-        DrawStyle.PaperCut => "layered paper cut-out shapes with soft shadows",
-        DrawStyle.Infographic => "an infographic: big numbers, simple charts, icons and arrows",
-        DrawStyle.Neon => "glowing accent lines on the dark background (a soft glow, no fills)",
-        _ => "flat shapes and simple icons in solid colours",
     };
 
     private static string MotionWords(MotionIntensity motion) => motion switch

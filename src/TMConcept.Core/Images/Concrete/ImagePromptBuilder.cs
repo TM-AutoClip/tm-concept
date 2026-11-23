@@ -17,9 +17,10 @@ public static partial class ImagePromptBuilder
 {
     /// <summary>
     /// The version of the prompt format, part of the key of a concept's kept prompts and images (<c>VideoPipeline</c>): kept prompts of another
-    /// format are not reused, so they always went through this format's check (2: numbered prompts, checked and repaired once, 20 Nov 2026).
+    /// format are not reused, so they always went through this format's check (2: numbered prompts, checked and repaired once, 20 Nov 2026; 3: a template without a style lets this step choose
+    /// one, 0.1.32).
     /// </summary>
-    public const string Version = "2";
+    public const string Version = "3";
 
     /// <summary>Longest prompt kept.</summary>
     public const int PromptMax = 400;
@@ -41,7 +42,15 @@ public static partial class ImagePromptBuilder
     {
         ArgumentNullException.ThrowIfNull(visuals);
         var text = new StringBuilder("Channel: «").Append(Clean(channel)).Append("»\n");
-        if (style is { } drawn)
+        if (style is Styles.DrawStyle.Auto)
+        {
+            // 0.1.32: no style given. The model picks the look that fits this channel and these scenes, a preset or its own words, says which
+            // in "style" and writes every prompt in it.
+            text.Append("No illustration style was chosen: choose ONE that fits this channel and these scenes and use it in every prompt. Prefer one ")
+                .Append("of these keys when it fits: ").Append(string.Join(", ", Styles.DrawStyles.Choosable.Select(d => d.Key)))
+                .Append("; otherwise describe your own style in at most 120 characters. Put the key or your description in \"style\".\n");
+        }
+        else if (style is { } drawn)
         {
             text.Append("Illustration style of every image: ").Append(Videos.VideoStylePrompt.ImageStyle(drawn)).Append(".\n");
         }
@@ -66,8 +75,36 @@ public static partial class ImagePromptBuilder
             + ", every prompt filled.";
     }
 
-    /// <summary>The answer schema (no minItems: the count is in the prompt and checked in code).</summary>
-    public static JsonObject Schema() => new()
+    /// <summary>
+    /// The answer schema (no minItems: the count is in the prompt and checked in code); <paramref name="chooseStyle"/> (a template without a
+    /// style, 0.1.32) adds the required "style" the model chose.
+    /// </summary>
+    public static JsonObject Schema(bool chooseStyle = false)
+    {
+        var schema = PromptSchema();
+        if (chooseStyle)
+        {
+            ((JsonObject)schema["properties"]!)["style"] = new JsonObject { ["type"] = "string" };
+            schema["required"] = new JsonArray("prompts", "style");
+        }
+
+        return schema;
+    }
+
+    /// <summary>
+    /// The style the model chose (<see cref="Schema"/> with a choice): the preset of a key it named, otherwise its own words (at most
+    /// <see cref="StyleMax"/> characters). No preset and empty words when the answer has none.
+    /// </summary>
+    public static (Styles.DrawStyle? Preset, string Words) ReadStyle(string? answer)
+    {
+        var value = ModelJson.TryParseObject(answer)?["style"] is JsonValue node && node.TryGetValue<string>(out var text) ? text.Trim() : string.Empty;
+        return Styles.DrawStyles.FindKey(value) is { } preset ? (preset.Style, string.Empty) : (null, Text.TextClean.OneLine(value, StyleMax));
+    }
+
+    /// <summary>Longest own style description kept.</summary>
+    public const int StyleMax = 160;
+
+    private static JsonObject PromptSchema() => new()
     {
         ["type"] = "object",
         ["properties"] = new JsonObject

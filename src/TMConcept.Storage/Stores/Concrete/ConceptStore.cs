@@ -34,6 +34,7 @@ public sealed class ConceptStore(ConceptDatabase database) : IConceptStore
                 Similarity = c.Similarity,
                 DuplicateNote = c.DuplicateNote,
                 Sources = c.Sources,
+                DrawStyle = c.DrawStyle,
                 CreatedAtUtc = c.CreatedAtUtc,
                 DecidedAtUtc = c.DecidedAtUtc,
                 TrashReason = c.TrashReason,
@@ -94,6 +95,13 @@ public sealed class ConceptStore(ConceptDatabase database) : IConceptStore
         var text = content.Replace("\0", string.Empty, StringComparison.Ordinal);
         await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
         await db.Concepts.Where(c => c.Id == id).ExecuteUpdateAsync(s => s.SetProperty(c => c.Content, text), cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task SetDrawStyleAsync(Guid id, Core.Styles.DrawStyle? style, CancellationToken cancellationToken)
+    {
+        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await db.Concepts.Where(c => c.Id == id).ExecuteUpdateAsync(s => s.SetProperty(c => c.DrawStyle, style), cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />

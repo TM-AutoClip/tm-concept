@@ -147,7 +147,21 @@ public sealed partial class VideoViewModel : PageViewModelBase
     /// next video, never to the one being made; nothing is produced while none is chosen.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StyleConceptNote), nameof(HasStyleConceptNote))]
     public partial VideoStyle? SelectedStyle { get; set; }
+
+    /// <summary>
+    /// 0.1.32: the chosen template's style changes how a concept should be written (the stick-figure narrator): a note that a concept written
+    /// for no style or another one can be adapted on the concepts page (AI edit → adapt to a style). Empty otherwise.
+    /// </summary>
+    public string StyleConceptNote => SelectedStyle is { } style && Core.Styles.DrawStyles.Of(style.DrawStyle).HasConceptGuidance
+        ? _text.Format("video.style.concept_note", _text.Has("style.draw." + style.DrawStyle.ToString().ToLowerInvariant())
+            ? _text["style.draw." + style.DrawStyle.ToString().ToLowerInvariant()]
+            : style.DrawStyle.ToString())
+        : string.Empty;
+
+    /// <summary>Whether <see cref="StyleConceptNote"/> is shown.</summary>
+    public bool HasStyleConceptNote => StyleConceptNote.Length > 0;
 
     /// <summary>There is no template yet (the picker says to make one in Settings).</summary>
     [ObservableProperty]

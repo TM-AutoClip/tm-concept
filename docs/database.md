@@ -60,6 +60,8 @@ What happens at the start (`SchemaUpgrader`, called by `Vault.OpenAsync`, `Vault
    branches of one version add a step each.
    `Version0129` (0.1.29: the profiles' sample images were removed) drops the `profile_images` table and needs no data step: nothing
    reads those rows any more.
+   `Version0132` (0.1.32: the concepts' `DrawStyle` column, the drawing style a concept was written for) needs none: an older concept
+   was written for no particular style (null).
 4. Build and run the tests: `SchemaUpgradeTests.TheAppsStepsMatchItsMappingAndANewFileRecordsThem` fails while the mapping and the steps
    differ (EF Core would also refuse to upgrade with pending model changes), and `CompiledModelTests` fails while the compiled model is old.
 5. Add a test that upgrades a file of the previous step with real data (see `SchemaUpgradeTests` for the pattern) when the step moves data.
