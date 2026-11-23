@@ -277,11 +277,26 @@ public sealed partial class ConceptsViewModel : PageViewModelBase
         Ideas.Clear();
         Documents.Clear();
         Research.Clear();
-        await Documents.Library.ProfileChangedAsync().ConfigureAwait(true);
-        await Detail.LoadAsync(null).ConfigureAwait(true);
-        await Settings.LoadAsync(_session.Profile, newProfile: true).ConfigureAwait(true);
+        using (_timer.Step("page.concepts.profile_changed.library", countConnections: true))
+        {
+            await Documents.Library.ProfileChangedAsync().ConfigureAwait(true);
+        }
+
+        using (_timer.Step("page.concepts.profile_changed.detail", countConnections: true))
+        {
+            await Detail.LoadAsync(null).ConfigureAwait(true);
+        }
+
+        using (_timer.Step("page.concepts.profile_changed.settings", countConnections: true))
+        {
+            await Settings.LoadAsync(_session.Profile, newProfile: true).ConfigureAwait(true);
+        }
+
         _loadedOnce = true;
-        await ReloadAsync().ConfigureAwait(true);
+        using (_timer.Step("page.concepts.profile_changed.reload", countConnections: true))
+        {
+            await ReloadAsync().ConfigureAwait(true);
+        }
     }
 
     /// <inheritdoc />
