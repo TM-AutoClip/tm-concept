@@ -79,7 +79,14 @@ public sealed class LeftoverSweeper(AppPaths paths, ILeftoverSweep sweep, ICompo
         var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(tools));
         if (!interrupted && parent is not null && Directory.Exists(parent))
         {
-            targets.AddRange(sweep.OldComponentFolders(tools, Folders(parent, name + ".*"), gate.Reinstalling));
+            var present = Directory.Exists(tools);
+            var old = sweep.OldComponentFolders(tools, Folders(parent, name + ".*"), gate.Reinstalling, present);
+            if (!present)
+            {
+                logger.LogWarning(LogEvents.OnScreen, "Start-up sweep: the components folder is not there; the old components folders next to it stay");
+            }
+
+            targets.AddRange(old);
         }
 
         var engines = Path.Combine(tools, LeftoverSweep.EnginesFolder);

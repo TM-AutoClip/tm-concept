@@ -222,13 +222,13 @@ public sealed class PythonInstaller(PythonLayout layout, IToolLocator tools, IPr
             }
             else
             {
-                logger.LogWarning("uv cache prune failed (exit code {Code}): {Output}", result.ExitCode, ChildOutput.Summary(result.LastLines));
+                logger.LogWarning(Core.Activity.LogEvents.OnScreen, "uv cache prune failed (exit code {Code}): {Output}", result.ExitCode, ChildOutput.Summary(result.LastLines));
             }
         }
         catch (Exception ex) when (ex is OperationCanceledException or IOException or UnauthorizedAccessException or InvalidOperationException
             or System.ComponentModel.Win32Exception)
         {
-            logger.LogWarning(ex, "uv cache prune could not run; the install is not affected");
+            logger.LogWarning(Core.Activity.LogEvents.OnScreen, ex, "uv cache prune could not run; the install is not affected");
         }
     }
 

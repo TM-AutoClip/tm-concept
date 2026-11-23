@@ -183,6 +183,9 @@ public sealed class ComponentReinstaller(ComponentPlanner planner, ComponentInst
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             logger.LogError(LogEvents.OnScreen, ex, "The old components folder could not be put back");
+
+            // 0.1.37: the old folder may be the only working copy; the start-up sweep keeps it for one more start.
+            gate.KeepMarker();
             var line = text.Format("components.reinstall.not_back", Location(aside));
             activity.Add(ActivityLevel.Error, line);
             return new InstallOutcome(false, Join(outcome.Reason, line));

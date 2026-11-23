@@ -18,11 +18,11 @@ public sealed partial class LeftoverSweep : ILeftoverSweep
     public const string TempFolder = "tmp";
 
     /// <inheritdoc />
-    public IReadOnlyList<string> OldComponentFolders(string tools, IEnumerable<string> folders, bool reinstalling)
+    public IReadOnlyList<string> OldComponentFolders(string tools, IEnumerable<string> folders, bool reinstalling, bool toolsPresent)
     {
         ArgumentException.ThrowIfNullOrEmpty(tools);
         ArgumentNullException.ThrowIfNull(folders);
-        if (reinstalling)
+        if (reinstalling || !toolsPresent)
         {
             return [];
         }

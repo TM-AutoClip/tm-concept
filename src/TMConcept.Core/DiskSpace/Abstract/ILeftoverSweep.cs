@@ -10,9 +10,10 @@ public interface ILeftoverSweep
     /// <summary>
     /// Of <paramref name="folders"/>, those that are an old components folder of <paramref name="tools"/>: a sibling of it whose name is exactly
     /// <c>&lt;tools name&gt;.old-yyyyMMdd-HHmmss</c> or <c>&lt;tools name&gt;.failed-yyyyMMdd-HHmmss</c>. None while a reinstall runs
-    /// (<paramref name="reinstalling"/>); <paramref name="tools"/> itself never.
+    /// (<paramref name="reinstalling"/>) and none while <paramref name="tools"/> is not there (<paramref name="toolsPresent"/> false: an old
+    /// folder may then be the only copy of the components); <paramref name="tools"/> itself never.
     /// </summary>
-    IReadOnlyList<string> OldComponentFolders(string tools, IEnumerable<string> folders, bool reinstalling);
+    IReadOnlyList<string> OldComponentFolders(string tools, IEnumerable<string> folders, bool reinstalling, bool toolsPresent);
 
     /// <summary>The temporary folder of each of <paramref name="engineFolders"/> that is a package folder right under <c>&lt;tools&gt;/engines</c>.</summary>
     IReadOnlyList<string> EngineTemps(string tools, IEnumerable<string> engineFolders);

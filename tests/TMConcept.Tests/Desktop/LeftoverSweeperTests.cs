@@ -89,4 +89,41 @@ public sealed class LeftoverSweeperTests
         Directory.Exists(old).ShouldBeFalse();
         Directory.Exists(failed).ShouldBeFalse();
     }
+
+    [Fact]
+    public async Task WithoutTheComponentsFolderTheOldFoldersStay()
+    {
+        using var h = new DesktopHarness();
+        var (old, failed, _, _, _) = Layout(h);
+        Directory.Delete(h.Paths.ToolsDirectory, recursive: true);
+
+        (await h.Get<ILeftoverSweeper>().SweepAsync(CancellationToken.None)).ShouldBe(0);
+        Directory.Exists(old).ShouldBeTrue("it may be the only copy of the components");
+        Directory.Exists(failed).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void AReinstallWhoseOldFolderCouldNotGoBackKeepsTheMarker()
+    {
+        using var h = new DesktopHarness();
+        var gate = h.Get<IComponentWorkGate>();
+
+        gate.KeepMarker();
+        gate.Reinstall().Dispose();
+
+        File.Exists(gate.MarkerFile).ShouldBeFalse("a keep outside a reinstall does nothing");
+
+        using (gate.Reinstall())
+        {
+            gate.KeepMarker();
+        }
+
+        File.Exists(gate.MarkerFile).ShouldBeTrue();
+        gate.Interrupted.ShouldBeTrue("the next start keeps the old folders once more");
+
+        gate.ForgetInterrupted();
+        gate.Reinstall().Dispose();
+
+        File.Exists(gate.MarkerFile).ShouldBeFalse("the keep holds for that one reinstall only");
+    }
 }

@@ -26,6 +26,12 @@ public interface IComponentWorkGate
     /// <summary>Holds the gate for a reinstall and writes the marker file until disposed.</summary>
     IDisposable Reinstall();
 
+    /// <summary>
+    /// The marker stays when the running reinstall ends (its old folder could not be put back in place): the next start then treats it as a
+    /// cut-short reinstall and keeps the old folders once more. Nothing when no reinstall of this process runs.
+    /// </summary>
+    void KeepMarker();
+
     /// <summary>Deletes a previous run's marker (<see cref="Interrupted"/>) so the next start sweeps again; nothing while a reinstall runs.</summary>
     void ForgetInterrupted();
 }

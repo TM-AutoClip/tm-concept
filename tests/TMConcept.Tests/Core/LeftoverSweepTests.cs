@@ -36,7 +36,7 @@ public sealed class LeftoverSweepTests
             Path.Combine(Path.GetTempPath(), "tools.old-20261116-120000"),
         ];
 
-        _sweep.OldComponentFolders(Tools, folders, reinstalling: false).ShouldBe(
+        _sweep.OldComponentFolders(Tools, folders, reinstalling: false, toolsPresent: true).ShouldBe(
         [
             Path.Combine(Data, "tools.failed-20261116-120501"),
             Path.Combine(Data, "tools.old-20261116-120000"),
@@ -47,13 +47,21 @@ public sealed class LeftoverSweepTests
     public void NothingIsSelectedWhileAReinstallRuns()
     {
         string[] folders = [Path.Combine(Data, "tools.old-20261116-120000"), Path.Combine(Data, "tools.failed-20261116-120501")];
-        _sweep.OldComponentFolders(Tools, folders, reinstalling: true).ShouldBeEmpty();
+        _sweep.OldComponentFolders(Tools, folders, reinstalling: true, toolsPresent: true).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void NothingIsSelectedWhileTheToolsFolderIsNotThere()
+    {
+        // A reinstall whose old folder could not go back (or a crash right after setting it aside): it may be the only copy of the components.
+        string[] folders = [Path.Combine(Data, "tools.old-20261116-120000"), Path.Combine(Data, "tools.failed-20261116-120501")];
+        _sweep.OldComponentFolders(Tools, folders, reinstalling: false, toolsPresent: false).ShouldBeEmpty();
     }
 
     [Fact]
     public void TheToolsFolderItselfIsNeverSelected()
     {
-        _sweep.OldComponentFolders(Tools, [Tools, Tools + Path.DirectorySeparatorChar, Data], reinstalling: false).ShouldBeEmpty();
+        _sweep.OldComponentFolders(Tools, [Tools, Tools + Path.DirectorySeparatorChar, Data], reinstalling: false, toolsPresent: true).ShouldBeEmpty();
         LeftoverSweep.Matches("tools", "tools").ShouldBeFalse();
         LeftoverSweep.Matches("tools", "tools.old-20261116-120000").ShouldBeTrue();
         LeftoverSweep.Matches("tools", "tools.failed-20261116-120000").ShouldBeTrue();

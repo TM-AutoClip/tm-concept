@@ -12,6 +12,7 @@ public sealed class ComponentWorkGate(AppPaths paths, ILogger<ComponentWorkGate>
     private readonly Lock _sync = new();
     private int _installs;
     private int _reinstalls;
+    private bool _keepMarker;
 
     /// <inheritdoc />
     public string MarkerFile => Path.TrimEndingDirectorySeparator(paths.ToolsDirectory) + MarkerSuffix;
@@ -77,10 +78,27 @@ public sealed class ComponentWorkGate(AppPaths paths, ILogger<ComponentWorkGate>
             {
                 if (--_reinstalls == 0)
                 {
-                    Delete();
+                    if (!_keepMarker)
+                    {
+                        Delete();
+                    }
+
+                    _keepMarker = false;
                 }
             }
         });
+    }
+
+    /// <inheritdoc />
+    public void KeepMarker()
+    {
+        lock (_sync)
+        {
+            if (_reinstalls > 0)
+            {
+                _keepMarker = true;
+            }
+        }
     }
 
     /// <inheritdoc />
