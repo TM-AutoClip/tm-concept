@@ -29,6 +29,7 @@ public sealed class SingleInstance : IDisposable
     private readonly FileStream? _lock;
     private readonly string _name;
     private readonly CancellationTokenSource _stop = new();
+    private int _disposed;
 
     private SingleInstance(FileStream? lockFile, string name)
     {
@@ -94,7 +95,13 @@ public sealed class SingleInstance : IDisposable
     /// The app is closing: a second start is no longer asked to wait for this window but waits for the lock (it is held until
     /// <see cref="Dispose"/>, after the exit work).
     /// </summary>
-    public void StopListening() => _stop.Cancel();
+    public void StopListening()
+    {
+        if (Volatile.Read(ref _disposed) == 0)
+        {
+            _stop.Cancel();
+        }
+    }
 
     /// <summary>
     /// Takes the lock once the instance holding it has ended, trying every half second for at most <paramref name="wait"/>; the result is
@@ -117,8 +124,14 @@ public sealed class SingleInstance : IDisposable
     }
 
     /// <inheritdoc />
+    /// <remarks>Once only: a canceled start frees the lock before the process ends (<see cref="Startup.StartupExit"/>).</remarks>
     public void Dispose()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
         _stop.Cancel();
         _lock?.Dispose();
         _stop.Dispose();

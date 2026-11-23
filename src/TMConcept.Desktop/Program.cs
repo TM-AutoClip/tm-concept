@@ -68,59 +68,35 @@ internal static class Program
         }
 
         timer.End("startup.options_and_lock");
-        timer.Begin("startup.services");
-        using var services = DesktopServices.Build(paths, s => s.AddSingleton<Updates.IAppEdition>(edition));
-        var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(Program));
-        var children = services.GetRequiredService<Engines.Processes.ChildProcessGuardBase>();
-        timer.End("startup.services");
-
-        // The models the repository's model catalog added (the kept copy, checked again; no network): before anything reads the model lists.
-        using (timer.Step("startup.catalog_saved"))
-        {
-            services.GetRequiredService<Catalog.RemoteCatalogUpdater>().ApplySaved();
-        }
-
-        // Linux has no job object: when the process is ending on an unhandled exception, the children (ffmpeg, Node, Chrome) are ended here
-        // or they would outlive the app.
-        services.GetRequiredService<CrashLog>().Attach(terminating: () => children.KillAll());
-        AppDomain.CurrentDomain.ProcessExit += (_, _) => children.KillAll();
-        logger.LogInformation("TM Concept {Version} ({Edition} edition) starting on {Os} ({Architecture}, {Runtime}); data folder: {Mode}", AppIdentity.Version,
-            edition.Kind == Updates.AppEditionKind.Installed ? "installed" : "portable", AppIdentity.Os, AppIdentity.Architecture, AppIdentity.Runtime,
-            options.DataDirectory is null ? "default" : "custom data folder");
-
-        // The lines measured so far are written after the start line, every later one at once.
-        timer.Attach(services.GetRequiredService<ILoggerFactory>().CreateLogger(StepTimer.Category));
-        using (timer.Step("startup.sweep_orphans"))
-        {
-            SweepOrphans(children, paths, logger);
-        }
-
-        instance.Logger = services.GetRequiredService<ILogger<SingleInstance>>();
-        instance.ShowRequested += (_, _) =>
-        {
-            logger.LogInformation("A second start asked for the window; showing it");
-            services.GetRequiredService<Startup.AppStartup>().ShowMainWindow();
-        };
-        App.Services = services;
-        bool graphicsCard;
+        // 0.1.38: only the small preferences file is read here (the renderer must be chosen before Avalonia starts, the splash needs the
+        // language); the services, the kept catalog and the orphan sweep run after the splash window is up (AppBoot).
+        UiPreferences preferences;
         using (timer.Step("startup.ui_preferences"))
         {
-            graphicsCard = services.GetRequiredService<UiPreferencesFile>().Read().UseGraphicsCard;
+            preferences = new UiPreferencesFile(paths, NullLogger<UiPreferencesFile>.Instance).Read();
         }
 
-        logger.LogInformation("Drawing with the {Renderer}", graphicsCard ? "graphics card" : "processor");
+        var boot = new Startup.AppBoot(paths, options, edition, instance, preferences);
+        instance.ShowRequested += (_, _) =>
+        {
+            boot.Services?.GetService<ILogger<SingleInstance>>()?.LogInformation("A second start asked for the window; showing it");
+            boot.ShowRequested();
+        };
+        App.Boot = boot;
         int exit;
         try
         {
             // Ended in App.OnFrameworkInitializationCompleted: the platform, the styles and the application object.
             timer.Begin(Startup.StartupSteps.Avalonia);
-            exit = BuildAvaloniaApp(graphicsCard).StartWithClassicDesktopLifetime(args);
+            exit = BuildAvaloniaApp(preferences.UseGraphicsCard).StartWithClassicDesktopLifetime(args);
         }
         catch (Exception ex)
         {
             // Written once here, as Critical; not thrown on (the process-wide handler would write the same crash a second time). The
-            // children end through ProcessExit, the services are disposed by the using above.
-            logger.LogCritical(ex, "The app stopped with an unhandled exception");
+            // children end through ProcessExit, the services are disposed below.
+            Log(boot)?.LogCritical(ex, "The app stopped with an unhandled exception");
+            Console.Error.WriteLine("TM Concept stopped: " + ex.GetType().Name + ": " + ex.Message);
+            boot.Services?.Dispose();
             return 1;
         }
         finally
@@ -129,10 +105,19 @@ internal static class Program
             instance.StopListening();
         }
 
-        FreeGraphicsCard(services, logger);
-        logger.LogInformation("TM Concept stopped (exit code {Exit})", exit);
+        if (boot.Services is { } services)
+        {
+            var logger = Log(boot)!;
+            FreeGraphicsCard(services, logger);
+            logger.LogInformation("TM Concept stopped (exit code {Exit})", exit);
+            services.Dispose();
+        }
+
         return exit;
     }
+
+    /// <summary>The program's logger once the services are built (null before).</summary>
+    private static ILogger? Log(Startup.AppBoot boot) => boot.Services?.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(Program));
 
     /// <summary>
     /// The time from the process's start until <c>Main</c> (a single-file program unpacks and the runtime starts and compiles first): the
@@ -257,23 +242,6 @@ internal static class Program
         }
 
         return next;
-    }
-
-    /// <summary>Ends processes an earlier run left in this app's tools folder (it was killed); a failure is logged, the start goes on.</summary>
-    private static void SweepOrphans(Engines.Processes.ChildProcessGuardBase children, AppPaths paths, ILogger logger)
-    {
-        try
-        {
-            var ended = children.SweepOrphans(paths.ToolsDirectory);
-            if (ended > 0)
-            {
-                logger.LogWarning("{Count} process(es) left by an earlier run were ended", ended);
-            }
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or IOException or UnauthorizedAccessException)
-        {
-            logger.LogError(ex, "Processes left by an earlier run could not be checked");
-        }
     }
 
     /// <summary>Avalonia app builder (also used by the designer).</summary>

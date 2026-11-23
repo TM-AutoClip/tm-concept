@@ -62,7 +62,13 @@ public sealed class Vault(IAppPaths paths, DatabaseKey key, IEnumerable<IKeyProt
     }
 
     /// <summary>Opens the database with the key file's protector; an exception with the reason when it cannot.</summary>
-    public async Task OpenAsync(CancellationToken cancellationToken)
+    public Task OpenAsync(CancellationToken cancellationToken) => OpenAsync(null, cancellationToken);
+
+    /// <summary>
+    /// Opens the database with the key file's protector; <paramref name="keyOpened"/> is called once the key is out of its protection, before
+    /// the database is checked and upgraded (the splash names the next stage). An exception with the reason when it cannot.
+    /// </summary>
+    public async Task OpenAsync(Action? keyOpened, CancellationToken cancellationToken)
     {
         var envelope = KeyFile.Read(paths.KeyFile) ?? throw new InvalidOperationException("There is no key file; the database was never created here.");
         var protector = _protectors.FirstOrDefault(p => p.Method == envelope.Method)
@@ -87,6 +93,7 @@ public sealed class Vault(IAppPaths paths, DatabaseKey key, IEnumerable<IKeyProt
             CryptographicOperations.ZeroMemory(dek);
         }
 
+        keyOpened?.Invoke();
         try
         {
             // Reading the schema state (tables, recorded steps, pragmas) is the check that the key opens the file; an older file is upgraded

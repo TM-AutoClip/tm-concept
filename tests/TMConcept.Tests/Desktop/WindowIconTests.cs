@@ -14,7 +14,7 @@ public sealed class WindowIconTests
     public static TheoryData<string> Windows() =>
     [
         nameof(MainWindow), nameof(FirstRunWindow), nameof(UnlockWindow), nameof(ConfirmWindow), nameof(ApiKeyWindow), nameof(InstallWindow),
-        nameof(ReportProblemWindow), nameof(PlayerWindow), nameof(UpdateWindow), nameof(WhatsNewWindow),
+        nameof(ReportProblemWindow), nameof(PlayerWindow), nameof(UpdateWindow), nameof(WhatsNewWindow), nameof(SplashWindow),
     ];
 
     private static Window Create(string name) => name switch
@@ -29,6 +29,7 @@ public sealed class WindowIconTests
         nameof(PlayerWindow) => new PlayerWindow(),
         nameof(UpdateWindow) => new UpdateWindow(),
         nameof(WhatsNewWindow) => new WhatsNewWindow(),
+        nameof(SplashWindow) => new SplashWindow(),
         _ => throw new ArgumentOutOfRangeException(nameof(name), name, null),
     };
 

@@ -1,0 +1,28 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:TMConcept.Desktop.ViewModels"
+        x:Class="TMConcept.Desktop.Views.SplashWindow"
+        x:DataType="vm:SplashViewModel"
+        Title="TM Concept"
+        Width="440" SizeToContent="Height" CanResize="False"
+        WindowDecorations="None"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource tm-surface}">
+  <Border BorderBrush="{DynamicResource tm-border-strong}" BorderThickness="1">
+    <StackPanel Margin="28,24" Spacing="14">
+      <StackPanel Orientation="Horizontal" Spacing="16">
+        <Image Source="avares://TMConcept/Assets/app-256.png" Width="56" Height="56" />
+        <StackPanel VerticalAlignment="Center" Spacing="4">
+          <TextBlock Name="TitleText" Text="{Binding Title}" Classes="h2" />
+          <TextBlock Name="StageLine" Text="{Binding StageText}" Classes="muted" />
+        </StackPanel>
+      </StackPanel>
+      <ProgressBar Name="Progress" Minimum="0" Maximum="{x:Static vm:SplashViewModel.StageCount}" Value="{Binding StageNumber}" IsVisible="{Binding !HasError}" />
+      <TextBlock Name="ErrorText" Text="{Binding Error}" Classes="error" TextWrapping="Wrap" IsVisible="{Binding HasError}" />
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Text="{Binding Version}" Classes="small muted" VerticalAlignment="Center" />
+        <Button Grid.Column="1" Name="CancelButton" Content="{Binding CancelText}" Command="{Binding CancelCommand}" />
+      </Grid>
+    </StackPanel>
+  </Border>
+</Window>

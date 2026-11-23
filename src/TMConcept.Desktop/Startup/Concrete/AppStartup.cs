@@ -22,8 +22,11 @@ namespace TMConcept.Desktop.Startup;
 /// <summary>
 /// Startup flow: first run (language → new start or restore → protection and backup password) · unlock (automatic keyring, or master
 /// password; an older database goes through the schema steps it lacks after a copy of it is kept; one this version cannot open is not
-/// changed: the unlock window says why, and for one made before upgrades were recorded offers to set it aside and start fresh) · main window. After the main window opens: old work files are cleaned, leftover install folders are swept in the background and the daily backup runs. Closing the main window
-/// ends the app; while a page works (a generation, a video render) it asks first and stops the work (its Node / Chrome / ffmpeg processes
+/// changed: the unlock window says why, and for one made before upgrades were recorded offers to set it aside and start fresh) · main window.
+/// It takes over from the splash window (<see cref="AppBoot"/>, 0.1.38): the automatic unlock, the database upgrade and the session load run
+/// off the interface thread, named on the splash; the splash closes when the first-run, unlock or main window opens. After the main window
+/// opens: the previous version's program file and old work files are removed, leftover install folders are swept and the daily backup runs,
+/// all in the background (the app is usable meanwhile). Closing the main window ends the app; while a page works (a generation, a video render) it asks first and stops the work (its Node / Chrome / ffmpeg processes
 /// are ended with it) before the app closes. An exception that reaches the interface thread is logged and shown instead of ending the app.
 /// Every step until the daily backup writes its time to the log (<c>startup.&lt;step&gt; &lt;ms&gt;</c>, <see cref="IStepTimer"/>);
 /// <c>startup.at.&lt;point&gt;</c> lines are the time since <c>Main</c> began.
@@ -34,13 +37,16 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
 {
     private IClassicDesktopStyleApplicationLifetime? _desktop;
     private Window? _main;
+    private StartupSplash? _splash;
     private bool _closeConfirmed;
 
-    /// <summary>Runs the flow.</summary>
-    public void Run(IClassicDesktopStyleApplicationLifetime desktop)
+    /// <summary>Runs the flow; <paramref name="splash"/> is the splash window the start shows until the next window opens.</summary>
+    public void Run(IClassicDesktopStyleApplicationLifetime desktop, StartupSplash splash)
     {
         ArgumentNullException.ThrowIfNull(desktop);
+        ArgumentNullException.ThrowIfNull(splash);
         _desktop = desktop;
+        _splash = splash;
         Dispatcher.UIThread.UnhandledException += (_, e) =>
         {
             // A command that throws (a storage error, a full disk) must not take the whole app down: logged with its cause and shown.
@@ -68,11 +74,14 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
         }
     }
 
-    /// <summary>Shows and activates the main window (second start).</summary>
+    /// <summary>
+    /// Shows and activates the main window (second start); before it opens, the splash, first-run or unlock window is brought to the front.
+    /// </summary>
     public void ShowMainWindow() => Dispatcher.UIThread.Post(() =>
     {
         if (_main is null)
         {
+            ((Window?)_splash?.Window ?? windows.Active)?.Activate();
             return;
         }
 
@@ -143,49 +152,110 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
         windows.Active = window;
         _desktop!.MainWindow = window;
         window.Show();
+        CloseSplash();
         timer.Mark("startup.at." + (window is FirstRunWindow ? "first_run_window" : "unlock_window"));
     }
 
+    /// <summary>The next window is up: the splash closes (never two start windows on top of each other).</summary>
+    private void CloseSplash()
+    {
+        if (_splash is { } splash)
+        {
+            _splash = null;
+            splash.Window.Finish();
+        }
+    }
+
+    /// <summary>
+    /// The keyring opens the database: the vault, the database upgrade and the session load run off the interface thread, named on the splash;
+    /// then the main window opens. A failure of the vault step opens the unlock window, any later one is shown on the splash.
+    /// </summary>
     private async Task OpenAutomaticAsync()
     {
+        var splash = _splash!;
+        var outcome = await splash.Sequence.RunAsync(
+        [
+            new StartupStep(StartupStage.Vault, OpenVaultAsync, VaultFailed),
+            new StartupStep(StartupStage.Session, _ => LoadSessionAsync()),
+        ], splash.Screen).ConfigureAwait(true);
+        if (outcome != StartupOutcome.Completed)
+        {
+            return;
+        }
+
         try
         {
-            using (timer.Step("startup.vault_open"))
-            {
-                await vault.OpenAsync(CancellationToken.None).ConfigureAwait(true);
-            }
-
-            await StartMainAsync().ConfigureAwait(true);
+            await OpenMainAsync().ConfigureAwait(true);
         }
-        catch (Storage.Database.DatabaseVersionException ex)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            logger.LogCritical(ex, "The main window could not be opened");
+            if (_splash is { } open)
+            {
+                // Before the main window was up: the splash says why and closes the app.
+                open.Screen.ShowError(StartupStage.Session, ex.Message);
+            }
+            else
+            {
+                activity.Add(ActivityLevel.Error, text.Format("error.generic", ex.Message));
+            }
+        }
+    }
+
+    private async Task OpenVaultAsync(IProgress<StartupStage> progress)
+    {
+        using (timer.Step("startup.vault_open"))
+        {
+            await vault.OpenAsync(() => progress.Report(StartupStage.Database), CancellationToken.None).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>The automatic unlock failed: the unlock window takes over (on the interface thread).</summary>
+    private bool VaultFailed(Exception ex)
+    {
+        if (ex is Storage.Database.DatabaseVersionException version)
         {
             // The key opened the file, but this version cannot use its schema: the unlock window says why and what can be done.
-            logger.LogCritical(ex, "The database was not opened: {Problem}", ex.Problem);
-            ShowUnlock(null, ex);
+            logger.LogCritical(ex, "The database was not opened: {Problem}", version.Problem);
+            ShowUnlock(null, version);
         }
-        catch (Exception ex)
+        else
         {
             // The keyring (DPAPI / Secret Service) failed: the key store cannot open the database; the master password window is the way left.
             logger.LogCritical(ex, "The database could not be opened automatically (key protection: {Method})", vault.Method);
             ShowUnlock(text.Format("unlock.automatic_failed", ex.Message), null);
         }
+
+        return true;
     }
 
-    private async Task StartMainAsync()
+    /// <summary>The settings, the selected profile and the local servers, then the kept prices (no network); off the interface thread.</summary>
+    private async Task LoadSessionAsync()
     {
         using (timer.Step("startup.session_load", countConnections: true))
         {
-            await session.LoadAsync(CancellationToken.None).ConfigureAwait(true);
+            await session.LoadAsync(CancellationToken.None).ConfigureAwait(false);
         }
 
-        text.Use(session.Settings.Language);
-        // Prices: the last good copies now (no network); a check for newer ones at most once a day, in the background (offline = built-in).
-        var prices = services.GetRequiredService<Providers.Pricing.PriceUpdater>();
         using (timer.Step("startup.prices_saved"))
         {
-            prices.LoadSaved();
+            services.GetRequiredService<Providers.Pricing.PriceUpdater>().LoadSaved();
         }
+    }
 
+    /// <summary>After the first run or the master password: the session loads in the background, then the main window opens.</summary>
+    private async Task StartMainAsync()
+    {
+        await Task.Run(LoadSessionAsync).ConfigureAwait(true);
+        await OpenMainAsync().ConfigureAwait(true);
+    }
+
+    private async Task OpenMainAsync()
+    {
+        text.Use(session.Settings.Language);
+        // Prices: the last good copies were loaded with the session; a check for newer ones at most once a day, in the background (offline =
+        // built-in).
+        var prices = services.GetRequiredService<Providers.Pricing.PriceUpdater>();
         _ = Task.Run(async () =>
         {
             try
@@ -237,16 +307,21 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
             windows.Active = window;
             _desktop!.MainWindow = window;
             window.Show();
+            CloseSplash();
         }
 
         timer.Mark("startup.at.main_window");
 
         // Only now (the database is open and upgraded, the main window is up) is the previous version's program file of an update removed:
-        // until here a failed start could still go back to it.
-        using (timer.Step("startup.self_replacer_cleanup"))
+        // until here a failed start could still go back to it. In the background (a file delete never holds the window up).
+        var replacer = services.GetRequiredService<Updates.SelfReplacer>();
+        _ = Task.Run(() =>
         {
-            services.GetRequiredService<Updates.SelfReplacer>().CleanUp();
-        }
+            using (timer.Step("startup.self_replacer_cleanup"))
+            {
+                replacer.CleanUp();
+            }
+        });
 
         using (timer.Step("startup.shell_start", countConnections: true))
         {
@@ -300,10 +375,14 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
 
         try
         {
-            using (timer.Step("startup.clean_work"))
+            var pipeline = services.GetRequiredService<Core.Videos.VideoPipeline>();
+            await Task.Run(() =>
             {
-                services.GetRequiredService<Core.Videos.VideoPipeline>().CleanWork();
-            }
+                using (timer.Step("startup.clean_work"))
+                {
+                    pipeline.CleanWork();
+                }
+            }).ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -315,14 +394,15 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
             string? made;
             using (timer.Step("startup.daily_backup", countConnections: true))
             {
-                made = await backup.RunDailyAsync(CancellationToken.None).ConfigureAwait(true);
+                // Off the interface thread: the app is usable while the backup is made.
+                made = await Task.Run(() => backup.RunDailyAsync(CancellationToken.None)).ConfigureAwait(true);
             }
 
             if (made is not null)
             {
                 activity.Add(ActivityLevel.Info, text["backup.daily_done"]);
             }
-            else if (!await backup.HasPasswordAsync(CancellationToken.None).ConfigureAwait(true))
+            else if (!await Task.Run(() => backup.HasPasswordAsync(CancellationToken.None)).ConfigureAwait(true))
             {
                 activity.Add(ActivityLevel.Warning, text["backup.no_password"]);
             }
