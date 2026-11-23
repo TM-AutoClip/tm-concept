@@ -84,15 +84,30 @@ public sealed class AppBoot
 
     private async Task StartAsync(IClassicDesktopStyleApplicationLifetime desktop)
     {
-        // Loaded while Avalonia started; normally done already.
-        var texts = await _texts.ConfigureAwait(true);
-        var sequence = new StartupSequence(new StartupExit(() => Services, _instance));
-        var model = new SplashViewModel(texts, sequence);
-        var splash = new SplashWindow { DataContext = model };
-        Os.TaskbarIcon.ApplyWhenOpen(splash, NullLogger.Instance);
-        _splash = splash;
-        desktop.MainWindow = splash;
-        splash.Show();
+        StartupSequence sequence;
+        SplashViewModel model;
+        SplashWindow splash;
+        try
+        {
+            // Loaded while Avalonia started; normally done already.
+            var texts = await _texts.ConfigureAwait(true);
+            sequence = new StartupSequence(new StartupExit(() => Services, _instance));
+            model = new SplashViewModel(texts, sequence);
+            splash = new SplashWindow { DataContext = model };
+            Os.TaskbarIcon.ApplyWhenOpen(splash, NullLogger.Instance);
+            _splash = splash;
+            desktop.MainWindow = splash;
+            splash.Show();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // No window could open (the texts, the splash): the app ends on Shutdown only, so without this it would stay running unseen,
+            // holding the data folder's lock. The log file is not open yet (no services): the reason goes to the error output.
+            Console.Error.WriteLine("TM Concept could not show its start window: " + ex.GetType().Name + ": " + ex.Message);
+            desktop.Shutdown(1);
+            return;
+        }
+
         _timer.Mark("startup.at.splash");
 
         try
@@ -122,7 +137,7 @@ public sealed class AppBoot
         {
             // The interface part of the start failed (the services are built): written once and shown on the splash, which then closes the app.
             Services?.GetService<ILogger<AppBoot>>()?.LogCritical(ex, "The start failed");
-            model.ShowError(model.Stage, ex.Message);
+            sequence.Fail(model, model.Stage, ex.Message);
         }
     }
 

@@ -174,6 +174,23 @@ public sealed class StartupSequenceTests
         ran.ShouldBeEmpty();
     }
 
+    [Fact]
+    public async Task AFailureAfterTheStepsIsShownAndCloseEndsWithAnErrorCode()
+    {
+        // Opening the main window failed after every step ended well: shown on the splash like a failed step, and Close ends with code 1.
+        var exit = new FakeExit();
+        var screen = new FakeScreen();
+        var sequence = new StartupSequence(exit);
+        (await sequence.RunAsync([Step(StartupStage.Session, [])], screen)).ShouldBe(StartupOutcome.Completed);
+
+        sequence.Fail(screen, StartupStage.Session, "no window");
+        sequence.Cancel();
+
+        sequence.Failed.ShouldBeTrue();
+        screen.Errors.ShouldBe([(StartupStage.Session, "no window")]);
+        exit.Calls.ShouldBe(["kill", "lock", "end 1"]);
+    }
+
     [AvaloniaFact]
     public void TheSplashNamesTheStageAndAfterAFailureShowsWhyWithClose()
     {

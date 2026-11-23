@@ -24,8 +24,9 @@ namespace TMConcept.Desktop.Startup;
 /// password; an older database goes through the schema steps it lacks after a copy of it is kept; one this version cannot open is not
 /// changed: the unlock window says why, and for one made before upgrades were recorded offers to set it aside and start fresh) · main window.
 /// It takes over from the splash window (<see cref="AppBoot"/>, 0.1.38): the automatic unlock, the database upgrade and the session load run
-/// off the interface thread, named on the splash; the splash closes when the first-run, unlock or main window opens. After the main window
-/// opens: the previous version's program file and old work files are removed, leftover install folders are swept and the daily backup runs,
+/// off the interface thread, named on the splash (old work files are cleaned with the session, before any page can start a run); the splash
+/// closes when the first-run, unlock or main window opens. After the main window opens: the previous version's program file is removed,
+/// leftover install folders are swept and the daily backup runs,
 /// all in the background (the app is usable meanwhile). Closing the main window ends the app; while a page works (a generation, a video render) it asks first and stops the work (its Node / Chrome / ffmpeg processes
 /// are ended with it) before the app closes. An exception that reaches the interface thread is logged and shown instead of ending the app.
 /// Every step until the daily backup writes its time to the log (<c>startup.&lt;step&gt; &lt;ms&gt;</c>, <see cref="IStepTimer"/>);
@@ -192,8 +193,8 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
             logger.LogCritical(ex, "The main window could not be opened");
             if (_splash is { } open)
             {
-                // Before the main window was up: the splash says why and closes the app.
-                open.Screen.ShowError(StartupStage.Session, ex.Message);
+                // Before the main window was up: the splash says why and closes the app (with exit code 1).
+                open.Sequence.Fail(open.Screen, StartupStage.Session, ex.Message);
             }
             else
             {
@@ -229,7 +230,10 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
         return true;
     }
 
-    /// <summary>The settings, the selected profile and the local servers, then the kept prices (no network); off the interface thread.</summary>
+    /// <summary>
+    /// The settings, the selected profile and the local servers, then the kept prices (no network) and the old work files; off the interface
+    /// thread, before the main window opens.
+    /// </summary>
     private async Task LoadSessionAsync()
     {
         using (timer.Step("startup.session_load", countConnections: true))
@@ -240,6 +244,28 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
         using (timer.Step("startup.prices_saved"))
         {
             services.GetRequiredService<Providers.Pricing.PriceUpdater>().LoadSaved();
+        }
+
+        CleanWork();
+    }
+
+    /// <summary>
+    /// The work files a closed or killed run left (<see cref="Core.Videos.VideoPipeline.CleanWork"/>): before the main window opens, so no
+    /// video, listen or sample a page starts can own one of them yet (0.1.38 moved it off the interface thread; after the window it would
+    /// race the first run). A failure is logged, the start goes on.
+    /// </summary>
+    private void CleanWork()
+    {
+        try
+        {
+            using (timer.Step("startup.clean_work"))
+            {
+                services.GetRequiredService<Core.Videos.VideoPipeline>().CleanWork();
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarning(ex, "Old work files could not be cleaned");
         }
     }
 
@@ -372,22 +398,6 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
 
         // A newer version of the app (at most once a day, when it is not turned off): offered in a window, installed only on confirmation.
         _ = OfferUpdateAsync();
-
-        try
-        {
-            var pipeline = services.GetRequiredService<Core.Videos.VideoPipeline>();
-            await Task.Run(() =>
-            {
-                using (timer.Step("startup.clean_work"))
-                {
-                    pipeline.CleanWork();
-                }
-            }).ConfigureAwait(true);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            logger.LogWarning(ex, "Old work files could not be cleaned");
-        }
 
         try
         {

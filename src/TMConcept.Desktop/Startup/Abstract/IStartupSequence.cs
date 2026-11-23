@@ -16,6 +16,12 @@ public interface IStartupSequence
     Task<StartupOutcome> RunAsync(IReadOnlyList<StartupStep> steps, IStartupScreen screen);
 
     /// <summary>
+    /// A part of the start outside the steps failed (opening the main window): marked as failed like a failed step (Close then ends with exit
+    /// code 1) and <paramref name="message"/> is shown on <paramref name="screen"/>. On the interface thread.
+    /// </summary>
+    void Fail(IStartupScreen screen, StartupStage stage, string message);
+
+    /// <summary>
     /// Ends the start: the child processes, then the data folder's lock, then the process. Safe at any step: the database is upgraded on a
     /// working copy that replaces the file only once it is complete, so a cut-short upgrade leaves the file as it was.
     /// </summary>

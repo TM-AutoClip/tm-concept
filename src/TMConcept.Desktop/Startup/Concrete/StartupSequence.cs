@@ -40,13 +40,20 @@ public sealed class StartupSequence(IStartupExit exit) : IStartupSequence
                     return StartupOutcome.Redirected;
                 }
 
-                Failed = true;
-                screen.ShowError(step.Stage, ex.Message);
+                Fail(screen, step.Stage, ex.Message);
                 return StartupOutcome.Failed;
             }
         }
 
         return Volatile.Read(ref _canceled) != 0 ? StartupOutcome.Canceled : StartupOutcome.Completed;
+    }
+
+    /// <inheritdoc />
+    public void Fail(IStartupScreen screen, StartupStage stage, string message)
+    {
+        ArgumentNullException.ThrowIfNull(screen);
+        Failed = true;
+        screen.ShowError(stage, message);
     }
 
     /// <inheritdoc />
