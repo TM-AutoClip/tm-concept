@@ -99,7 +99,7 @@ public sealed class ConceptSceneTests
         english.System.ShouldContain("about 13.5 s of speech, never more than 65 words or 25 s", Case.Sensitive,
             "25 s at 2.6 words a second is the most, the target per scene is 13.5 s (one figure only made a small model write long scenes)");
         turkish.System.ShouldContain("yaklaşık 4 sahne yaz (yaklaşık 13.5 sn'de bir sahne; en az 3)");
-        turkish.System.ShouldContain("yaklaşık 13.5 sn konuşma, asla 57 kelimeden ya da 25 sn'den uzun değil");
+        turkish.System.ShouldContain("yaklaşık 13.5 sn konuşma, asla 45 kelimeden ya da 25 sn'den uzun değil");
         english.User.ShouldContain("\"sahneler\":[{\"ekranda\":\"…\",\"seslendirme\":\"…\"}]");
         english.System.ShouldNotContain("{");
         var schema = english.Schema.ToJsonString();

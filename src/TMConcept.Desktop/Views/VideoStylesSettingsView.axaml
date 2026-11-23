@@ -236,6 +236,15 @@
                             </DataTemplate>
                           </ComboBox.ItemTemplate>
                         </ComboBox>
+                        <TextBlock Text="{DynamicResource styles.tempo}" VerticalAlignment="Center" />
+                        <ComboBox Name="StyleTempo" ItemsSource="{Binding Tempos}" SelectedItem="{Binding Tempo}" MinWidth="140"
+                                  ToolTip.Tip="{DynamicResource styles.tempo.tip}">
+                          <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:NumberChoice">
+                              <TextBlock Text="{Binding Label}" />
+                            </DataTemplate>
+                          </ComboBox.ItemTemplate>
+                        </ComboBox>
                       </WrapPanel>
                     </Grid>
                   </StackPanel>

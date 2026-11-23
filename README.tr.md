@@ -467,6 +467,8 @@ Bir şablonla (Ayarlar → Şablonlar) üretilen video, modelin iyi niyetine kal
   *Ekranda*: videonun sonuna birkaç sessiz saniye eklenir ve orada profilin kanal fotoğrafı (profilde varsa, yuvarlak), kanal adı, cümle
   ve bir düğmeyle bir kapanış kartı çıkar; kart son sahneyi ya da anlatımını hiç örtmez. Seslendirme kapalıysa sesli kapanış kartta gösterilir.
 - **Çizim tarzı:** görseli olmayan sahneler şablonun tarzında çizilir, üretilen görseller de aynı tarzda istenir.
+- **Anlatım temposu:** seslendirme cümle cümle okunur; her cümleden sonra bir duraklama, sahneler arasında daha uzun bir ara olur:
+  *Sıkı*, *Doğal* (varsayılan) ya da *Rahat*. Kendi duraklama yer tutucuların bunun üstüne eklenir.
 - Saklanan koddan yapılan yeni bir sürüm, videonun üretildiği şablonu korur.
 
 ## Güncelleme

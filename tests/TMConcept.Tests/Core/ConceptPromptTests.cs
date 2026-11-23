@@ -27,7 +27,7 @@ public sealed class ConceptPromptTests
         prompt.System.ShouldStartWith("Bir video kanalı için doğru bilgiye dayanan");
         prompt.System.ShouldContain("KANALIN İÇERİĞİ: «A thousand years of Byzantium.»");
         prompt.System.ShouldContain("KANALIN İÇERİĞİ en önemli girdidir: her konsept onun kapsamında");
-        prompt.System.ShouldContain("dikey kısa video; hedef süre 60 sn ≈ 138 kelime");
+        prompt.System.ShouldContain("dikey kısa video; hedef süre 60 sn ≈ 108 kelime");
         prompt.System.ShouldNotContain("Nika", Case.Sensitive, "the history changes every batch, so it stays out of the cached part");
         prompt.User.ShouldStartWith("İŞLENENLER — 2 konsept");
         prompt.User.ShouldContain(":\n- Rum ateşi\n- Nika İsyanı\n", Case.Sensitive, "newest first, one per line under the heading");

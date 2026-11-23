@@ -46,7 +46,7 @@ public sealed class OutputLanguageTests
         prompt.System.ShouldStartWith("Bir video kanalı için doğru bilgiye dayanan");
         prompt.System.ShouldContain("her \"ekranda\" metnini Türkçe yaz");
         prompt.System.ShouldContain("yanıtı yalnız Türkçe yaz");
-        prompt.System.ShouldContain("≈ 138 kelime Türkçe seslendirme");
+        prompt.System.ShouldContain("≈ 108 kelime Türkçe seslendirme");
     }
 
     [Fact]
@@ -68,7 +68,7 @@ public sealed class OutputLanguageTests
     [Fact]
     public void RatesFollowTheLanguageAndAnUnknownCodeGetsEnglishRates()
     {
-        ConceptPromptBuilder.Words(ContentLanguages.Turkish, 60).ShouldBe(138, "kept from before");
+        ConceptPromptBuilder.Words(ContentLanguages.Turkish, 60).ShouldBe(108, "1.8 words per second with the pauses (0.1.31)");
         ConceptPromptBuilder.Words(ContentLanguages.English, 60).ShouldBe(156, "kept from before");
         ConceptPromptBuilder.Words(ContentLanguages.Spanish, 60).ShouldBe(156);
         ConceptPromptBuilder.Words(ContentLanguages.Russian, 60).ShouldBe(126);

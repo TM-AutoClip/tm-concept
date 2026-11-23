@@ -474,6 +474,8 @@ A video made with a template (Settings → Templates) follows it without relying
   photo (round, when the profile has one), the channel name, the sentence and a button, so the card never covers the last scene or its
   narration. With narration off a spoken closing is shown on the card instead.
 - **Drawing style:** scenes without an image are drawn in the template's style, and generated images are asked for in the same style.
+- **Narration tempo:** the narration is spoken sentence by sentence with a pause after every sentence and a longer one between scenes:
+  *Tight*, *Natural* (default) or *Relaxed*. Your own pause placeholders are added on top.
 - A new version made from the kept code keeps the template the video was made with.
 
 ## Update

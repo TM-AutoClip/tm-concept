@@ -62,6 +62,12 @@ public sealed class VideoStyle
     /// <summary>How much things move.</summary>
     public MotionIntensity Motion { get; set; } = MotionIntensity.Normal;
 
+    /// <summary>
+    /// The narration's breathing room (0.1.31): the silence after every sentence and between scenes (<see cref="Speech.NarrationTempos"/>). A
+    /// template saved before has none in its JSON and reads as the default.
+    /// </summary>
+    public Speech.NarrationTempo Tempo { get; set; } = Speech.NarrationTempos.Default;
+
     /// <summary>Where the closing call to action goes.</summary>
     public ClosingPlacement Closing { get; set; } = ClosingPlacement.Off;
 

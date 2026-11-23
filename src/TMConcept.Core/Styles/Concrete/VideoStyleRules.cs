@@ -187,13 +187,19 @@ public static class VideoStyleRules
 
         if (!Enum.IsDefined(style.TitleStyle) || !Enum.IsDefined(style.TitlePosition) || !Enum.IsDefined(style.DrawStyle) ||
             !Enum.IsDefined(style.Motion) || !Enum.IsDefined(style.Closing) || !Enum.IsDefined(style.ClosingPhrase) ||
-            !Enum.IsDefined(style.ClosingPlatform) || !Enum.IsDefined(style.FontEmphasis))
+            !Enum.IsDefined(style.ClosingPlatform) || !Enum.IsDefined(style.FontEmphasis) || !Enum.IsDefined(style.Tempo))
         {
             problems.Add(VideoStyleProblem.UnknownValue);
         }
 
         return problems;
     }
+
+    /// <summary>
+    /// The silences the narration of a video gets (0.1.31): the template's tempo, the default tempo for a video without a template, none for a
+    /// silent video (nothing to pause between).
+    /// </summary>
+    public static Speech.NarrationPacing Pacing(VideoStyle? style) => Speech.NarrationTempos.Of(style?.Tempo ?? Speech.NarrationTempos.Default);
 
     /// <summary>A deep copy (through the source-generated JSON, so a field added later is copied too).</summary>
     public static VideoStyle Copy(VideoStyle style)

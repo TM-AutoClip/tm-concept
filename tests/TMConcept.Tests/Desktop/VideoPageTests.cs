@@ -834,11 +834,13 @@ public sealed class VideoPageTests
         var record = await RunAsync(h, concept, new VideoOptions { Engine = engine.Kind, Speech = true });
 
         var folder = LibraryPaths.Resolve(h.Get<IAppPaths>().LibraryDirectory, record.Folder);
-        foreach (var clip in Directory.GetFiles(Path.Combine(folder, VideoFolders.Audio), "*.wav"))
-        {
-            // One second spoken at 1.5 times its speed: about 667 ms.
-            TMConcept.Core.Speech.WaveFile.DurationMs(clip).ShouldBeInRange(640, 690, Path.GetFileName(clip));
-        }
+        var clips = Directory.GetFiles(Path.Combine(folder, VideoFolders.Audio), "*.wav");
+        // Every sentence is one second spoken at 1.5 times its speed (about 667 ms); the natural tempo adds its sentence silence between the
+        // sentences of a scene and its scene silence after each scene (0.1.31).
+        var pacing = TMConcept.Core.Speech.NarrationTempos.Of(TMConcept.Core.Speech.NarrationTempo.Natural);
+        var sentences = voice.Requests.Count;
+        var expected = (sentences * 667) + ((sentences - clips.Length) * pacing.SentenceGapMs) + (clips.Length * pacing.SceneGapMs);
+        clips.Sum(TMConcept.Core.Speech.WaveFile.DurationMs).ShouldBeInRange(expected - (25 * sentences), expected + (25 * sentences));
     }
 
     [AvaloniaFact]

@@ -5,6 +5,7 @@ using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TMConcept.Core.Profiles;
+using TMConcept.Core.Speech;
 using TMConcept.Core.Styles;
 using TMConcept.Desktop.Localization;
 using TMConcept.Desktop.Videos;
@@ -46,6 +47,7 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         TitleStyles = Choices<TitleStyle>("style.title.");
         DrawStyles = Choices<DrawStyle>("style.draw.");
         Motions = Choices<MotionIntensity>("style.motion.");
+        Tempos = Choices<NarrationTempo>("style.tempo.");
         Placements = Choices<ClosingPlacement>("style.closing.");
         Platforms = Choices<ClosingPlatform>("style.platform.");
         TitleCells = Enum.GetValues<TitlePosition>().Select(p => new TitleCellViewModel(p, Label("style.position." + Key(p), p.ToString()))).ToList();
@@ -70,6 +72,7 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         TitleStyle = Pick(TitleStyles, (int)_source.TitleStyle);
         DrawStyle = Pick(DrawStyles, (int)_source.DrawStyle);
         Motion = Pick(Motions, (int)_source.Motion);
+        Tempo = Pick(Tempos, (int)_source.Tempo);
         Closing = Pick(Placements, (int)_source.Closing);
         Platform = Pick(Platforms, (int)_source.ClosingPlatform);
         Phrases = PhraseChoices((ClosingPlatform)Platform.Value);
@@ -161,6 +164,9 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
     /// <summary>Motion intensities.</summary>
     public IReadOnlyList<NumberChoice> Motions { get; }
 
+    /// <summary>Narration tempos (0.1.31).</summary>
+    public IReadOnlyList<NumberChoice> Tempos { get; }
+
     /// <summary>Where the closing goes (off, voice, screen, both).</summary>
     public IReadOnlyList<NumberChoice> Placements { get; }
 
@@ -229,6 +235,10 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
     /// <summary>Motion intensity.</summary>
     [ObservableProperty]
     public partial NumberChoice Motion { get; set; }
+
+    /// <summary>Narration tempo: the silences between sentences and scenes.</summary>
+    [ObservableProperty]
+    public partial NumberChoice Tempo { get; set; }
 
     /// <summary>Closing placement.</summary>
     [ObservableProperty]
@@ -326,6 +336,7 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         style.TitlePosition = Position;
         style.DrawStyle = (DrawStyle)DrawStyle.Value;
         style.Motion = (MotionIntensity)Motion.Value;
+        style.Tempo = (NarrationTempo)Tempo.Value;
         style.Closing = (ClosingPlacement)Closing.Value;
         style.ClosingPlatform = (ClosingPlatform)Platform.Value;
         style.ClosingPhrase = (ClosingPhrase)(Phrase?.Value ?? 0);

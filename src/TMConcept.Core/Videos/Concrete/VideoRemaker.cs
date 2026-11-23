@@ -93,10 +93,11 @@ public sealed class VideoRemaker(IEnumerable<IVideoEngine> engines, SceneNarrato
             {
                 var skipped = 0;
                 var count = input.Scenes.Count;
+                var pacing = Styles.VideoStyleRules.Pacing(Options(source.Record).Style);
                 steps.Report(VideoSteps.Speech, 0, done: 0, total: count);
                 for (var i = 0; i < count; i++)
                 {
-                    var (clip, words) = await SceneVoiceAsync(voice, job.Profile.ContentLanguage, i + 1, job.SceneTexts[i], work, steps, id, cancellationToken)
+                    var (clip, words) = await SceneVoiceAsync(voice, job.Profile.ContentLanguage, i + 1, job.SceneTexts[i], work, pacing, steps, id, cancellationToken)
                         .ConfigureAwait(false);
                     skipped += words;
                     clips.Add(clip);
@@ -245,12 +246,12 @@ public sealed class VideoRemaker(IEnumerable<IVideoEngine> engines, SceneNarrato
 
     /// <summary>One scene's new clip (<see cref="SceneNarrator"/>), with what it cost spent in <paramref name="steps"/>; a voice that fails stops the version.</summary>
     private async Task<(SpeechClip? Clip, int Skipped)> SceneVoiceAsync(SpeechSetup voice, string language, int number, string text, string work,
-        VideoStepProgress steps, Guid id, CancellationToken cancellationToken)
+        NarrationPacing pacing, VideoStepProgress steps, Guid id, CancellationToken cancellationToken)
     {
         decimal cost = 0;
         try
         {
-            var clip = await narrator.VoiceAsync(voice, language, number, text, work, usd => cost += usd, cancellationToken).ConfigureAwait(false);
+            var clip = await narrator.VoiceAsync(voice, language, number, text, work, pacing, usd => cost += usd, cancellationToken).ConfigureAwait(false);
             return (clip, clip?.SkippedWords.Count ?? 0);
         }
         catch (Exception ex) when (ex is SpeechException or InvalidDataException)

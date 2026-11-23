@@ -53,8 +53,8 @@ public static class ContentLanguages
         ["the", "a", "an", "and", "or", "of", "in", "on", "to", "for", "with", "by", "is", "was", "how", "why", "what", "who", "part", "episode"];
 
     /// <summary>
-    /// Every output language, in the order of the profile page. Turkish and English keep the rates the estimates used before (2.3 / 2.6 words
-    /// per second; 7.5 / 6.0 characters per word). The others: German and Swedish have long compound words (fewer, longer words per second),
+    /// Every output language, in the order of the profile page. Turkish 1.8 words per second (0.1.31, with the narration's pauses; 2.3
+    /// before), English 2.6; 7.5 / 6.0 characters per word. The others: German and Swedish have long compound words (fewer, longer words per second),
     /// Polish, Russian and Indonesian long multi-syllable words; Spanish, French and Italian are spoken fast with short words.
     /// </summary>
     public static readonly IReadOnlyList<OutputLanguage> Definitions =

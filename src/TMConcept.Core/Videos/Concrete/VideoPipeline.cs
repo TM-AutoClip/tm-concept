@@ -182,11 +182,12 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
             try
             {
                 var count = scenes.Count;
+                var pacing = Styles.VideoStyleRules.Pacing(options.Style);
                 steps.Report(VideoSteps.Speech, 0, done: 0, total: count);
                 for (var i = 0; i < count; i++)
                 {
                     // The scene's script: its pauses and speed placeholders are applied exactly as in a new version.
-                    var clip = await SceneVoiceAsync(voice!, profile.ContentLanguage, i + 1, scenes[i].Script, work, steps, id, cancellationToken)
+                    var clip = await SceneVoiceAsync(voice!, profile.ContentLanguage, i + 1, scenes[i].Script, work, pacing, steps, id, cancellationToken)
                         .ConfigureAwait(false);
                     clips.Add(clip);
                     steps.Report(VideoSteps.Speech, (i + 1.0) / count, done: i + 1, total: count);
@@ -378,13 +379,13 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
     /// One scene's clip (<see cref="SceneNarrator"/>); what an online voice charged for it is spent at once, also when the clip fails or is
     /// canceled halfway (the parts made before were paid for).
     /// </summary>
-    private async Task<SpeechClip?> SceneVoiceAsync(SpeechSetup voice, string language, int number, string script, string work, VideoStepProgress steps,
-        Guid id, CancellationToken cancellationToken)
+    private async Task<SpeechClip?> SceneVoiceAsync(SpeechSetup voice, string language, int number, string script, string work, NarrationPacing pacing,
+        VideoStepProgress steps, Guid id, CancellationToken cancellationToken)
     {
         decimal cost = 0;
         try
         {
-            return await narrator.VoiceAsync(voice, language, number, script, work, usd => cost += usd, cancellationToken).ConfigureAwait(false);
+            return await narrator.VoiceAsync(voice, language, number, script, work, pacing, usd => cost += usd, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
