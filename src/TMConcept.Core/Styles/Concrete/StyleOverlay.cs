@@ -53,6 +53,7 @@ public static class StyleOverlay
         var background = SubtitleBuilder.AssColour(palette.Background);
         var accent = SubtitleBuilder.AssColour(palette.Accent);
         var edge = Edge(style, palette, size);
+        var (highlightOn, highlightOff) = WordHighlight.Tags(style, palette, edge);
         var ass = new StringBuilder();
         ass.Append("[Script Info]\nScriptType: v4.00+\nWrapStyle: 0\nScaledBorderAndShadow: yes\n")
             .Append(c, $"PlayResX: {width}\nPlayResY: {height}\n\n")
@@ -78,9 +79,24 @@ public static class StyleOverlay
                 }
 
                 var need = style.ReadableText && needs is not null && i < needs.Count ? needs[i] : TextBackdropNeed.Plain;
+                var lineStyle = need == TextBackdropNeed.Backdrop ? "TmBoxed" : "Default";
+                var prefix = need == TextBackdropNeed.Stronger ? Stronger(edge) : string.Empty;
+                if (style.WordHighlight)
+                {
+                    // 0.1.34: one step per word, the word being said in the accent (its cue's time shared by the words' lengths).
+                    foreach (var (from, to, words) in WordHighlight.Steps(cue, highlightOn, highlightOff))
+                    {
+                        if (from < stop)
+                        {
+                            Event(ass, 0, from, Math.Min(to, stop), lineStyle, prefix + words);
+                        }
+                    }
+
+                    continue;
+                }
+
                 var line = string.Join("\\N", cue.Lines.Select(Plain));
-                Event(ass, 0, cue.StartMs, Math.Min(cue.EndMs, stop), need == TextBackdropNeed.Backdrop ? "TmBoxed" : "Default",
-                    need == TextBackdropNeed.Stronger ? Stronger(edge) + line : line);
+                Event(ass, 0, cue.StartMs, Math.Min(cue.EndMs, stop), lineStyle, prefix + line);
             }
         }
 

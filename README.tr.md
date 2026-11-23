@@ -472,6 +472,8 @@ Bir şablonla (Ayarlar → Şablonlar) üretilen video, modelin iyi niyetine kal
   yerler arasında gezen kamera, yolu yürüyen figürler — program bunu çizer ve sesle zamanlar. *Hareketsiz / Normal / Hareketli* ne kadar
   hareket olacağını belirler. İsteğe bağlı bir görsel modeli (yerel Gemma 3 4B ya da ucuz bir çevrimiçi model) üretilen resimlerde
   şeylerin yerini bulur, işaretler tam üstüne gelir. *Serbest kod* (animasyonu model yazar) şablonda seçenek olarak duruyor.
+- **Kelime kelime vurgu (0.1.34, isteğe bağlı):** o an söylenen kelime vurgu renginde görünür; çizim tarzına göre parlar, büyür ya da
+  yalnız rengi değişir.
 - **Çizim tarzı:** görseli olmayan sahneler şablonun tarzında çizilir, üretilen görseller de aynı tarzda istenir. Düzenleyicide her
   biri açıklamalı on dört seçenek: *Yapay zekâ seçsin* (yeni şablonun varsayılanı: her videoda konuya uyan görünüşü model seçer), düz
   şekiller, çöp adam anlatıcı, çizgi çizim, kâğıt kesme, infografik, neon, kara kalem, animasyon (çizgi film), teknik çizim (blueprint),

@@ -19,6 +19,12 @@ public sealed class VideoStyle
     /// <summary>Subtitles burned into the picture (when off, the code never sees the narration and may not draw it).</summary>
     public bool Subtitles { get; set; } = true;
 
+    /// <summary>
+    /// Word-by-word highlighted subtitles (0.1.34, <see cref="WordHighlight"/>): the word being said in the accent colour, in the drawing
+    /// style's way. Off by default; only with <see cref="Subtitles"/>.
+    /// </summary>
+    public bool WordHighlight { get; set; }
+
     /// <summary>Progress bar drawn by the app (off by default; when off, the code may not draw a progress bar, timer or scene counter).</summary>
     public bool ProgressBar { get; set; }
 

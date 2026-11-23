@@ -1041,6 +1041,8 @@
   "styles.limit": "You can have at most {0} templates. Delete one first.",
   "styles.name": "Name",
   "styles.subtitles": "Subtitles in the picture",
+  "styles.word_highlight": "Word-by-word highlight",
+  "styles.word_highlight.tip": "The word being said shows in the accent colour, so the eye follows the voice. The highlight matches the style: it glows in neon, hologram and terminal, the word grows a little in the flat, cartoon and stick-figure looks, and only its colour changes in the drawn and paper looks. Words share their sentence's time by their length.",
   "styles.subtitles.tip": "On: the narration is shown as subtitles at the bottom of the video, in the template's font. Off: no subtitles and no narration text on screen (the video code never gets the text). The .srt file is always written.",
   "styles.readable": "Readable text",
   "styles.readable.tip": "On (the default): subtitles and on-screen text get an outline and a soft shadow in the colour opposite to the text (black under light text, white under dark text), so they stay readable over an image or a background of their own colour.",

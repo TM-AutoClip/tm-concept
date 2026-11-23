@@ -38,6 +38,8 @@
                     <TextBox Name="StyleName" Text="{Binding Name}" MaxLength="60" />
                     <StackPanel Orientation="Horizontal">
                       <CheckBox Name="StyleSubtitles" IsChecked="{Binding Subtitles}" Content="{DynamicResource styles.subtitles}" />
+                      <CheckBox Name="StyleWordHighlight" IsChecked="{Binding WordHighlight}" IsEnabled="{Binding Subtitles}"
+                                Content="{DynamicResource styles.word_highlight}" ToolTip.Tip="{DynamicResource styles.word_highlight.tip}" />
                       <views:HelpTip Text="{DynamicResource styles.subtitles.tip}" />
                     </StackPanel>
                     <StackPanel Orientation="Horizontal">

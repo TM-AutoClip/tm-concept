@@ -61,6 +61,7 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         _filling = true;
         Name = _source.Name;
         Subtitles = _source.Subtitles;
+        WordHighlight = _source.WordHighlight;
         ProgressBar = _source.ProgressBar;
         ReadableText = _source.ReadableText;
         Font = Fonts.FirstOrDefault(f => f.Font.Id == _source.FontId) ?? Fonts[0];
@@ -268,6 +269,10 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
     [ObservableProperty]
     public partial NumberChoice Motion { get; set; }
 
+    /// <summary>Word-by-word highlighted subtitles (0.1.34).</summary>
+    [ObservableProperty]
+    public partial bool WordHighlight { get; set; }
+
     /// <summary>Narration tempo: the silences between sentences and scenes.</summary>
     [ObservableProperty]
     public partial NumberChoice Tempo { get; set; }
@@ -374,6 +379,7 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         style.Motion = (MotionIntensity)Motion.Value;
         style.Tempo = (NarrationTempo)Tempo.Value;
         style.Drawer = (SceneDrawer)Drawer.Value;
+        style.WordHighlight = WordHighlight;
         style.Closing = (ClosingPlacement)Closing.Value;
         style.ClosingPlatform = (ClosingPlatform)Platform.Value;
         style.ClosingPhrase = (ClosingPhrase)(Phrase?.Value ?? 0);

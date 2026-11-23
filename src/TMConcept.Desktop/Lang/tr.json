@@ -1041,6 +1041,8 @@
   "styles.limit": "En çok {0} şablonun olabilir. Önce birini sil.",
   "styles.name": "Ad",
   "styles.subtitles": "Videoda altyazı",
+  "styles.word_highlight": "Kelime kelime vurgu",
+  "styles.word_highlight.tip": "Altyazıda o an söylenen kelime vurgu renginde görünür; göz sesi takip eder. Vurgu tarzla uyumlu: neon, hologram ve terminalde parlar, düz/çizgi film/çöp adam tarzlarında kelime biraz büyür, çizim ve kâğıt tarzlarında yalnız rengi değişir. Kelimelerin zamanı cümle içinde uzunluklarına göre paylaştırılır.",
   "styles.subtitles.tip": "Açık: anlatım videonun altında, şablonun yazı tipiyle altyazı olarak görünür. Kapalı: altyazı da, ekranda anlatım yazısı da olmaz (video kodu bu yazıyı hiç almaz). .srt dosyası her zaman yazılır.",
   "styles.readable": "Okunur yazı",
   "styles.readable.tip": "Açık (varsayılan): altyazıya ve ekrandaki yazılara, yazı renginin tersi renkte (açık yazıya siyah, koyu yazıya beyaz) bir kontur ve hafif gölge eklenir; yazı, kendi renginde bir görselin ya da arka planın üstünde de okunur.",
