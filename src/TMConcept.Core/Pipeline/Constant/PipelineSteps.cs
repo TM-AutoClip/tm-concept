@@ -39,6 +39,18 @@ public static class PipelineSteps
     /// </summary>
     public const string ImagePromptCost = "image-prompt";
 
+    /// <summary>
+    /// Cost label of the scene plan of a video drawn by the app (0.1.33; not a step of its own: the video code model writes it instead of the
+    /// code).
+    /// </summary>
+    public const string ScenePlanCost = "scene-plan";
+
+    /// <summary>
+    /// Where things are in the generated scene images (optional, 0.1.33): a model that reads images places the overlays of a video drawn by the
+    /// app on the right spots (online and cheap, or a local one); off = the plan's own guesses.
+    /// </summary>
+    public const string ImagePoints = "image-points";
+
     /// <summary>Every step in display order.</summary>
     public static readonly IReadOnlyList<PipelineStep> All =
     [
@@ -49,14 +61,16 @@ public static class PipelineSteps
         new(Embedding, ModelCapability.Embedding, ["local/paraphrase-multilingual-minilm", "openai/text-embedding-3-small"], Optional: true),
         new(Topics, ModelCapability.Chat, ["anthropic/claude-haiku-5-5", "zai/glm-5.3-flash", "deepseek/deepseek-flash"], Optional: true),
         new(DocumentText, ModelCapability.Vision, ["anthropic/claude-haiku-5-5"], Optional: true),
+        new(ImagePoints, ModelCapability.Vision, ["app-ollama/gemma3:4b", "anthropic/claude-haiku-5-5"], Optional: true),
     ];
 
     /// <summary>The steps chosen on the Generate concepts page.</summary>
     public static readonly IReadOnlyList<string> ConceptPage = [Concepts, Embedding, Topics, DocumentText];
 
     /// <summary>
-    /// The steps chosen on the Concept → video page: the video's own (code with its engine, images, narration) and the concept step, which
-    /// the AI edit of an approved concept uses there. A video is made only with the first three (production names them itself).
+    /// The steps chosen on the Concept → video page: the video's own (code with its engine, images, the image points of
+    /// a video drawn by the app, narration) and the concept step, which the AI edit of an approved concept uses there (production names the
+    /// video's own itself).
     /// </summary>
-    public static readonly IReadOnlyList<string> VideoPage = [VideoCode, Images, Speech, Concepts];
+    public static readonly IReadOnlyList<string> VideoPage = [VideoCode, Images, ImagePoints, Speech, Concepts];
 }

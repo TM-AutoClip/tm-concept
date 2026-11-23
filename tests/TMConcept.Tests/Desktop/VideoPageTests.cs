@@ -40,7 +40,7 @@ public sealed class VideoPageTests
     /// A profile with a key, its video code choice and one approved concept; the page is open (nothing queued) with a default template chosen
     /// (0.1.19: nothing is produced without one), unless <paramref name="chooseStyle"/> is false.
     /// </summary>
-    private static async Task<(VideoViewModel Page, Concept Concept)> OpenAsync(DesktopHarness h, bool chooseStyle = true)
+    private static async Task<(VideoViewModel Page, Concept Concept)> OpenAsync(DesktopHarness h, bool chooseStyle = true, Action<VideoStyle>? template = null)
     {
         await FirstRunTests.CreateAsync(h);
         var profile = new Profile { Name = "Byzantium", ContentLanguage = ContentLanguages.English, ConceptText = "x" };
@@ -57,6 +57,7 @@ public sealed class VideoPageTests
             Model = "claude-sonnet-5-5",
         }, CancellationToken.None);
         var style = new VideoStyle { Name = "Default" };
+        template?.Invoke(style);
         await h.Get<IVideoStyleStore>().SaveAsync(style, CancellationToken.None);
         var page = h.Get<VideoViewModel>();
         await page.ActivateAsync();
@@ -76,6 +77,48 @@ public sealed class VideoPageTests
         s.AddSingleton<IMediaTools, FakeMedia>();
         more?.Invoke(s);
     });
+
+    private const string PlanAnswer = """
+        {"scenes":[
+          {"scene":1,"base":"map","title":"","region":[20,30,45,45],"nodes":[],"links":[],
+           "anchors":[{"id":"city","label":"Constantinople","find":"","lon":28.97,"lat":41.0,"x":null,"y":null},
+                      {"id":"sea","label":"Marmara","find":"","lon":28.0,"lat":40.7,"x":null,"y":null}],
+           "beats":[{"sentence":1,"focus":"city","zoom":1.6,"actions":[{"type":"pin","from":"","to":"","via":[],"at":"city","label":"","text":"","walker":"","dashed":false,"country":"","size":0,"fromValue":null,"value":null,"suffix":""},
+                                                              {"type":"teleport","from":"","to":"","via":[],"at":"city","label":"","text":"","walker":"","dashed":false,"country":"","size":0,"fromValue":null,"value":null,"suffix":""}]}]},
+          {"scene":2,"base":"diagram","title":"","region":[],"nodes":[{"id":"fire","label":"Fire","x":0.5,"y":0.4}],"links":[],"anchors":[],
+           "beats":[{"sentence":1,"focus":"","zoom":1,"actions":[{"type":"highlight","from":"","to":"","via":[],"at":"fire","label":"","text":"","walker":"","dashed":false,"country":"","size":0.1,"fromValue":null,"value":null,"suffix":""}]}]}
+        ]}
+        """;
+
+    [AvaloniaFact]
+    public async Task ATemplateDrawnByTheAppAsksForAScenePlanInsteadOfCodeAndRendersTheDrawer()
+    {
+        var engine = new FakeEngine();
+        var chat = new FakeChat().Answer(_ => new ChatResponse(PlanAnswer, new ChatUsage(900, 0, 0, 700), null, "end_turn", "r"));
+        using var h = Harness(chat, engine);
+        var (page, concept) = await OpenAsync(h, template: s => s.Drawer = SceneDrawer.App);
+        await page.EnqueueAsync(page.Approved.Single());
+
+        await page.ProduceAllAsync();
+
+        // One paid call, the plan (never code); the app's drawer is the scene file and every scene has its cleaned, timed plan.
+        var request = chat.Requests.ShouldHaveSingleItem();
+        request.System.ShouldStartWith("You plan an animated explainer video");
+        request.User.ShouldContain("Scene 1 (");
+        request.User.ShouldContain("1) «In 672 the city was under siege.»");
+        var scenes = engine.Input!.Scenes;
+        scenes[0].Plan.ShouldNotBeNull().Base.ShouldBe(TMConcept.Core.Plans.PlanBases.Map);
+        scenes[0].Plan!.Beats.Single().Actions.Select(a => a.Type).ShouldBe(["pin"], "an unknown action is dropped");
+        scenes[0].Plan!.Beats.Single().Start.ShouldBe(scenes[0].StartSeconds, 0.01);
+        scenes[1].Plan.ShouldNotBeNull().Base.ShouldBe(TMConcept.Core.Plans.PlanBases.Diagram);
+        scenes[1].Plan!.Beats.Single().Start.ShouldBe(scenes[1].StartSeconds, 0.01);
+        var video = (await h.Get<IVideoStore>().ListAsync(concept.ProfileId, CancellationToken.None)).Single();
+        video.Warnings.ShouldNotContain(VideoWarnings.AppCode);
+        video.TotalUsd.ShouldBeGreaterThan(0);
+        var folder = LibraryPaths.Resolve(h.Get<IAppPaths>().LibraryDirectory, video.Folder);
+        TMConcept.Core.Plans.PlanDrawer.IsDrawer(File.ReadAllText(Path.Combine(folder, VideoFolders.Source, engine.CodeFile))).ShouldBeTrue();
+        File.ReadAllText(Path.Combine(folder, VideoFolders.Source, "input.json")).ShouldContain("\"plan\"");
+    }
 
     [AvaloniaFact]
     public async Task AQueuedConceptBecomesASilentVideoInTheLibrary()
@@ -124,9 +167,9 @@ public sealed class VideoPageTests
 
         // One line: code, engine, images, narration and the concept model of the AI edit; the cards are folded away.
         page.ModelsOpen.ShouldBeFalse();
-        page.Picker.Rows.Select(r => r.Step.Code).ShouldBe([PipelineSteps.VideoCode, PipelineSteps.Images, PipelineSteps.Speech, PipelineSteps.Concepts]);
+        page.Picker.Rows.Select(r => r.Step.Code).ShouldBe([PipelineSteps.VideoCode, PipelineSteps.Images, PipelineSteps.ImagePoints, PipelineSteps.Speech, PipelineSteps.Concepts]);
         var line = Find<Avalonia.Controls.TextBlock>(view, "SummaryLine").Text!;
-        foreach (var part in new[] { "video-code", "engine", "images", "speech", "concepts" })
+        foreach (var part in new[] { "video-code", "engine", "images", "image-points", "speech", "concepts" })
         {
             line.ShouldContain(text["steps.short." + part] + ":");
         }

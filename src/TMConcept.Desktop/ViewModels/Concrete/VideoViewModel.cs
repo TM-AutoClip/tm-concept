@@ -724,7 +724,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
         }
 
         var needed = new List<string> { PipelineSteps.VideoCode };
-        needed.AddRange(new[] { PipelineSteps.Images, PipelineSteps.Speech }.Where(s => Picker.Model(s) is not null));
+        needed.AddRange(new[] { PipelineSteps.Images, PipelineSteps.ImagePoints, PipelineSteps.Speech }.Where(s => Picker.Model(s) is not null));
         bool ready;
         try
         {

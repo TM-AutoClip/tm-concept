@@ -77,7 +77,8 @@ public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store,
         _loading = true;
         SelectedStyle = null;
         _loading = false;
-        Editor = NewEditor(new VideoStyle { Name = NewName() }, true);
+        // 0.1.33: a new template is drawn by the app from the scene plan; the model's free code stays a choice.
+        Editor = NewEditor(new VideoStyle { Name = NewName(), Drawer = SceneDrawer.App }, true);
         Status = string.Empty;
     }
 

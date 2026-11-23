@@ -127,6 +127,9 @@ public sealed class VideoRemaker(IEnumerable<IVideoEngine> engines, SceneNarrato
             var options = Options(source.Record);
             var timed = RenderInputBuilder.Build(input.Title, input.Language, sources, input.Width, input.Height, input.Fps, input.Theme,
                 Styles.VideoStyleRules.EndHoldMs(options.Style, input.Language));
+
+            // A video drawn by the app (0.1.33) keeps its scene plans, their beats timed again from the new sentences.
+            Plans.PlanTiming.Carry(input, timed, clips.Select(c => c?.Spans).ToList());
             steps.Finish(VideoSteps.Timing);
             var rendered = await assembler.RenderKeptAsync(source.Engine, source.Code, options, timed, work, steps, cancellationToken)
                 .ConfigureAwait(false);

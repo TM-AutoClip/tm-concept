@@ -74,6 +74,7 @@ public static class DesktopServices
         services.AddSingleton<Core.Tools.IZipEntryDownloader, Engines.Tools.ZipEntryDownloader>();
         services.AddSingleton<Engines.Media.FfmpegMuxer>();
         services.AddSingleton<Core.Media.IMediaTools, Engines.Media.FfmpegMedia>();
+        services.AddSingleton<Core.Plans.ScenePlanner>();
         services.AddSingleton<Core.Videos.VideoAssembler>();
         services.AddSingleton<Core.Videos.VideoPipeline>();
         // 0.1.28: deleting something deletes everything it generated, for good (files first, the record after).

@@ -222,9 +222,10 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         // D. images
         var (width, height) = RenderInputBuilder.Size(profile.Format);
         List<string> sceneImages = [];
+        IReadOnlyList<string> imagePrompts = [];
         if (imagesOn)
         {
-            sceneImages = await ImagesAsync(job, imageModel, split.Scenes, work, steps, id, width, height, cancellationToken).ConfigureAwait(false);
+            (sceneImages, imagePrompts) = await ImagesAsync(job, imageModel, split.Scenes, work, steps, id, width, height, cancellationToken).ConfigureAwait(false);
             if (sceneImages.Count < split.Scenes.Count)
             {
                 // Chosen images and fewer pictures than scenes: a scene would show nothing (stopped before the paid code call).
@@ -247,7 +248,9 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         steps.Finish(VideoSteps.Timing);
 
         // E + F. code (+ one repair after a rejected check), render (+ one repair with the error text)
-        var rendered = await assembler.CodeAndRenderAsync(engine, job.CodeModel, options, input, work, id, steps, cancellationToken)
+        var rendered = await assembler.CodeAndRenderAsync(engine, job.CodeModel, options, input, work, id, steps, cancellationToken,
+            new PlanContext(clips.Select(c => c?.Spans).ToList(), imagePrompts,
+                Plans.PlanDrawer.Draws(engine.Kind, options.Style) && sceneImages.Count > 0 ? await PointsModelAsync(profile.Id, cancellationToken).ConfigureAwait(false) : null))
             .ConfigureAwait(false);
         warnings.AddRange(rendered.Warnings());
 
@@ -257,7 +260,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
             engine.Name, job.CodeModel.Model.Provider + "/" + job.CodeModel.Model.Id,
             speechOn ? voice!.Model.Provider + "/" + voice.Model.Id + ":" + voice.Voice : string.Empty,
             imageModel is not null ? imageModel.Model.Provider + "/" + imageModel.Model.Id : imagesOn ? options.Images : string.Empty,
-            VideoCodePrompt.Version, warnings, steps.Spent, await ConceptShareAsync(job.Concept, id).ConfigureAwait(false), watch)
+            Plans.PlanDrawer.Draws(engine.Kind, options.Style) ? "plan-" + Plans.PlanPromptBuilder.Version : VideoCodePrompt.Version, warnings, steps.Spent, await ConceptShareAsync(job.Concept, id).ConfigureAwait(false), watch)
         {
             // Each scene's text with its placeholders and the transition into it: a new version is edited from this.
             Script = scenes.Select(s => VideoRemaker.WithTransition(s.Transition, s.Script, profile.ContentLanguage)).ToList(),
@@ -399,10 +402,11 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
     /// <summary>
     /// The scene images of the chosen model. Any failure stops the video (<see cref="VideoException"/> "images").
     /// </summary>
-    private async Task<List<string>> ImagesAsync(VideoJob job, ResolvedModel? imageModel, IReadOnlyList<Scene> scenes, string work,
-        VideoStepProgress steps, Guid id, int width, int height, CancellationToken cancellationToken)
+    private async Task<(List<string> Names, IReadOnlyList<string> Prompts)> ImagesAsync(VideoJob job, ResolvedModel? imageModel, IReadOnlyList<Scene> scenes,
+        string work, VideoStepProgress steps, Guid id, int width, int height, CancellationToken cancellationToken)
     {
         var names = new List<string>();
+        IReadOnlyList<string> prompts = [];
         var publicFolder = Path.Combine(work, "project", "public");
         void Place(string source, string name)
         {
@@ -425,7 +429,6 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                 Directory.CreateDirectory(cache);
                 var promptFile = Path.Combine(cache, "prompts.txt");
                 var styleFile = Path.Combine(cache, "style.txt");
-                IReadOnlyList<string> prompts;
                 if (File.Exists(promptFile) && (await File.ReadAllLinesAsync(promptFile, cancellationToken).ConfigureAwait(false)) is { } kept && kept.Length == visuals.Count)
                 {
                     prompts = kept;
@@ -484,7 +487,30 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
             throw new VideoException(ex.Message, ex) { Code = ex is MemoryShortfallException ? "memory" : "images" };
         }
 
-        return names;
+        return (names, prompts);
+    }
+
+    /// <summary>
+    /// The image points model of a video drawn by the app (0.1.33, optional): null when it is off or cannot be made ready (the plan's own
+    /// guesses are used then; an overlay never stops a video).
+    /// </summary>
+    private async Task<ResolvedModel?> PointsModelAsync(Guid profileId, CancellationToken cancellationToken)
+    {
+        var choice = await resolver.ChoiceAsync(PipelineSteps.ImagePoints, profileId, cancellationToken).ConfigureAwait(false);
+        if (StepModelResolver.IsOff(choice))
+        {
+            return null;
+        }
+
+        try
+        {
+            return await resolver.ResolveAsync(PipelineSteps.ImagePoints, choice, cancellationToken).ConfigureAwait(false);
+        }
+        catch (ModelNotReadyException ex)
+        {
+            logger.LogWarning("The image points model is not ready (no {Missing}); the plan's own guesses are used", ex.Missing);
+            return null;
+        }
     }
 
     /// <summary>

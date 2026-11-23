@@ -473,6 +473,12 @@ A video made with a template (Settings → Templates) follows it without relying
   `narration.txt`; *Screen* adds a few silent seconds to the end of the video and shows a closing card there with the profile's channel
   photo (round, when the profile has one), the channel name, the sentence and a button, so the card never covers the last scene or its
   narration. With narration off a spoken closing is shown on the card instead.
+- **Drawn by the app (0.1.33):** a new template's HyperFrames videos are drawn by the app's own overlay library. The video code model
+  writes only each scene's plan — its picture, a map drawn from real borders (Natural Earth), a diagram of labelled boxes or a title, and
+  one step per narration sentence: routes drawn on, arrows, pins and labels, highlights, counting numbers, the camera moving between
+  places, travellers walking a route — and the app draws and times it with the voice. *Still / Normal / Lively* set how much moves. An
+  optional vision model (local Gemma 3 4B or a cheap online one) finds where things are in the generated pictures so the marks land on
+  them. *Free code* (the model writes the animation itself) stays a choice in the template.
 - **Drawing style:** scenes without an image are drawn in the template's style, and generated images are asked for in the same style.
   Fourteen choices, each described in the editor: *Let the AI choose* (the default of a new template: the model picks the look that fits
   each video), flat shapes, stick-figure narrator, line art, paper cut-out, infographic, neon, pencil sketch, animation (cartoon),

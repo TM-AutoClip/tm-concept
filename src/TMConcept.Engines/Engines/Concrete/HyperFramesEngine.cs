@@ -155,6 +155,12 @@ public sealed class HyperFramesEngine(IAppPaths paths, ToolInstaller tools, Chro
         var style = input.Style;
         var head = style is null ? string.Empty : TemplateHead(input, style);
         var helper = style is null ? string.Empty : "<script src=\"" + HelperFile + "\"></script>\n";
+
+        // 0.1.33: a video drawn by the app with a map scene gets the world map before its scene file.
+        if (Core.Plans.PlanDrawer.NeedsWorld(input))
+        {
+            helper += "<script src=\"" + Core.Plans.PlanDrawer.WorldFile + "\"></script>\n";
+        }
         var rootFont = style is null ? "sans-serif" : "var(--tm-font)";
         // 0.1.32: the style's texture, the app's own still layer over the whole picture (nothing for a video without a template).
         var textureCss = StyleTextureCss.Css(style?.Texture);
@@ -217,6 +223,11 @@ public sealed class HyperFramesEngine(IAppPaths paths, ToolInstaller tools, Chro
         if (request.Input.Style is not null)
         {
             files[HelperFile] = TemplateHelpers.HyperFramesScript;
+        }
+
+        if (Core.Plans.PlanDrawer.NeedsWorld(request.Input))
+        {
+            files[Core.Plans.PlanDrawer.WorldFile] = Core.Plans.PlanDrawer.WorldScript;
         }
 
         return files;

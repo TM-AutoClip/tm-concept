@@ -21,7 +21,7 @@ public static class VideoCostBreakdown
 
     /// <summary>The display order.</summary>
     public static readonly IReadOnlyList<string> Order =
-        [PipelineSteps.Concepts, ConceptEdits, NarrationText, PipelineSteps.ImagePromptCost, PipelineSteps.Images, PipelineSteps.Speech, PipelineSteps.VideoCode];
+        [PipelineSteps.Concepts, ConceptEdits, NarrationText, PipelineSteps.ImagePromptCost, PipelineSteps.Images, PipelineSteps.ImagePoints, PipelineSteps.Speech, PipelineSteps.ScenePlanCost, PipelineSteps.VideoCode];
 
     /// <summary>
     /// The concept's share of the run it was generated in: the run's cost divided by the concepts it kept (5 concepts for 0.11 $ → 0.022 $

@@ -32,4 +32,11 @@ public sealed class RenderScene
     /// or <c>fade</c> (ffmpeg fades through black at its start after the render).
     /// </summary>
     public string Transition { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The scene's plan for the app's drawer (0.1.33, <see cref="Plans.RenderPlan"/>); null when a model writes the video code (and then not
+    /// written into the input at all).
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public Plans.RenderPlan? Plan { get; set; }
 }

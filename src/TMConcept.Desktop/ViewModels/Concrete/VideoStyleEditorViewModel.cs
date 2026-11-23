@@ -49,6 +49,7 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         DrawStyles = Core.Styles.DrawStyles.All.Select(d => new NumberChoice((int)d.Style, Label("style.draw." + Key(d.Style), d.Key))).ToList();
         Motions = Choices<MotionIntensity>("style.motion.");
         Tempos = Choices<NarrationTempo>("style.tempo.");
+        Drawers = Choices<SceneDrawer>("style.drawer.");
         Placements = Choices<ClosingPlacement>("style.closing.");
         Platforms = Choices<ClosingPlatform>("style.platform.");
         TitleCells = Enum.GetValues<TitlePosition>().Select(p => new TitleCellViewModel(p, Label("style.position." + Key(p), p.ToString()))).ToList();
@@ -75,6 +76,7 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         ShowDrawStyle();
         Motion = Pick(Motions, (int)_source.Motion);
         Tempo = Pick(Tempos, (int)_source.Tempo);
+        Drawer = Pick(Drawers, (int)_source.Drawer);
         Closing = Pick(Placements, (int)_source.Closing);
         Platform = Pick(Platforms, (int)_source.ClosingPlatform);
         Phrases = PhraseChoices((ClosingPlatform)Platform.Value);
@@ -168,6 +170,9 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
 
     /// <summary>Narration tempos (0.1.31).</summary>
     public IReadOnlyList<NumberChoice> Tempos { get; }
+
+    /// <summary>Who draws the HyperFrames videos (0.1.33): the app from the scene plan, or the model's free code.</summary>
+    public IReadOnlyList<NumberChoice> Drawers { get; }
 
     /// <summary>Where the closing goes (off, voice, screen, both).</summary>
     public IReadOnlyList<NumberChoice> Placements { get; }
@@ -267,6 +272,10 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
     [ObservableProperty]
     public partial NumberChoice Tempo { get; set; }
 
+    /// <summary>Who draws the video (0.1.33).</summary>
+    [ObservableProperty]
+    public partial NumberChoice Drawer { get; set; }
+
     /// <summary>Closing placement.</summary>
     [ObservableProperty]
     public partial NumberChoice Closing { get; set; }
@@ -364,6 +373,7 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         style.DrawStyle = (DrawStyle)DrawStyle.Value;
         style.Motion = (MotionIntensity)Motion.Value;
         style.Tempo = (NarrationTempo)Tempo.Value;
+        style.Drawer = (SceneDrawer)Drawer.Value;
         style.Closing = (ClosingPlacement)Closing.Value;
         style.ClosingPlatform = (ClosingPlatform)Platform.Value;
         style.ClosingPhrase = (ClosingPhrase)(Phrase?.Value ?? 0);

@@ -466,6 +466,12 @@ Bir şablonla (Ayarlar → Şablonlar) üretilen video, modelin iyi niyetine kal
   *Seste*: cümle, seslendirilmeden önce son sahnenin anlatımının sonuna eklenir; böylece altyazıda ve `narration.txt`'de de olur.
   *Ekranda*: videonun sonuna birkaç sessiz saniye eklenir ve orada profilin kanal fotoğrafı (profilde varsa, yuvarlak), kanal adı, cümle
   ve bir düğmeyle bir kapanış kartı çıkar; kart son sahneyi ya da anlatımını hiç örtmez. Seslendirme kapalıysa sesli kapanış kartta gösterilir.
+- **Programın çizdiği videolar (0.1.33):** yeni şablonun HyperFrames videolarını programın kendi katman kütüphanesi çizer. Video kodu
+  modeli yalnız her sahnenin planını yazar — resmi, gerçek sınırlardan çizilen bir harita (Natural Earth), etiketli kutulardan bir şema ya
+  da bir başlık ve anlatımın her cümlesine bir adım: çizilerek ilerleyen yollar, oklar, iğneler ve etiketler, vurgular, sayan sayılar,
+  yerler arasında gezen kamera, yolu yürüyen figürler — program bunu çizer ve sesle zamanlar. *Hareketsiz / Normal / Hareketli* ne kadar
+  hareket olacağını belirler. İsteğe bağlı bir görsel modeli (yerel Gemma 3 4B ya da ucuz bir çevrimiçi model) üretilen resimlerde
+  şeylerin yerini bulur, işaretler tam üstüne gelir. *Serbest kod* (animasyonu model yazar) şablonda seçenek olarak duruyor.
 - **Çizim tarzı:** görseli olmayan sahneler şablonun tarzında çizilir, üretilen görseller de aynı tarzda istenir. Düzenleyicide her
   biri açıklamalı on dört seçenek: *Yapay zekâ seçsin* (yeni şablonun varsayılanı: her videoda konuya uyan görünüşü model seçer), düz
   şekiller, çöp adam anlatıcı, çizgi çizim, kâğıt kesme, infografik, neon, kara kalem, animasyon (çizgi film), teknik çizim (blueprint),

@@ -73,6 +73,12 @@ public sealed class VideoStyle
     public MotionIntensity Motion { get; set; } = MotionIntensity.Normal;
 
     /// <summary>
+    /// Who draws the HyperFrames videos (0.1.33, <see cref="SceneDrawer"/>): the app from the model's scene plan, or the model's own code. A
+    /// template saved before has none in its JSON and keeps the model's code; the editor starts a new template with the app's drawer.
+    /// </summary>
+    public SceneDrawer Drawer { get; set; } = SceneDrawer.FreeCode;
+
+    /// <summary>
     /// The narration's breathing room (0.1.31): the silence after every sentence and between scenes (<see cref="Speech.NarrationTempos"/>). A
     /// template saved before has none in its JSON and reads as the default.
     /// </summary>

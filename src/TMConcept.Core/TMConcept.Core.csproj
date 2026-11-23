@@ -14,6 +14,9 @@
     <EmbeddedResource Include="Prompts/Files/en/*.txt" LogicalName="TMConcept.Prompts.en.%(Filename)%(Extension)" />
     <!-- Video fonts of the templates (SIL OFL 1.1, from github.com/google/fonts; the license texts ship as licenses/font-<name>.txt from the Desktop project). -->
     <EmbeddedResource Include="Styles/Files/Fonts/**/*.ttf" LogicalName="TMConcept.Fonts.%(Filename)%(Extension)" />
+    <!-- 0.1.33: the app's scene drawer and its world map (Natural Earth 1:110m, public domain; tools/world-map.py). -->
+    <EmbeddedResource Include="Plans/Files/plan.js" LogicalName="TMConcept.Plans.plan.js" />
+    <EmbeddedResource Include="Plans/Files/world.json" LogicalName="TMConcept.Plans.world.json" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="TMConcept.Tests" />

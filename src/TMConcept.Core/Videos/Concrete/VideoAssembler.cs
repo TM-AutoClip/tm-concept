@@ -22,7 +22,7 @@ namespace TMConcept.Core.Videos;
 /// the pipeline unchanged, so a version is made exactly as the first video was.
 /// </summary>
 public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator costs, IMediaTools media, IVideoStore videos, IRunStore runs, IAppPaths paths,
-    TimeProvider clock, ILogger<VideoAssembler> logger)
+    TimeProvider clock, Plans.ScenePlanner planner, ILogger<VideoAssembler> logger)
 {
     /// <summary>The start of a rejected code's file name in a work folder (kept for reading until the start-up clean-up).</summary>
     public const string Rejected = "rejected-";
@@ -50,11 +50,17 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
     /// the 0.1.30 review: one title card or one split layout must not throw away a paid video while the limits are not tuned on real online
     /// renders); fewer failing scenes keep the video with a warning (<see cref="RenderOutcome.FrameWeak"/>), as does the app's own animation
     /// when it fails the check. A local model's code that fails to render gets its free repair, and when that fails too the app's own animation
-    /// is rendered (the decision that a local model falls back to it).
+    /// is rendered (the decision that a local model falls back to it). 0.1.33: a HyperFrames video whose template chooses the app's drawer
+    /// (<see cref="Plans.PlanDrawer.Draws"/>) gets a scene plan from the same model instead of code (<see cref="DrawAsync"/>).
     /// </summary>
     public async Task<RenderOutcome> CodeAndRenderAsync(IVideoEngine engine, ResolvedModel codeModel, VideoOptions options, RenderInput input, string work,
-        Guid id, VideoStepProgress steps, CancellationToken cancellationToken)
+        Guid id, VideoStepProgress steps, CancellationToken cancellationToken, PlanContext? plan = null)
     {
+        if (Plans.PlanDrawer.Draws(engine.Kind, options?.Style))
+        {
+            return await DrawAsync(engine, codeModel, options!, input, work, id, steps, plan ?? new PlanContext(), cancellationToken).ConfigureAwait(false);
+        }
+
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(codeModel);
         ArgumentNullException.ThrowIfNull(options);
@@ -200,6 +206,60 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         return new RenderOutcome(request, repaired, input) { AppCode = appCode, FrameFallback = frameFallback, FrameWeak = frameWeak };
     }
 
+    /// <summary>
+    /// E + F of a video drawn by the app (0.1.33): the scene plan (<see cref="Plans.ScenePlanner"/>: the code model writes each scene's base,
+    /// points and beats; the image points model places them; the beats follow the spoken sentences), then the app's drawer
+    /// (<see cref="Plans.PlanDrawer.Code"/>) is written without the code check (no model wrote it) and rendered. A render that fails falls back
+    /// to the app's simple animation; scenes that fail the frame check keep the video with a warning (no paid repair for an app file).
+    /// </summary>
+    private async Task<RenderOutcome> DrawAsync(IVideoEngine engine, ResolvedModel codeModel, VideoOptions options, RenderInput input, string work, Guid id,
+        VideoStepProgress steps, PlanContext context, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(engine);
+        ArgumentNullException.ThrowIfNull(codeModel);
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(steps);
+        var style = options.Style;
+        RenderStyleBuilder.Apply(input, style);
+        await BoostAsync(input, work, cancellationToken).ConfigureAwait(false);
+        var project = Path.Combine(work, "project");
+        PlaceFonts(project, style, input.Language);
+        steps.Report(VideoSteps.Code, 0.1);
+        await planner.PlanAsync(new Plans.PlanRequest(codeModel, context.PointsModel, input, style, context.Spans, context.ImagePrompts, project, id), steps,
+            cancellationToken).ConfigureAwait(false);
+        steps.Finish(VideoSteps.Code);
+        var request = new EngineRenderRequest(project, Plans.PlanDrawer.Code, RenderInputBuilder.ForEngine(input, VideoStyleRules.SubtitlesOn(options)),
+            Path.Combine(work, "silent.mp4"), Workers());
+        var engineProgress = new ForwardProgress<EngineEvent>(e => steps.Report(VideoSteps.Render, e.Ratio ?? 0, e.Message));
+        var appCode = false;
+        try
+        {
+            engine.WriteProject(request);
+            await engine.RenderAsync(request, engineProgress, cancellationToken).ConfigureAwait(false);
+        }
+        catch (EngineException ex) when (ex.Code is "render" or "check")
+        {
+            logger.LogWarning("The app's scene drawer did not render ({Error}); the app's simple animation is used", ex.Message);
+            request = AppCode(engine, request, style) ?? throw new VideoException("Render failed: " + ex.Message, ex) { Code = "render" };
+            await RenderAppCodeAsync(engine, request, engineProgress, cancellationToken).ConfigureAwait(false);
+            appCode = true;
+        }
+        catch (EngineException ex)
+        {
+            throw new VideoException("Render failed: " + ex.Message, ex) { Code = "render" };
+        }
+
+        var (findings, _) = await FrameFindingsAsync(request, cancellationToken).ConfigureAwait(false);
+        if (findings.Count > 0)
+        {
+            logger.LogWarning(Activity.LogEvents.OnScreen, "The drawn video does not show {Failed} scenes well ({Findings}); it is kept with a warning",
+                findings.Count, string.Join(" · ", findings));
+        }
+
+        steps.Finish(VideoSteps.Render);
+        return new RenderOutcome(request, false, input) { AppCode = appCode, FrameWeak = findings.Count > 0 };
+    }
+
     /// <summary>Renders the app's own animation (no repair: the app's code is not sent to a model).</summary>
     private static async Task RenderAppCodeAsync(IVideoEngine engine, EngineRenderRequest request, IProgress<EngineEvent> progress,
         CancellationToken cancellationToken)
@@ -250,7 +310,9 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
             }
 
             Media.FramePixels? image = null;
-            var file = scenes[i].Image.Length > 0 ? Path.Combine(request.Folder, scenes[i].Image) : null;
+            // A scene drawn as a map, a diagram or a title (0.1.33) does not show its picture: only its emptiness is checked.
+            var shown = scenes[i].Plan is not { } scenePlan || scenePlan.Base == Plans.PlanBases.Image;
+            var file = scenes[i].Image.Length > 0 && shown ? Path.Combine(request.Folder, scenes[i].Image) : null;
             if (file is not null && File.Exists(file))
             {
                 try
