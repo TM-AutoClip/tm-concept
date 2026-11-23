@@ -5,6 +5,7 @@ using Avalonia.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TMConcept.Core.Activity;
+using TMConcept.Core.Diagnostics;
 using TMConcept.Core.Models;
 using TMConcept.Core.Notifications;
 using TMConcept.Desktop.Composition;
@@ -24,9 +25,12 @@ namespace TMConcept.Desktop.Startup;
 /// changed: the unlock window says why, and for one made before upgrades were recorded offers to set it aside and start fresh) · main window. After the main window opens: old work files are cleaned and the daily backup runs. Closing the main window
 /// ends the app; while a page works (a generation, a video render) it asks first and stops the work (its Node / Chrome / ffmpeg processes
 /// are ended with it) before the app closes. An exception that reaches the interface thread is logged and shown instead of ending the app.
+/// Every step until the daily backup writes its time to the log (<c>startup.&lt;step&gt; &lt;ms&gt;</c>, <see cref="IStepTimer"/>);
+/// <c>startup.at.&lt;point&gt;</c> lines are the time since <c>Main</c> began.
 /// </summary>
 public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer text, LanguageResources languageResources, UiPreferencesFile preferences,
-    AppSession session, WindowHost windows, BackupService backup, IActivityLog activity, INotifier notifier, CrashLog crash, ILogger<AppStartup> logger)
+    AppSession session, WindowHost windows, BackupService backup, IActivityLog activity, INotifier notifier, CrashLog crash, IStepTimer timer,
+    ILogger<AppStartup> logger)
 {
     private IClassicDesktopStyleApplicationLifetime? _desktop;
     private Window? _main;
@@ -139,13 +143,18 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
         windows.Active = window;
         _desktop!.MainWindow = window;
         window.Show();
+        timer.Mark("startup.at." + (window is FirstRunWindow ? "first_run_window" : "unlock_window"));
     }
 
     private async Task OpenAutomaticAsync()
     {
         try
         {
-            await vault.OpenAsync(CancellationToken.None).ConfigureAwait(true);
+            using (timer.Step("startup.vault_open"))
+            {
+                await vault.OpenAsync(CancellationToken.None).ConfigureAwait(true);
+            }
+
             await StartMainAsync().ConfigureAwait(true);
         }
         catch (Storage.Database.DatabaseVersionException ex)
@@ -164,11 +173,19 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
 
     private async Task StartMainAsync()
     {
-        await session.LoadAsync(CancellationToken.None).ConfigureAwait(true);
+        using (timer.Step("startup.session_load", countConnections: true))
+        {
+            await session.LoadAsync(CancellationToken.None).ConfigureAwait(true);
+        }
+
         text.Use(session.Settings.Language);
         // Prices: the last good copies now (no network); a check for newer ones at most once a day, in the background (offline = built-in).
         var prices = services.GetRequiredService<Providers.Pricing.PriceUpdater>();
-        prices.LoadSaved();
+        using (timer.Step("startup.prices_saved"))
+        {
+            prices.LoadSaved();
+        }
+
         _ = Task.Run(async () =>
         {
             try
@@ -208,20 +225,34 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
                 logger.LogError(ex, "The installed components could not be looked at");
             }
         });
-        var shell = services.GetRequiredService<ShellViewModel>();
-        var window = new MainWindow { DataContext = shell };
-        Os.TaskbarIcon.ApplyWhenOpen(window, logger);
-        window.Closing += (_, e) => OnClosing(window, shell, e);
-        window.Closed += (_, _) => Quit();
-        _main = window;
-        windows.Active = window;
-        _desktop!.MainWindow = window;
-        window.Show();
+        ShellViewModel shell;
+        using (timer.Step("startup.main_window"))
+        {
+            shell = services.GetRequiredService<ShellViewModel>();
+            var window = new MainWindow { DataContext = shell };
+            Os.TaskbarIcon.ApplyWhenOpen(window, logger);
+            window.Closing += (_, e) => OnClosing(window, shell, e);
+            window.Closed += (_, _) => Quit();
+            _main = window;
+            windows.Active = window;
+            _desktop!.MainWindow = window;
+            window.Show();
+        }
+
+        timer.Mark("startup.at.main_window");
 
         // Only now (the database is open and upgraded, the main window is up) is the previous version's program file of an update removed:
         // until here a failed start could still go back to it.
-        services.GetRequiredService<Updates.SelfReplacer>().CleanUp();
-        await shell.StartAsync().ConfigureAwait(true);
+        using (timer.Step("startup.self_replacer_cleanup"))
+        {
+            services.GetRequiredService<Updates.SelfReplacer>().CleanUp();
+        }
+
+        using (timer.Step("startup.shell_start", countConnections: true))
+        {
+            await shell.StartAsync().ConfigureAwait(true);
+        }
+
         if (session.PendingMessage is { } message)
         {
             activity.Add(ActivityLevel.Info, message);
@@ -233,7 +264,10 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
         // first run or the unlock, in the main window; a failure is logged and shown, it never keeps the app from starting.
         try
         {
-            await services.GetRequiredService<VersionCheck>().RunAsync(AppIdentity.ShortVersion, CancellationToken.None).ConfigureAwait(true);
+            using (timer.Step("startup.version_check"))
+            {
+                await services.GetRequiredService<VersionCheck>().RunAsync(AppIdentity.ShortVersion, CancellationToken.None).ConfigureAwait(true);
+            }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
@@ -248,7 +282,10 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
 
         try
         {
-            services.GetRequiredService<Core.Videos.VideoPipeline>().CleanWork();
+            using (timer.Step("startup.clean_work"))
+            {
+                services.GetRequiredService<Core.Videos.VideoPipeline>().CleanWork();
+            }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -257,7 +294,13 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
 
         try
         {
-            if (await backup.RunDailyAsync(CancellationToken.None).ConfigureAwait(true) is not null)
+            string? made;
+            using (timer.Step("startup.daily_backup", countConnections: true))
+            {
+                made = await backup.RunDailyAsync(CancellationToken.None).ConfigureAwait(true);
+            }
+
+            if (made is not null)
             {
                 activity.Add(ActivityLevel.Info, text["backup.daily_done"]);
             }
@@ -272,6 +315,11 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
             activity.Add(ActivityLevel.Error, text.Format("backup.failed", ex.Message));
             notifier.Notify(new AppNotification(NotificationKind.Failed, "TM Concept", text.Format("backup.failed", ex.Message)));
         }
+
+        // The end of the start, and every database connection opened since Main (background checks included).
+        timer.Mark("startup.at.done");
+        var connections = timer.Connections;
+        timer.Record("startup.database_total", connections.Opening, connections);
     }
 
     /// <summary>Shows the notes of the new versions once; a failure is only logged (the start is never held up).</summary>

@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using TMConcept.Core.Activity;
+using TMConcept.Core.Diagnostics;
 using TMConcept.Core.Models;
 using TMConcept.Core.Notifications;
 using TMConcept.Core.Profiles;
@@ -41,6 +42,7 @@ public sealed partial class ShellViewModel : ObservableObject
     private readonly SpendingMeter _spending;
     private readonly IModelCatalog _catalog;
     private readonly UiPreferencesFile _preferences;
+    private readonly IStepTimer _timer;
     private bool _loadingProfiles;
 
     /// <summary>Lines the panel shows.</summary>
@@ -52,8 +54,10 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>Builds the tabs from every registered page.</summary>
     public ShellViewModel(IEnumerable<PageViewModelBase> pages, Localizer text, AppSession session, IProfileStore profiles, INotifier notifier,
         IReportDialog report, IActivityFeed feed, WorkStatus work, WindowHost host, SpendingMeter spending, ConceptEvents events, IModelCatalog catalog,
-        UiPreferencesFile preferences, ILogger<ShellViewModel> logger, ILogViewer? logs = null)
+        UiPreferencesFile preferences, IStepTimer timer, ILogger<ShellViewModel> logger, ILogViewer? logs = null)
     {
+        ArgumentNullException.ThrowIfNull(timer);
+        _timer = timer;
         ArgumentNullException.ThrowIfNull(host);
         ArgumentNullException.ThrowIfNull(feed);
         ArgumentNullException.ThrowIfNull(work);
@@ -358,7 +362,11 @@ public sealed partial class ShellViewModel : ObservableObject
 
         try
         {
-            await page.ActivateAsync().ConfigureAwait(true);
+            // "page.<name>.activate <ms>" with the database connections the page opened meanwhile (background work counts too).
+            using (_timer.Step("page." + page.TimingName + ".activate", countConnections: true))
+            {
+                await page.ActivateAsync().ConfigureAwait(true);
+            }
         }
         catch (Exception ex)
         {

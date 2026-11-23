@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
+using TMConcept.Core.Diagnostics;
 using TMConcept.Core.Paths;
 using TMConcept.Storage.Database;
 
@@ -71,7 +72,12 @@ public sealed class Vault(IAppPaths paths, DatabaseKey key, IEnumerable<IKeyProt
             throw new InvalidOperationException($"The key protection '{envelope.Method}' is not available on this computer now.");
         }
 
-        var dek = await protector.UnprotectAsync(envelope, cancellationToken).ConfigureAwait(false);
+        byte[] dek;
+        using (StepTimer.Process.Step("startup.vault_unprotect"))
+        {
+            dek = await protector.UnprotectAsync(envelope, cancellationToken).ConfigureAwait(false);
+        }
+
         try
         {
             key.Load(dek);
@@ -85,7 +91,12 @@ public sealed class Vault(IAppPaths paths, DatabaseKey key, IEnumerable<IKeyProt
         {
             // Reading the schema state (tables, recorded steps, pragmas) is the check that the key opens the file; an older file is upgraded
             // here, after a copy of it is kept (a failed upgrade leaves it as it was).
-            var upgrade = await new ConceptDatabase(paths, key).UpgradeAsync(logger, cancellationToken).ConfigureAwait(false);
+            SchemaUpgradeResult upgrade;
+            using (StepTimer.Process.Step("startup.database_upgrade", countConnections: true))
+            {
+                upgrade = await new ConceptDatabase(paths, key).UpgradeAsync(logger, cancellationToken).ConfigureAwait(false);
+            }
+
             if (upgrade.Applied.Count > 0)
             {
                 logger.LogInformation("The database went through {Count} schema step(s): {Steps}", upgrade.Applied.Count,

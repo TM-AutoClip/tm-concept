@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Microsoft.Extensions.DependencyInjection;
+using TMConcept.Core.Diagnostics;
 using TMConcept.Desktop.Startup;
 
 namespace TMConcept.Desktop;
@@ -24,8 +25,14 @@ public sealed partial class App : Application
     {
         if (Services is { } services && ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            var timer = services.GetRequiredService<IStepTimer>();
+            timer.End(StartupSteps.Avalonia);
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
-            services.GetRequiredService<AppStartup>().Run(desktop);
+            using (timer.Step("startup.app_run"))
+            {
+                services.GetRequiredService<AppStartup>().Run(desktop);
+            }
+
         }
 
         base.OnFrameworkInitializationCompleted();

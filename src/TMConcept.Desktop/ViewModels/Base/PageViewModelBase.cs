@@ -8,6 +8,12 @@ public abstract partial class PageViewModelBase : ObservableObject
     /// <summary>Localization key of the title.</summary>
     public abstract string TitleKey { get; }
 
+    /// <summary>
+    /// The page's name in the timing lines of the log (<c>page.&lt;name&gt;.activate</c>): the type's name without "ViewModel", in lower
+    /// case (ConceptsViewModel → concepts).
+    /// </summary>
+    public string TimingName => GetType().Name.Replace("ViewModel", string.Empty, StringComparison.Ordinal).ToLowerInvariant();
+
     /// <summary>Position among the tabs (Settings, from <see cref="ShellViewModel.TabOrderMax"/> on, stands apart on the right).</summary>
     public abstract int Order { get; }
 

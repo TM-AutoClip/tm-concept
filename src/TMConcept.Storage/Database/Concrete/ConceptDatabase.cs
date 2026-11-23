@@ -2,6 +2,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using TMConcept.Core.Diagnostics;
 using TMConcept.Core.Paths;
 using TMConcept.Storage.Keys;
 
@@ -45,8 +46,11 @@ public sealed class ConceptDatabase(IAppPaths paths, DatabaseKey key)
             .Options);
         try
         {
+            // Counted on the app's step timer (no line per connection; a page change writes how many it opened and how long that took).
+            var start = TimeProvider.System.GetTimestamp();
             await db.Database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
             WaitForLocks((SqliteConnection)db.Database.GetDbConnection());
+            StepTimer.Process.CountConnection(TimeProvider.System.GetElapsedTime(start));
             return db;
         }
         catch

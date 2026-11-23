@@ -2,6 +2,7 @@ using Avalonia;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using TMConcept.Core.Diagnostics;
 using TMConcept.Desktop.Composition;
 using TMConcept.Desktop.Instance;
 using TMConcept.Desktop.Logging;
@@ -26,13 +27,22 @@ internal static class Program
             return RunSpeechWorker(args);
         }
 
+        // Start timings (0.1.36): one "startup.<step> <ms>" line per step of the start, kept in the log to compare later versions with. The
+        // timer was created just now (first use); the time before Main (the single-file program unpacking, the runtime starting) is the
+        // process's own start time until here.
+        var timer = StepTimer.Process;
+        RecordProcessStart(timer);
+        timer.Begin("startup.velopack");
+
         // The installed edition (Velopack): Setup's and the uninstaller's hooks (--veloapp-install / -updated / -obsolete / -uninstall) run here
         // and end the process before the data folder lock is taken or any service is built. A downloaded update is never applied at start: the
         // apply ends every process running from the install folder (a second start or the speech worker would end a working first instance),
         // so it is applied only from the update window when no work runs. The portable program passes straight through.
         VelopackApp.Build().SetAutoApplyOnStartup(false).SetAppUserModelId(Os.TaskbarIcon.AppId).Run();
         var edition = Updates.VelopackEdition.Current();
+        timer.End("startup.velopack");
 
+        timer.Begin("startup.options_and_lock");
         var options = StartOptions.Parse(args);
         var dataDirectory = options.DataDirectory ?? DesktopServices.CurrentOs.DefaultDataDirectory();
         if (edition.Kind == Updates.AppEditionKind.Installed && Updates.EditionGuard.Overlaps(dataDirectory, edition.InstallRoot))
@@ -57,12 +67,18 @@ internal static class Program
             return 0;
         }
 
+        timer.End("startup.options_and_lock");
+        timer.Begin("startup.services");
         using var services = DesktopServices.Build(paths, s => s.AddSingleton<Updates.IAppEdition>(edition));
         var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(Program));
         var children = services.GetRequiredService<Engines.Processes.ChildProcessGuardBase>();
+        timer.End("startup.services");
 
         // The models the repository's model catalog added (the kept copy, checked again; no network): before anything reads the model lists.
-        services.GetRequiredService<Catalog.RemoteCatalogUpdater>().ApplySaved();
+        using (timer.Step("startup.catalog_saved"))
+        {
+            services.GetRequiredService<Catalog.RemoteCatalogUpdater>().ApplySaved();
+        }
 
         // Linux has no job object: when the process is ending on an unhandled exception, the children (ffmpeg, Node, Chrome) are ended here
         // or they would outlive the app.
@@ -71,7 +87,13 @@ internal static class Program
         logger.LogInformation("TM Concept {Version} ({Edition} edition) starting on {Os} ({Architecture}, {Runtime}); data folder: {Mode}", AppIdentity.Version,
             edition.Kind == Updates.AppEditionKind.Installed ? "installed" : "portable", AppIdentity.Os, AppIdentity.Architecture, AppIdentity.Runtime,
             options.DataDirectory is null ? "default" : "custom data folder");
-        SweepOrphans(children, paths, logger);
+
+        // The lines measured so far are written after the start line, every later one at once.
+        timer.Attach(services.GetRequiredService<ILoggerFactory>().CreateLogger(StepTimer.Category));
+        using (timer.Step("startup.sweep_orphans"))
+        {
+            SweepOrphans(children, paths, logger);
+        }
 
         instance.Logger = services.GetRequiredService<ILogger<SingleInstance>>();
         instance.ShowRequested += (_, _) =>
@@ -80,11 +102,18 @@ internal static class Program
             services.GetRequiredService<Startup.AppStartup>().ShowMainWindow();
         };
         App.Services = services;
-        var graphicsCard = services.GetRequiredService<UiPreferencesFile>().Read().UseGraphicsCard;
+        bool graphicsCard;
+        using (timer.Step("startup.ui_preferences"))
+        {
+            graphicsCard = services.GetRequiredService<UiPreferencesFile>().Read().UseGraphicsCard;
+        }
+
         logger.LogInformation("Drawing with the {Renderer}", graphicsCard ? "graphics card" : "processor");
         int exit;
         try
         {
+            // Ended in App.OnFrameworkInitializationCompleted: the platform, the styles and the application object.
+            timer.Begin(Startup.StartupSteps.Avalonia);
             exit = BuildAvaloniaApp(graphicsCard).StartWithClassicDesktopLifetime(args);
         }
         catch (Exception ex)
@@ -103,6 +132,24 @@ internal static class Program
         FreeGraphicsCard(services, logger);
         logger.LogInformation("TM Concept stopped (exit code {Exit})", exit);
         return exit;
+    }
+
+    /// <summary>
+    /// The time from the process's start until <c>Main</c> (a single-file program unpacks and the runtime starts and compiles first): the
+    /// first start line. Nothing when the system does not give the process's start time.
+    /// </summary>
+    private static void RecordProcessStart(IStepTimer timer)
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.GetCurrentProcess();
+            var beforeMain = DateTime.Now - process.StartTime - timer.SinceOrigin;
+            timer.Record("startup.process_to_main", beforeMain < TimeSpan.Zero ? TimeSpan.Zero : beforeMain);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException or System.ComponentModel.Win32Exception)
+        {
+            // Not measured; the start goes on.
+        }
     }
 
     /// <summary>

@@ -55,6 +55,8 @@ public static class DesktopServices
         // line, not here: the activity log needs a logger, so resolving it while the logger factory is built would be a cycle.
         services.AddSingleton<ILoggerProvider>(s => new ActivityLoggerProvider(() => s.GetService<IActivityFeed>(), s.GetRequiredService<LogScrubber>()));
         services.AddSingleton(TimeProvider.System);
+        // The app's step timer: the start steps before the services are measured on the same one (Program).
+        services.AddSingleton<Core.Diagnostics.IStepTimer>(Core.Diagnostics.StepTimer.Process);
         services.AddSingleton(s => new CrashLog(s.GetRequiredService<ILoggerFactory>().CreateLogger("TMConcept.Crash")));
         services.AddSingleton(paths);
         services.AddSingleton<IAppPaths>(paths);
@@ -191,7 +193,7 @@ public static class DesktopServices
         overrides?.Invoke(services);
         services.AddSingleton(s =>
         {
-            var locator = new ViewLocator();
+            var locator = new ViewLocator(s.GetRequiredService<Core.Diagnostics.IStepTimer>());
             foreach (var registration in s.GetServices<IViewRegistration>())
             {
                 registration.Register(locator);

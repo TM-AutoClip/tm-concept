@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using TMConcept.Core.Concepts;
+using TMConcept.Core.Diagnostics;
 using TMConcept.Core.Text;
 using TMConcept.Desktop.Concepts;
 using TMConcept.Desktop.Localization;
@@ -31,6 +32,7 @@ public sealed partial class ConceptsViewModel : PageViewModelBase
     private readonly ConceptEvents _events;
     private readonly Localizer _text;
     private readonly ILogger<ConceptsViewModel> _logger;
+    private readonly IStepTimer _timer;
     private readonly List<ConceptCardViewModel> _approved = [];
     private bool _attached;
     private bool _loadedOnce;
@@ -39,8 +41,9 @@ public sealed partial class ConceptsViewModel : PageViewModelBase
     /// <summary>Creates the page with its bar, its four sections, its runner and its detail panel.</summary>
     public ConceptsViewModel(AppSession session, IConceptStore concepts, ConceptActions actions, ConceptEvents events, Localizer text,
         ConceptSettingsViewModel settings, ConceptRunner runner, TopicSectionViewModel topics, IdeaSectionViewModel ideas, DocumentSectionViewModel documents,
-        ResearchSectionViewModel research, ConceptDetailViewModel detail, ILogger<ConceptsViewModel> logger)
+        ResearchSectionViewModel research, ConceptDetailViewModel detail, IStepTimer timer, ILogger<ConceptsViewModel> logger)
     {
+        _timer = timer;
         _session = session;
         _concepts = concepts;
         _actions = actions;
@@ -239,16 +242,30 @@ public sealed partial class ConceptsViewModel : PageViewModelBase
             };
         }
 
+        // Each part's time goes to the log ("page.concepts.<part> <ms>") so a slow page change shows which part holds it.
         if (!_loadedOnce)
         {
-            await Documents.Library.ProfileChangedAsync().ConfigureAwait(true);
+            using (_timer.Step("page.concepts.library", countConnections: true))
+            {
+                await Documents.Library.ProfileChangedAsync().ConfigureAwait(true);
+            }
         }
 
-        Research.LoadSettings();
+        using (_timer.Step("page.concepts.research_settings"))
+        {
+            Research.LoadSettings();
+        }
 
-        await Settings.LoadAsync(_session.Profile, newProfile: !_loadedOnce).ConfigureAwait(true);
+        using (_timer.Step("page.concepts.settings", countConnections: true))
+        {
+            await Settings.LoadAsync(_session.Profile, newProfile: !_loadedOnce).ConfigureAwait(true);
+        }
+
         _loadedOnce = true;
-        await ReloadAsync().ConfigureAwait(true);
+        using (_timer.Step("page.concepts.reload", countConnections: true))
+        {
+            await ReloadAsync().ConfigureAwait(true);
+        }
     }
 
     /// <inheritdoc />
