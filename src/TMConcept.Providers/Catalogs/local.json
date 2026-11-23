@@ -12,6 +12,7 @@
     { "id": "trendyol-tts", "name": "Trendyol-TTS (Turkish)", "capabilities": "Speech", "requires": ["voice.trendyol-tts"], "minVideoMemoryGb": 8, "memoryGb": 12, "license": "mit" },
     { "id": "ahenk", "name": "Ahenk (Turkish, emotions)", "capabilities": "Speech", "requires": ["voice.ahenk"], "minVideoMemoryGb": 8, "memoryGb": 12, "license": "cc-by-4.0" },
     { "id": "mms-tts-tr", "name": "MMS-TTS Turkish (non-commercial)", "capabilities": "Speech", "requires": ["voice.mms-tts-tr"], "memoryGb": 2, "license": "cc-by-nc-4.0", "licenseUse": "NonCommercial", "licenseUrl": "https://huggingface.co/facebook/mms-tts-tur" },
+    { "id": "yazgi-tts-1", "name": "yazgı-tts-1 (Turkish, processor)", "capabilities": "Speech", "requires": ["voice.yazgi-tts-1"], "memoryGb": 2, "license": "apache-2.0", "licenseUrl": "https://huggingface.co/erkamk/yazgi-tts-1" },
     { "id": "ahenk-cep", "name": "Ahenk Cep (Turkish)", "capabilities": "Speech", "requires": ["voice.ahenk-cep"], "license": "cc-by-4.0" },
     { "id": "pp-ocr-latin", "name": "PaddleOCR PP-OCRv5 (reads scanned pages, Latin script)", "capabilities": "Vision", "requires": ["ocr.pp-ocr-latin"], "license": "apache-2.0" },
     { "id": "paraphrase-multilingual-minilm", "name": "Multilingual MiniLM (meaning check)", "capabilities": "Embedding", "requires": ["embedding.paraphrase-multilingual-minilm"] },

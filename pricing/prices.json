@@ -49,6 +49,34 @@
       "outputUsd": 1.2
     },
     {
+      "provider": "elevenlabs",
+      "id": "eleven_v4",
+      "inputUsd": 0,
+      "outputUsd": 0,
+      "speechUsdPerMillionCharacters": 80.0
+    },
+    {
+      "provider": "elevenlabs",
+      "id": "eleven_v4_turbo",
+      "inputUsd": 0,
+      "outputUsd": 0,
+      "speechUsdPerMillionCharacters": 40.0
+    },
+    {
+      "provider": "elevenlabs",
+      "id": "eleven_flash_v2_5",
+      "inputUsd": 0,
+      "outputUsd": 0,
+      "speechUsdPerMillionCharacters": 40.0
+    },
+    {
+      "provider": "elevenlabs",
+      "id": "eleven_multilingual_v2",
+      "inputUsd": 0,
+      "outputUsd": 0,
+      "speechUsdPerMillionCharacters": 80.0
+    },
+    {
       "provider": "fal",
       "id": "fal-ai/flux-2/flash",
       "imageUsd": 0.01
@@ -62,6 +90,27 @@
       "provider": "fal",
       "id": "fal-ai/nano-banana-2",
       "imageUsd": 0.08
+    },
+    {
+      "provider": "google-cloud",
+      "id": "chirp3-hd",
+      "inputUsd": 0,
+      "outputUsd": 0,
+      "speechUsdPerMillionCharacters": 30.0
+    },
+    {
+      "provider": "google",
+      "id": "gemini-3.8-flash-tts",
+      "inputUsd": 0,
+      "outputUsd": 0,
+      "speechUsdPerMillionCharacters": 17.0
+    },
+    {
+      "provider": "google",
+      "id": "gemini-3.8-flash-lite-tts",
+      "inputUsd": 0,
+      "outputUsd": 0,
+      "speechUsdPerMillionCharacters": 11.5
     },
     {
       "provider": "mistral",

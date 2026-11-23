@@ -36,6 +36,10 @@ public static class ProviderServices
         AddChat<MistralProvider>(services);
         AddChat<DeepSeekProvider>(services);
         AddProvider<FalProvider>(services);
+        // 0.1.35: speech-only providers (their engines are registered with the other voices).
+        AddProvider<Providers.Speech.GoogleProvider>(services);
+        AddProvider<Providers.Speech.GoogleCloudProvider>(services);
+        AddProvider<Providers.Speech.ElevenLabsProvider>(services);
         services.AddSingleton<Providers.Embeddings.IEmbeddingTransport, Providers.Embeddings.OpenAIEmbeddings>();
         services.AddSingleton<Providers.Embeddings.IEmbeddingTransport, Providers.Embeddings.OpenRouterEmbeddings>();
         services.AddSingleton<Providers.Embeddings.EmbeddingService>();

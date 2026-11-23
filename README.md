@@ -260,6 +260,13 @@ for:
   speak the profile's video language are listed; when the language changes, a voice that
   does not speak the new one is replaced by the language's default voice, with a warning on the step. Voice, speed and ▶ Listen (a
   short sentence in the video language) are in the step.
+- **Online voices (0.1.35):** besides OpenAI (whose speech models retire on 6 January 2027): **Gemini 3.8 Flash TTS** and **Flash Lite TTS**
+  (a Gemini API key; 30 voices, every video language), **Google Cloud Chirp 3 HD** (a Google Cloud key with the Text-to-Speech API) and
+  **ElevenLabs** v4, v4 Turbo, Flash v2.5 and Multilingual v2. **yazgı-tts-1** (local, free, Turkish, eight voices, on the processor;
+  Apache-2.0) is offered too, never as a default.
+- **Delivery markers (0.1.35):** [excited], [calm], [sad], [serious], [curious], [whisper], [laughing], [sigh] in a scene's text: Gemini
+  and ElevenLabs v3/v4 voices read the words after it that way (a laugh or a sigh once, before them); other voices simply ignore it, and
+  it is never spoken or shown.
 - **Your own voice** — **Pocket TTS** (local, free, English only): Settings → Voice and pronunciation → add a clean recording of 3–15 s
   (WAV, MP3, M4A, OGG, FLAC; ffmpeg converts it), then choose it as the voice of the step. The recording stays in the encrypted
   database. Weights CC-BY-4.0: credit "Pocket TTS, Kyutai (CC-BY-4.0)" when you publish. No speed setting.

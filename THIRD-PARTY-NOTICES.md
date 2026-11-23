@@ -64,6 +64,7 @@ models) or the first video needs them and you confirm the list of downloads. TM 
 | Component | License | Notes |
 |---|---|---|
 | Node.js 26.13.0 | MIT (plus the licenses of its bundled parts) | nodejs.org |
+| yazgı-tts-1 (erkamk/yazgi-tts-1: weights, voices and the yazgi_tts package wheel, pinned to a commit) and normalizer-tr 0.7.0 | Apache-2.0 (both) | huggingface.co/erkamk/yazgi-tts-1 and PyPI, into the app's Python voice environment (0.1.35; the weights are plain tensors loaded with torch.load(weights_only=True)) |
 | FFmpeg (BtbN FFmpeg-Builds, GPL build) | GPL-3.0-or-later | A separate program, run as a separate process. Source: github.com/FFmpeg/FFmpeg, build scripts: github.com/BtbN/FFmpeg-Builds |
 | Chrome Headless Shell | BSD-3-Clause (Chromium) and the licenses of its third-party parts | Downloaded with @puppeteer/browsers or by Remotion |
 | HyperFrames + GSAP | Apache-2.0 (HyperFrames), GSAP "no charge" standard license | npm |

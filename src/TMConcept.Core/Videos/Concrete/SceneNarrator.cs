@@ -66,7 +66,7 @@ public sealed class SceneNarrator(SpeechService speech, ILogger<SceneNarrator> l
             }
 
             var file = Path.Combine(work, VideoFolders.Audio, "parts", string.Create(CultureInfo.InvariantCulture, $"{number}-{k + 1}.wav"));
-            var clip = await speech.SynthesizeAsync(Speed(voice, part.Speed), language, part.Text, file, cancellationToken).ConfigureAwait(false);
+            var clip = await speech.SynthesizeAsync(Speed(voice, part.Speed), language, part.Text, part.Delivery, file, cancellationToken).ConfigureAwait(false);
             paid(clip.CostUsd);
             cost += clip.CostUsd;
             characters += clip.Characters;
@@ -107,7 +107,9 @@ public sealed class SceneNarrator(SpeechService speech, ILogger<SceneNarrator> l
                 var last = i == sentences.Count - 1;
                 var pause = !last ? pacing.SentenceGapMs
                     : part.PauseAfterMs + (p < parts.Count - 1 && EndsSentence(sentences[i]) ? pacing.SentenceGapMs : 0);
-                result.Add(new NarrationPart(sentences[i], part.Speed, pause));
+                // A mood carries over the part's sentences; a sound (a laugh, a sigh) comes once, before the first.
+                var delivery = i == 0 || !Speech.SpeechDeliveries.IsSound(part.Delivery) ? part.Delivery : string.Empty;
+                result.Add(new NarrationPart(sentences[i], part.Speed, pause, delivery));
             }
         }
 

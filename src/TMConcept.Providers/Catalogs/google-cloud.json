@@ -1,0 +1,7 @@
+{
+  "provider": "google-cloud",
+  "pricedOn": "2026-11-05",
+  "models": [
+    { "id": "chirp3-hd", "name": "Chirp 3 HD (speech)", "capabilities": "Speech", "inputUsd": 0, "outputUsd": 0, "speechUsdPerMillionCharacters": 30.0 }
+  ]
+}

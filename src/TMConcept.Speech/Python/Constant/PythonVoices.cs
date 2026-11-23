@@ -21,6 +21,7 @@ public static class PythonVoices
     private const string TrendyolCommit = "66a80184b286390800ee7c1a95228cc839cd59ef";
     private const string AhenkCommit = "6bcef95c9e8401058253518d08028369958522cc";
     private const string MmsCommit = "7e364479c307f06733ca865b0a5269e0209cf82d";
+    private const string YazgiCommit = "87c89ad84556fb3f1c171f7f88a37ddc0f806b04";
 
     private static readonly IReadOnlyList<string> Turkish = [ContentLanguages.Turkish];
 
@@ -111,5 +112,32 @@ public static class PythonVoices
     Turkish, [new("default", "MMS")], CopiesVoice: false, OnCard: false, NeedMegabytes: 0, new Dictionary<string, string>());
 
     /// <summary>Every Python voice.</summary>
-    public static readonly IReadOnlyList<PythonVoice> All = [XttsV2, F5Turkish, VoxCpm2, Trendyol, Ahenk, MmsTurkish];
+    /// <summary>
+    /// yazgı-tts-1 (0.1.35): a small Turkish voice on the processor; its package is the pinned wheel in the model folder, its weights the pinned
+    /// .pt files loaded as plain tensors (torch.load weights_only=True, inside the package). Eight built-in voices; not a default.
+    /// </summary>
+    public static readonly PythonVoice YazgiTts = new(SpeechEngines.YazgiTts, "yazgı-tts-1", PythonEnvironments.Yazgi.Key, "yazgi",
+    [
+        PythonModelFiles.Pinned("erkamk/yazgi-tts-1", YazgiCommit, "config.json", "084fb8024d78abc7011ef7e71e42ca5dbbf35f70e814e6c7c4204724ec4bbd7a", 960),
+        PythonModelFiles.Pinned("erkamk/yazgi-tts-1", YazgiCommit, "model.pt", "ba8acbd3831062a5ed8a7bd0822fc21f6c97bbb9c7992df7afd20958a2fd3041", 225_063_723),
+        PythonModelFiles.Pinned("erkamk/yazgi-tts-1", YazgiCommit, "codec.pt", "34bb58a62d31341a800ec57569036c044bb8882693a4990fa6675c1d0787c70b", 387_579_887),
+        PythonModelFiles.Pinned("erkamk/yazgi-tts-1", YazgiCommit, "dist/yazgi_tts-0.1.0-py3-none-any.whl", "69aa6de7812dee43cf1f1a51fe62823b4a8fb270befd37920e3e16c13fb92c23", 32_077,
+            "yazgi_tts-0.1.0-py3-none-any.whl"),
+        PythonModelFiles.Pinned("erkamk/yazgi-tts-1", YazgiCommit, "voices/female-01.npz", "c5bb96636f771ff121f5609c32369b8b38fefa4933c56c658521b9bb3aa6c70d", 3_926, "voices/female-01.npz"),
+        PythonModelFiles.Pinned("erkamk/yazgi-tts-1", YazgiCommit, "voices/female-02.npz", "ebf6aa7355a23d69f52a987e0b6decc264ec8dc7f6f9ea74fb95ca7142b82331", 3_382, "voices/female-02.npz"),
+        PythonModelFiles.Pinned("erkamk/yazgi-tts-1", YazgiCommit, "voices/female-03.npz", "f92303a09a4bca707ac5a2b48aa297d8846195d9f163e684d2f2db6d41b64370", 3_926, "voices/female-03.npz"),
+        PythonModelFiles.Pinned("erkamk/yazgi-tts-1", YazgiCommit, "voices/female-04.npz", "c62fb8bd84795741c9cacc36b383472821dec6b3edb86f6df30cfceaf6036fc4", 3_766, "voices/female-04.npz"),
+        PythonModelFiles.Pinned("erkamk/yazgi-tts-1", YazgiCommit, "voices/male-01.npz", "96e402930b217eb699efff754ac4382e431994c74e75c3a970e9d80e64a14354", 3_254, "voices/male-01.npz"),
+        PythonModelFiles.Pinned("erkamk/yazgi-tts-1", YazgiCommit, "voices/male-02.npz", "50d4c31331c8390d7400cc763dda66c03245ca051602ab72ea02645c37244135", 3_382, "voices/male-02.npz"),
+        PythonModelFiles.Pinned("erkamk/yazgi-tts-1", YazgiCommit, "voices/male-03.npz", "82256e9062d8915a59302c3b307014c635cc3c9ae5404c6b8623cc3abb36f19d", 3_510, "voices/male-03.npz"),
+        PythonModelFiles.Pinned("erkamk/yazgi-tts-1", YazgiCommit, "voices/male-04.npz", "e939c9d178ae17eae841b2bbc84fd20ef5188ed6b7e388f670a265d481a04242", 3_638, "voices/male-04.npz"),
+    ],
+    Turkish,
+    [
+        new("male-01", "Erkek 1"), new("male-02", "Erkek 2"), new("male-03", "Erkek 3"), new("male-04", "Erkek 4"),
+        new("female-01", "Kadın 1"), new("female-02", "Kadın 2"), new("female-03", "Kadın 3"), new("female-04", "Kadın 4"),
+    ],
+    CopiesVoice: false, OnCard: false, NeedMegabytes: 0, new Dictionary<string, string>());
+
+    public static readonly IReadOnlyList<PythonVoice> All = [XttsV2, F5Turkish, VoxCpm2, Trendyol, Ahenk, MmsTurkish, YazgiTts];
 }

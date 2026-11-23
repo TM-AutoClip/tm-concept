@@ -18,6 +18,12 @@ public sealed record Marker(string Id, MarkerKind Kind, LocalizedText Token, Loc
     /// <summary>How the scene begins (<see cref="Scenes.SceneTransitions"/>; empty = not a transition marker).</summary>
     public string Transition { get; init; } = string.Empty;
 
+    /// <summary>
+    /// The delivery of the words after it (0.1.35, <see cref="Speech.SpeechDeliveries"/>; narration; empty = not a delivery marker): a mood
+    /// for the part that follows, a sound before its first sentence. Only Gemini and ElevenLabs v3/v4 voices act on it.
+    /// </summary>
+    public string Delivery { get; init; } = string.Empty;
+
     /// <summary>The token of a language ("tr" → Turkish, anything else → English).</summary>
     public string TokenOf(string language) => language == Profiles.ContentLanguages.Turkish ? Token.Tr : Token.En;
 

@@ -15,8 +15,10 @@ public sealed class MarkerTests
     [Fact]
     public void TheCatalogHoldsOnlyWhatTheProgramAppliesItself()
     {
-        MarkerCatalog.All.Select(m => m.Id).ShouldBe(["pause-0.5", "pause-1", "pause-2", "slow", "fast", "normal-speed", "hard-cut", "soft-transition"],
-            "no style request for a model, nothing that cannot be applied exactly (emphasis on screen, a big number…)");
+        MarkerCatalog.All.Select(m => m.Id).ShouldBe(["pause-0.5", "pause-1", "pause-2", "slow", "fast", "normal-speed", "hard-cut", "soft-transition",
+            "delivery-excited", "delivery-calm", "delivery-sad", "delivery-serious", "delivery-curious", "delivery-whisper", "delivery-laugh", "delivery-sigh"],
+            "nothing that cannot be applied exactly (emphasis on screen, a big number…); 0.1.35's delivery markers go to the voices that "
+            + "know them as their own setting and are dropped for the others");
         MarkerCatalog.Of(MarkerKind.Transition).Select(m => m.Transition).ShouldBe([SceneTransitions.Cut, SceneTransitions.Fade]);
         foreach (var marker in MarkerCatalog.All)
         {
@@ -26,8 +28,8 @@ public sealed class MarkerTests
             marker.Hint.En.ShouldNotBeEmpty();
             MarkerText.Find(marker.Token.Tr).ShouldBe(marker);
             MarkerText.Find(marker.Token.En).ShouldBe(marker);
-            var applied = marker.Kind == MarkerKind.Narration ? marker.PauseMs > 0 || marker.Speed > 0 : marker.Transition.Length > 0;
-            applied.ShouldBeTrue("every placeholder is applied on this computer");
+            var applied = marker.Kind == MarkerKind.Narration ? marker.PauseMs > 0 || marker.Speed > 0 || marker.Delivery.Length > 0 : marker.Transition.Length > 0;
+            applied.ShouldBeTrue("every placeholder is applied on this computer (a delivery as the voice's own setting)");
         }
     }
 

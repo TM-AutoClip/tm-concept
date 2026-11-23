@@ -98,7 +98,7 @@ public sealed class PythonVoiceTests
 
         var xtts = (await planner.PlanAsync([ComponentCodes.VoicePrefix + SpeechEngines.XttsV2], CancellationToken.None)).Downloads;
         xtts.Single(d => d.Name.StartsWith("XTTS-v2 model", StringComparison.Ordinal)).Name.ShouldContain("NON-COMMERCIAL");
-        source.Components.Count(c => c.Code.StartsWith(ComponentCodes.PythonEnvironmentPrefix, StringComparison.Ordinal)).ShouldBe(4, "VoxCPM2, Trendyol and Ahenk share one");
+        source.Components.Count(c => c.Code.StartsWith(ComponentCodes.PythonEnvironmentPrefix, StringComparison.Ordinal)).ShouldBe(5, "VoxCPM2, Trendyol and Ahenk share one; yazgı has its own (0.1.35)");
 
         // Without an NVIDIA card the processor build is planned: smaller, and said so.
         var amd = new PythonInstaller(layout, null!, null!, new FakeGpu(Amd16), NullLogger<PythonInstaller>.Instance);

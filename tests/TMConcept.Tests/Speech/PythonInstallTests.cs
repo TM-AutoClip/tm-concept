@@ -75,7 +75,7 @@ public sealed class PythonInstallTests
     [Fact]
     public void TheWorkerScriptsShipWithTheApp()
     {
-        PythonFiles.Scripts.ShouldBe(["adapter_f5.py", "adapter_mms.py", "adapter_voxcpm.py", "adapter_xtts.py", "f5_ref_tr.wav", "tmc_common.py", "worker.py"]);
+        PythonFiles.Scripts.ShouldBe(["adapter_f5.py", "adapter_mms.py", "adapter_voxcpm.py", "adapter_xtts.py", "adapter_yazgi.py", "f5_ref_tr.wav", "tmc_common.py", "worker.py"]);
         System.Text.Encoding.UTF8.GetString(PythonFiles.Read("worker.py")).ShouldContain("HF_HUB_OFFLINE");
     }
 

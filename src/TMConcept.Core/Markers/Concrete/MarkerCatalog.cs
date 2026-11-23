@@ -8,7 +8,9 @@ namespace TMConcept.Core.Markers;
 /// lengthens its scene; a speed marker changes the voice's speed; a soft transition is a short fade through black that ffmpeg adds after the
 /// render. The one exception is the hard cut: it is only told to the video code (as the scene's "transition" in the input), so it depends on
 /// that code — the help text says so, and whether the program should force it (or drop it) is the developer's open question. Nothing else
-/// is sent to a model as a request: what cannot be applied (emphasis on screen, a big number…) is not offered.
+/// is sent to a model as a request: what cannot be applied (emphasis on screen, a big number…) is not offered. 0.1.35 (the developer's
+/// decision): delivery markers (a mood or a sound) go to the voices that have such a setting (Gemini, ElevenLabs v3/v4) and are dropped for
+/// the others.
 /// </summary>
 public static class MarkerCatalog
 {
@@ -36,6 +38,14 @@ public static class MarkerCatalog
         Transition("hard-cut", T("[sert geçiş]", "[hard cut]"), T("video koduna ani kesme diye söylenir", "passed on to the video code as a sudden cut"), SceneTransitions.Cut),
         Transition("soft-transition", T("[yumuşak geçiş]", "[soft transition]"), T("sahneye kısa bir kararmayla geçilir", "the scene starts after a short fade through black"),
             SceneTransitions.Fade),
+        Delivery(Speech.SpeechDeliveries.Excited, T("[heyecanlı]", "[excited]")),
+        Delivery(Speech.SpeechDeliveries.Calm, T("[sakin]", "[calm]")),
+        Delivery(Speech.SpeechDeliveries.Sad, T("[hüzünlü]", "[sad]")),
+        Delivery(Speech.SpeechDeliveries.Serious, T("[ciddi]", "[serious]")),
+        Delivery(Speech.SpeechDeliveries.Curious, T("[meraklı]", "[curious]")),
+        Delivery(Speech.SpeechDeliveries.Whisper, T("[fısıltı]", "[whisper]")),
+        Delivery(Speech.SpeechDeliveries.Laugh, T("[gülerek]", "[laughing]")),
+        Delivery(Speech.SpeechDeliveries.Sigh, T("[iç çekerek]", "[sigh]")),
     ];
 
     /// <summary>The markers of one kind.</summary>
@@ -47,6 +57,13 @@ public static class MarkerCatalog
         new(id, MarkerKind.Narration, token, T("araya sessizlik eklenir", "silence is added there")) { PauseMs = milliseconds };
 
     private static Marker Pace(string id, LocalizedText token, LocalizedText hint, double speed) => new(id, MarkerKind.Narration, token, hint) { Speed = speed };
+
+    private static Marker Delivery(string delivery, LocalizedText token) =>
+        new("delivery-" + delivery, MarkerKind.Narration, token,
+            T("Gemini ve ElevenLabs v3/v4 sesleri sonrasını bu tonda okur; diğer sesler yok sayar", "Gemini and ElevenLabs v3/v4 voices read what follows this way; other voices ignore it"))
+        {
+            Delivery = delivery,
+        };
 
     private static Marker Transition(string id, LocalizedText token, LocalizedText hint, string transition) =>
         new(id, MarkerKind.Transition, token, hint) { Transition = transition };

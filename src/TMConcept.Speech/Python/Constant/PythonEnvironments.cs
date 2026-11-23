@@ -24,5 +24,9 @@ public static class PythonEnvironments
     public static readonly PythonEnvironment Mms = new("mms", "MMS-TTS", ["torch==2.8.0", "transformers==4.56.2"], 660_000_000, 660_000_000, ProcessorOnly: true);
 
     /// <summary>Every environment.</summary>
-    public static readonly IReadOnlyList<PythonEnvironment> All = [Xtts, F5, VoxCpm, Mms];
+    /// <summary>yazgı-tts-1 (0.1.35): PyTorch on the processor and the Turkish text front end its package needs.</summary>
+    public static readonly PythonEnvironment Yazgi = new("yazgi", "yazgı-tts", ["torch==2.8.0", "numpy", "soundfile", "normalizer-tr==0.7.0"], 700_000_000,
+        700_000_000, ProcessorOnly: true);
+
+    public static readonly IReadOnlyList<PythonEnvironment> All = [Xtts, F5, VoxCpm, Mms, Yazgi];
 }

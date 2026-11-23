@@ -113,6 +113,9 @@ public static class DesktopServices
         services.AddSingleton<Speech.Embeddings.LocalEmbedder>();
         services.AddSingleton<Core.Duplicates.ILocalEmbedder>(s => s.GetRequiredService<Speech.Embeddings.LocalEmbedder>());
         services.AddSingleton<Core.Speech.ISpeechEngine, Providers.Speech.OpenAISpeechEngine>();
+        services.AddSingleton<Core.Speech.ISpeechEngine, Providers.Speech.GeminiSpeechEngine>();
+        services.AddSingleton<Core.Speech.ISpeechEngine, Providers.Speech.GoogleCloudSpeechEngine>();
+        services.AddSingleton<Core.Speech.ISpeechEngine, Providers.Speech.ElevenLabsSpeechEngine>();
         services.AddSingleton<Core.Pronunciation.ISpeechTextNormalizer, Core.Pronunciation.TurkishSpeechTextNormalizer>();
         services.AddSingleton<Core.Pronunciation.PronunciationService>();
         services.AddSingleton<Core.Speech.SpeechService>();

@@ -71,6 +71,7 @@ public static partial class MarkerText
         var parts = new List<NarrationPart>();
         var skipped = new List<string>();
         var speed = 1.0;
+        var delivery = string.Empty;
         var pending = new StringBuilder();
         void Flush()
         {
@@ -78,7 +79,8 @@ public static partial class MarkerText
             pending.Clear();
             if (spoken.Length > 0)
             {
-                parts.Add(new NarrationPart(spoken, speed, 0));
+                parts.Add(new NarrationPart(spoken, speed, 0, delivery));
+                delivery = string.Empty;
             }
         }
 
@@ -118,6 +120,12 @@ public static partial class MarkerText
             if (marker.Speed > 0)
             {
                 speed = marker.Speed;
+            }
+
+            if (marker.Delivery.Length > 0)
+            {
+                // 0.1.35: the delivery of the part that follows (only the voices that know it act on it).
+                delivery = marker.Delivery;
             }
         }
 

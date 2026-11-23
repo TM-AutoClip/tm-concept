@@ -1,0 +1,8 @@
+{
+  "provider": "google",
+  "pricedOn": "2026-11-05",
+  "models": [
+    { "id": "gemini-3.8-flash-tts", "name": "Gemini 3.8 Flash TTS (speech)", "capabilities": "Speech", "inputUsd": 0, "outputUsd": 0, "speechUsdPerMillionCharacters": 17.0 },
+    { "id": "gemini-3.8-flash-lite-tts", "name": "Gemini 3.8 Flash Lite TTS (speech)", "capabilities": "Speech", "inputUsd": 0, "outputUsd": 0, "speechUsdPerMillionCharacters": 11.5 }
+  ]
+}

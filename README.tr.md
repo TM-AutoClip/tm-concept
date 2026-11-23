@@ -255,6 +255,13 @@ yazar:
   Türkçe; tek sesin yedi okuma tarzı: düz, sakin, neşeli, şefkatli, hüzünlü, kızgın, şaşkın; 48 kHz, işlemcide çalışan 13 MB'lık bir
   model, bir dakikalık konuşma yaklaşık 10 saniye) ya da bir online ses. Yalnız profilin video dilini konuşan sesler listelenir; dil değişince yeni dili konuşmayan ses, adımda bir uyarıyla o
   dilin varsayılan sesine döner. Ses, hız ve ▶ Dinle (video dilinde kısa bir cümle) adımın içinde.
+- **Online sesler (0.1.35):** OpenAI'ın yanında (konuşma modelleri 6 Ocak 2027'de kapanıyor): **Gemini 3.8 Flash TTS** ve **Flash Lite
+  TTS** (Gemini API anahtarı; 30 ses, bütün video dilleri), **Google Cloud Chirp 3 HD** (Text-to-Speech API'si açık bir Google Cloud
+  anahtarı) ve **ElevenLabs** v4, v4 Turbo, Flash v2.5 ve Multilingual v2. **yazgı-tts-1** (yerel, ücretsiz, Türkçe, sekiz ses, işlemcide;
+  Apache-2.0) da seçilebilir, hiçbir zaman varsayılan değil.
+- **Ton yer tutucuları (0.1.35):** sahne metninde [heyecanlı], [sakin], [hüzünlü], [ciddi], [meraklı], [fısıltı], [gülerek], [iç çekerek]:
+  Gemini ve ElevenLabs v3/v4 sesleri sonrasını o tonda okur (gülme ya da iç çekme bir kez, önünde); diğer sesler yok sayar; hiçbir zaman
+  okunmaz ve altyazıda görünmez.
 - **Kendi sesin** — **Pocket TTS** (yerel, ücretsiz, yalnız İngilizce): Ayarlar → Ses ve telaffuz → 3–15 saniyelik temiz bir kayıt ekle
   (WAV, MP3, M4A, OGG, FLAC; ffmpeg dönüştürür), sonra adımda ses olarak seç. Kayıt şifreli veritabanında kalır. Ağırlıklar CC-BY-4.0:
   yayınlarken "Pocket TTS, Kyutai (CC-BY-4.0)" atfını yaz. Hız ayarı yok.

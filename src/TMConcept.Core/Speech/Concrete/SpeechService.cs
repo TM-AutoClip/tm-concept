@@ -83,17 +83,24 @@ public sealed class SpeechService(IEnumerable<ISpeechEngine> engines, StepModelR
     public Task<SpeechClip> SynthesizeAsync(SpeechSetup setup, string language, string text, string outputWav, CancellationToken cancellationToken) =>
         SynthesizeAsync(setup, language, text, outputWav, [], cancellationToken);
 
+    /// <summary>Speaks with a delivery (0.1.35, <see cref="SpeechDeliveries"/>; only the voices that know it act on it).</summary>
+    public Task<SpeechClip> SynthesizeAsync(SpeechSetup setup, string language, string text, string delivery, string outputWav, CancellationToken cancellationToken) =>
+        SpeakAsync(setup, language, text, outputWav, [], delivery ?? string.Empty, cancellationToken);
+
     /// <summary>
     /// Speaks into <paramref name="outputWav"/> with <paramref name="extra"/> dictionary words applied first (the settings page listens to a
     /// word before it is saved).
     /// </summary>
-    public async Task<SpeechClip> SynthesizeAsync(SpeechSetup setup, string language, string text, string outputWav, IReadOnlyList<PronunciationRule> extra,
-        CancellationToken cancellationToken)
+    public Task<SpeechClip> SynthesizeAsync(SpeechSetup setup, string language, string text, string outputWav, IReadOnlyList<PronunciationRule> extra,
+        CancellationToken cancellationToken) => SpeakAsync(setup, language, text, outputWav, extra, string.Empty, cancellationToken);
+
+    private async Task<SpeechClip> SpeakAsync(SpeechSetup setup, string language, string text, string outputWav, IReadOnlyList<PronunciationRule> extra,
+        string delivery, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(setup);
         var voice = setup.Voice.Length > 0 ? setup.Voice : setup.Engine.Voices(language).FirstOrDefault()?.Id ?? string.Empty;
         var spoken = await pronunciations.PrepareAsync(text, language, extra, cancellationToken).ConfigureAwait(false);
-        var cache = Path.Combine(paths.WorkDirectory, "speech-cache", VoiceTag(voice) + "-" + Key(spoken, setup.Engine.Code, setup.Model.Id, voice, setup.Speed) + ".wav");
+        var cache = Path.Combine(paths.WorkDirectory, "speech-cache", VoiceTag(voice) + "-" + Key(delivery.Length > 0 ? spoken + "\u001e" + delivery : spoken, setup.Engine.Code, setup.Model.Id, voice, setup.Speed) + ".wav");
         Directory.CreateDirectory(Path.GetDirectoryName(outputWav)!);
         if (File.Exists(cache))
         {
@@ -106,7 +113,7 @@ public sealed class SpeechService(IEnumerable<ISpeechEngine> engines, StepModelR
         var lease = await gpu.AcquireAsync(setup.Model, cancellationToken).ConfigureAwait(false);
         await using (lease.ConfigureAwait(false))
         {
-            clip = await setup.Engine.SynthesizeAsync(new SpeechRequest(spoken, language, voice, setup.Speed, outputWav, setup.Online), cancellationToken)
+            clip = await setup.Engine.SynthesizeAsync(new SpeechRequest(spoken, language, voice, setup.Speed, outputWav, setup.Online, delivery), cancellationToken)
                 .ConfigureAwait(false);
         }
 
