@@ -207,8 +207,16 @@ public sealed partial class ShellViewModel : ObservableObject
             page.OnProfilesChanged(RefreshProfilesAsync);
         }
 
-        await RefreshProfilesAsync().ConfigureAwait(true);
-        await _spending.RefreshAsync().ConfigureAwait(true);
+        using (_timer.Step("startup.shell.profiles", countConnections: true))
+        {
+            await RefreshProfilesAsync().ConfigureAwait(true);
+        }
+
+        using (_timer.Step("startup.shell.spending", countConnections: true))
+        {
+            await _spending.RefreshAsync().ConfigureAwait(true);
+        }
+
         if (Profiles.Count == 0)
         {
             // First start: the first profile is the last step of the setup.
@@ -337,10 +345,18 @@ public sealed partial class ShellViewModel : ObservableObject
                 return;
             }
 
-            await _session.SelectProfileAsync(profile, CancellationToken.None).ConfigureAwait(true);
+            using (_timer.Step("profile.select", countConnections: true))
+            {
+                await _session.SelectProfileAsync(profile, CancellationToken.None).ConfigureAwait(true);
+            }
+
             foreach (var item in Items)
             {
-                await item.Page.ProfileChangedAsync().ConfigureAwait(true);
+                // "page.<name>.profile_changed <ms>": every page reloads for the new profile, shown or not.
+                using (_timer.Step("page." + item.Page.TimingName + ".profile_changed", countConnections: true))
+                {
+                    await item.Page.ProfileChangedAsync().ConfigureAwait(true);
+                }
             }
 
             await ActivateCurrentAsync().ConfigureAwait(true);
