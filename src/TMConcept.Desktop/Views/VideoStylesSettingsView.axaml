@@ -228,7 +228,7 @@
                         </ItemsControl>
                       </Border>
 
-                      <StackPanel Grid.Row="4" Orientation="Horizontal" VerticalAlignment="Center">
+                      <StackPanel Grid.Row="4" Orientation="Horizontal" VerticalAlignment="Top" Margin="0,6,0,0">
                         <TextBlock Text="{DynamicResource styles.draw}" VerticalAlignment="Center" />
                         <views:HelpTip Text="{DynamicResource styles.draw.tip}" />
                       </StackPanel>
@@ -249,45 +249,54 @@
                                     Command="{Binding ApplySuggestedPaletteCommand}" />
                           </StackPanel>
                         </StackPanel>
-                        <TextBlock Text="{DynamicResource styles.motion}" VerticalAlignment="Center" />
-                        <ComboBox Name="StyleMotion" ItemsSource="{Binding Motions}" SelectedItem="{Binding Motion}" MinWidth="140"
-                                  ToolTip.Tip="{DynamicResource styles.motion.tip}">
-                          <ComboBox.ItemTemplate>
-                            <DataTemplate x:DataType="vm:NumberChoice">
-                              <TextBlock Text="{Binding Label}" />
-                            </DataTemplate>
-                          </ComboBox.ItemTemplate>
-                        </ComboBox>
-                        <TextBlock Text="{DynamicResource styles.drawer}" VerticalAlignment="Center" />
-                        <ComboBox Name="StyleDrawer" ItemsSource="{Binding Drawers}" SelectedItem="{Binding Drawer}" MinWidth="160"
-                                  ToolTip.Tip="{DynamicResource styles.drawer.tip}">
-                          <ComboBox.ItemTemplate>
-                            <DataTemplate x:DataType="vm:NumberChoice">
-                              <TextBlock Text="{Binding Label}" />
-                            </DataTemplate>
-                          </ComboBox.ItemTemplate>
-                        </ComboBox>
-                        <TextBlock Text="{DynamicResource styles.tempo}" VerticalAlignment="Center" />
-                        <ComboBox Name="StyleTempo" ItemsSource="{Binding Tempos}" SelectedItem="{Binding Tempo}" MinWidth="140"
-                                  ToolTip.Tip="{DynamicResource styles.tempo.tip}">
-                          <ComboBox.ItemTemplate>
-                            <DataTemplate x:DataType="vm:NumberChoice">
-                              <TextBlock Text="{Binding Label}" />
-                            </DataTemplate>
-                          </ComboBox.ItemTemplate>
-                        </ComboBox>
-                        <!-- F11 (0.1.50): the quality mode; Fast by default. -->
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                          <TextBlock Text="{DynamicResource styles.quality}" VerticalAlignment="Center" />
-                          <views:HelpTip Text="{DynamicResource styles.quality.tip}" />
+                        <!-- A label and its picker wrap together (a long style note never leaves a label alone at the end of a line). -->
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                          <TextBlock Text="{DynamicResource styles.motion}" VerticalAlignment="Center" />
+                          <ComboBox Name="StyleMotion" ItemsSource="{Binding Motions}" SelectedItem="{Binding Motion}" MinWidth="140"
+                                    ToolTip.Tip="{DynamicResource styles.motion.tip}">
+                            <ComboBox.ItemTemplate>
+                              <DataTemplate x:DataType="vm:NumberChoice">
+                                <TextBlock Text="{Binding Label}" />
+                              </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                          </ComboBox>
                         </StackPanel>
-                        <ComboBox Name="StyleQuality" ItemsSource="{Binding Qualities}" SelectedItem="{Binding Quality}" MinWidth="140">
-                          <ComboBox.ItemTemplate>
-                            <DataTemplate x:DataType="vm:NumberChoice">
-                              <TextBlock Text="{Binding Label}" />
-                            </DataTemplate>
-                          </ComboBox.ItemTemplate>
-                        </ComboBox>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                          <TextBlock Text="{DynamicResource styles.drawer}" VerticalAlignment="Center" />
+                          <ComboBox Name="StyleDrawer" ItemsSource="{Binding Drawers}" SelectedItem="{Binding Drawer}" MinWidth="160"
+                                    ToolTip.Tip="{DynamicResource styles.drawer.tip}">
+                            <ComboBox.ItemTemplate>
+                              <DataTemplate x:DataType="vm:NumberChoice">
+                                <TextBlock Text="{Binding Label}" />
+                              </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                          </ComboBox>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                          <TextBlock Text="{DynamicResource styles.tempo}" VerticalAlignment="Center" />
+                          <ComboBox Name="StyleTempo" ItemsSource="{Binding Tempos}" SelectedItem="{Binding Tempo}" MinWidth="140"
+                                    ToolTip.Tip="{DynamicResource styles.tempo.tip}">
+                            <ComboBox.ItemTemplate>
+                              <DataTemplate x:DataType="vm:NumberChoice">
+                                <TextBlock Text="{Binding Label}" />
+                              </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                          </ComboBox>
+                        </StackPanel>
+                        <!-- F11 (0.1.50): the quality mode; Fast by default. -->
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                          <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="{DynamicResource styles.quality}" VerticalAlignment="Center" />
+                            <views:HelpTip Text="{DynamicResource styles.quality.tip}" />
+                          </StackPanel>
+                          <ComboBox Name="StyleQuality" ItemsSource="{Binding Qualities}" SelectedItem="{Binding Quality}" MinWidth="140">
+                            <ComboBox.ItemTemplate>
+                              <DataTemplate x:DataType="vm:NumberChoice">
+                                <TextBlock Text="{Binding Label}" />
+                              </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                          </ComboBox>
+                        </StackPanel>
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                           <CheckBox Name="StyleFinish" IsChecked="{Binding Finish}" Content="{DynamicResource styles.finish}" />
                           <views:HelpTip Text="{DynamicResource styles.finish.tip}" />
