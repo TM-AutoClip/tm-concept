@@ -62,6 +62,14 @@ public sealed class RenderStyle
     /// </summary>
     public string Texture { get; set; } = string.Empty;
 
+    /// <summary>
+    /// The finishing layer of the app's drawer (F12, 0.1.43, <see cref="RenderFinish"/>): paper tooth, grain, vignette, glow, shadow and boil
+    /// drawn on one canvas over the scenes. Null (and absent from the file) when the template has it off, for code written by a model and in
+    /// the input of older videos: then nothing is drawn.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public RenderFinish? Finish { get; set; }
+
     /// <summary>How much moves: calm, normal or lively.</summary>
     public string Motion { get; set; } = string.Empty;
 

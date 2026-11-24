@@ -10,11 +10,22 @@ namespace TMConcept.Core.Styles;
 /// (<paramref name="ConceptGuidance"/>, empty = nothing). <paramref name="PrefersImages"/>: the look needs an image model (code alone draws
 /// it only roughly). <paramref name="Transition"/> (F1, 0.1.42): the family of scene transitions the look uses in the app's drawer
 /// (<see cref="Scenes.SceneTransitions"/>: paper slides, a drafting board or a pencil wipes like an eraser, a terminal cuts; empty = the
-/// tempo's own). The prompts are English (models write code best in English); the guidance is in the concept prompt's language.
+/// tempo's own). F12 (0.1.43): <see cref="Pitfalls"/>, the known mistakes of the look that go into the scene plan prompt, and
+/// <see cref="Finish"/>, the finishing layer the app's drawer lays over it. The prompts are English (models write code best in English); the
+/// guidance is in the concept prompt's language.
 /// </summary>
 public sealed record DrawStyleDefinition(DrawStyle Style, string Key, string ImagePrompt, string Drawing, string Craft, StyleTexture Texture,
     string PaletteId, LocalizedText ConceptGuidance, bool PrefersImages = false, string Transition = "")
 {
+    /// <summary>
+    /// The look's known mistakes (F12, 0.1.43; two to four short English sentences, empty for <see cref="DrawStyle.Auto"/>): the scene plan
+    /// prompt lists them for the chosen style so the same mistake is not made again. No call is added.
+    /// </summary>
+    public IReadOnlyList<string> Pitfalls { get; init; } = [];
+
+    /// <summary>The finishing layer of the look (F12, 0.1.43; <see cref="StyleFinish.None"/> for <see cref="DrawStyle.Auto"/>).</summary>
+    public StyleFinish Finish { get; init; } = StyleFinish.None;
+
     /// <summary>Whether a concept written for this style differs from a plain one.</summary>
     public bool HasConceptGuidance => ConceptGuidance.Tr.Length > 0 || ConceptGuidance.En.Length > 0;
 

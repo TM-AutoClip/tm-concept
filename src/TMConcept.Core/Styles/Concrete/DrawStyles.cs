@@ -7,7 +7,10 @@ namespace TMConcept.Core.Styles;
 /// material and motion rules were written for this app after reading MIT projects as recipes, without taking their code or prompt text:
 /// ersinkoc/AI-Video-Factory (entrance length caps, paper slide-in with a fixed shadow, isometric outline-then-fill, texture layers),
 /// deenukhan/animation-styles and cth9191/animate (blueprint, hologram, terminal and pencil-sketch looks) and kaomei/stickman-video-director
-/// (a stick-figure presenter, setup → action → reaction, a visual change every two to three seconds).
+/// (a stick-figure presenter, setup → action → reaction, a visual change every two to three seconds). F12 (0.1.43): every style's known
+/// mistakes (<see cref="DrawStyleDefinition.Pitfalls"/>, a "known pitfalls" list per style as in ReelMimic's style file template, MIT) and
+/// its finishing layer (<see cref="DrawStyleDefinition.Finish"/>: paper tooth, grain, vignette, glow, shadow by depth and a 12-step boil,
+/// effects read from ReelMimic's own engines, MIT; the watercolour and pastel engines built on p5.js are not used).
 /// </summary>
 public static class DrawStyles
 {
@@ -21,7 +24,16 @@ public static class DrawStyles
             "flat vector illustration, solid colours, simple shapes",
             "flat shapes and simple icons in solid colours",
             "Shapes pop in (at most 0.45 s, a little overshoot) and settle; no outlines.",
-            StyleTexture.None, string.Empty, NoGuidance),
+            StyleTexture.None, string.Empty, NoGuidance)
+        {
+            Pitfalls =
+            [
+                "Flat shapes carry no detail: a map region wider than a continent or a diagram with more than six boxes turns into confetti.",
+                "Without outlines the accent and the surface colours must differ: never put an accent pin on an accent country.",
+                "Pops need room: keep every anchor at least a tenth of the frame away from the others.",
+            ],
+            Finish = new(Grain: 0.25, Vignette: 0.3),
+        },
         new(DrawStyle.StickFigure, "stick-figure",
             "minimal stick-figure illustration, simple line characters with round heads, plain background, generous empty space on one side",
             "a stick-figure presenter (round head, line body) at one side who acts out and points at the scene's subject, next to simple line "
@@ -40,64 +52,172 @@ public static class DrawStyles
                     + "something, the result shows. Explain abstract ideas with a visual metaphor (memory = a chest of drawers). Every segment gets a new "
                     + "recognisable place. Even for a technical or historical subject the narrator points at the drawings, diagrams and objects beside "
                     + "it; the narration is the narrator speaking to the viewer.",
-            }),
+            })
+        {
+            Pitfalls =
+            [
+                "The presenter stands in the lower left corner: keep pins, labels and diagram boxes out of that corner.",
+                "A beat without an action leaves the presenter idle: every beat points at, walks to or reacts to something.",
+                "Stick figures are tiny: walkers only on routes longer than a third of the frame.",
+            ],
+            Finish = new(Tooth: 0.35, Vignette: 0.2, Boil: 0.5),
+        },
         new(DrawStyle.LineArt, "line-art",
             "clean line art, thin ink lines, minimal shading",
             "thin one-colour line drawings without fills",
             "Lines draw on along their length (stroke-dashoffset, 0.6–1.2 s) before anything is filled.",
-            StyleTexture.Paper, string.Empty, NoGuidance),
+            StyleTexture.Paper, string.Empty, NoGuidance)
+        {
+            Pitfalls =
+            [
+                "Thin lines vanish on a busy picture: on an image base use at most two paths and short labels.",
+                "Lines draw on one after another: no more than two drawn paths in one beat.",
+                "No filled shapes: prefer pins, paths and arrows to country fills.",
+            ],
+            Finish = new(Tooth: 0.45, Grain: 0.15, Vignette: 0.2),
+        },
         new(DrawStyle.PaperCut, "paper-cut",
             "layered paper cut-out illustration, soft shadows, craft paper texture",
             "layered paper cut-out shapes with soft shadows",
             "Paper pieces slide in horizontally to their place (at most 0.9 s) and keep one fixed soft shadow; paper never fades, morphs or bends.",
-            StyleTexture.Paper, "paper", NoGuidance, Transition: Scenes.SceneTransitions.Slide),
+            StyleTexture.Paper, "paper", NoGuidance, Transition: Scenes.SceneTransitions.Slide)
+        {
+            Pitfalls =
+            [
+                "Paper never fades, morphs or bends: no zoom deeper than 1.6 and no camera move shorter than its sentence.",
+                "Every piece casts a shadow: keep labels and pins apart, overlapping pieces read as a pile.",
+                "Paper slides in from the side: do not start two pieces at the same place in one beat.",
+            ],
+            Finish = new(Tooth: 0.5, Vignette: 0.25, Shadow: 1, Boil: 0.6),
+        },
         new(DrawStyle.Infographic, "infographic",
             "clean infographic-style illustration with simple icons and diagrams (no text)",
             "an infographic: big numbers, simple charts, icons and arrows",
             "Bars grow from zero, numbers count up and land with a small scale, connectors draw on one after another.",
-            StyleTexture.None, string.Empty, NoGuidance),
+            StyleTexture.None, string.Empty, NoGuidance)
+        {
+            Pitfalls =
+            [
+                "A number without a source sentence is a lie: every counter shows a number the narration says.",
+                "Counters need time to count: no counter on a sentence shorter than two seconds.",
+                "One chart idea per scene: no more than one counter and one diagram in a scene.",
+            ],
+            Finish = new(Grain: 0.15, Vignette: 0.2),
+        },
         new(DrawStyle.Neon, "neon",
             "neon glow illustration, glowing lines on a dark background",
             "glowing accent lines on the dark background (a soft glow, no fills)",
             "Glowing lines draw on, then breathe softly; at most one flicker per scene.",
-            StyleTexture.Grain, "ocean", NoGuidance),
+            StyleTexture.Grain, "ocean", NoGuidance)
+        {
+            Pitfalls =
+            [
+                "Glow adds up: a map with many coloured countries becomes a wall of light; colour at most three countries in a scene.",
+                "Glowing lines need the dark: keep the camera off bright image areas and prefer map and diagram bases.",
+                "At most one flicker per scene: do not highlight the same point twice.",
+            ],
+            Finish = new(Grain: 0.35, Vignette: 0.6, Bloom: 0.8),
+        },
         new(DrawStyle.PencilSketch, "pencil-sketch",
             "pencil sketch, graphite lines and cross-hatching on warm off-white paper, hand-drawn, no colour except one small accent",
             "graphite pencil drawings: a light construction line first, then a darker confident line, shading only with hatching",
             "Everything is drawn on, never popped: pencil first, then the dark line, then a quick scribbled colour; one accent colour, on the subject "
             + "only; no gradients.",
-            StyleTexture.Paper, "sketch", NoGuidance, Transition: Scenes.SceneTransitions.Wipe),
+            StyleTexture.Paper, "sketch", NoGuidance, Transition: Scenes.SceneTransitions.Wipe)
+        {
+            Pitfalls =
+            [
+                "Graphite is drawn, never popped: give every drawn path a sentence of its own.",
+                "One accent colour, on the subject only: colour one country or one highlight per scene, not more.",
+                "Hatching needs space: diagrams with at most five boxes.",
+            ],
+            Finish = new(Tooth: 0.8, Grain: 0.25, Vignette: 0.3, Boil: 0.4),
+        },
         new(DrawStyle.Cartoon, "cartoon",
             "2D cartoon animation style, bold clean outlines, flat cel shading, expressive simple characters, vibrant limited palette, storybook "
             + "background",
             "cartoon shapes with thick dark outlines and flat cel-shaded colours, rounded friendly forms",
             "Squash and stretch on entrances (at most 0.45 s), a small anticipation before a move, a short hold after it.",
-            StyleTexture.None, string.Empty, NoGuidance, PrefersImages: true),
+            StyleTexture.None, string.Empty, NoGuidance, PrefersImages: true)
+        {
+            Pitfalls =
+            [
+                "Bold outlines need size: labels stay short (one or two words) and anchors far from the edges.",
+                "Squash and stretch on every entrance tires the eye: at most two actions per beat.",
+                "Cartoon scenes need a place: prefer the picture or a map to a bare title card.",
+            ],
+            Finish = new(Grain: 0.15, Vignette: 0.3, Boil: 0.3),
+        },
         new(DrawStyle.Blueprint, "blueprint",
             "white technical blueprint drawing on deep blueprint blue, fine grid, dimension lines, schematic, no text",
             "white technical line drawings on the blue background: outlines, section views, dimension arrows and a faint grid",
             "Lines draw on (stroke-dashoffset), then dimension arrows extend and small labels appear; nothing bounces.",
-            StyleTexture.Grid, "blueprint", NoGuidance, Transition: Scenes.SceneTransitions.Wipe),
+            StyleTexture.Grid, "blueprint", NoGuidance, Transition: Scenes.SceneTransitions.Wipe)
+        {
+            Pitfalls =
+            [
+                "A blueprint explains how something is built: prefer diagram bases with the parts as boxes and the links between them.",
+                "Nothing bounces: use calm eases (power2.inOut or sine.inOut) for the camera.",
+                "White lines on blue lose fine detail: no map region smaller than a country.",
+            ],
+            Finish = new(Tooth: 0.25, Grain: 0.25, Vignette: 0.4),
+        },
         new(DrawStyle.Hologram, "hologram",
             "cyan sci-fi hologram, glowing thin wireframes and HUD readouts on a near-black background, futuristic interface, no text",
             "thin cyan wireframes, rings and readout panels that glow on the dark background, one warm amber accent",
             "Wireframes draw on and rotate slowly; panels open with a scan line; the opacity flickers gently between 0.85 and 1.",
-            StyleTexture.Scanlines, "hologram", NoGuidance),
+            StyleTexture.Scanlines, "hologram", NoGuidance)
+        {
+            Pitfalls =
+            [
+                "Wireframes glow on the dark: avoid image bases with bright skies or white backgrounds.",
+                "Scan lines already move: no more than one highlight per beat.",
+                "Readout panels need room: diagrams with at most six boxes, labels of at most two words.",
+            ],
+            Finish = new(Grain: 0.35, Vignette: 0.6, Bloom: 0.7, Boil: 0.2),
+        },
         new(DrawStyle.Terminal, "terminal",
             "retro computer terminal screen, green phosphor text-mode graphics on black, ASCII art look, CRT glow",
             "monospace text-mode drawings: shapes built from characters (the ramp \" .:-=+*#%@\"), boxes and progress bars in the accent colour",
             "Text types in character by character (12–15 per second) with a blinking cursor; whole lines scroll up; no smooth tweening.",
-            StyleTexture.Scanlines, "terminal", NoGuidance, Transition: Scenes.SceneTransitions.Cut),
+            StyleTexture.Scanlines, "terminal", NoGuidance, Transition: Scenes.SceneTransitions.Cut)
+        {
+            Pitfalls =
+            [
+                "Text types in at about 13 characters a second: labels of at most two words, and none on a sentence shorter than two seconds.",
+                "Character graphics lose detail: prefer title cards, counters and diagrams to maps with many borders.",
+                "No smooth tweening: few camera moves, and no travelling walkers.",
+            ],
+            Finish = new(Grain: 0.45, Vignette: 0.7, Bloom: 0.5),
+        },
         new(DrawStyle.Isometric, "isometric",
             "isometric illustration, small 3D-looking blocks and buildings at 30 degrees, clean flat shading, soft palette",
             "isometric shapes (30° projection): blocks, platforms and small buildings, outline first, then the faces filled",
             "Each object draws its outline along its length, then its faces fill in; objects rise onto the grid one after another.",
-            StyleTexture.None, string.Empty, NoGuidance),
+            StyleTexture.None, string.Empty, NoGuidance)
+        {
+            Pitfalls =
+            [
+                "Isometric blocks need depth: a map is flat, prefer diagram bases laid out on a diagonal.",
+                "Objects rise one after another: at most two actions in a beat.",
+                "Keep the camera's zoom at 1.5 or less: a deeper zoom breaks the 30 degree grid.",
+            ],
+            Finish = new(Grain: 0.15, Vignette: 0.2, Shadow: 0.6),
+        },
         new(DrawStyle.Watercolor, "watercolor",
             "watercolour painting, soft wet-edged washes and blooms on textured paper, light pencil underdrawing",
             "soft translucent colour washes with lighter edges, a thin pencil line under them",
             "Washes bloom in slowly (about 0.8 s) and stay; no hard pops.",
-            StyleTexture.Paper, "paper", NoGuidance, PrefersImages: true),
+            StyleTexture.Paper, "paper", NoGuidance, PrefersImages: true)
+        {
+            Pitfalls =
+            [
+                "Washes bloom slowly: no more than one new action in a beat, and none on a sentence shorter than two seconds.",
+                "Soft edges blur small things: labels and pins only on large, calm areas of the picture.",
+                "No hard pops: counters and fast camera moves fight the look; prefer slow drifts.",
+            ],
+            Finish = new(Tooth: 0.8, Grain: 0.15, Vignette: 0.3, Bloom: 0.2),
+        },
     ];
 
     /// <summary>The definition of <paramref name="style"/> (an unknown value reads as <see cref="DrawStyle.Flat"/>).</summary>

@@ -62,6 +62,7 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         Name = _source.Name;
         Subtitles = _source.Subtitles;
         WordHighlight = _source.WordHighlight;
+        Finish = _source.Finish;
         ProgressBar = _source.ProgressBar;
         ReadableText = _source.ReadableText;
         Font = Fonts.FirstOrDefault(f => f.Font.Id == _source.FontId) ?? Fonts[0];
@@ -273,6 +274,10 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
     [ObservableProperty]
     public partial bool WordHighlight { get; set; }
 
+    /// <summary>The style's finishing layer (F12, 0.1.43: paper tooth, grain, vignette, glow, shadow, boil; the app's drawer only).</summary>
+    [ObservableProperty]
+    public partial bool Finish { get; set; }
+
     /// <summary>Narration tempo: the silences between sentences and scenes.</summary>
     [ObservableProperty]
     public partial NumberChoice Tempo { get; set; }
@@ -380,6 +385,7 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         style.Tempo = (NarrationTempo)Tempo.Value;
         style.Drawer = (SceneDrawer)Drawer.Value;
         style.WordHighlight = WordHighlight;
+        style.Finish = Finish;
         style.Closing = (ClosingPlacement)Closing.Value;
         style.ClosingPlatform = (ClosingPlatform)Platform.Value;
         style.ClosingPhrase = (ClosingPhrase)(Phrase?.Value ?? 0);

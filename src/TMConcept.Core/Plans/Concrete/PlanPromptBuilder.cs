@@ -13,12 +13,13 @@ namespace TMConcept.Core.Plans;
 /// move and overlay actions; the app draws all of it (<c>plan.js</c>), so no model writes code. The amount of motion follows the template's
 /// motion (<see cref="MotionIntensity"/>: calm = still, a scene's overlays shown at once; normal = drawn on with the sentences; lively =
 /// something changes every 2–3 s, travellers on the routes). Since 0.1.42 the same call also chooses each scene's transition from the
-/// catalog of the tempo's energy (F1) and each camera move's ease, and is told the tempo's targets (F9); no call is added.
+/// catalog of the tempo's energy (F1) and each camera move's ease, and is told the tempo's targets (F9); since 0.1.43 the user text
+/// also lists the drawing style's known pitfalls (F12). No call is added.
 /// </summary>
 public static class PlanPromptBuilder
 {
     /// <summary>The version of the plan prompt, kept with every video made with the drawer.</summary>
-    public const string Version = "3";
+    public const string Version = "4";
 
     /// <summary>
     /// The system text for a video in <paramref name="motion"/> at <paramref name="tempo"/> (its transitions, eases and targets);
@@ -114,6 +115,11 @@ public static class PlanPromptBuilder
         var text = new StringBuilder();
         text.Append(c, $"Video: «{Clean(title, 200)}», {scenes.Count} scenes, language {video.English} ({video.Code}): every label and text in {video.English}.\n");
         text.Append("Look: ").Append(Look(style)).Append('\n');
+        if (Pitfalls(style) is { Count: > 0 } pitfalls)
+        {
+            text.Append("Known pitfalls of this look (avoid them): ").Append(string.Join(" ", pitfalls)).Append('\n');
+        }
+
         foreach (var scene in scenes)
         {
             text.Append(c, $"Scene {scene.Number} ({scene.Seconds:0.#} s): ");
@@ -147,6 +153,13 @@ public static class PlanPromptBuilder
 
         return DrawStyles.Of(style.DrawStyle).ImagePrompt;
     }
+
+    /// <summary>
+    /// The known mistakes of the template's drawing style (F12, 0.1.43, <see cref="DrawStyleDefinition.Pitfalls"/>); none without a template,
+    /// for "AI chooses" (a preset it chose is already in the snapshot's style) and for the model's own style description.
+    /// </summary>
+    public static IReadOnlyList<string> Pitfalls(VideoStyle? style) =>
+        style is null || style.DrawStyle == DrawStyle.Auto ? [] : DrawStyles.Of(style.DrawStyle).Pitfalls;
 
     private static string Clean(string text, int max) =>
         Text.TextClean.OneLine(text, max).Replace("«", "\"", StringComparison.Ordinal).Replace("»", "\"", StringComparison.Ordinal);

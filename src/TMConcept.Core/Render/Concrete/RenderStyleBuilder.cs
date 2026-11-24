@@ -21,6 +21,7 @@ public static class RenderStyleBuilder
 
         input.Theme = VideoStyleRules.Theme(VideoStyleRules.Palette(style));
         input.Style = Tokens(style, input.Language);
+        input.Style.Finish = RenderFinishBuilder.For(style, input.Title);
     }
 
     /// <summary>The tokens of a template for a video language (the font may fall back for Cyrillic, the closing card depends on the language).</summary>

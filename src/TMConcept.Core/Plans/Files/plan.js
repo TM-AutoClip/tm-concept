@@ -1,6 +1,6 @@
 // The app's file (TM Concept 0.1.33): draws every scene from its plan (input.scenes[i].plan). No model writes this file; the model only
 // writes the plan (what is on screen, where and when), so the same drawer serves every topic. Loaded after gsap, window.INPUT, tm.js and
-// (for map scenes) world.js. Everything is a function of the paused timeline's time: no timers, no randomness, frames can be sought.
+// (for map scenes) world.js. Everything is a function of the paused timeline's time: no timers, no unseeded randomness, frames can be sought.
 (function () {
   "use strict";
   var input = window.INPUT;
@@ -387,6 +387,190 @@
     tl.set(spot, {}, sceneEnd);
   }
 
+  // F12 (0.1.43): the finishing layer, only when the template has it on (input.style.finish; absent = nothing below runs, no canvas, the video
+  // as before). One canvas over every scene layer, painted from the timeline's time by a tween of the timeline itself (no timer, no other
+  // process), so a frame is the same however and in whatever order it is reached. Every random choice comes from rnd(key), a stream seeded
+  // by finish.seed and the key (FNV-1a + mulberry32): the same key gives the same numbers in every frame. The paper tooth, the vignette and
+  // the glow are made once; the grain and the boil change 12 times a second. Shadow numbers by depth follow ReelMimic's paper-cutout engine
+  // (MIT): opacity 0.2 + 0.09 s (at most 0.6), offset 1.5 + 4.5 s and blur 2 + 6 s at 1080 px, light from the top left.
+  var finish = style.finish || null;
+  var parts = [];
+
+  function rnd(key) {
+    var h = 2166136261;
+    var text = String(finish ? finish.seed : 0) + "|" + key;
+    for (var i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619) >>> 0;
+    var s = h || 1;
+    return function () {
+      s = (s + 0x6D2B79F5) >>> 0;
+      var t = Math.imul(s ^ (s >>> 15), s | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function strength(name) {
+    var v = finish ? Number(finish[name]) : 0;
+    return isFinite(v) ? Math.max(0, Math.min(1, v)) : 0;
+  }
+
+  function rgb(hex) {
+    var m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(String(hex || ""));
+    return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : [255, 255, 255];
+  }
+
+  // A tile of seeded specks: "tooth" = light pits of the paper (two scales of value noise, tiled), "grain" = light and dark film grain.
+  function tile(kind, size, key) {
+    var c = document.createElement("canvas");
+    c.width = size;
+    c.height = size;
+    var g = c.getContext("2d");
+    if (!g) return null;
+    var r = rnd(key);
+    var data = g.createImageData(size, size);
+    var d = data.data;
+    var fields = kind === "tooth" ? [field(r, size, 8), field(r, size, 32)] : null;
+    for (var y = 0, i = 0; y < size; y++) {
+      for (var x = 0; x < size; x++, i += 4) {
+        if (fields) {
+          var v = 0.55 * fields[0](x, y) + 0.3 * fields[1](x, y) + 0.15 * r();
+          var a = Math.max(0, Math.min(1, (v - 0.52) / 0.25));
+          d[i] = 255; d[i + 1] = 251; d[i + 2] = 242; d[i + 3] = Math.round(255 * a * a);
+        } else if (r() < 0.45) {
+          var light = r() < 0.5;
+          d[i] = d[i + 1] = d[i + 2] = light ? 255 : 0;
+          d[i + 3] = Math.round(255 * (0.25 + 0.75 * r()));
+        }
+      }
+    }
+    g.putImageData(data, 0, 0);
+    return c;
+  }
+
+  // Smooth value noise on a grid of cells x cells that wraps at the tile's edge (so the tile repeats without a seam).
+  function field(r, size, cells) {
+    var grid = [];
+    for (var i = 0; i < cells * cells; i++) grid.push(r());
+    return function (x, y) {
+      var fx = x / size * cells, fy = y / size * cells;
+      var ix = Math.floor(fx), iy = Math.floor(fy);
+      var tx = fx - ix, ty = fy - iy;
+      tx = tx * tx * (3 - 2 * tx);
+      ty = ty * ty * (3 - 2 * ty);
+      var at = function (cx, cy) { return grid[((cy % cells) * cells) + (cx % cells)]; };
+      var top = at(ix, iy) + (at(ix + 1, iy) - at(ix, iy)) * tx;
+      var bottom = at(ix, iy + 1) + (at(ix + 1, iy + 1) - at(ix, iy + 1)) * tx;
+      return top + (bottom - top) * ty;
+    };
+  }
+
+  function shadowCss(depth) {
+    var s = strength("shadow") * depth;
+    var k = unit / 1080;
+    var alpha = Math.min(0.6, 0.2 + 0.09 * s);
+    var off = (1.5 + 4.5 * s) * k, blur = (2 + 6 * s) * k;
+    return "drop-shadow(" + (0.5 * off).toFixed(1) + "px " + (0.86 * off).toFixed(1) + "px " + blur.toFixed(1) + "px rgba(48,28,14," + alpha.toFixed(2) + "))";
+  }
+
+  function finishLayer() {
+    var canvas = el("canvas", root, "position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;");
+    canvas.setAttribute("data-tm-finish", "1");
+    canvas.width = W;
+    canvas.height = H;
+    var g = canvas.getContext("2d");
+    if (!g) return;
+
+    // The still part, made once: tooth, vignette and glow.
+    var still = document.createElement("canvas");
+    still.width = W;
+    still.height = H;
+    var s = still.getContext("2d");
+    if (s && strength("tooth") > 0) {
+      var tooth = tile("tooth", 256, "tooth");
+      if (tooth) {
+        s.globalAlpha = 0.55 * strength("tooth");
+        s.fillStyle = s.createPattern(tooth, "repeat");
+        s.fillRect(0, 0, W, H);
+        s.globalAlpha = 1;
+      }
+    }
+
+    if (s && strength("bloom") > 0) {
+      var r = rnd("bloom");
+      var glowColor = rgb(C.accent);
+      s.globalCompositeOperation = "lighter";
+      for (var i = 0; i < 3; i++) {
+        var gx = W * (0.25 + 0.5 * r()), gy = H * (0.25 + 0.5 * r()), radius = unit * (0.45 + 0.35 * r());
+        var glowFill = s.createRadialGradient(gx, gy, 0, gx, gy, radius);
+        glowFill.addColorStop(0, "rgba(" + glowColor.join(",") + "," + (0.16 * strength("bloom")).toFixed(3) + ")");
+        glowFill.addColorStop(1, "rgba(" + glowColor.join(",") + ",0)");
+        s.fillStyle = glowFill;
+        s.fillRect(0, 0, W, H);
+      }
+      s.globalCompositeOperation = "source-over";
+    }
+
+    if (s && strength("vignette") > 0) {
+      var reach = Math.sqrt(W * W + H * H) / 2;
+      var shade = s.createRadialGradient(W / 2, H / 2, reach * 0.5, W / 2, H / 2, reach);
+      shade.addColorStop(0, "rgba(12,8,20,0)");
+      shade.addColorStop(1, "rgba(12,8,20," + (0.6 * strength("vignette")).toFixed(3) + ")");
+      s.fillStyle = shade;
+      s.fillRect(0, 0, W, H);
+    }
+
+    // The shadow by depth, set once: the drawings one step above the scene, the labels and pins two.
+    if (strength("shadow") > 0) {
+      parts.forEach(function (p) {
+        p.svg.style.filter = shadowCss(1);
+        p.overlay.style.filter = shadowCss(2);
+      });
+    }
+
+    var grains = [];
+    if (strength("grain") > 0) {
+      for (var n = 0; n < 4; n++) {
+        var grain = tile("grain", 200, "grain" + n);
+        if (grain) grains.push(g.createPattern(grain, "repeat"));
+      }
+    }
+
+    var boil = strength("boil") * unit * 0.0025 * (calm ? 0.5 : 1);
+    var steps = finish.steps && finish.steps.length >= 24 ? finish.steps : null;
+    var painted = -1;
+
+    function paint(time) {
+      var step = Math.max(0, Math.floor(time * 12 + 1e-6));
+      if (step === painted) return;
+      painted = step;
+      g.clearRect(0, 0, W, H);
+      g.drawImage(still, 0, 0);
+      if (grains.length > 0) {
+        var r = rnd("grain-step" + step);
+        g.save();
+        g.globalAlpha = 0.4 * strength("grain");
+        g.translate(-Math.floor(r() * 200), -Math.floor(r() * 200));
+        g.fillStyle = grains[step % grains.length];
+        g.fillRect(0, 0, W + 200, H + 200);
+        g.restore();
+      }
+
+      if (boil > 0) {
+        parts.forEach(function (p, i) {
+          var k = ((step + i * 5) % 12) * 2;
+          var dx = steps ? steps[k] : rnd("boil" + step + "-" + i)() * 2 - 1;
+          var dy = steps ? steps[k + 1] : rnd("boil" + step + "-" + i + "y")() * 2 - 1;
+          p.camera.style.translate = (dx * boil).toFixed(2) + "px " + (dy * boil).toFixed(2) + "px";
+        });
+      }
+    }
+
+    var length = input.durationSeconds || tl.duration();
+    var clock = { t: 0 };
+    paint(0);
+    tl.to(clock, { t: length, duration: length, ease: "none", onUpdate: function () { paint(tl.time()); } }, 0);
+  }
+
   var previous = null;
   input.scenes.forEach(function (scene, index) {
     var plan = scene.plan || { base: scene.image ? "image" : "title" };
@@ -451,7 +635,10 @@
     });
     if (calm && beats.length > 0 && beats[0].camera) cameraTo(ctx, beats[0].camera, start, scene.durationSeconds);
     presenter(ctx, beats, start, end);
+    parts.push({ svg: svg, overlay: overlay, camera: camera });
   });
+
+  if (finish) finishLayer();
 
   window.__timelines = window.__timelines || {};
   window.__timelines["concept"] = tl;

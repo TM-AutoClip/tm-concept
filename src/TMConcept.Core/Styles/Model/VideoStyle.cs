@@ -90,6 +90,13 @@ public sealed class VideoStyle
     /// </summary>
     public Speech.NarrationTempo Tempo { get; set; } = Speech.NarrationTempos.Default;
 
+    /// <summary>
+    /// The style's finishing layer ("Son işlem", F12, 0.1.43; <see cref="DrawStyleDefinition.Finish"/>): paper tooth, grain, vignette, glow,
+    /// shadow and boil over the scenes the app draws. A template saved before has none in its JSON and stays off, so its videos look as they
+    /// did; the editor starts a new template with it on.
+    /// </summary>
+    public bool Finish { get; set; }
+
     /// <summary>Where the closing call to action goes.</summary>
     public ClosingPlacement Closing { get; set; } = ClosingPlacement.Off;
 

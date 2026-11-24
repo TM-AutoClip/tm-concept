@@ -265,6 +265,10 @@
                             </DataTemplate>
                           </ComboBox.ItemTemplate>
                         </ComboBox>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                          <CheckBox Name="StyleFinish" IsChecked="{Binding Finish}" Content="{DynamicResource styles.finish}" />
+                          <views:HelpTip Text="{DynamicResource styles.finish.tip}" />
+                        </StackPanel>
                       </WrapPanel>
                     </Grid>
                   </StackPanel>

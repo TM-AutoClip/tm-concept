@@ -33,6 +33,22 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
     /// <summary>Render workers: cores − 2 (at least 1).</summary>
     public static int Workers() => Math.Clamp(Environment.ProcessorCount - 2, 1, 8);
 
+    /// <summary>The effects of a finishing layer that are on (for the log).</summary>
+    private static IEnumerable<string> FinishNames(RenderFinish finish) =>
+        new StyleFinish(finish.Tooth, finish.Grain, finish.Vignette, finish.Bloom, finish.Shadow, finish.Boil).Effects;
+
+    /// <summary>
+    /// Takes the finishing layer (F12, 0.1.43) out of an input whose scenes are drawn by code a model wrote: only the app's drawer
+    /// (<c>plan.js</c>) draws it, the model's code would only see an unknown field.
+    /// </summary>
+    private static void NoFinish(RenderInput input)
+    {
+        if (input.Style is { } style)
+        {
+            style.Finish = null;
+        }
+    }
+
     /// <summary>
     /// E + F: the video code from <paramref name="codeModel"/> for <paramref name="input"/> (paid; every call is spent in
     /// <paramref name="steps"/>, also a cut-off one; the call's phase and tokens are reported while it streams), written into
@@ -69,6 +85,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         var subtitles = VideoStyleRules.SubtitlesOn(options);
         var style = options.Style;
         RenderStyleBuilder.Apply(input, style);
+        NoFinish(input);
         await BoostAsync(input, work, cancellationToken).ConfigureAwait(false);
         var chat = chats.Create(codeModel.Model, codeModel.Key.Secret);
         var local = IsLocal(codeModel.Model);
@@ -233,10 +250,17 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
             Path.Combine(work, "silent.mp4"), Workers());
         var engineProgress = new ForwardProgress<EngineEvent>(e => steps.Report(VideoSteps.Render, e.Ratio ?? 0, e.Message));
         var appCode = false;
+        var finish = input.Style?.Finish;
+        var renderWatch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             engine.WriteProject(request);
             await engine.RenderAsync(request, engineProgress, cancellationToken).ConfigureAwait(false);
+
+            // F12 (0.1.43): the render time next to the finishing layer, so its cost shows in the log (the same video with it off is the measure).
+            logger.LogInformation("The app's drawer rendered in {Seconds:0.0} s ({PerSecond:0.00} s per video second); finishing layer {Finish}",
+                renderWatch.Elapsed.TotalSeconds, renderWatch.Elapsed.TotalSeconds / Math.Max(1, input.DurationSeconds),
+                finish is null ? "off" : string.Join("+", FinishNames(finish)));
         }
         catch (EngineException ex) when (ex.Code is "render" or "check")
         {
@@ -374,6 +398,11 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(steps);
         RenderStyleBuilder.Apply(input, options.Style);
+        if (!Plans.PlanDrawer.IsDrawer(code))
+        {
+            NoFinish(input);
+        }
+
         await BoostAsync(input, work, cancellationToken).ConfigureAwait(false);
         PlaceFonts(Path.Combine(work, "project"), options.Style, input.Language);
         var request = new EngineRenderRequest(Path.Combine(work, "project"), code, RenderInputBuilder.ForEngine(input, VideoStyleRules.SubtitlesOn(options)),

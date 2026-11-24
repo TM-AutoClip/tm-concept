@@ -1142,6 +1142,8 @@
   "styles.tempo.tip": "The breathing room the narration leaves after sentences and between scenes. Tight: short breaks. Natural: a clear pause after every sentence and a longer one at a scene change. Relaxed: long pauses, a calm narration.",
   "styles.drawer": "Drawn by",
   "styles.drawer.tip": "Who draws the video (HyperFrames only). The app: the model writes only each scene's plan (picture, map, diagram or title; routes, arrows, pins, labels, counters, the camera; one step per sentence) and the app's own library draws it — steadier and cheaper. Free code: the model writes the animation's code itself (anything goes, but it costs more and sometimes breaks).",
+  "styles.finish": "Finishing",
+  "styles.finish.tip": "When the app draws, it lays a finishing layer that fits the drawing style over the scenes: paper texture, grain, darker corners (vignette), glow, shadow by depth and a slight tremble in 12 steps a second. The style sets which effects and how strong; no extra AI request, rendering takes a little longer. Works only with Drawn by = The app and a chosen style. On in new templates; off in earlier ones (their videos stay as they were).",
   "styles.closing": "Closing call to action",
   "styles.closing.tip": "A short sentence at the end that asks viewers to subscribe or follow. Always in the video's language (ready sentences, no model writes them). Voice: the sentence is added to the end of the last scene's narration. Screen: an end card in the last seconds with the profile's channel photo (if it has one), the channel name and the sentence.",
   "styles.closing.where": "Where",

@@ -486,6 +486,9 @@ A video made with a template (Settings → Templates) follows it without relying
   places, travellers walking a route — and the app draws and times it with the voice. *Still / Normal / Lively* set how much moves. An
   optional vision model (local Gemma 3 4B or a cheap online one) finds where things are in the generated pictures so the marks land on
   them. *Free code* (the model writes the animation itself) stays a choice in the template.
+- **Finishing (0.1.43, on in new templates):** over the scenes the app draws, a layer that fits the drawing style: paper texture, grain,
+  darker corners, a soft glow, a shadow by depth and a slight 12-steps-a-second tremble, all from a fixed seed. Each style also lists
+  its known pitfalls in the scene plan request. No extra AI request.
 - **Word-by-word highlight (0.1.34, optional):** the word being said shows in the accent colour, glowing, growing or only recoloured
   as the drawing style suits.
 - **Drawing style:** scenes without an image are drawn in the template's style, and generated images are asked for in the same style.
