@@ -204,4 +204,37 @@ public sealed class SceneTransitionTests
         rule.Problems(busy, new PlanCheck(scenes, pictures, true, NarrationTempo.Relaxed)).ShouldHaveSingleItem().ShouldContain("leave more sentences without a beat");
         rule.Problems(bare, new PlanCheck(scenes, pictures, true, NarrationTempo.Relaxed)).ShouldBeEmpty();
     }
+
+    [Fact]
+    public void AMotionThatContradictsTheTempoWinsAndCostsNoRepair()
+    {
+        var scenes = Enumerable.Range(1, 3).Select(n => new PlanScene(n, 10, "v", ["One.", "Two.", "Three.", "Four."], string.Empty)).ToList();
+        var pictures = Enumerable.Repeat(false, 3).ToList();
+        var bare = Enumerable.Range(1, 3).Select(n => new PlanItem
+        {
+            Scene = n,
+            Plan = new RenderPlan { Base = PlanBases.Title, Title = "T" + n, Beats = [new PlanBeat { Sentence = 1, Actions = [new PlanAction { Type = PlanActions.Text, Text = "x" }] }] },
+        }).ToList();
+        var busy = Enumerable.Range(1, 3).Select(n => new PlanItem
+        {
+            Scene = n,
+            Plan = new RenderPlan
+            {
+                Base = PlanBases.Title,
+                Title = "T" + n,
+                Beats = [.. Enumerable.Range(1, 4).Select(s => new PlanBeat { Sentence = s, Camera = new PlanCamera { Zoom = 1 + (s / 10.0) } })],
+            },
+        }).ToList();
+        var rule = new TempoTargetRule();
+        rule.Problems(bare, new PlanCheck(scenes, pictures, true, NarrationTempo.Tight, MotionIntensity.Calm)).ShouldBeEmpty("a calm motion asks for one or two beats");
+        rule.Problems(busy, new PlanCheck(scenes, pictures, true, NarrationTempo.Relaxed, MotionIntensity.Lively)).ShouldBeEmpty("a lively motion asks for a beat on every sentence");
+        rule.Problems(bare, new PlanCheck(scenes, pictures, true, NarrationTempo.Tight, MotionIntensity.Lively)).ShouldNotBeEmpty();
+
+        var calm = PlanPromptBuilder.System(MotionIntensity.Calm, NarrationTempo.Tight);
+        calm.ShouldContain("Tempo: tight");
+        calm.ShouldNotContain("times every 10 seconds");
+        calm.ShouldContain("expo.out or back.out");
+        PlanPromptBuilder.System(MotionIntensity.Lively, NarrationTempo.Relaxed).ShouldNotContain("times every 10 seconds");
+        PlanPromptBuilder.System(MotionIntensity.Normal, NarrationTempo.Tight).ShouldContain("about 4 times every 10 seconds");
+    }
 }

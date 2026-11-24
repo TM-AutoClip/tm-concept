@@ -73,7 +73,7 @@ public sealed class ScenePlanner(IChatClientFactory chats, ICostCalculator costs
         var items = PlanReader.Read(first[0]);
 
         // The structure and the plan rules (0.1.41) share the single repair; a repair that still breaks a rule is used as far as it goes.
-        var check = new PlanCheck(scenes, input.Scenes.Select(s => s.Image.Length > 0).ToList(), request.Subtitles, tempo);
+        var check = new PlanCheck(scenes, input.Scenes.Select(s => s.Image.Length > 0).ToList(), request.Subtitles, tempo, motion);
         var problems = PlanReader.Problems(items, check);
         if (problems.Count > 0)
         {
