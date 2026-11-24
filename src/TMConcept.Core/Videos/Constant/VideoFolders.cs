@@ -38,6 +38,9 @@ public static class VideoFolders
     /// </summary>
     public const string ScriptFile = "narration-edit.json";
 
+    /// <summary>The frame strips of the motion check's findings (0.1.41; PNG, one per finding, named by its kind and second).</summary>
+    public const string Checks = "checks";
+
     /// <summary>The thumbnail (the Produced videos page makes it again when it is missing).</summary>
     public const string ThumbnailFile = "thumbnail.jpg";
 

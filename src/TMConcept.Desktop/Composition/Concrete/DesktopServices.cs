@@ -76,6 +76,7 @@ public static class DesktopServices
         services.AddSingleton<Core.Tools.IZipEntryDownloader, Engines.Tools.ZipEntryDownloader>();
         services.AddSingleton<Engines.Media.FfmpegMuxer>();
         services.AddSingleton<Core.Media.IMediaTools, Engines.Media.FfmpegMedia>();
+        services.AddSingleton<Core.Media.IMotionFrames, Engines.Media.FfmpegMotionFrames>();
         services.AddSingleton<Core.Plans.ScenePlanner>();
         services.AddSingleton<Core.Videos.VideoAssembler>();
         services.AddSingleton<Core.Videos.VideoPipeline>();

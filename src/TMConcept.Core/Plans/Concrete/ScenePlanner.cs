@@ -9,7 +9,8 @@ namespace TMConcept.Core.Plans;
 
 /// <summary>
 /// Writes the plans of a video drawn by the app (0.1.33): one paid call to the video code model (<see cref="PlanPromptBuilder"/>; an
-/// unreadable answer is asked again as it was, an answer that does not fit the scenes gets ONE repair request), cleaned
+/// unreadable answer is asked again as it was, an answer that does not fit the scenes or breaks a plan rule (<see cref="PlanReader.Rules"/>,
+/// 0.1.41) gets ONE repair request), cleaned
 /// (<see cref="PlanReader"/>); then, when an image points model is chosen, every image scene's points are placed where that model sees them
 /// (<see cref="ImagePointPrompt"/>, one call per picture, a failure keeps the plan's guesses); then the beats are timed from the spoken
 /// sentences (<see cref="PlanTiming"/>). A plan that still does not fit after the repair is used as far as it goes: a scene without a plan
@@ -68,14 +69,24 @@ public sealed class ScenePlanner(IChatClientFactory chats, ICostCalculator costs
             return PlanReader.Read(text).Count > 0 ? new[] { text } : null;
         }, logger, cancellationToken).ConfigureAwait(false);
         var items = PlanReader.Read(first[0]);
-        var problems = PlanReader.Problems(items, scenes.Count);
+
+        // The structure and the plan rules (0.1.41) share the single repair; a repair that still breaks a rule is used as far as it goes.
+        var check = new PlanCheck(scenes, input.Scenes.Select(s => s.Image.Length > 0).ToList(), request.Subtitles);
+        var problems = PlanReader.Problems(items, check);
         if (problems.Count > 0)
         {
-            logger.LogWarning("The scene plan does not fit the {Count} scenes ({Problems}); asking for one repair", scenes.Count, string.Join("; ", problems));
+            logger.LogWarning("The scene plan does not fit the {Count} scenes or the plan rules ({Problems}); asking for one repair", scenes.Count,
+                string.Join("; ", problems));
             var repaired = PlanReader.Read(await AskAsync(PlanPromptBuilder.Repair(user, problems), cancellationToken).ConfigureAwait(false));
-            if (repaired.Count > 0 && PlanReader.Problems(repaired, scenes.Count).Count <= problems.Count)
+            if (PlanReader.Better(repaired, items, check))
             {
                 items = repaired;
+                var left = PlanReader.Problems(items, check);
+                if (left.Count > 0)
+                {
+                    logger.LogInformation("The repaired scene plan still has {Count} findings ({Problems}); it is used as far as it goes", left.Count,
+                        string.Join("; ", left));
+                }
             }
         }
 

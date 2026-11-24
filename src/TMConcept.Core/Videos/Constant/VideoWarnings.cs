@@ -39,6 +39,27 @@ public static class VideoWarnings
     /// <summary>No frame of the video that is not black was found for the thumbnail: the video may be empty (yellow).</summary>
     public const string NoThumbnail = "no_thumbnail";
 
+    /// <summary>The motion check (<see cref="MotionCheck"/>, 0.1.41) found a sudden cut inside a scene (yellow; frame strip in the version's checks folder).</summary>
+    public const string MotionCut = "motion_cut";
+
+    /// <summary>The motion check found a freeze where the plan expects motion (yellow).</summary>
+    public const string MotionFreeze = "motion_freeze";
+
+    /// <summary>The motion check found black frames inside the film (yellow).</summary>
+    public const string MotionBlack = "motion_black";
+
+    /// <summary>The motion check found a short white flash (yellow).</summary>
+    public const string MotionFlash = "motion_flash";
+
+    /// <summary>The motion check found a hard cut to black at the end, without a fade (yellow).</summary>
+    public const string MotionEndBlack = "motion_end_black";
+
+    /// <summary>The motion check found a planned fade that did not happen (yellow).</summary>
+    public const string MotionFade = "motion_fade";
+
+    /// <summary>Every code of the motion check (made again for every version, never carried over).</summary>
+    public static readonly IReadOnlyList<string> Motion = [MotionCut, MotionFreeze, MotionBlack, MotionFlash, MotionEndBlack, MotionFade];
+
     /// <summary>
     /// The sample images were chosen but the profile had none: the video was made without images. Written until 0.1.28 (sample images were
     /// removed in 0.1.29); read, never written.

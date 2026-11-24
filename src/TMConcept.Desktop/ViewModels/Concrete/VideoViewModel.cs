@@ -977,6 +977,9 @@ public sealed partial class VideoViewModel : PageViewModelBase
         (VideoWarnings.FrameCheck, "video.frames.fallback", ActivityLevel.Warning, "video.noted.frame_check"),
         (VideoWarnings.FrameWeak, "video.frames.weak", ActivityLevel.Warning, "video.noted.frame_weak"),
         (VideoWarnings.NoThumbnail, "video.thumbnail.none", ActivityLevel.Warning, "video.noted.no_thumbnail"),
+
+        // The motion check of the finished video (0.1.41): yellow, the video is kept; the times are in the log, the strips in checks/.
+        .. VideoWarnings.Motion.Select(code => (code, "video." + code, ActivityLevel.Warning, "video.noted." + code)),
     ];
 
     /// <summary>The warnings of a failed run as activity lines (Warning); returns their texts for the notification.</summary>

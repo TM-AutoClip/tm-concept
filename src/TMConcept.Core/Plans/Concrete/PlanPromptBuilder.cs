@@ -15,7 +15,7 @@ namespace TMConcept.Core.Plans;
 public static class PlanPromptBuilder
 {
     /// <summary>The version of the plan prompt, kept with every video made with the drawer.</summary>
-    public const string Version = "1";
+    public const string Version = "2";
 
     /// <summary>The system text for a video in <paramref name="motion"/>.</summary>
     public static string System(MotionIntensity motion)
@@ -40,7 +40,9 @@ public static class PlanPromptBuilder
             Camera of a beat: "focus" = an anchor or node id to centre ("" = the whole frame), "zoom" 1 to 2.2.
             Rules: every action points at anchors or nodes of its own scene; labels have at most three words and are in the video's
             language; keep the bottom quarter free for subtitles (no anchor or node lower than y 0.75); at most three actions per beat;
-            every action shows what its sentence says; places, coordinates, dates and numbers must be real.
+            every action shows what its sentence says; places, coordinates, dates and numbers must be real; one background (the same
+            map region, the same diagram, title cards) fills at most 40% of the video; no beat repeats the shot before it with nothing new,
+            and no scene opens on the shot the scene before ended on.
 
             """);
         text.Append(motion switch

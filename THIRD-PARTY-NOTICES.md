@@ -13,9 +13,36 @@ TM Concept is MIT licensed. It includes or uses the following third-party materi
 | Ahenk Cep text front end and sampling loop, ported to C# (from `site/js/front-native.js`, `site/js/engine.js` and `site/js/randn.js` of github.com/ozguradmin/ahenk-turkish-tts, which follow EMA Lightning's `frontend.py`, `chunker.py` and engine) | Apache-2.0 (Ahenk; EMA Lightning) | `src/TMConcept.Speech/AhenkCep`. Changed: rewritten in C#; the text arrives already normalized by TM Concept's own Turkish rules, so trnorm itself is not included. |
 | PaddleOCR PP-OCRv5 Latin character list (`ppocrv5_latin_dict.txt` of github.com/PaddlePaddle/PaddleOCR, as published with the RapidOCR models, ModelScope RapidAI/RapidOCR tag v3.10.0; unchanged) | Apache-2.0 (PaddleOCR) | `src/TMConcept.Documents/Ocr/Files` (embedded in the program; the local OCR's recogniser reads its classes from it, 0.1.25) |
 | World map of the scene drawer: Natural Earth 1:110m admin-0 countries (github.com/nvkelso/natural-earth-vector, `geojson/ne_110m_admin_0_countries.geojson`; "Made with Natural Earth") | Public domain | `src/TMConcept.Core/Plans/Files/world.json` (embedded in the program; a map scene's work folder gets it as `world.js`). Changed: names, codes, label points and outlines only, rounded to 0.1 degree and delta-encoded by `tools/world-map.py` (0.1.33). |
+| Motion check thresholds of ReelMimic's video-clone `motion_check.py` (github.com/edenfunf/reelmimic, `.claude/skills/video-clone/scripts/motion_check.py`; the 160 × 96 grey frame, the 8 × 8 grid, the cut, freeze, black, white and hard-end-to-black numbers; the frame strip idea of `clip_strip.py`) | MIT (ReelMimic, notice below) | `src/TMConcept.Core/Videos/Constant/MotionCheckLimits.cs` (0.1.41). Changed: the numbers only; the check itself is written for TM Concept in C# (`MotionFrameReader`, `MotionCheck`), with its own rules for planned fades, scene starts and the scene drawer's beats. The 40 % background-variety rule of the scene plan (`PlanLimits.BackgroundShare`) is an idea from ReelMimic's storyboard format (Apache-2.0); no text or code of it is included. |
 | Some entries of the built-in Turkish pronunciation list and the Turkish letter names of abbreviations, cross-checked with the word lists of trnorm (`site/js/trnorm/lexicon.js` of the same repository) | Apache-2.0 (trnorm) | `src/TMConcept.Core/Pronunciation/Files/tr.txt`, `src/TMConcept.Core/Pronunciation/Constant` |
 
 The font license texts are shipped as files next to the program and in the Linux archive (`licenses/`). Fonts installed on the user's computer (for example Times New Roman) are never shipped: a template may use one, and a video made on that computer copies its files into the video's work folder only.
+
+### ReelMimic (MIT)
+
+```
+MIT License
+
+Copyright (c) 2026 ReelMimic contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
 
 ## Ideas read, not copied
 

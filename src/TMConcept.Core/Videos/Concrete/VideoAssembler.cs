@@ -22,7 +22,7 @@ namespace TMConcept.Core.Videos;
 /// the pipeline unchanged, so a version is made exactly as the first video was.
 /// </summary>
 public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator costs, IMediaTools media, IVideoStore videos, IRunStore runs, IAppPaths paths,
-    TimeProvider clock, Plans.ScenePlanner planner, ILogger<VideoAssembler> logger)
+    TimeProvider clock, Plans.ScenePlanner planner, IMotionFrames motion, ILogger<VideoAssembler> logger)
 {
     /// <summary>The start of a rejected code's file name in a work folder (kept for reading until the start-up clean-up).</summary>
     public const string Rejected = "rejected-";
@@ -225,7 +225,8 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         var project = Path.Combine(work, "project");
         PlaceFonts(project, style, input.Language);
         steps.Report(VideoSteps.Code, 0.1);
-        await planner.PlanAsync(new Plans.PlanRequest(codeModel, context.PointsModel, input, style, context.Spans, context.ImagePrompts, project, id), steps,
+        await planner.PlanAsync(new Plans.PlanRequest(codeModel, context.PointsModel, input, style, context.Spans, context.ImagePrompts, project, id,
+            VideoStyleRules.SubtitlesOn(options)), steps,
             cancellationToken).ConfigureAwait(false);
         steps.Finish(VideoSteps.Code);
         var request = new EngineRenderRequest(project, Plans.PlanDrawer.Code, RenderInputBuilder.ForEngine(input, VideoStyleRules.SubtitlesOn(options)),
@@ -396,7 +397,8 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
     /// H + I: subtitles from the input's captions, timed by the spoken parts around the pauses (<see cref="SubtitleSources"/>; burned in when chosen), the clips joined with the silent video into the work folder (with a
     /// fade through black at the start of each scene with a soft transition, see <see cref="Fades"/>), then
     /// the version folder gets only finished files — subtitles, the narration text, the engine project as it rendered and the clips, the
-    /// video, the thumbnail — and the record with its cost lines is saved.
+    /// video, the motion check's frame strips (0.1.41, <see cref="MotionAsync"/>), the thumbnail — and the record with its cost lines and
+    /// warnings is saved.
     /// </summary>
     public async Task<VideoRecord> SaveAsync(VersionSave save, VideoStepProgress steps, CancellationToken cancellationToken)
     {
@@ -446,6 +448,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         var output = Path.Combine(folder, VideoFolders.VideoFile);
         File.Move(muxed, output, overwrite: true);
         steps.Finish(VideoSteps.Mux);
+        var moved = await MotionAsync(output, input, folder, save.Work, cancellationToken).ConfigureAwait(false);
 
         var thumbnail = await media.ThumbnailAsync(output, Path.Combine(folder, VideoFolders.ThumbnailFile), cancellationToken).ConfigureAwait(false);
         var record = new VideoRecord
@@ -472,12 +475,63 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
             CostExact = save.Spent.All(c => c.Exact),
             ElapsedMs = save.Watch.ElapsedMilliseconds,
             // No frame that is not black for the thumbnail: a yellow warning (until 0.1.29 only a log line, and an empty video was "ready").
-            Warnings = string.Join(',', save.Warnings.Concat(thumbnail ? [] : [VideoWarnings.NoThumbnail]).Distinct()),
+            Warnings = string.Join(',', save.Warnings.Where(w => !VideoWarnings.Motion.Contains(w)).Concat(moved)
+                .Concat(thumbnail ? [] : [VideoWarnings.NoThumbnail]).Distinct()),
             CreatedAtUtc = clock.GetUtcNow(),
         };
         await videos.AddAsync(record, [.. save.ExtraCosts, .. save.Spent], CancellationToken.None).ConfigureAwait(false);
         steps.Finish(VideoSteps.Save);
         return record;
+    }
+
+    /// <summary>
+    /// The motion check of the finished video (F3, 0.1.41; <see cref="MotionCheck"/>): every frame read small and grey by the app's ffmpeg,
+    /// the findings logged with their times, a frame strip of each (at most <see cref="MotionCheckLimits.MaxStrips"/>) written into the
+    /// version's <see cref="VideoFolders.Checks"/> folder; returns the warning codes found (yellow, the video is kept). A check that cannot
+    /// run (no ffmpeg, an unreadable file) is logged and skipped: it never fails a video. No model is called.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> MotionAsync(string video, RenderInput input, string folder, string work, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<MotionFinding> findings;
+        try
+        {
+            var series = await motion.ReadAsync(video, input.Fps, work, cancellationToken).ConfigureAwait(false);
+            if (series is null)
+            {
+                return [];
+            }
+
+            findings = MotionCheck.Find(series, MotionCheck.Expect(input));
+            logger.LogInformation("Motion check: {Frames} frames, {Count} findings", series.Count, findings.Count);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogInformation("The motion check was skipped ({Error})", ex.Message);
+            return [];
+        }
+
+        if (findings.Count == 0)
+        {
+            return [];
+        }
+
+        // Logged for the file only: the activity panel gets the warnings in the user's language from the codes (the video page).
+        logger.LogWarning(Activity.LogEvents.OnScreen, "Motion check findings: {Findings}", string.Join(" · ", findings));
+        var checks = Path.Combine(folder, VideoFolders.Checks);
+        foreach (var finding in findings.Take(MotionCheckLimits.MaxStrips))
+        {
+            try
+            {
+                await motion.StripAsync(video, finding.StripAt, finding.StripSeconds, input.Fps, Path.Combine(checks, finding.StripName), cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogInformation("The frame strip of {Finding} was not written ({Error})", finding, ex.Message);
+            }
+        }
+
+        return findings.Select(f => f.Code).Distinct().ToList();
     }
 
     /// <summary>

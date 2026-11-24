@@ -6,7 +6,9 @@ namespace TMConcept.Core.Plans;
 
 /// <summary>
 /// Reads and checks the plan answer (0.1.33). <see cref="Read"/> is tolerant (thinking, a code fence and missing fields are skipped);
-/// <see cref="Problems"/> names what makes the plan unusable (the scene count, a missing or doubled scene), which gets one repair request;
+/// <see cref="Problems(IReadOnlyList{PlanItem}, int)"/> names what makes the plan unusable (the scene count, a missing or doubled scene) and,
+/// since 0.1.41, <see cref="Problems(IReadOnlyList{PlanItem}, PlanCheck)"/> adds what breaks the plan rules (<see cref="Rules"/>); all of it
+/// gets the one repair request;
 /// <see cref="Clean"/> then repairs what can be repaired without asking: an unknown base (or an image base without a picture) becomes the
 /// picture or a title, unknown actions and actions pointing at points that do not exist are dropped, zooms, sentences and fractions are
 /// clamped, a map without a region gets one around its places. Nothing a model writes reaches the page unchecked.
@@ -45,6 +47,45 @@ public static class PlanReader
         }
 
         return problems;
+    }
+
+    /// <summary>
+    /// The plan rules the code enforces (F2, 0.1.41), applied in this order after the structure: one background at most 40 % of the video,
+    /// no repeated shot, beats per sentence, label words, the subtitles' bottom quarter, every action's points in its own scene.
+    /// </summary>
+    public static IReadOnlyList<IPlanRule> Rules { get; } =
+    [
+        new BackgroundShareRule(), new RepeatedShotRule(), new BeatsPerSentenceRule(), new LabelWordsRule(), new SubtitleAreaRule(), new ActionPointsRule(),
+    ];
+
+    /// <summary>
+    /// What does not fit the scenes of <paramref name="check"/> (the structure, <see cref="Problems(IReadOnlyList{PlanItem}, int)"/>) and then
+    /// what breaks the plan rules (<see cref="Rules"/>, in order); empty = usable as it is. Everything goes into the single repair request.
+    /// </summary>
+    public static IReadOnlyList<string> Problems(IReadOnlyList<PlanItem> items, PlanCheck check)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        ArgumentNullException.ThrowIfNull(check);
+        return [.. Problems(items, check.Scenes.Count), .. Rules.SelectMany(r => r.Problems(items, check))];
+    }
+
+    /// <summary>
+    /// Whether the repaired answer is used instead of the first: it may not break the structure more (a lost scene weighs more than any rule),
+    /// and with the same structure it may not have more findings.
+    /// </summary>
+    public static bool Better(IReadOnlyList<PlanItem> repaired, IReadOnlyList<PlanItem> first, PlanCheck check)
+    {
+        ArgumentNullException.ThrowIfNull(repaired);
+        ArgumentNullException.ThrowIfNull(first);
+        ArgumentNullException.ThrowIfNull(check);
+        if (repaired.Count == 0)
+        {
+            return false;
+        }
+
+        var structure = Problems(repaired, check.Scenes.Count).Count;
+        var before = Problems(first, check.Scenes.Count).Count;
+        return structure < before || (structure == before && Problems(repaired, check).Count <= Problems(first, check).Count);
     }
 
     /// <summary>
