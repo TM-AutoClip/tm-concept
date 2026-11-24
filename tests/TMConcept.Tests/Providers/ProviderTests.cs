@@ -241,7 +241,8 @@ public sealed class ProviderTests
         foreach (var model in Catalog.All.Where(m => m.Provider != ModelProviders.Local))
         {
             model.PricedOn.ShouldNotBeNullOrEmpty();
-            var priced = model.InputUsd > 0 || model.OutputUsd > 0 || model.ImageUsd > 0 || model.SpeechUsdPerMillionCharacters > 0;
+            var priced = model.InputUsd > 0 || model.OutputUsd > 0 || model.ImageUsd > 0 || model.SpeechUsdPerMillionCharacters > 0
+                || model.MusicUsdPerPiece > 0 || model.MusicUsdPerMinute > 0;
             priced.ShouldBeTrue(model.Provider + "/" + model.Id);
         }
     }

@@ -957,12 +957,14 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
             OnPropertyChanged(nameof(Summary));
             Changed?.Invoke(this, EventArgs.Empty);
 
-            // Saved at once (0.1.17): the next page switch, restart, key or server never brings an older choice back.
-            await SaveRowsAsync([row]).ConfigureAwait(true);
+            // The note first: it says at once what the choice means (the save runs off the window's thread since 0.1.39 and would delay it).
             if (e.PropertyName is not (nameof(StepModelRowViewModel.Effort) or nameof(StepModelRowViewModel.Speed)))
             {
                 await NoteAsync(row).ConfigureAwait(true);
             }
+
+            // Saved at once (0.1.17): the next page switch, restart, key or server never brings an older choice back.
+            await SaveRowsAsync([row]).ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

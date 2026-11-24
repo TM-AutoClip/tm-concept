@@ -38,6 +38,8 @@ public sealed partial class VersionEditorViewModel(StepPickerViewModel picker, V
     private Profile? _profile;
     private CancellationTokenSource? _cancel;
     private bool _attached;
+    private Guid? _madeId;
+    private string _madeStatus = string.Empty;
 
     /// <summary>A new version was made (the page shows it).</summary>
     public event EventHandler<VideoRecord>? Made;
@@ -90,7 +92,9 @@ public sealed partial class VersionEditorViewModel(StepPickerViewModel picker, V
         _source = null;
         _profile = profile;
         CanEdit = false;
-        Status = string.Empty;
+
+        // The version just made keeps the line that says so (the page shows it after its list is read again); any other starts without one.
+        Status = record is not null && record.Id == _madeId ? _madeStatus : string.Empty;
         if (record is null || profile is null)
         {
             return;
@@ -225,6 +229,7 @@ public sealed partial class VersionEditorViewModel(StepPickerViewModel picker, V
     {
         Busy = true;
         Status = string.Empty;
+        _madeId = null;
         using var cancel = new CancellationTokenSource();
         _cancel = cancel;
         try
@@ -254,6 +259,8 @@ public sealed partial class VersionEditorViewModel(StepPickerViewModel picker, V
             Status = text.Format("version.done", name, text.Usd(record.TotalUsd));
             activity.Add(ActivityLevel.Info, Status);
             notifier.Notify(new AppNotification(NotificationKind.Done, text["version.done.title"], record.Title + " · " + Status));
+            _madeId = record.Id;
+            _madeStatus = Status;
             Made?.Invoke(this, record);
         }
         catch (VideoException ex)

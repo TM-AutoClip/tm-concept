@@ -27,6 +27,7 @@ public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store,
     private Core.Music.LocalMusicCard? _card;
     private IReadOnlyList<SavedPalette> _saved = [];
     private bool _fontsLogged;
+    private int _load;
 
     /// <inheritdoc />
     public override string TitleKey => "settings.styles";
@@ -296,6 +297,10 @@ public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store,
 
     private async Task LoadAsync(Guid? select)
     {
+        // Only the newest load fills the page: an older one (the section shown twice at once) that ends later never takes back a template
+        // chosen or changed meanwhile.
+        var load = ++_load;
+
         // The fonts installed on this computer are read once, off the interface thread (the editor lists them after the shipped ones).
         var installed = await Task.Run(() => SystemFonts.Installed).ConfigureAwait(true);
 
@@ -309,6 +314,11 @@ public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store,
 
         _saved = await palettes.ListAsync(CancellationToken.None).ConfigureAwait(true);
         var all = await store.ListAsync(CancellationToken.None).ConfigureAwait(true);
+        if (load != _load)
+        {
+            return;
+        }
+
         _loading = true;
         try
         {

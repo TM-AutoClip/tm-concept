@@ -1519,6 +1519,7 @@ public sealed class VideoPageTests
         var code = page.Picker.Row(PipelineSteps.VideoCode)!;
         code.Selected!.Model!.Id.ShouldBe("claude-sonnet-5-5", "the profile's last choice is preselected");
         code.Selected = code.Options.First(o => o.Model?.Id == "claude-opus-5-5");
+        await Until(() => page.QueueEstimate.Contains('$', StringComparison.Ordinal)); // the queued concepts are read off the window's thread
         page.QueueEstimate.ShouldContain("$");
 
         await page.ProduceAllAsync();
