@@ -80,9 +80,11 @@ public sealed class LeftoverSweeper(AppPaths paths, ILeftoverSweep sweep, ICompo
         if (!interrupted && parent is not null && Directory.Exists(parent))
         {
             var present = Directory.Exists(tools);
-            var old = sweep.OldComponentFolders(tools, Folders(parent, name + ".*"), gate.Reinstalling, present);
-            if (!present)
+            var found = Folders(parent, name + ".*");
+            var old = sweep.OldComponentFolders(tools, found, gate.Reinstalling, present);
+            if (!present && found.Count > 0)
             {
+                // Only worth a warning when something is kept: a new data folder has neither the components folder nor old ones.
                 logger.LogWarning(LogEvents.OnScreen, "Start-up sweep: the components folder is not there; the old components folders next to it stay");
             }
 

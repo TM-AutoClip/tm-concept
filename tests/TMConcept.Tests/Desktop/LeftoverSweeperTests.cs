@@ -1,3 +1,5 @@
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Shouldly;
 using TMConcept.Desktop.Components;
 using TMConcept.Desktop.DiskSpace;
@@ -25,6 +27,20 @@ public sealed class LeftoverSweeperTests
         var engine = Path.Combine(h.Paths.ToolsDirectory, "engines", "remotion");
         return (Folder(Path.Combine(data, "tools.old-20261116-120000"), 1000), Folder(Path.Combine(data, "tools.failed-20261116-120501"), 500),
             Folder(Path.Combine(data, "tools.mine")), Folder(Path.Combine(engine, "tmp"), 24), Folder(Path.Combine(engine, "node_modules")));
+    }
+
+    /// <summary>Keeps the level of every line the sweeper writes.</summary>
+    private sealed class LevelLogger : ILogger<LeftoverSweeper>
+    {
+        public List<LogLevel> Levels { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+            Levels.Add(logLevel);
     }
 
     [Fact]
@@ -100,6 +116,25 @@ public sealed class LeftoverSweeperTests
         (await h.Get<ILeftoverSweeper>().SweepAsync(CancellationToken.None)).ShouldBe(0);
         Directory.Exists(old).ShouldBeTrue("it may be the only copy of the components");
         Directory.Exists(failed).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task ANewDataFolderWithoutComponentsWritesNoWarning()
+    {
+        var logger = new LevelLogger();
+        using var h = new DesktopHarness(s => s.AddSingleton<ILogger<LeftoverSweeper>>(logger));
+        if (Directory.Exists(h.Paths.ToolsDirectory))
+        {
+            Directory.Delete(h.Paths.ToolsDirectory, recursive: true);
+        }
+
+        (await h.Get<ILeftoverSweeper>().SweepAsync(CancellationToken.None)).ShouldBe(0);
+        logger.Levels.ShouldNotContain(LogLevel.Warning, "nothing is kept, so nothing to warn about");
+
+        // Old folders without the components folder: they stay, and that is worth a warning.
+        Folder(Path.Combine(h.Paths.DataDirectory, "tools.old-20261116-120000"));
+        (await h.Get<ILeftoverSweeper>().SweepAsync(CancellationToken.None)).ShouldBe(0);
+        logger.Levels.ShouldContain(LogLevel.Warning);
     }
 
     [Fact]
