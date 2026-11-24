@@ -454,7 +454,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         }
         catch (InvalidOperationException ex)
         {
-            throw new VideoException("Joining video and narration failed: " + ex.Message, ex) { Code = save.Music is null ? "mux" : "music" };
+            throw new VideoException("Joining video and narration failed: " + ex.Message, ex) { Code = "mux" };
         }
 
         var folder = save.TargetFolder;

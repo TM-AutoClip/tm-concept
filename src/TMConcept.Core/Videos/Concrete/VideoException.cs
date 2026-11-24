@@ -1,8 +1,9 @@
 namespace TMConcept.Core.Videos;
 
 /// <summary>
-/// A video could not be made (<see cref="Code"/>: "scenes", "speech", "images", "code", "render", "mux", "files", "missing", or <see cref="ProviderPrefix"/> +
-/// the provider's failure code).
+/// A video could not be made (<see cref="Code"/>: "scenes", "speech", "images", "code", "render", "mux", "music" (0.1.44: the background
+/// music file is missing, damaged or silent, checked before anything is paid for), "files", "missing", or <see cref="ProviderPrefix"/> + the
+/// provider's failure code).
 /// </summary>
 public sealed class VideoException : Exception
 {

@@ -1606,6 +1606,33 @@ public sealed class VideoPageTests
         made.ImageModel.ShouldBe("fal/fal-ai/flux-2/flash");
     }
 
+    /// <summary>
+    /// H2 (0.1.44): after a video whose music asks for credit, the page shows the yellow note with the text to copy; music without an
+    /// attribution shows none.
+    /// </summary>
+    [AvaloniaFact]
+    public Task TheAttributionNoteShowsForMusicThatAsksForCredit() => AttributionNoteAsync("Music: \"My Song\" by Me", shown: true);
+
+    [AvaloniaFact]
+    public Task NoAttributionNoteForMusicThatAsksForNone() => AttributionNoteAsync(string.Empty, shown: false);
+
+    private static async Task AttributionNoteAsync(string attribution, bool shown)
+    {
+        var engine = new FakeEngine();
+        using var h = Harness(new FakeChat().Answer(_ => Code(engine.SampleCode)), engine);
+        var file = Path.Combine(h.Get<IAppPaths>().DataDirectory, "user-music", "song.mp3");
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        await File.WriteAllBytesAsync(file, [0x49, 0x44, 0x33, 0x04, 0x00]);
+        var (page, _) = await OpenAsync(h, template: s => s.Music = new VideoMusic { Source = MusicSource.OwnFile, File = file, Attribution = attribution });
+        await page.EnqueueAsync(page.Approved.Single());
+
+        await page.ProduceAllAsync();
+
+        page.Produced.ShouldHaveSingleItem();
+        page.HasAttribution.ShouldBe(shown);
+        page.Attribution.ShouldBe(attribution);
+    }
+
     internal sealed class FakeImages : IImageEngine
     {
         public List<string> Prompts { get; } = [];
