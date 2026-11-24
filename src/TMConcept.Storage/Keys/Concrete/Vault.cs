@@ -27,8 +27,14 @@ public sealed class Vault(IAppPaths paths, DatabaseKey key, IEnumerable<IKeyProt
     /// <summary>Method used by the current key file (<c>null</c> before creation).</summary>
     public string? Method => KeyFile.Read(paths.KeyFile)?.Method;
 
-    /// <summary>First start: a new key, sealed with <paramref name="protector"/>, and an empty database with the schema.</summary>
-    public async Task CreateAsync(IKeyProtector protector, CancellationToken cancellationToken)
+    /// <summary>
+    /// First start: a new key, sealed with <paramref name="protector"/>, and an empty database with the schema. Runs on the thread pool
+    /// (sealing and opening the encrypted file derive keys; the window's thread only awaits it).
+    /// </summary>
+    public Task CreateAsync(IKeyProtector protector, CancellationToken cancellationToken) =>
+        DatabaseWork.RunAsync(() => CreateWorkAsync(protector, cancellationToken), cancellationToken);
+
+    private async Task CreateWorkAsync(IKeyProtector protector, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(protector);
         if (State != VaultState.NotCreated)
@@ -67,9 +73,13 @@ public sealed class Vault(IAppPaths paths, DatabaseKey key, IEnumerable<IKeyProt
 
     /// <summary>
     /// Opens the database with the key file's protector; <paramref name="keyOpened"/> is called once the key is out of its protection, before
-    /// the database is checked and upgraded (the splash names the next stage). An exception with the reason when it cannot.
+    /// the database is checked and upgraded (the splash names the next stage). An exception with the reason when it cannot. Runs on the
+    /// thread pool: unsealing a master password (Argon2id) and opening the encrypted file derive keys, which held the unlock window's thread.
     /// </summary>
-    public async Task OpenAsync(Action? keyOpened, CancellationToken cancellationToken)
+    public Task OpenAsync(Action? keyOpened, CancellationToken cancellationToken) =>
+        DatabaseWork.RunAsync(() => OpenWorkAsync(keyOpened, cancellationToken), cancellationToken);
+
+    private async Task OpenWorkAsync(Action? keyOpened, CancellationToken cancellationToken)
     {
         var envelope = KeyFile.Read(paths.KeyFile) ?? throw new InvalidOperationException("There is no key file; the database was never created here.");
         var protector = _protectors.FirstOrDefault(p => p.Method == envelope.Method)
@@ -121,8 +131,14 @@ public sealed class Vault(IAppPaths paths, DatabaseKey key, IEnumerable<IKeyProt
         logger.LogInformation("Encrypted database opened (key protection: {Method})", envelope.Method);
     }
 
-    /// <summary>Seals the open key with another protector (for example "lock with a master password") and forgets the old seal.</summary>
-    public async Task ChangeProtectionAsync(IKeyProtector protector, CancellationToken cancellationToken)
+    /// <summary>
+    /// Seals the open key with another protector (for example "lock with a master password") and forgets the old seal. Runs on the thread
+    /// pool (a master password seal derives a key).
+    /// </summary>
+    public Task ChangeProtectionAsync(IKeyProtector protector, CancellationToken cancellationToken) =>
+        DatabaseWork.RunAsync(() => ChangeProtectionWorkAsync(protector, cancellationToken), cancellationToken);
+
+    private async Task ChangeProtectionWorkAsync(IKeyProtector protector, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(protector);
 

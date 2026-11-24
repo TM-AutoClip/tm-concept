@@ -36,14 +36,53 @@ public sealed class DatabaseWorkTests
         SynchronizationContext.SetSynchronizationContext(window);
         try
         {
+            // The calling thread stays busy until both pieces of work have run, so the pool cannot hand it the work after it returns.
             var caller = Environment.CurrentManagedThreadId;
-            var read = h.Database.ReadAsync(db => Task.FromResult((Context: SynchronizationContext.Current, Thread: Environment.CurrentManagedThreadId)), None);
-            var write = h.Database.WriteAsync(db => Task.FromResult((Context: SynchronizationContext.Current, Thread: Environment.CurrentManagedThreadId)), None);
+            using var ran = new CountdownEvent(2);
+            (SynchronizationContext? Context, int Thread) Seen()
+            {
+                var seen = (SynchronizationContext.Current, Environment.CurrentManagedThreadId);
+                ran.Signal();
+                return seen;
+            }
+
+            var read = h.Database.ReadAsync(db => Task.FromResult(Seen()), None);
+            var write = h.Database.WriteAsync(db => Task.FromResult(Seen()), None);
+            ran.Wait(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken).ShouldBeTrue("both pieces of work ran while the caller waited");
             foreach (var (context, thread) in await Task.WhenAll(read, write))
             {
                 context.ShouldNotBeSameAs(window, "the work does not see the window's context");
                 thread.ShouldNotBe(caller, "the work does not run on the calling thread");
             }
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
+    }
+
+    [Fact]
+    public async Task UnlockRunsOffTheCallersThread()
+    {
+        using var h = await StorageHarness.CreatedAsync();
+        h.Vault.Lock();
+        var previous = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new MarkedContext());
+        try
+        {
+            // The key callback runs inside the unlock: the master password's Argon2id and the file's key derivation run where it runs.
+            var caller = Environment.CurrentManagedThreadId;
+            using var opened = new ManualResetEventSlim();
+            var thread = 0;
+            var open = h.Vault.OpenAsync(() =>
+            {
+                thread = Environment.CurrentManagedThreadId;
+                opened.Set();
+            }, None);
+            opened.Wait(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken).ShouldBeTrue("the key was opened while the caller waited");
+            await open;
+            thread.ShouldNotBe(caller, "unsealing the key does not hold the calling (window's) thread");
+            h.Vault.State.ShouldBe(VaultState.Open);
         }
         finally
         {

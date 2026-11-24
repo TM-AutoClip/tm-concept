@@ -17,6 +17,9 @@ internal static class DatabaseWork
     /// <summary>Runs <paramref name="work"/> on the thread pool, never on the caller's thread (or its synchronization context).</summary>
     public static Task<T> RunAsync<T>(Func<Task<T>> work, CancellationToken cancellationToken) => Task.Run(work, cancellationToken);
 
+    /// <summary><see cref="RunAsync{T}"/> without a result.</summary>
+    public static Task RunAsync(Func<Task> work, CancellationToken cancellationToken) => Task.Run(work, cancellationToken);
+
     /// <summary>The one-writer gate of <paramref name="file"/> (one per file for the whole process).</summary>
     public static SemaphoreSlim Writer(string file) => Writers.GetOrAdd(Path.GetFullPath(file), static _ => new SemaphoreSlim(1, 1));
 

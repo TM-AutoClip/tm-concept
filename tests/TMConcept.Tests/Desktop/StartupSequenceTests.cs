@@ -83,16 +83,21 @@ public sealed class StartupSequenceTests
         var caller = Environment.CurrentManagedThreadId;
         var stepThread = caller;
         var sequence = new StartupSequence(new FakeExit());
+        using var stepRan = new ManualResetEventSlim();
 
-        var outcome = await sequence.RunAsync(
+        // The calling thread stays busy until the step has run, so the pool cannot hand it the step after it returns to the pool.
+        var run = sequence.RunAsync(
         [
             new StartupStep(StartupStage.Vault, progress =>
             {
                 stepThread = Environment.CurrentManagedThreadId;
                 progress.Report(StartupStage.Database);
+                stepRan.Set();
                 return Task.CompletedTask;
             }),
         ], screen);
+        stepRan.Wait(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken).ShouldBeTrue();
+        var outcome = await run;
 
         outcome.ShouldBe(StartupOutcome.Completed);
         stepThread.ShouldNotBe(caller);
