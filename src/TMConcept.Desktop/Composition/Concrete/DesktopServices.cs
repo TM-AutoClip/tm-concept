@@ -484,9 +484,9 @@ public static class DesktopServices
         services.AddSingleton<Core.Channels.IChannelPhotoFetcher, Providers.Channels.ChannelPhotoClient>();
         services.AddSingleton<Core.Channels.IChannelInspirer, Core.Channels.ChannelInspirer>();
         services.AddSingleton<Core.Channels.IChannelStyleWriter, Core.Channels.ChannelStyleWriter>();
-        services.AddSingleton<Core.Channels.ChannelTemplateCreator>();
+        services.AddSingleton<Core.Channels.IChannelTemplateCreator, Core.Channels.ChannelTemplateCreator>();
         services.AddTransient(s => new ChannelInspirationServices(s.GetRequiredService<Core.Channels.IChannelInspirer>(),
-            s.GetRequiredService<Core.Channels.IChannelStyleWriter>(), s.GetRequiredService<Core.Channels.ChannelTemplateCreator>(),
+            s.GetRequiredService<Core.Channels.IChannelStyleWriter>(), s.GetRequiredService<Core.Channels.IChannelTemplateCreator>(),
             () => EnsureChannelToolsAsync(s), token => ChannelModelAsync(s, token), s.GetRequiredService<IActivityLog>(), s.GetRequiredService<TimeProvider>()));
         services.AddTransient<ChannelInspirationViewModel>();
         services.AddSingleton<Func<ChannelInspirationViewModel>>(s => () => s.GetRequiredService<ChannelInspirationViewModel>());

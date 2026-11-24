@@ -301,8 +301,8 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
 
     /// <summary>
     /// Makes a NEW profile from the edited draft of "Kanaldan esinlen": the form starts a new profile, takes the draft (and its photo, copied
-    /// into the library by the save like a picked one) and saves it. Null when it was saved; otherwise why not (the new profile stays in the
-    /// form, unsaved, so nothing typed is lost).
+    /// into the library by the save like a picked one) and saves it. Null when it was saved; otherwise why not (the draft stays in the
+    /// window, so nothing typed is lost; the page goes back to the selected profile).
     /// </summary>
     public async Task<string?> CreateFromChannelAsync(ChannelProfileDraft draft)
     {
@@ -321,7 +321,11 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
         await SaveAsync().ConfigureAwait(true);
         if (IsNew)
         {
-            return Status.Length > 0 ? Status : text["inspire.not_created"];
+            // The draft stays in the window (it is shown there and can be fixed and created again); the page goes back to the selected
+            // profile, so no unsaved form keeps pointing at the look's temporary photo, which the window deletes when it closes.
+            var failure = Status.Length > 0 ? Status : text["inspire.not_created"];
+            await CancelNewAsync().ConfigureAwait(true);
+            return failure;
         }
 
         logger.LogInformation("Profile {Id} made from a channel", _editing?.Id);

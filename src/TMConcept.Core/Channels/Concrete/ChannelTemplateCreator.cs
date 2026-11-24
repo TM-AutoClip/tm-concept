@@ -10,7 +10,7 @@ namespace TMConcept.Core.Channels;
 /// targets from the numbers) and the defaults of a new template (drawn by the app, with its finishing layer). It is added only while there are
 /// fewer than <see cref="VideoStyleLimits.Max"/> templates (rule 20); an existing template is never touched, also when an id would clash.
 /// </summary>
-public sealed class ChannelTemplateCreator(IVideoStyleStore store, TimeProvider clock, ILogger<ChannelTemplateCreator> logger)
+public sealed class ChannelTemplateCreator(IVideoStyleStore store, TimeProvider clock, ILogger<ChannelTemplateCreator> logger) : IChannelTemplateCreator
 {
     /// <summary>The draft of a template named <paramref name="name"/> (cut to <see cref="VideoStyleLimits.NameMax"/>) with <paramref name="tempo"/>.</summary>
     public static VideoStyle Draft(string name, ReferenceTempoProfile tempo, DateTimeOffset now)
@@ -29,11 +29,11 @@ public sealed class ChannelTemplateCreator(IVideoStyleStore store, TimeProvider 
         };
     }
 
-    /// <summary>Whether one more template fits (fewer than <see cref="VideoStyleLimits.Max"/>).</summary>
+    /// <inheritdoc />
     public async Task<bool> HasRoomAsync(CancellationToken cancellationToken) =>
         (await store.ListAsync(cancellationToken).ConfigureAwait(false)).Count < VideoStyleLimits.Max;
 
-    /// <summary>Adds <paramref name="draft"/> as a new template; <see cref="ChannelTemplateOutcome.LimitReached"/> (nothing written) at the limit.</summary>
+    /// <inheritdoc />
     public async Task<ChannelTemplateOutcome> CreateAsync(VideoStyle draft, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(draft);

@@ -123,7 +123,18 @@ public sealed class ChannelInspirer(IAppPaths paths, IChannelLister lister, IRef
                 break;
             }
 
-            var part = await lister.ListAsync(tabUri, ChannelLimits.ListCount - videos.Count, folder, cancellationToken).ConfigureAwait(false);
+            ChannelListing part;
+            try
+            {
+                part = await lister.ListAsync(tabUri, ChannelLimits.ListCount - videos.Count, folder, cancellationToken).ConfigureAwait(false);
+            }
+            catch (ChannelInspireException ex) when (ex.Code == "list" && videos.Count > 0)
+            {
+                // A later tab that cannot be read (a Shorts tab yt-dlp does not answer for) does not throw away the videos already read.
+                logger.LogWarning("A tab of the channel's home could not be read; the {Videos} videos read so far are kept", videos.Count);
+                break;
+            }
+
             videos.AddRange(part.Videos.Where(v => videos.All(o => o.Id != v.Id)));
         }
 

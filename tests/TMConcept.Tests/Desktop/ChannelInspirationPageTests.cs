@@ -159,8 +159,29 @@ public sealed class ChannelInspirationPageTests
         model.CreateProfileCommand.CanExecute(null).ShouldBeFalse();
     }
 
+    [AvaloniaFact]
+    public async Task AProfileThatCannotBeMadeLeavesThePageOnTheSelectedProfile()
+    {
+        using var h = new DesktopHarness();
+        await FirstRunTests.CreateAsync(h);
+        var page = h.Get<ProfileViewModel>();
+        page.StartNew();
+        page.Name = "Existing";
+        page.Language = page.Languages.First(l => l.Value == ContentLanguages.English);
+        page.ConceptText = "My own channel about something else entirely, written by hand.";
+        await page.SaveAsync();
+
+        // An empty channel content is refused by the page's own checks: the reason comes back, nothing is written and the page does not
+        // keep an unsaved new profile (whose photo would be the look's temporary file, deleted when the window closes).
+        var failure = await page.CreateFromChannelAsync(new ChannelProfileDraft("Tarih Kutusu esinli", ContentLanguages.Turkish, true, 60, string.Empty, null));
+        failure.ShouldNotBeNullOrEmpty();
+        page.IsNew.ShouldBeFalse();
+        page.Name.ShouldBe("Existing");
+        (await h.Get<IProfileStore>().ListAsync(CancellationToken.None)).Count.ShouldBe(1);
+    }
+
     private static ChannelInspirationViewModel Model(DesktopHarness h, FakeInspirer inspirer, FakeWriter writer, IActivityLog activity, ResolvedModel? ai) =>
-        new(new ChannelInspirationServices(inspirer, writer, h.Get<ChannelTemplateCreator>(), () => Task.FromResult(true), _ => Task.FromResult(ai), activity,
+        new(new ChannelInspirationServices(inspirer, writer, h.Get<IChannelTemplateCreator>(), () => Task.FromResult(true), _ => Task.FromResult(ai), activity,
             TimeProvider.System), h.Get<Localizer>(), NullLogger<ChannelInspirationViewModel>.Instance);
 
     private sealed class FakeInspirer : IChannelInspirer

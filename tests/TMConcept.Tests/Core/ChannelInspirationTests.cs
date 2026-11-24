@@ -256,6 +256,13 @@ public sealed class ChannelInspirationTests
         home.Listing.Videos.ShouldNotBeEmpty();
         lister.Addresses.ShouldContain("https://www.youtube.com/@some/videos");
         inspirer.Discard(home);
+
+        // A later tab yt-dlp cannot read (the Shorts tab) keeps the videos the first one gave; a first tab that fails still fails the look.
+        lister.FailShorts = true;
+        var kept = await inspirer.InspectAsync("https://www.youtube.com/@some", 1, photo: false, null, ct);
+        kept.Listing.Videos.ShouldNotBeEmpty();
+        lister.Addresses.ShouldContain("https://www.youtube.com/@some/shorts");
+        inspirer.Discard(kept);
     }
 
     [Fact]
@@ -336,6 +343,8 @@ public sealed class ChannelInspirationTests
 
         public bool HomeFirst { get; set; }
 
+        public bool FailShorts { get; set; }
+
         public List<string> Addresses { get; } = [];
 
         public bool Ready => true;
@@ -344,7 +353,7 @@ public sealed class ChannelInspirationTests
         {
             Directory.Exists(folder).ShouldBeTrue("yt-dlp runs in the look's own folder");
             Addresses.Add(address.AbsoluteUri);
-            if (Fail)
+            if (Fail || (FailShorts && address.AbsolutePath.EndsWith("/shorts", StringComparison.Ordinal)))
             {
                 throw new ChannelInspireException("no") { Code = "list" };
             }

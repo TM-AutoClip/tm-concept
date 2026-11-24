@@ -13,5 +13,5 @@ namespace TMConcept.Desktop.ViewModels;
 /// <param name="Activity">The activity panel.</param>
 /// <param name="Clock">The clock.</param>
 public sealed record ChannelInspirationServices(Core.Channels.IChannelInspirer Inspirer, Core.Channels.IChannelStyleWriter Writer,
-    Core.Channels.ChannelTemplateCreator Templates, Func<Task<bool>> EnsureAsync, Func<CancellationToken, Task<Core.Models.ResolvedModel?>> ModelAsync,
+    Core.Channels.IChannelTemplateCreator Templates, Func<Task<bool>> EnsureAsync, Func<CancellationToken, Task<Core.Models.ResolvedModel?>> ModelAsync,
     Core.Activity.IActivityLog Activity, TimeProvider Clock);
