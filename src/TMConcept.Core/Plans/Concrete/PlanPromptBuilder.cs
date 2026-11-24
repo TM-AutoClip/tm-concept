@@ -158,6 +158,24 @@ public static class PlanPromptBuilder
         return user + "\nYour previous answer did not fit: " + string.Join("; ", problems) + ". Write the whole plan again.";
     }
 
+    /// <summary>
+    /// The plan again after the user's notes on its preview (F10, 0.1.49): the same scenes, the plan the user saw and every note with its
+    /// scene, in one request; the scenes without a note are kept as they were.
+    /// </summary>
+    public static string Revise(string user, string previous, IReadOnlyList<Videos.SceneNote> notes)
+    {
+        ArgumentNullException.ThrowIfNull(notes);
+        var c = CultureInfo.InvariantCulture;
+        var text = new StringBuilder(user).Append("\nThe user looked at still frames of your plan:\n").Append(Text.TextClean.OneLine(previous, 60_000))
+            .Append("\nTheir notes, scene by scene:\n");
+        foreach (var note in notes.Where(n => n.Text.Trim().Length > 0).OrderBy(n => n.Scene))
+        {
+            text.Append(c, $"Scene {note.Scene}: «{Clean(note.Text, 600)}»\n");
+        }
+
+        return text.Append("Write the whole plan again: change what the notes ask for and keep every scene without a note as it was.").ToString();
+    }
+
     /// <summary>The look of the video for the plan (colours and labels follow it): the template's style or the chosen words.</summary>
     private static string Look(VideoStyle? style)
     {

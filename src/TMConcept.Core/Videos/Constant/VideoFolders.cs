@@ -59,6 +59,12 @@ public static class VideoFolders
     /// </summary>
     public const string AssetsFile = "assets.json";
 
+    /// <summary>
+    /// The notes left on the version while it played (F16, 0.1.49; <see cref="TimeNotes"/>): each with its moment, its scene and its text. Written
+    /// only when there is one; "Fix" makes a new version from them.
+    /// </summary>
+    public const string NotesFile = "notes.json";
+
     /// <summary>The thumbnail (the Produced videos page makes it again when it is missing).</summary>
     public const string ThumbnailFile = "thumbnail.jpg";
 

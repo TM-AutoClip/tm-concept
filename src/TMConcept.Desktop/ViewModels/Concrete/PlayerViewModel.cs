@@ -103,6 +103,13 @@ public sealed partial class PlayerViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     public partial string Message { get; set; } = string.Empty;
 
+    /// <summary>
+    /// The notes under the picture (F16, 0.1.49): set by the Produced videos page for the version it shows, none on the video page (the player
+    /// is shared; one page is shown at a time).
+    /// </summary>
+    [ObservableProperty]
+    public partial TimeNotesViewModel? Notes { get; set; }
+
     /// <summary>Loads a video without playing it (the thumbnail shows until ▶).</summary>
     public void Load(string file, string poster, int width, int height, double fps, long durationMs)
     {

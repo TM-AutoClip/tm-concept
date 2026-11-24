@@ -84,13 +84,30 @@
                   <views:HelpTip Text="{DynamicResource video.night.hint}" />
                 </StackPanel>
                 <Button Name="ProduceAllButton" Grid.Column="2" Classes="accent" Content="{DynamicResource video.produce_all}"
-                        Command="{Binding ProduceAllCommand}" IsEnabled="{Binding Idle}" />
+                        Command="{Binding ProduceAllCommand}" IsEnabled="{Binding CanProduce}" />
                 <Button Grid.Column="3" Content="{DynamicResource common.cancel}" Command="{Binding CancelCommand}" IsVisible="{Binding Busy}" />
               </Grid>
               <TextBlock Name="QueueEstimate" Text="{Binding QueueEstimate}" ToolTip.Tip="{Binding QueueEstimateTip}" Classes="tiny"
                          IsVisible="{Binding QueueEstimate, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
               <TextBlock Text="{Binding Status}" Classes="error" TextWrapping="Wrap"
                          IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+              <!-- F16 (0.1.49): what is missing before production, by name. A required gap (red) turns "Produce in order" off; an optional one
+                   (yellow) is fixed or skipped on purpose. -->
+              <ItemsControl Name="GapList" ItemsSource="{Binding Checklist.Rows}" IsVisible="{Binding Checklist.HasRows}" Margin="0,2,0,0">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:GapRowViewModel">
+                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6" Margin="0,1">
+                      <TextBlock Text="{Binding Text}" TextWrapping="Wrap" VerticalAlignment="Center" Classes="small warning"
+                                 Classes.error="{Binding Required}" />
+                      <Button Grid.Column="1" Classes="small" Content="{Binding Fix}" IsVisible="{Binding CanFix}" VerticalAlignment="Center"
+                              Command="{Binding $parent[ItemsControl].((vm:VideoViewModel)DataContext).Checklist.FixCommand}" CommandParameter="{Binding}" />
+                      <Button Grid.Column="2" Classes="small" Content="{DynamicResource video.gap.skip}" IsVisible="{Binding CanSkip}"
+                              VerticalAlignment="Center" ToolTip.Tip="{DynamicResource video.gap.skip.tip}"
+                              Command="{Binding $parent[ItemsControl].((vm:VideoViewModel)DataContext).Checklist.SkipCommand}" CommandParameter="{Binding}" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
             </StackPanel>
             <!-- H2 (0.1.44): the credit the made video's music asks for, for the description; never drawn into the video. -->
             <Border Name="AttributionNote" DockPanel.Dock="Bottom" Classes="card" Margin="0,6,0,0" IsVisible="{Binding HasAttribution}">
@@ -140,8 +157,10 @@
         </Border>
 
         <!-- The made videos: the list and the preview of the chosen one (poster first; ▶ plays) with its buttons; beside each other when the
-             card is wide (the made videos under the queue on a narrow window), the list over the preview when it is narrow. -->
+             card is wide (the made videos under the queue on a narrow window), the list over the preview when it is narrow. F10 (0.1.49):
+             while a video waits for its plan, the plan preview lies over this card (the rest of the page stays usable). -->
         <Border Classes="card" Padding="10,8">
+          <Panel>
           <DockPanel>
             <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="2,0,0,6">
               <TextBlock Text="{Binding ProducedHeader}" Classes="h2" VerticalAlignment="Center" />
@@ -189,6 +208,47 @@
               </Panel>
             </controls:AdaptiveSplitPanel>
           </DockPanel>
+          <Border Name="PlanReviewPanel" Background="{DynamicResource tm-surface}" IsVisible="{Binding Review.Waiting}">
+            <DockPanel DataContext="{Binding Review}" x:DataType="vm:PlanReviewViewModel">
+              <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="2,0,0,6">
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Text="{Binding Title}" Classes="h2" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                  <views:HelpTip Text="{DynamicResource video.review.tip}" />
+                </StackPanel>
+                <TextBlock Text="{DynamicResource video.review.hint}" Classes="small" TextWrapping="Wrap" IsVisible="{Binding CanRevise}" />
+                <TextBlock Text="{DynamicResource video.review.first.hint}" Classes="small" TextWrapping="Wrap" IsVisible="{Binding FirstScene}" />
+              </StackPanel>
+              <WrapPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
+                <Button Name="ApprovePlanButton" Classes="accent" Content="{DynamicResource video.review.approve}" Command="{Binding ApproveCommand}"
+                        Margin="0,0,6,6" />
+                <Button Name="RevisePlanButton" Content="{DynamicResource video.review.revise}" Command="{Binding ReviseCommand}" IsVisible="{Binding CanRevise}"
+                        ToolTip.Tip="{DynamicResource video.review.revise.tip}" Margin="0,0,6,6" />
+                <Button Name="RejectPlanButton" Classes="danger" Content="{DynamicResource video.review.reject}" Command="{Binding RejectCommand}"
+                        ToolTip.Tip="{DynamicResource video.review.reject.tip}" Margin="0,0,6,6" />
+              </WrapPanel>
+              <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Spacing="8">
+                  <Image Source="{Binding Sheet, Converter={x:Static c:FileBitmapConverter.Instance}, ConverterParameter=1440}" Stretch="Uniform"
+                         MaxHeight="420" HorizontalAlignment="Left" IsVisible="{Binding HasSheet}" />
+                  <TextBlock Text="{DynamicResource video.review.no_sheet}" Classes="small warning" TextWrapping="Wrap"
+                             IsVisible="{Binding !HasSheet}" />
+                  <ItemsControl ItemsSource="{Binding Scenes}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:SceneNoteRowViewModel">
+                        <StackPanel Spacing="2" Margin="0,0,0,8">
+                          <TextBlock Text="{Binding Header}" FontWeight="SemiBold" />
+                          <TextBlock Text="{Binding Caption}" Classes="small" TextWrapping="Wrap" />
+                          <TextBox Text="{Binding Note}" PlaceholderText="{DynamicResource video.review.note}" TextWrapping="Wrap"
+                                   IsVisible="{Binding $parent[ItemsControl].((vm:PlanReviewViewModel)DataContext).CanRevise}" />
+                        </StackPanel>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </ScrollViewer>
+            </DockPanel>
+          </Border>
+          </Panel>
         </Border>
       </controls:AdaptiveSplitPanel>
     </Grid>

@@ -280,6 +280,15 @@
                           <CheckBox Name="StyleFinish" IsChecked="{Binding Finish}" Content="{DynamicResource styles.finish}" />
                           <views:HelpTip Text="{DynamicResource styles.finish.tip}" />
                         </StackPanel>
+                        <!-- F10 (0.1.49): the plan shown before the images are paid for; off by default. -->
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                          <CheckBox Name="StylePlanReview" IsChecked="{Binding PlanReview}" Content="{DynamicResource styles.plan_review}" />
+                          <views:HelpTip Text="{DynamicResource styles.plan_review.tip}" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" IsEnabled="{Binding PlanReview}">
+                          <CheckBox Name="StyleFirstScene" IsChecked="{Binding FirstSceneReview}" Content="{DynamicResource styles.first_scene}" />
+                          <views:HelpTip Text="{DynamicResource styles.first_scene.tip}" />
+                        </StackPanel>
                       </WrapPanel>
                     </Grid>
                   </StackPanel>

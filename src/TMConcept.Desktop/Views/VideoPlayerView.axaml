@@ -3,6 +3,7 @@
              xmlns:vm="using:TMConcept.Desktop.ViewModels"
              xmlns:c="using:TMConcept.Desktop.Converters"
              xmlns:controls="using:TMConcept.Desktop.Controls"
+             xmlns:views="using:TMConcept.Desktop.Views"
              x:Class="TMConcept.Desktop.Views.VideoPlayerView"
              x:DataType="vm:PlayerViewModel">
   <!-- The picture is 16:9 by the width it gets (never taller than the room it has); the controls sit under it. -->
@@ -20,6 +21,42 @@
       </Grid>
       <TextBlock Name="MessageLine" Text="{Binding Message}" Classes="small warning" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"
                  ToolTip.Tip="{Binding Message}" IsVisible="{Binding Message, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+      <!-- F16 (0.1.49): notes on the shown version (the Produced videos page sets them). Writing stops the video; the note belongs to that
+           moment and its scene. "Fix" makes a new version where only the noted scenes change (one call, its estimate confirmed first). -->
+      <Border Name="NotesPanel" Classes="card" Padding="8,6" Margin="0,4,0,0" IsVisible="{Binding Notes, Converter={x:Static ObjectConverters.IsNotNull}}">
+        <StackPanel Spacing="6" DataContext="{Binding Notes}" x:DataType="vm:TimeNotesViewModel">
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Text="{DynamicResource notes.title}" FontWeight="SemiBold" VerticalAlignment="Center" />
+            <views:HelpTip Text="{DynamicResource notes.tip}" />
+          </StackPanel>
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6" IsEnabled="{Binding Ready}">
+            <TextBox Name="NoteBox" Text="{Binding Draft}" PlaceholderText="{DynamicResource notes.placeholder}" AcceptsReturn="False" TextWrapping="Wrap" />
+            <Button Name="AddNoteButton" Grid.Column="1" Classes="small" Content="{DynamicResource notes.add}" Command="{Binding AddCommand}" IsDefault="False" />
+          </Grid>
+          <ItemsControl Name="NoteList" ItemsSource="{Binding Notes}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:TimeNoteRowViewModel">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Margin="0,2">
+                  <TextBlock Text="{Binding Line}" Classes="small" VerticalAlignment="Top" />
+                  <TextBlock Grid.Column="1" Text="{Binding Text}" TextWrapping="Wrap" />
+                  <Button Grid.Column="2" Classes="small" Content="✕" ToolTip.Tip="{DynamicResource notes.remove}" VerticalAlignment="Top"
+                          Command="{Binding $parent[ItemsControl].((vm:TimeNotesViewModel)DataContext).RemoveCommand}" CommandParameter="{Binding}" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <Button Name="FixNotesButton" Classes="accent" Content="{DynamicResource notes.fix}" Command="{Binding FixCommand}" IsEnabled="{Binding CanFix}" />
+            <views:HelpTip Text="{DynamicResource notes.fix.tip}" />
+          </StackPanel>
+          <TextBlock Text="{Binding Status}" Classes="small warning" TextWrapping="Wrap"
+                     IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+          <StackPanel Spacing="6" IsVisible="{Binding Busy}">
+            <views:ProductionStagesView Name="FixStages" DataContext="{Binding Progress}" />
+            <Button Content="{DynamicResource common.cancel}" Command="{Binding CancelCommand}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
     </StackPanel>
     <controls:AspectBox VerticalAlignment="Top">
     <Border Background="Black" CornerRadius="6" ClipToBounds="True">

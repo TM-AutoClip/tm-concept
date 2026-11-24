@@ -523,6 +523,12 @@ A video made with a template (Settings → Templates) follows it without relying
   only after a yes, Windows for now) each video's narration is heard once on this computer, every subtitle word gets the time it is
   said and the subtitles break where the voice breathes. The text stays the narration's; a sentence heard poorly is listed with
   "check by ear". Without it the times are estimated by length, as before.
+- **Plan preview (0.1.49, optional):** a template drawn by the app can show its plan before the pictures are paid for: still frames
+  of every beat with grey stand-ins, then approve, notes per scene (one new plan request for all of them) or reject; *One scene first*
+  shows the first scene with its real picture before the others. Night mode never waits.
+- **Notes on a finished video (0.1.49):** write while it plays (the video stops; the note belongs to that moment and scene), then
+  **Fix**: one request, a new version where only the noted scenes change. The video page names what is missing before production
+  (template, model, key in red; narration, music file, pronunciation in yellow, skippable).
 - **Drawing style:** scenes without an image are drawn in the template's style, and generated images are asked for in the same style.
   Fourteen choices, each described in the editor: *Let the AI choose* (the default of a new template: the model picks the look that fits
   each video), flat shapes, stick-figure narrator, line art, paper cut-out, infographic, neon, pencil sketch, animation (cartoon),

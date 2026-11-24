@@ -19,7 +19,14 @@ namespace TMConcept.Core.Plans;
 public sealed class ScenePlanner(IChatClientFactory chats, ICostCalculator costs, ILogger<ScenePlanner> logger)
 {
     /// <summary>Plans every scene of <paramref name="request"/>'s input (sets <see cref="Render.RenderScene.Plan"/>); returns the scenes without a plan of their own.</summary>
-    public async Task<int> PlanAsync(PlanRequest request, VideoStepProgress steps, CancellationToken cancellationToken)
+    public async Task<int> PlanAsync(PlanRequest request, VideoStepProgress steps, CancellationToken cancellationToken) =>
+        (await DraftAsync(request, steps, cancellationToken).ConfigureAwait(false)).Missing;
+
+    /// <summary>
+    /// The same as <see cref="PlanAsync"/>, with the answer the plan was read from (F10, 0.1.49: a previewed plan is planned again from it and
+    /// the user's notes, <see cref="PlanRequest.Notes"/>).
+    /// </summary>
+    public async Task<(int Missing, string Answer)> DraftAsync(PlanRequest request, VideoStepProgress steps, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(steps);
@@ -35,6 +42,13 @@ public sealed class ScenePlanner(IChatClientFactory chats, ICostCalculator costs
         var family = request.Style is { DrawStyle: not Styles.DrawStyle.Auto } style ? Styles.DrawStyles.Of(style.DrawStyle).Transition : string.Empty;
         var system = PlanPromptBuilder.System(motion, tempo, family, request.MusicHints);
         var user = PlanPromptBuilder.User(input.Title, input.Language, request.Style, scenes);
+        if (request.Notes is { Count: > 0 } notes)
+        {
+            // F10: all the notes of a preview go into this one call, with the plan they are about.
+            user = PlanPromptBuilder.Revise(user, request.Previous, notes);
+            logger.LogInformation("The scene plan is made again with {Count} notes of the user", notes.Count);
+        }
+
         var model = request.CodeModel;
         var chat = chats.Create(model.Model, model.Key.Secret);
 
@@ -71,6 +85,7 @@ public sealed class ScenePlanner(IChatClientFactory chats, ICostCalculator costs
             return PlanReader.Read(text).Count > 0 ? new[] { text } : null;
         }, logger, cancellationToken).ConfigureAwait(false);
         var items = PlanReader.Read(first[0]);
+        var answer = first[0];
 
         // The structure and the plan rules (0.1.41) share the single repair; a repair that still breaks a rule is used as far as it goes.
         var check = new PlanCheck(scenes, input.Scenes.Select(s => s.Image.Length > 0).ToList(), request.Subtitles, tempo, motion);
@@ -79,10 +94,12 @@ public sealed class ScenePlanner(IChatClientFactory chats, ICostCalculator costs
         {
             logger.LogWarning("The scene plan does not fit the {Count} scenes or the plan rules ({Problems}); asking for one repair", scenes.Count,
                 string.Join("; ", problems));
-            var repaired = PlanReader.Read(await AskAsync(PlanPromptBuilder.Repair(user, problems), cancellationToken).ConfigureAwait(false));
-            if (PlanReader.Better(repaired, items, check))
+            var repairText = await AskAsync(PlanPromptBuilder.Repair(user, problems), cancellationToken).ConfigureAwait(false);
+            var repaired = (Items: PlanReader.Read(repairText), Text: repairText);
+            if (PlanReader.Better(repaired.Items, items, check))
             {
-                items = repaired;
+                items = repaired.Items;
+                answer = repaired.Text;
                 var left = PlanReader.Problems(items, check);
                 if (left.Count > 0)
                 {
@@ -103,7 +120,7 @@ public sealed class ScenePlanner(IChatClientFactory chats, ICostCalculator costs
         steps.Report(VideoSteps.Code, 0.7);
         if (request.PointsModel is { } points)
         {
-            await PointsAsync(request, points, cleaned, steps, cancellationToken).ConfigureAwait(false);
+            await PointsAsync(request, points, cleaned.Select(c => (RenderPlan?)c.Plan).ToList(), steps, cancellationToken).ConfigureAwait(false);
         }
 
         for (var i = 0; i < input.Scenes.Count; i++)
@@ -123,18 +140,35 @@ public sealed class ScenePlanner(IChatClientFactory chats, ICostCalculator costs
 
         logger.LogInformation("Scene plan: {Bases}; {Beats} beats; transitions {Transitions}", string.Join(", ", cleaned.GroupBy(c => c.Plan.Base).Select(g => g.Key + " " + g.Count())),
             cleaned.Sum(c => c.Plan.Beats.Count), string.Join(", ", cleaned.Skip(1).Select(c => c.Plan.Transition.Length > 0 ? c.Plan.Transition : "-")));
-        return missing;
+        return (missing, answer);
+    }
+
+    /// <summary>
+    /// F10 (0.1.49): the image points of a plan made before its images (a previewed plan; <see cref="Render.RenderScene.Plan"/> is set), placed
+    /// now that the images are there; nothing without an image points model. The plan's timing is not changed (the points are places, not times).
+    /// </summary>
+    public Task PlaceAsync(PlanRequest request, VideoStepProgress steps, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(steps);
+        return request.PointsModel is { } points
+            ? PointsAsync(request, points, request.Input.Scenes.Select(s => s.Plan).ToList(), steps, cancellationToken)
+            : Task.CompletedTask;
     }
 
     /// <summary>Places the image scenes' points where the image points model sees them (one call per picture; a failure keeps the guesses).</summary>
-    private async Task PointsAsync(PlanRequest request, ResolvedModel model, IReadOnlyList<PlanItem> plans, VideoStepProgress steps,
+    private async Task PointsAsync(PlanRequest request, ResolvedModel model, IReadOnlyList<RenderPlan?> plans, VideoStepProgress steps,
         CancellationToken cancellationToken)
     {
         var chat = chats.Create(model.Model, model.Key.Secret);
         var placed = 0;
         for (var i = 0; i < plans.Count && i < request.Input.Scenes.Count; i++)
         {
-            var plan = plans[i].Plan;
+            if (plans[i] is not { } plan)
+            {
+                continue;
+            }
+
             var anchors = plan.Anchors.Where(a => a.Find.Length > 0 && a.X is not null).ToList();
             var file = Path.Combine(request.ProjectFolder, request.Input.Scenes[i].Image);
             if (plan.Base != PlanBases.Image || anchors.Count == 0 || request.Input.Scenes[i].Image.Length == 0 || !File.Exists(file))

@@ -54,6 +54,12 @@ public sealed class VideoCostEstimator(ICostCalculator costs, IModelCatalog? cat
                     string.Empty, VideoRemaker.SilentMs(s.Script, profile.ContentLanguage), s.Transition)).ToList(), width, height, 30,
                     endHoldMs: Styles.VideoStyleRules.EndHoldMs(style, profile.ContentLanguage));
                 total = total.Plus(Code(input, profile.ContentLanguage, engine, code, subtitles, style));
+                if (engine is not null && Plans.PlanDrawer.Draws(engine.Kind, style) && style!.PlanReview)
+                {
+                    // F10 (0.1.49): notes on a previewed plan cost one more plan call (all the notes together): at the high end only.
+                    var again = Call(input, profile.ContentLanguage, engine, code, subtitles, style);
+                    total = total.Plus(new CostEstimate(0, again.MaxUsd, 0, 0, 0));
+                }
                 if (image is not null)
                 {
                     var visuals = scenes.Select(s => s.Visual.Length > 0 ? s.Visual : s.Narration).ToList();
@@ -109,8 +115,7 @@ public sealed class VideoCostEstimator(ICostCalculator costs, IModelCatalog? cat
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(code);
         subtitles = style?.Subtitles ?? subtitles;
-        var system = engine is null ? 0 : costs.Tokens(VideoCodePrompt.System(engine, subtitles, style, language), ContentLanguages.English);
-        var user = costs.Tokens(VideoCodePrompt.User(Render.RenderInputBuilder.ForEngine(input, subtitles)), language);
+        var (system, user) = Prompt(input, language, engine, subtitles, style);
 
         // The high end is the call's whole budget: 14 000 tokens used to be counted, but real answers with thinking were cut at 32 000.
         long most = VideoCodeBudget.For(code);
@@ -119,6 +124,24 @@ public sealed class VideoCostEstimator(ICostCalculator costs, IModelCatalog? cat
         // One repair may follow a rejected check: its cost is the high end only.
         var repair = costs.EstimateChat(code, system + user + most, system, 0, most);
         return first with { MaxUsd = first.MaxUsd + repair.MaxUsd };
+    }
+
+    /// <summary>One code (or plan) call for <paramref name="input"/> without its repair: from <see cref="CodeOutputMin"/> output tokens to the whole budget.</summary>
+    public CostEstimate Call(RenderInput input, string language, IVideoEngine? engine, CatalogModel code, bool subtitles, Styles.VideoStyle? style = null)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(code);
+        var (system, user) = Prompt(input, language, engine, subtitles, style);
+        return costs.EstimateChat(code, system + user, 0, CodeOutputMin, VideoCodeBudget.For(code));
+    }
+
+    /// <summary>The tokens of the code prompt's system and user parts.</summary>
+    private (long System, long User) Prompt(RenderInput input, string language, IVideoEngine? engine, bool subtitles, Styles.VideoStyle? style)
+    {
+        subtitles = style?.Subtitles ?? subtitles;
+        var system = engine is null ? 0 : costs.Tokens(VideoCodePrompt.System(engine, subtitles, style, language), ContentLanguages.English);
+        var user = costs.Tokens(VideoCodePrompt.User(Render.RenderInputBuilder.ForEngine(input, subtitles)), language);
+        return (system, user);
     }
 
     /// <summary>What an online voice costs for <paramref name="characters"/> characters (a local voice nothing).</summary>

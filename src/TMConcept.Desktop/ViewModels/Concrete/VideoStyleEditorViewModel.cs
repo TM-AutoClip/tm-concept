@@ -87,6 +87,8 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         Subtitles = _source.Subtitles;
         WordHighlight = _source.WordHighlight;
         Finish = _source.Finish;
+        PlanReview = _source.PlanReview;
+        FirstSceneReview = _source.FirstSceneReview;
         ProgressBar = _source.ProgressBar;
         ReadableText = _source.ReadableText;
         Font = Fonts.FirstOrDefault(f => f.Font.Id == _source.FontId) ?? Fonts[0];
@@ -310,6 +312,14 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
     /// <summary>The style's finishing layer (F12, 0.1.43: paper tooth, grain, vignette, glow, shadow, boil; the app's drawer only).</summary>
     [ObservableProperty]
     public partial bool Finish { get; set; }
+
+    /// <summary>F10 (0.1.49): show the plan and wait for approval (the app's drawer only; off by default).</summary>
+    [ObservableProperty]
+    public partial bool PlanReview { get; set; }
+
+    /// <summary>F10 (0.1.49): one scene first, after the plan is approved (only with <see cref="PlanReview"/>).</summary>
+    [ObservableProperty]
+    public partial bool FirstSceneReview { get; set; }
 
     /// <summary>Narration tempo: the silences between sentences and scenes.</summary>
     [ObservableProperty]
@@ -568,6 +578,8 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         style.Drawer = (SceneDrawer)Drawer.Value;
         style.WordHighlight = WordHighlight;
         style.Finish = Finish;
+        style.PlanReview = PlanReview;
+        style.FirstSceneReview = PlanReview && FirstSceneReview;
         style.Music = new VideoMusic
         {
             Source = (Core.Styles.MusicSource)(MusicSource?.Value ?? 0),

@@ -98,6 +98,20 @@ public sealed class VideoStyle
     public bool Finish { get; set; }
 
     /// <summary>
+    /// "Show the plan and wait for approval" (F10, 0.1.49; the app's drawer only, <see cref="Plans.PlanDrawer.Draws"/>): after the scene plan the
+    /// video waits on the video page with a sheet of still frames of the plan (placeholders instead of the scene images, nothing paid for
+    /// them yet); approve, or notes per scene for one new plan call, or reject (the images are never paid for). Ignored in night mode. Off by
+    /// default and in a template saved before (its JSON has none), so its videos are made as they were.
+    /// </summary>
+    public bool PlanReview { get; set; }
+
+    /// <summary>
+    /// "One scene first" (F10, 0.1.49; only with <see cref="PlanReview"/>): after the plan is approved the first scene's image is made and the
+    /// scene drawn, shown, and the video waits once more before the other images. No call more, only the order. Off by default.
+    /// </summary>
+    public bool FirstSceneReview { get; set; }
+
+    /// <summary>
     /// Background music (0.1.44, C3): its source, level, ducking under the narration and fade-out. A template saved before has none in its
     /// JSON and reads as off, so its videos sound as they did.
     /// </summary>

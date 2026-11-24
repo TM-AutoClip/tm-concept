@@ -27,7 +27,7 @@ namespace TMConcept.Desktop.ViewModels;
 /// </summary>
 public sealed partial class ProducedViewModel(AppSession session, IVideoStore videos, IConceptStore concepts, Videos.VideoRows rows, Videos.VideoFiles files,
     Core.Deletion.VideoDeletion deletion, IConfirmDialog confirm, ConceptEvents events, Concepts.ConceptActions actions, IActivityLog activity, PlayerViewModel player,
-    IMediaTools media, Localizer text, VersionEditorViewModel editor, Core.Runs.IRunStore runs, ILogger<ProducedViewModel> logger)
+    IMediaTools media, Localizer text, VersionEditorViewModel editor, TimeNotesViewModel notes, Core.Runs.IRunStore runs, ILogger<ProducedViewModel> logger)
     : PageViewModelBase
 {
     private readonly List<VideoRowViewModel> _all = [];
@@ -53,6 +53,9 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
 
     /// <summary>"New version": a new voice or another engine for the shown version.</summary>
     public VersionEditorViewModel Editor { get; } = editor;
+
+    /// <summary>F16 (0.1.49): the notes on the shown version under the player, and "Fix" (a new version where only the noted scenes change).</summary>
+    public TimeNotesViewModel Notes { get; } = notes;
 
     /// <summary>Search.</summary>
     [ObservableProperty]
@@ -96,6 +99,8 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
     /// <inheritdoc />
     public override Task ActivateAsync()
     {
+        // The shared player shows this page's notes (the video page clears them).
+        Player.Notes = Notes;
         if (!_attached)
         {
             _attached = true;
@@ -103,7 +108,26 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
             {
                 if (e.PropertyName == nameof(VersionEditorViewModel.Busy))
                 {
-                    Working = Editor.Busy;
+                    Working = Editor.Busy || Notes.Busy;
+                }
+            };
+            Notes.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(TimeNotesViewModel.Busy))
+                {
+                    Working = Editor.Busy || Notes.Busy;
+                }
+            };
+            Notes.Made += async (_, record) =>
+            {
+                try
+                {
+                    _select = record.Id;
+                    await ReloadAsync().ConfigureAwait(true);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogError(ex, "The video list could not be reloaded");
                 }
             };
             Editor.Made += async (_, record) =>
@@ -276,6 +300,7 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
         if (value is null)
         {
             Player.Unload();
+            NotesWork = NotesAsync(null);
             return;
         }
 
@@ -283,6 +308,28 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
         ThumbnailWork = ThumbnailAgainAsync(value);
         _ = DetailsAsync(value);
         _ = EditorAsync(value);
+        NotesWork = NotesAsync(value);
+    }
+
+    /// <summary>The notes of the shown version being read (tests wait for it).</summary>
+    internal Task NotesWork { get; private set; } = Task.CompletedTask;
+
+    /// <summary>The notes start from the shown version (not while a fixed version is made).</summary>
+    private async Task NotesAsync(VideoRowViewModel? version)
+    {
+        if (Notes.Busy)
+        {
+            return;
+        }
+
+        try
+        {
+            await Notes.LoadAsync(version?.Video, session.Profile).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "The notes of a version could not be loaded");
+        }
     }
 
     /// <summary>The new-version editor starts from the shown version (not while it makes one).</summary>

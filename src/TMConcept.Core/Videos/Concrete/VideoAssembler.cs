@@ -23,7 +23,7 @@ namespace TMConcept.Core.Videos;
 /// </summary>
 public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator costs, IMediaTools media, IVideoStore videos, IRunStore runs, IAppPaths paths,
     TimeProvider clock, Plans.ScenePlanner planner, IMotionFrames motion, VideoMusicStep musicStep, SubtitleTimingStep subtitleTiming,
-    ILogger<VideoAssembler> logger)
+    IPlanSheet sheets, ILogger<VideoAssembler> logger)
 {
     /// <summary>The background music step (0.1.44 C3, 0.1.45 C4 + F7 + F8).</summary>
     public VideoMusicStep Music => musicStep;
@@ -246,9 +246,17 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         var project = Path.Combine(work, "project");
         PlaceFonts(project, style, input.Language);
         steps.Report(VideoSteps.Code, 0.1);
-        await planner.PlanAsync(new Plans.PlanRequest(codeModel, context.PointsModel, input, style, context.Spans, context.ImagePrompts, project, id,
-            VideoStyleRules.SubtitlesOn(options), MusicHints: context.Music is { Automatic: true }), steps,
-            cancellationToken).ConfigureAwait(false);
+        var planRequest = new Plans.PlanRequest(codeModel, context.PointsModel, input, style, context.Spans, context.ImagePrompts, project, id,
+            VideoStyleRules.SubtitlesOn(options), MusicHints: context.Music is { Automatic: true });
+        if (context.Planned)
+        {
+            // F10 (0.1.49): the plan was made and approved before the images; only its image points are placed now that they are there.
+            await planner.PlaceAsync(planRequest, steps, cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            await planner.PlanAsync(planRequest, steps, cancellationToken).ConfigureAwait(false);
+        }
 
         // 0.1.45: a library track chosen by the concept follows the plan's music hints; the scene changes move onto its beats before the render.
         // 0.1.46: generated music is made here from the same hints (after the narration), its price spent as the "music" line.
@@ -294,6 +302,71 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
 
         steps.Finish(VideoSteps.Render);
         return new RenderOutcome(request, false, input) { AppCode = appCode, FrameWeak = findings.Count > 0, Music = chosen };
+    }
+
+    /// <summary>
+    /// F10 (0.1.49): the scene plan of a video whose template shows it before the images: the template's tokens and font go into the input and
+    /// the project (as for <see cref="DrawAsync"/>), then the plan call (paid, spent in <paramref name="steps"/>) without image points (the
+    /// pictures are placeholders yet); with <paramref name="notes"/> it is planned again from <paramref name="previous"/> and the notes in one
+    /// call. Sets every scene's plan; returns the answer the plan was read from.
+    /// </summary>
+    public async Task<string> DraftPlanAsync(ResolvedModel codeModel, VideoOptions options, RenderInput input, string work, Guid id,
+        VideoStepProgress steps, PlanContext context, IReadOnlyList<SceneNote>? notes, string previous, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(context);
+        var style = options.Style;
+        RenderStyleBuilder.Apply(input, style);
+        var project = Path.Combine(work, "project");
+        PlaceFonts(project, style, input.Language);
+        steps.Report(VideoSteps.Code, 0.1);
+        var (_, answer) = await planner.DraftAsync(new Plans.PlanRequest(codeModel, null, input, style, context.Spans, context.ImagePrompts, project, id,
+            VideoStyleRules.SubtitlesOn(options), MusicHints: context.Music is { Automatic: true }, Notes: notes, Previous: previous), steps,
+            cancellationToken).ConfigureAwait(false);
+        return answer;
+    }
+
+    /// <summary>
+    /// F10 (0.1.49): the still frames of the planned <paramref name="input"/>: the app's drawer renders a small, slow copy
+    /// (<see cref="PlanReviewRules.PreviewInput"/>; only the first <paramref name="scenes"/> scenes when given) from a copy of the project
+    /// (the placeholders, or the first scene's real image) in <c>&lt;work&gt;/preview/&lt;name&gt;</c>, and ffmpeg lays the key moments of its
+    /// beats out as one sheet. Processor only, nothing paid. Returns the sheet's file, or empty when the render or the sheet failed (logged; the
+    /// preview then lists the scenes without it, the video is not stopped for a preview).
+    /// </summary>
+    public async Task<string> PreviewAsync(IVideoEngine engine, VideoOptions options, RenderInput input, string work, string name, int scenes,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(engine);
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(input);
+        var folder = Path.Combine(work, "preview", name);
+        TryDelete(folder);
+        var project = Path.Combine(folder, "project");
+        try
+        {
+            CopyProject(Path.Combine(work, "project"), project);
+            var small = PlanReviewRules.PreviewInput(input, scenes);
+            var video = Path.Combine(folder, "preview.mp4");
+            var request = new EngineRenderRequest(project, Plans.PlanDrawer.Code, RenderInputBuilder.ForEngine(small, VideoStyleRules.SubtitlesOn(options)), video,
+                Workers());
+            engine.WriteProject(request);
+            await engine.RenderAsync(request, null, cancellationToken).ConfigureAwait(false);
+            var moments = PlanReviewRules.KeyMoments(small);
+            var columns = small.Width > small.Height ? PlanPreviewLimits.ColumnsLandscape : PlanPreviewLimits.ColumnsPortrait;
+            var sheet = Path.Combine(folder, "sheet.png");
+            if (await sheets.SheetAsync(video, moments, columns, sheet, cancellationToken).ConfigureAwait(false) && File.Exists(sheet))
+            {
+                logger.LogInformation("Plan preview {Name}: {Frames} still frames of {Scenes} scenes", name, moments.Count, small.Scenes.Count);
+                return sheet;
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException and not OutOfMemoryException)
+        {
+            logger.LogWarning("The plan preview {Name} could not be drawn ({Error}); the scenes are listed without it", name, ex.Message);
+        }
+
+        return string.Empty;
     }
 
     /// <summary>Renders the app's own animation (no repair: the app's code is not sent to a model).</summary>

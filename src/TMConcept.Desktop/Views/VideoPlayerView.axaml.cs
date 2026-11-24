@@ -10,7 +10,7 @@ using TMConcept.Desktop.ViewModels;
 namespace TMConcept.Desktop.Views;
 
 /// <summary>
-/// The player area. Space toggles play; ⛶ opens the same player in a full-screen window (Esc or ⛶ closes it); the full-screen copy only
+/// The player area. Space toggles play (not while a note is written: F16, writing stops the video); ⛶ opens the same player in a full-screen window (Esc or ⛶ closes it); the full-screen copy only
 /// closes itself.
 /// </summary>
 public sealed partial class VideoPlayerView : UserControl
@@ -38,8 +38,32 @@ public sealed partial class VideoPlayerView : UserControl
         seek.AddHandler(PointerCaptureLostEvent, (_, _) => _player?.EndSeek(), RoutingStrategies.Direct | RoutingStrategies.Bubble,
             handledEventsToo: true);
         DataContextChanged += (_, _) => Attach(DataContext as PlayerViewModel);
+        // F16 (0.1.49): writing a note stops the video, and the note belongs to that moment (the first letter decides it); Enter adds it.
+        var noteBox = this.FindControl<TextBox>("NoteBox")!;
+        noteBox.TextChanged += (_, _) =>
+        {
+            if (!string.IsNullOrWhiteSpace(noteBox.Text) && _player is { Notes: { PendingMs: null } notes } player)
+            {
+                player.Pause();
+                notes.Begin((long)player.PositionMs);
+            }
+        };
+        noteBox.KeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Enter && _player?.Notes is { } notes && notes.AddCommand.CanExecute(null))
+            {
+                e.Handled = true;
+                notes.AddCommand.Execute(null);
+            }
+        };
         KeyDown += (_, e) =>
         {
+            // Space in the note box is a letter, not play / pause.
+            if (e.Source is TextBox)
+            {
+                return;
+            }
+
             if (e.Key == Key.Space && _player is { HasVideo: true } player)
             {
                 player.PlayPause();

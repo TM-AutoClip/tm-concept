@@ -19,6 +19,12 @@ public sealed record PlanContext(IReadOnlyList<IReadOnlyList<SpeechSpan>?> Spans
     /// <summary>The narration clips of the scenes (their silence after the last word may be cut to meet a beat); empty = none known.</summary>
     public IReadOnlyList<Speech.SpeechClip?> Clips { get; init; } = [];
 
+    /// <summary>
+    /// F10 (0.1.49): the scenes have their plans already (made and approved before the images, <see cref="VideoAssembler.DraftPlanAsync"/>):
+    /// no plan call, only the image points are placed.
+    /// </summary>
+    public bool Planned { get; init; }
+
     /// <summary>Nothing known: the captions' sentences, the scenes' own lines, no image points model.</summary>
     public PlanContext()
         : this([], [], null)

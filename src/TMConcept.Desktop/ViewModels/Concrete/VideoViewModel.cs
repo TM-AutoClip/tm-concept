@@ -71,6 +71,8 @@ public sealed partial class VideoViewModel : PageViewModelBase
     private readonly Core.Paths.IAppPaths _paths;
     private readonly WindowHost _host;
     private readonly Dictionary<Guid, Concept> _queued = [];
+    private readonly Core.Pronunciation.IPronunciationStore _pronunciations;
+    private int _check;
     private CancellationTokenSource? _cancel;
     private Guid? _running;
     private bool _attached;
@@ -83,7 +85,8 @@ public sealed partial class VideoViewModel : PageViewModelBase
         IEnumerable<IVideoEngine> engines, StepModelResolver resolver, Core.Media.IMediaTools media, VideoCostEstimator estimator, StepPickerViewModel picker,
         ConceptDetailViewModel detail, ConceptActions actions, VideoRows rows, VideoFiles files, PlayerViewModel player,
         Func<ProductionProgressViewModel> progress, ConceptEvents events, INotifier notifier, IVideoQueueRunner runner, IActivityLog activity, Localizer text,
-        Paths.UiPreferencesFile preferences, IVideoStyleStore styles, Core.Paths.IAppPaths paths, WindowHost host, ILogger<VideoViewModel> logger)
+        Paths.UiPreferencesFile preferences, IVideoStyleStore styles, Core.Paths.IAppPaths paths, WindowHost host, PlanReviewViewModel review,
+        ProductionChecklistViewModel checklist, Core.Pronunciation.IPronunciationStore pronunciations, ILogger<VideoViewModel> logger)
     {
         _session = session;
         _concepts = concepts;
@@ -111,6 +114,12 @@ public sealed partial class VideoViewModel : PageViewModelBase
         _host = host;
         Player = player;
         Detail = detail;
+        _pronunciations = pronunciations;
+        Review = review;
+        Review.Attach(() => NightMode);
+        Checklist = checklist;
+        Checklist.Attach(FixGapAsync);
+        Checklist.Changed += (_, _) => OnPropertyChanged(nameof(CanProduce));
 
         // Four compact cards side by side when unfolded: code with its engine, images, narration, the concept model of the AI edit.
         Picker = picker;
@@ -271,8 +280,20 @@ public sealed partial class VideoViewModel : PageViewModelBase
 
     /// <summary>The queue is being made.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Idle))]
+    [NotifyPropertyChangedFor(nameof(Idle), nameof(CanProduce))]
     public partial bool Busy { get; set; }
+
+    /// <summary>
+    /// F10 (0.1.49): the plan preview of the video being made when its template asks for it (the panel shows while it waits; the queue waits
+    /// on that video, the page stays free).
+    /// </summary>
+    public PlanReviewViewModel Review { get; }
+
+    /// <summary>F16 (0.1.49): what is missing before production, by name; a required gap turns "Produce in order" off.</summary>
+    public ProductionChecklistViewModel Checklist { get; }
+
+    /// <summary>"Produce in order" can be pressed: nothing is being made and no required gap is open.</summary>
+    public bool CanProduce => !Busy && !Checklist.Blocks;
 
     /// <summary>The queue is not being made.</summary>
     public bool Idle => !Busy;
@@ -304,10 +325,13 @@ public sealed partial class VideoViewModel : PageViewModelBase
                     // This page's pickers include the concept step: the concepts page keeps its model bar (0.1.40) and reads it again.
                     _events.RaiseSettings(this);
                     await SafeAsync(EstimateAsync).ConfigureAwait(true);
+                    await CheckAsync().ConfigureAwait(true);
                 }
             };
         }
 
+        // The shared player has no notes here (the Produced videos page has them).
+        Player.Notes = null;
         await LoadStylesAsync().ConfigureAwait(true);
         if (!Busy)
         {
@@ -315,6 +339,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
         }
 
         await ReloadAsync().ConfigureAwait(true);
+        await CheckAsync().ConfigureAwait(true);
     }
 
     /// <inheritdoc />
@@ -323,9 +348,11 @@ public sealed partial class VideoViewModel : PageViewModelBase
         if (!Busy)
         {
             LastLine = string.Empty;
+            Checklist.Reset();
             await Detail.LoadAsync(null).ConfigureAwait(true);
             await LoadModelsAsync().ConfigureAwait(true);
             await ReloadAsync().ConfigureAwait(true);
+            await CheckAsync().ConfigureAwait(true);
         }
     }
 
@@ -618,6 +645,85 @@ public sealed partial class VideoViewModel : PageViewModelBase
 
         KeepStyle(value?.Id);
         _ = SafeAsync(EstimateAsync);
+        _ = CheckAsync();
+    }
+
+    partial void OnNightModeChanged(bool value)
+    {
+        // F10: nobody is at the computer in night mode, so a plan that waits goes on.
+        if (value)
+        {
+            Review.NightModeOn();
+        }
+    }
+
+    /// <summary>
+    /// F16 (0.1.49): reads what the checklist needs off the window's thread (the keys, the template's music file, the pronunciation
+    /// dictionary) and shows the gaps. A newer check wins over an older one that ends later. Never throws (a failure is logged; the list keeps
+    /// what it showed).
+    /// </summary>
+    public async Task CheckAsync()
+    {
+        var mine = ++_check;
+        try
+        {
+            var style = SelectedStyle;
+            var language = _session.Profile?.ContentLanguage ?? ContentLanguages.English;
+            var chosen = new[] { PipelineSteps.VideoCode, PipelineSteps.Images, PipelineSteps.ImagePoints, PipelineSteps.Speech }
+                .Select(s => Picker.Model(s)).OfType<CatalogModel>().ToList();
+            var withoutKey = await _resolver.ProvidersWithoutKeyAsync(chosen, CancellationToken.None).ConfigureAwait(true);
+            var ownMusic = style?.Music is { Source: MusicSource.OwnFile };
+            var file = style?.Music.File ?? string.Empty;
+            var exists = ownMusic && file.Length > 0 && await Task.Run(() => File.Exists(file)).ConfigureAwait(true);
+            bool? readable = null;
+            if (exists)
+            {
+                try
+                {
+                    readable = await _media.AudioDurationAsync(file, CancellationToken.None).ConfigureAwait(true) is not null;
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException and not OutOfMemoryException)
+                {
+                    // ffmpeg is not installed yet: the file is read when the video starts (as before).
+                    _logger.LogInformation("The template's music file could not be checked now ({Error})", ex.Message);
+                }
+            }
+
+            var voice = Picker.Model(PipelineSteps.Speech) is not null;
+            var dictionaryEmpty = voice && Core.Pronunciation.BuiltInPronunciations.Of(language).Count == 0
+                && (await _pronunciations.ListAsync(language, CancellationToken.None).ConfigureAwait(true)).Count == 0;
+            if (mine != _check)
+            {
+                return;
+            }
+
+            Checklist.Apply(ProductionChecklist.Gaps(new ChecklistFacts
+            {
+                Template = style is not null,
+                CodeModel = Picker.Model(PipelineSteps.VideoCode) is not null,
+                ProvidersWithoutKey = withoutKey,
+                Voice = voice,
+                OwnMusic = ownMusic,
+                MusicExists = exists,
+                MusicReadable = readable,
+                PronunciationEmpty = dictionaryEmpty,
+            }));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException and not OutOfMemoryException)
+        {
+            _logger.LogWarning(ex, "The list of what is missing before production could not be made");
+        }
+    }
+
+    /// <summary>The page's part of fixing a gap: the model cards open for a model or the voice; then the list is checked again.</summary>
+    private async Task FixGapAsync(GapRowViewModel row)
+    {
+        if (row.Gap.Code is ProductionGaps.CodeModel or ProductionGaps.Voice)
+        {
+            ModelsOpen = true;
+        }
+
+        await CheckAsync().ConfigureAwait(true);
     }
 
     /// <summary>Reads the templates again and chooses the kept one (no longer there, e.g. deleted in Settings: nothing is chosen).</summary>
@@ -667,7 +773,10 @@ public sealed partial class VideoViewModel : PageViewModelBase
         }
     }
 
-    /// <summary>What must still be chosen before anything is produced: a code model and a template; <c>null</c> when both are.</summary>
+    /// <summary>
+    /// What must still be chosen before anything is produced: a code model and a template; <c>null</c> when both are (F16, 0.1.49: the same rule
+    /// is the checklist's required gaps, which turn the button off; this is the refusal when it is pressed anyway).
+    /// </summary>
     private string? MissingChoice()
     {
         if (SelectedStyle is not null)
@@ -870,6 +979,11 @@ public sealed partial class VideoViewModel : PageViewModelBase
 
             var options = new VideoOptions();
             VideoStyleRules.Snapshot(options, style);
+            if (ProductionChecklist.WithoutMusic(options.Style, Checklist.Gaps, Checklist.Skipped))
+            {
+                _logger.LogInformation("The template's music file was skipped on purpose; this video is made without music");
+            }
+
             _logger.LogInformation("Queued video starts with template {Id} (subtitles {Subtitles}, progress bar {ProgressBar}, closing {Closing})",
                 style.Id, style.Subtitles ? "on" : "off", style.ProgressBar ? "on" : "off", style.Closing);
             ResolvedModel model;
@@ -901,7 +1015,9 @@ public sealed partial class VideoViewModel : PageViewModelBase
                 VideoRecord record;
                 using (MemoryShortfallScope.Begin(() => NightMode))
                 {
-                    record = await _pipeline.RunAsync(new VideoJob(concept, profile, options, model), progress.Reporter, cancellationToken).ConfigureAwait(true);
+                    Review.VideoTitle = concept.Title;
+                    record = await _pipeline.RunAsync(new VideoJob(concept, profile, options, model) { Review = Review }, progress.Reporter, cancellationToken)
+                        .ConfigureAwait(true);
                 }
 
                 made = true;

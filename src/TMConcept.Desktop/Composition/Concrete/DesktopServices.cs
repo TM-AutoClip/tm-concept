@@ -77,6 +77,7 @@ public static class DesktopServices
         services.AddSingleton<Engines.Media.FfmpegMuxer>();
         services.AddSingleton<Core.Media.IMediaTools, Engines.Media.FfmpegMedia>();
         services.AddSingleton<Core.Media.IMotionFrames, Engines.Media.FfmpegMotionFrames>();
+        services.AddSingleton<Core.Media.IPlanSheet, Engines.Media.FfmpegPlanSheet>();
         services.AddSingleton<Core.Plans.ScenePlanner>();
 
         // 0.1.45 (C4, F7, F8, S6): the ready music library (a component, downloaded after a confirmation), the music analysis with the app's
@@ -113,6 +114,7 @@ public static class DesktopServices
         services.AddSingleton<Core.Videos.IVideoQueueRunner, Core.Videos.VideoQueueRunner>();
         services.AddSingleton<Core.Videos.SceneNarrator>();
         services.AddSingleton<Core.Videos.VideoRemaker>();
+        services.AddSingleton<Core.Videos.SceneFixer>();
         services.AddSingleton<Core.Videos.VideoCostEstimator>();
         services.AddSingleton<Speech.Speech.SpeechModelInstaller>();
         services.AddSingleton(s => new Speech.Speech.SpeechWorkerClient(s.GetRequiredService<Core.Processes.IChildProcessGuard>(),
@@ -367,6 +369,9 @@ public static class DesktopServices
         // One set of model pickers per page that uses models (Generate concepts, Concept → video, Profile).
         services.AddTransient<StepPickerViewModel>();
         services.AddTransient<VersionEditorViewModel>();
+        services.AddTransient<TimeNotesViewModel>();
+        services.AddTransient<PlanReviewViewModel>();
+        services.AddTransient<ProductionChecklistViewModel>();
 
         // The concept page's parts: the page (a singleton) gets its own bar, runner, sections and detail panel; the status changes are one
         // service for every page.

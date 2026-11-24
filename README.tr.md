@@ -513,6 +513,12 @@ Bir şablonla (Ayarlar → Şablonlar) üretilen video, modelin iyi niyetine kal
   yalnız evet deyince iner, şimdilik Windows) her videonun seslendirmesi bu bilgisayarda bir kez dinlenir, altyazıdaki her kelime
   söylendiği zamanı alır ve altyazı sesin nefes aldığı yerde bölünür. Metin seslendirme metni kalır; az duyulan cümle "kulakla kontrol et"
   diye listelenir. Kurulu değilse zamanlar eskisi gibi uzunluğa göre tahmin edilir.
+- **Plan önizlemesi (0.1.49, isteğe bağlı):** programın çizdiği şablon, resimlere para ödenmeden önce planı gösterebilir: gri yer
+  tutuculu, her vuruşun hareketsiz karesi; sonra onay, sahne başına not (hepsi için tek yeni plan isteği) ya da ret; *Önce bir sahne*
+  ilk sahneyi gerçek resmiyle diğerlerinden önce gösterir. Gece modunda beklenmez.
+- **Bitmiş videoya notlar (0.1.49):** oynarken yaz (video durur; not o ana ve sahneye bağlanır), sonra **Düzelt**: tek istek, yalnız not
+  düşülen sahnelerin değiştiği yeni bir sürüm. Video sayfası üretimden önce eksikleri adlarıyla sayar (şablon, model, anahtar kırmızı;
+  seslendirme, müzik dosyası, telaffuz sarı, atlanabilir).
 - **Çizim tarzı:** görseli olmayan sahneler şablonun tarzında çizilir, üretilen görseller de aynı tarzda istenir. Düzenleyicide her
   biri açıklamalı on dört seçenek: *Yapay zekâ seçsin* (yeni şablonun varsayılanı: her videoda konuya uyan görünüşü model seçer), düz
   şekiller, çöp adam anlatıcı, çizgi çizim, kâğıt kesme, infografik, neon, kara kalem, animasyon (çizgi film), teknik çizim (blueprint),

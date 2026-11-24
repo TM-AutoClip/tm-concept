@@ -9,8 +9,9 @@ namespace TMConcept.Core.Plans;
 /// the timed input (its scenes get the plans), the template, each scene's spoken spans (null for a silent or kept clip), each scene's image
 /// prompt (empty when unknown), the project folder the images are in, the video's id (for its costs) and whether subtitles are on (the
 /// plan rules keep the bottom quarter free for them, <see cref="SubtitleAreaRule"/>) and whether each scene also gets a music hint (0.1.45:
-/// the template's library music is chosen by the concept).
+/// the template's library music is chosen by the concept). F10 (0.1.49): the user's notes on a previewed plan and that plan's answer; with
+/// notes the call plans again from them (one call for all the notes, <see cref="PlanPromptBuilder.Revise"/>).
 /// </summary>
 public sealed record PlanRequest(ResolvedModel CodeModel, ResolvedModel? PointsModel, RenderInput Input, Styles.VideoStyle? Style,
     IReadOnlyList<IReadOnlyList<SpeechSpan>?> Spans, IReadOnlyList<string> ImagePrompts, string ProjectFolder, Guid VideoId, bool Subtitles = true,
-    bool MusicHints = false);
+    bool MusicHints = false, IReadOnlyList<Videos.SceneNote>? Notes = null, string Previous = "");

@@ -222,13 +222,26 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
             steps.Finish(VideoSteps.Speech);
         }
 
-        // D. images
+        // D. images. F10 (0.1.49): a video whose plan is shown first gets only its image prompts now and grey placeholders under the images'
+        // names; the images are paid for after the plan is approved (ReviewAsync).
         var (width, height) = RenderInputBuilder.Size(profile.Format);
+        var reviewing = PlanReviewRules.Waits(engine.Kind, options.Style, job.Review);
         List<string> sceneImages = [];
         IReadOnlyList<string> imagePrompts = [];
+        (IImageEngine Engine, string Cache, IReadOnlyList<string> Prompts)? imageSet = null;
         if (imagesOn)
         {
-            (sceneImages, imagePrompts) = await ImagesAsync(job, imageModel, split.Scenes, work, steps, id, width, height, cancellationToken).ConfigureAwait(false);
+            if (reviewing)
+            {
+                imageSet = await GuardImagesAsync(() => ImagePlanAsync(job, imageModel!, split.Scenes, steps, id, width, height, cancellationToken)).ConfigureAwait(false);
+                imagePrompts = imageSet.Value.Prompts;
+                sceneImages = await PlaceholdersAsync(work, imagePrompts.Count, width, height, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                (sceneImages, imagePrompts) = await ImagesAsync(job, imageModel, split.Scenes, work, steps, id, width, height, cancellationToken).ConfigureAwait(false);
+            }
+
             if (sceneImages.Count < split.Scenes.Count)
             {
                 // Chosen images and fewer pictures than scenes: a scene would show nothing (stopped before the paid code call).
@@ -239,7 +252,10 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                 };
             }
 
-            steps.Finish(VideoSteps.Images);
+            if (!reviewing)
+            {
+                steps.Finish(VideoSteps.Images);
+            }
         }
 
         // C. timing, after the images: a scene lasts as long as its clip (a silent one as long as its text takes to say).
@@ -260,13 +276,25 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
 
         steps.Finish(VideoSteps.Timing);
 
+        // F10 (0.1.49): the plan first, shown with placeholders; the images (and the first scene, when asked) after it is approved.
+        var context = new PlanContext(clips.Select(c => c?.Spans).ToList(), imagePrompts, null)
+        {
+            Music = planChooses ? music : null,
+            Clips = clips,
+        };
+        if (reviewing)
+        {
+            await ReviewAsync(job, engine, input, work, id, steps, context, imageModel, imageSet, width, height, cancellationToken).ConfigureAwait(false);
+            context = context with { Planned = true };
+        }
+
         // E + F. code (+ one repair after a rejected check), render (+ one repair with the error text)
         var rendered = await assembler.CodeAndRenderAsync(engine, job.CodeModel, options, input, work, id, steps, cancellationToken,
-            new PlanContext(clips.Select(c => c?.Spans).ToList(), imagePrompts,
-                Plans.PlanDrawer.Draws(engine.Kind, options.Style) && sceneImages.Count > 0 ? await PointsModelAsync(profile.Id, cancellationToken).ConfigureAwait(false) : null)
+            context with
             {
-                Music = planChooses ? music : null,
-                Clips = clips,
+                PointsModel = Plans.PlanDrawer.Draws(engine.Kind, options.Style) && sceneImages.Count > 0
+                    ? await PointsModelAsync(profile.Id, cancellationToken).ConfigureAwait(false)
+                    : null,
             })
             .ConfigureAwait(false);
         music = rendered.Music ?? music;
@@ -421,92 +449,222 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
     /// <summary>
     /// The scene images of the chosen model. Any failure stops the video (<see cref="VideoException"/> "images").
     /// </summary>
-    private async Task<(List<string> Names, IReadOnlyList<string> Prompts)> ImagesAsync(VideoJob job, ResolvedModel? imageModel, IReadOnlyList<Scene> scenes,
-        string work, VideoStepProgress steps, Guid id, int width, int height, CancellationToken cancellationToken)
-    {
-        var names = new List<string>();
-        IReadOnlyList<string> prompts = [];
-        var publicFolder = Path.Combine(work, "project", "public");
-        void Place(string source, string name)
+    private Task<(List<string> Names, IReadOnlyList<string> Prompts)> ImagesAsync(VideoJob job, ResolvedModel? imageModel, IReadOnlyList<Scene> scenes,
+        string work, VideoStepProgress steps, Guid id, int width, int height, CancellationToken cancellationToken) =>
+        GuardImagesAsync(async () =>
         {
-            Directory.CreateDirectory(publicFolder);
-            File.Copy(source, Path.Combine(publicFolder, name), overwrite: true);
-            File.Copy(source, Path.Combine(work, "project", name), overwrite: true);
-        }
+            if (imageModel is null)
+            {
+                return (new List<string>(), (IReadOnlyList<string>)[]);
+            }
 
+            var set = await ImagePlanAsync(job, imageModel, scenes, steps, id, width, height, cancellationToken).ConfigureAwait(false);
+            var names = await DrawImagesAsync(set, imageModel, work, steps, id, width, height, set.Prompts.Count, cancellationToken).ConfigureAwait(false);
+            return (names, set.Prompts);
+        });
+
+    /// <summary>
+    /// Any failure of a chosen image step stops the video before the code call (16 Nov 2026: 0.1.15 went on without images when sd-cli could not
+    /// start and the user paid for a video he did not want). The engine's own message (sd-cli's exit code and output) is the reason the user
+    /// sees. A provider's error goes through as it is and is named with the provider's text.
+    /// </summary>
+    private async Task<T> GuardImagesAsync<T>(Func<Task<T>> work)
+    {
         try
         {
-            if (imageModel is not null)
-            {
-                var engine = images.FirstOrDefault(e => e.Code == imageModel.Model.Provider)
-                    ?? throw new VideoException($"{imageModel.Model.Provider} has no image engine.") { Code = "images" };
-                var visuals = scenes.Select(s => s.Visual.Length > 0 ? s.Visual : s.Narration).ToList();
-
-                // Prompts and images of this concept are kept until its video is made: a retry after a later failure reuses them.
-                var drawStyle = job.Options.Style?.DrawStyle;
-                var cache = Path.Combine(SceneImageRoot(job.Concept.Id), CacheKey(job.Profile.Name, imageModel.Model, width, height, visuals, drawStyle));
-                Directory.CreateDirectory(cache);
-                var promptFile = Path.Combine(cache, "prompts.txt");
-                var styleFile = Path.Combine(cache, "style.txt");
-                if (File.Exists(promptFile) && (await File.ReadAllLinesAsync(promptFile, cancellationToken).ConfigureAwait(false)) is { } kept && kept.Length == visuals.Count)
-                {
-                    prompts = kept;
-                    logger.LogInformation("Scene image prompts reused from an earlier attempt");
-                    if (drawStyle is Styles.DrawStyle.Auto && File.Exists(styleFile))
-                    {
-                        Choose(job.Options, await File.ReadAllTextAsync(styleFile, cancellationToken).ConfigureAwait(false));
-                    }
-                }
-                else
-                {
-                    var (made, chosen) = await ImagePromptsAsync(job, visuals, drawStyle, steps, id, cancellationToken).ConfigureAwait(false);
-                    prompts = made;
-                    await File.WriteAllLinesAsync(promptFile, prompts.Select(p => p.ReplaceLineEndings(" ")), cancellationToken).ConfigureAwait(false);
-                    if (drawStyle is Styles.DrawStyle.Auto)
-                    {
-                        await File.WriteAllTextAsync(styleFile, chosen, cancellationToken).ConfigureAwait(false);
-                        Choose(job.Options, chosen);
-                    }
-                }
-
-                steps.Report(VideoSteps.Images, 0, done: 0, total: prompts.Count);
-
-                // One graphics card lease for all the scene images (0.1.17): the prompt model's lease ended with its answer, so a local
-                // prompt model is unloaded here before the image model takes the card, and no other page's local model comes in between.
-                var lease = await gpu.AcquireAsync(imageModel.Model, cancellationToken).ConfigureAwait(false);
-                await using var leaseScope = lease.ConfigureAwait(false);
-                for (var i = 0; i < prompts.Count; i++)
-                {
-                    var file = Path.Combine(cache, "scene-" + (i + 1).ToString(CultureInfo.InvariantCulture) + ".png");
-                    if (!File.Exists(file))
-                    {
-                        var result = await engine.GenerateAsync(new ImageRequest(prompts[i], width, height, file, imageModel), cancellationToken).ConfigureAwait(false);
-                        logger.LogInformation("Scene image {Number} of {Count} made with {Provider}/{Model}", i + 1, prompts.Count, imageModel.Model.Provider,
-                            imageModel.Model.Id);
-                        steps.Spend(new VideoCost { VideoId = id, Step = PipelineSteps.Images, Usd = result.CostUsd, Exact = result.CostUsd == 0 });
-                        if (!File.Exists(file))
-                        {
-                            throw new VideoException(string.Create(CultureInfo.InvariantCulture,
-                                $"{imageModel.Model.Name} made no image file for scene {i + 1}.")) { Code = "images" };
-                        }
-                    }
-
-                    Place(file, Path.GetFileName(file));
-                    names.Add(Path.GetFileName(file));
-                    steps.Report(VideoSteps.Images, (i + 1.0) / prompts.Count, done: i + 1, total: prompts.Count);
-                }
-            }
+            return await work().ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException and not Providers.ProviderException and not VideoException)
         {
-            // Any failure of a chosen image step stops the video before the code call (16 Nov 2026: 0.1.15 went on without images when sd-cli
-            // could not start and the user paid for a video he did not want). The engine's own message (sd-cli's exit code and output) is
-            // the reason the user sees. A provider's error goes through as it is and is named with the provider's text.
             logger.LogError(LogEvents.OnScreen, ex, "Scene images failed; the video is stopped");
             throw new VideoException(ex.Message, ex) { Code = ex is MemoryShortfallException ? "memory" : "images" };
         }
+    }
 
-        return (names, prompts);
+    /// <summary>
+    /// The image engine, the concept's image cache folder and the image prompts (one per scene; kept per concept until its video is made, so a
+    /// retry reuses them and pays nothing again).
+    /// </summary>
+    private async Task<(IImageEngine Engine, string Cache, IReadOnlyList<string> Prompts)> ImagePlanAsync(VideoJob job, ResolvedModel imageModel,
+        IReadOnlyList<Scene> scenes, VideoStepProgress steps, Guid id, int width, int height, CancellationToken cancellationToken)
+    {
+        var engine = images.FirstOrDefault(e => e.Code == imageModel.Model.Provider)
+            ?? throw new VideoException($"{imageModel.Model.Provider} has no image engine.") { Code = "images" };
+        var visuals = scenes.Select(s => s.Visual.Length > 0 ? s.Visual : s.Narration).ToList();
+
+        // Prompts and images of this concept are kept until its video is made: a retry after a later failure reuses them.
+        var drawStyle = job.Options.Style?.DrawStyle;
+        var cache = Path.Combine(SceneImageRoot(job.Concept.Id), CacheKey(job.Profile.Name, imageModel.Model, width, height, visuals, drawStyle));
+        Directory.CreateDirectory(cache);
+        var promptFile = Path.Combine(cache, "prompts.txt");
+        var styleFile = Path.Combine(cache, "style.txt");
+        IReadOnlyList<string> prompts;
+        if (File.Exists(promptFile) && (await File.ReadAllLinesAsync(promptFile, cancellationToken).ConfigureAwait(false)) is { } kept && kept.Length == visuals.Count)
+        {
+            prompts = kept;
+            logger.LogInformation("Scene image prompts reused from an earlier attempt");
+            if (drawStyle is Styles.DrawStyle.Auto && File.Exists(styleFile))
+            {
+                Choose(job.Options, await File.ReadAllTextAsync(styleFile, cancellationToken).ConfigureAwait(false));
+            }
+        }
+        else
+        {
+            var (made, chosen) = await ImagePromptsAsync(job, visuals, drawStyle, steps, id, cancellationToken).ConfigureAwait(false);
+            prompts = made;
+            await File.WriteAllLinesAsync(promptFile, prompts.Select(p => p.ReplaceLineEndings(" ")), cancellationToken).ConfigureAwait(false);
+            if (drawStyle is Styles.DrawStyle.Auto)
+            {
+                await File.WriteAllTextAsync(styleFile, chosen, cancellationToken).ConfigureAwait(false);
+                Choose(job.Options, chosen);
+            }
+        }
+
+        return (engine, cache, prompts);
+    }
+
+    /// <summary>
+    /// Makes the first <paramref name="count"/> scene images that are not in the cache yet (paid, spent at once) and places them where the engine
+    /// looks for them (the project's public/ folder and its root, over a placeholder of the same name). Returns their names.
+    /// </summary>
+    private async Task<List<string>> DrawImagesAsync((IImageEngine Engine, string Cache, IReadOnlyList<string> Prompts) set, ResolvedModel imageModel,
+        string work, VideoStepProgress steps, Guid id, int width, int height, int count, CancellationToken cancellationToken)
+    {
+        var names = new List<string>();
+        var prompts = set.Prompts;
+        count = Math.Min(count, prompts.Count);
+        steps.Report(VideoSteps.Images, 0, done: 0, total: prompts.Count);
+
+        // One graphics card lease for all the scene images (0.1.17): the prompt model's lease ended with its answer, so a local
+        // prompt model is unloaded here before the image model takes the card, and no other page's local model comes in between.
+        var lease = await gpu.AcquireAsync(imageModel.Model, cancellationToken).ConfigureAwait(false);
+        await using var leaseScope = lease.ConfigureAwait(false);
+        for (var i = 0; i < count; i++)
+        {
+            var file = Path.Combine(set.Cache, SceneImageName(i + 1));
+            if (!File.Exists(file))
+            {
+                var result = await set.Engine.GenerateAsync(new ImageRequest(prompts[i], width, height, file, imageModel), cancellationToken).ConfigureAwait(false);
+                logger.LogInformation("Scene image {Number} of {Count} made with {Provider}/{Model}", i + 1, prompts.Count, imageModel.Model.Provider,
+                    imageModel.Model.Id);
+                steps.Spend(new VideoCost { VideoId = id, Step = PipelineSteps.Images, Usd = result.CostUsd, Exact = result.CostUsd == 0 });
+                if (!File.Exists(file))
+                {
+                    throw new VideoException(string.Create(CultureInfo.InvariantCulture,
+                        $"{imageModel.Model.Name} made no image file for scene {i + 1}.")) { Code = "images" };
+                }
+            }
+
+            Place(work, file, Path.GetFileName(file));
+            names.Add(Path.GetFileName(file));
+            steps.Report(VideoSteps.Images, (i + 1.0) / prompts.Count, done: i + 1, total: prompts.Count);
+        }
+
+        return names;
+    }
+
+    /// <summary>The file name of scene <paramref name="number"/>'s image (in the cache, the project and its public/ folder).</summary>
+    private static string SceneImageName(int number) => "scene-" + number.ToString(CultureInfo.InvariantCulture) + ".png";
+
+    /// <summary>Copies a scene image where the engine looks for it: the project's public/ folder and its root.</summary>
+    private static void Place(string work, string source, string name)
+    {
+        var publicFolder = Path.Combine(work, "project", "public");
+        Directory.CreateDirectory(publicFolder);
+        File.Copy(source, Path.Combine(publicFolder, name), overwrite: true);
+        File.Copy(source, Path.Combine(work, "project", name), overwrite: true);
+    }
+
+    /// <summary>F10 (0.1.49): grey stand-ins under the scene images' names, so the plan and its preview see image scenes before any is paid for.</summary>
+    private static async Task<List<string>> PlaceholdersAsync(string work, int count, int width, int height, CancellationToken cancellationToken)
+    {
+        var names = new List<string>();
+        var file = Path.Combine(work, "placeholder.png");
+        await PlaceholderImage.WriteAsync(file, width, height, cancellationToken).ConfigureAwait(false);
+        for (var i = 0; i < count; i++)
+        {
+            names.Add(SceneImageName(i + 1));
+            Place(work, file, names[^1]);
+        }
+
+        return names;
+    }
+
+    /// <summary>
+    /// F10 (0.1.49): the plan is made with the placeholders and shown as still frames; the video waits for the user's answer (the queue waits on
+    /// it, the page stays free). Notes: all of them go into one new plan call, and the new plan is shown again. Rejected: the video stops before
+    /// any image is paid for. Approved: with "one scene first" the first scene's image is made and the scene drawn and shown, and the video
+    /// waits once more; then the other images are made. Night mode switched on before a wait skips it (nobody is there).
+    /// </summary>
+    private async Task ReviewAsync(VideoJob job, IVideoEngine engine, RenderInput input, string work, Guid id, VideoStepProgress steps, PlanContext context,
+        ResolvedModel? imageModel, (IImageEngine Engine, string Cache, IReadOnlyList<string> Prompts)? imageSet, int width, int height,
+        CancellationToken cancellationToken)
+    {
+        var review = job.Review!;
+        var options = job.Options;
+        IReadOnlyList<SceneNote>? notes = null;
+        var previous = string.Empty;
+        for (var round = 1; ; round++)
+        {
+            previous = await assembler.DraftPlanAsync(job.CodeModel, options, input, work, id, steps, context, notes, previous, cancellationToken)
+                .ConfigureAwait(false);
+            if (review.NightMode)
+            {
+                logger.LogInformation("Night mode: the plan is not shown, the video goes on");
+                break;
+            }
+
+            var sheet = await assembler.PreviewAsync(engine, options, input, work, "plan-" + round.ToString(CultureInfo.InvariantCulture), int.MaxValue,
+                cancellationToken).ConfigureAwait(false);
+            logger.LogInformation("The plan (round {Round}) waits for the user's approval", round);
+            var answer = await review.PlanAsync(new PlanPreview(sheet, PlanReviewRules.Scenes(input), round), cancellationToken).ConfigureAwait(false);
+            if (answer.Decision == PlanReviewDecision.Reject)
+            {
+                logger.LogWarning(LogEvents.OnScreen, "The plan was rejected; the video is stopped before its images");
+                throw new VideoException("The plan was not approved.") { Code = "rejected" };
+            }
+
+            notes = answer.Notes.Where(n => n.Text.Trim().Length > 0).ToList();
+            if (answer.Decision == PlanReviewDecision.Approve || notes.Count == 0)
+            {
+                logger.LogInformation("The plan was approved (round {Round})", round);
+                break;
+            }
+        }
+
+        if (imageSet is not { } set || imageModel is null)
+        {
+            await FirstSceneAsync(job, engine, input, work, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        if (PlanReviewRules.FirstScene(engine.Kind, options.Style, review))
+        {
+            await GuardImagesAsync(() => DrawImagesAsync(set, imageModel, work, steps, id, width, height, 1, cancellationToken)).ConfigureAwait(false);
+            await FirstSceneAsync(job, engine, input, work, cancellationToken).ConfigureAwait(false);
+        }
+
+        await GuardImagesAsync(() => DrawImagesAsync(set, imageModel, work, steps, id, width, height, set.Prompts.Count, cancellationToken)).ConfigureAwait(false);
+        steps.Finish(VideoSteps.Images);
+    }
+
+    /// <summary>"One scene first": the first scene drawn (with its real image when there is one) is shown and the video waits once more.</summary>
+    private async Task FirstSceneAsync(VideoJob job, IVideoEngine engine, RenderInput input, string work, CancellationToken cancellationToken)
+    {
+        var review = job.Review!;
+        if (!PlanReviewRules.FirstScene(engine.Kind, job.Options.Style, review))
+        {
+            return;
+        }
+
+        var sheet = await assembler.PreviewAsync(engine, job.Options, input, work, "first-scene", 1, cancellationToken).ConfigureAwait(false);
+        logger.LogInformation("The first scene waits for the user's approval");
+        if (!await review.FirstSceneAsync(new PlanPreview(sheet, PlanReviewRules.Scenes(input).Take(1).ToList(), 1, FirstScene: true), cancellationToken)
+            .ConfigureAwait(false))
+        {
+            logger.LogWarning(LogEvents.OnScreen, "The first scene was rejected; the video is stopped before the other images");
+            throw new VideoException("The first scene was not approved.") { Code = "rejected" };
+        }
     }
 
     /// <summary>
