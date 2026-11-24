@@ -312,12 +312,15 @@ public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store,
             logger.LogInformation("{Count} installed font families can be used in templates", installed.Count);
         }
 
-        _saved = await palettes.ListAsync(CancellationToken.None).ConfigureAwait(true);
+        var saved = await palettes.ListAsync(CancellationToken.None).ConfigureAwait(true);
         var all = await store.ListAsync(CancellationToken.None).ConfigureAwait(true);
         if (load != _load)
         {
             return;
         }
+
+        // The saved palettes too come from the newest load only.
+        _saved = saved;
 
         _loading = true;
         try

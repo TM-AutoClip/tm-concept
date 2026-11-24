@@ -957,18 +957,25 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
             OnPropertyChanged(nameof(Summary));
             Changed?.Invoke(this, EventArgs.Empty);
 
-            // The note first: it says at once what the choice means (the save runs off the window's thread since 0.1.39 and would delay it).
-            if (e.PropertyName is not (nameof(StepModelRowViewModel.Effort) or nameof(StepModelRowViewModel.Speed)))
+            // Saved at once (0.1.17): the next page switch, restart, key or server never brings an older choice back. The save starts first
+            // and runs while the note is written (it runs off the window's thread since 0.1.39 and would delay the note); a note that
+            // fails never leaves the choice unsaved.
+            var save = SaveRowsAsync([row]);
+            try
             {
-                await NoteAsync(row).ConfigureAwait(true);
+                if (e.PropertyName is not (nameof(StepModelRowViewModel.Effort) or nameof(StepModelRowViewModel.Speed)))
+                {
+                    await NoteAsync(row).ConfigureAwait(true);
+                }
             }
-
-            // Saved at once (0.1.17): the next page switch, restart, key or server never brings an older choice back.
-            await SaveRowsAsync([row]).ConfigureAwait(true);
+            finally
+            {
+                await save.ConfigureAwait(true);
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.LogError(ex, "The note of the step {Step} could not be shown", row.Step.Code);
+            logger.LogError(ex, "The choice of the step {Step} could not be noted or saved", row.Step.Code);
         }
     }
 
