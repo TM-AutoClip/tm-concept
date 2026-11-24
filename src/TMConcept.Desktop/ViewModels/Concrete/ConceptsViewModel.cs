@@ -2,7 +2,9 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using TMConcept.Core.AppOllama;
 using TMConcept.Core.Concepts;
+using TMConcept.Core.Endpoints;
 using TMConcept.Core.Diagnostics;
 using TMConcept.Core.Text;
 using TMConcept.Desktop.Concepts;
@@ -20,8 +22,9 @@ namespace TMConcept.Desktop.ViewModels;
 /// (<see cref="ConceptRunner"/>). Whatever any of them writes is ADDED to one list, switched between "New" and "Approved" (approved ones can be searched); every row has Approve
 /// (or Unapprove) and Delete, and the keys A, D (or Delete) and ↑↓ work on the list. A click opens the concept in the detail panel next to
 /// the list (<see cref="ConceptDetailViewModel"/>), never under its row; leaving a concept with unsaved edits asks first (also for another
-/// tab or profile; a row's Approve, Unapprove or Delete on that concept too). After a row's action on the open concept the panel moves to
-/// the next one, so A / D go through the list; an action on another row leaves the panel where it is. Both lists keep the store's order,
+/// tab or profile; a row's Approve, Unapprove or Delete on that concept too). After a row's Unapprove or Delete on the open concept the
+/// panel moves to the next one, so D goes through the list; an action on another row leaves the panel where it is. An approval (a row, the
+/// key A or the panel, 0.1.40) shows "Approved" at once with the approved concept chosen. Both lists keep the store's order,
 /// the highest number (the newest) first, while batches arrive and after a reload alike.
 /// </summary>
 public sealed partial class ConceptsViewModel : PageViewModelBase
@@ -38,12 +41,29 @@ public sealed partial class ConceptsViewModel : PageViewModelBase
     private bool _loadedOnce;
     private bool _choosing;
 
+    // What the page read and keeps (0.1.40, "program hantal"): the model bar was read for this profile (null = not yet, or settings may
+    // have changed since), the list belongs to this profile, and a concept changed elsewhere while the page was not shown.
+    private Guid? _settingsProfile;
+    private volatile bool _settingsRead;
+    private Guid? _listProfile;
+    private bool _listRead;
+    private bool _listStale;
+    private bool _shown;
+
     /// <summary>Creates the page with its bar, its four sections, its runner and its detail panel.</summary>
     public ConceptsViewModel(AppSession session, IConceptStore concepts, ConceptActions actions, ConceptEvents events, Localizer text,
         ConceptSettingsViewModel settings, ConceptRunner runner, TopicSectionViewModel topics, IdeaSectionViewModel ideas, DocumentSectionViewModel documents,
-        ResearchSectionViewModel research, ConceptDetailViewModel detail, IStepTimer timer, ILogger<ConceptsViewModel> logger)
+        ResearchSectionViewModel research, ConceptDetailViewModel detail, IStepTimer timer, ILogger<ConceptsViewModel> logger,
+        EndpointRegistry endpoints, AppModelRegistry appModels)
     {
+        ArgumentNullException.ThrowIfNull(endpoints);
+        ArgumentNullException.ThrowIfNull(appModels);
         _timer = timer;
+
+        // A server or a model of the app's Ollama added or removed (anywhere, also in the background): the model bar is read again at
+        // the next visit.
+        endpoints.Changed += (_, _) => _settingsRead = false;
+        appModels.Changed += (_, _) => _settingsRead = false;
         _session = session;
         _concepts = concepts;
         _actions = actions;
@@ -103,7 +123,14 @@ public sealed partial class ConceptsViewModel : PageViewModelBase
                 UpdateWorking();
             }
         };
-        Detail.Changed += (_, change) => Move(change.Card, change.Status, selectNext: false);
+        Detail.Changed += (_, change) =>
+        {
+            Move(change.Card, change.Status, selectNext: false);
+            if (change.Status == ConceptStatus.Approved)
+            {
+                _ = SafeAsync(() => ShowApprovedAsync(change.Card));
+            }
+        };
     }
 
     /// <inheritdoc />
@@ -227,7 +254,13 @@ public sealed partial class ConceptsViewModel : PageViewModelBase
     /// <inheritdoc />
     public override Task<bool> CanLeaveAsync() => Detail.LeaveAsync();
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Shows the page. 0.1.40 (the developer: "program hantal"): what the page read is kept. The model bar is read once per profile and
+    /// again only after the profile changed or the user left a page that changes settings (<see cref="ConceptEvents.SettingsChanged"/>);
+    /// the lists are read once per profile and kept current by <see cref="ConceptEvents.Changed"/>. A change made elsewhere while the page
+    /// was not shown is read in the background after the page is back: the last known list is on screen at once and changes in place (the
+    /// rows keep their objects, so the scroll position stays). Coming back without any change reads nothing.
+    /// </summary>
     public override async Task ActivateAsync()
     {
         if (!_attached)
@@ -235,12 +268,31 @@ public sealed partial class ConceptsViewModel : PageViewModelBase
             _attached = true;
             _events.Changed += async (sender, _) =>
             {
+                if (ReferenceEquals(sender, this))
+                {
+                    return;
+                }
+
+                if (!_shown)
+                {
+                    // Read when the page is shown again, not now.
+                    _listStale = true;
+                    return;
+                }
+
+                await SafeAsync(ReloadAsync).ConfigureAwait(true);
+            };
+            _events.SettingsChanged += (sender, _) =>
+            {
                 if (!ReferenceEquals(sender, this))
                 {
-                    await SafeAsync(ReloadAsync).ConfigureAwait(true);
+                    _settingsRead = false;
                 }
             };
         }
+
+        _shown = true;
+        var profile = _session.Profile?.Id;
 
         // Each part's time goes to the log ("page.concepts.<part> <ms>") so a slow page change shows which part holds it.
         if (!_loadedOnce)
@@ -251,21 +303,47 @@ public sealed partial class ConceptsViewModel : PageViewModelBase
             }
         }
 
-        using (_timer.Step("page.concepts.research_settings"))
+        if (!_settingsRead || _settingsProfile != profile)
         {
-            Research.LoadSettings();
-        }
+            using (_timer.Step("page.concepts.research_settings"))
+            {
+                Research.LoadSettings();
+            }
 
-        using (_timer.Step("page.concepts.settings", countConnections: true))
-        {
-            await Settings.LoadAsync(_session.Profile, newProfile: !_loadedOnce).ConfigureAwait(true);
+            using (_timer.Step("page.concepts.settings", countConnections: true))
+            {
+                await LoadSettingsAsync(newProfile: !_loadedOnce).ConfigureAwait(true);
+            }
         }
 
         _loadedOnce = true;
-        using (_timer.Step("page.concepts.reload", countConnections: true))
+        if (!_listRead || _listProfile != profile)
         {
-            await ReloadAsync().ConfigureAwait(true);
+            // Another profile's list is never shown: read before the page counts as loaded.
+            using (_timer.Step("page.concepts.reload", countConnections: true))
+            {
+                await ReloadAsync().ConfigureAwait(true);
+            }
         }
+        else if (_listStale)
+        {
+            // The kept list is on screen; what changed meanwhile comes in the background.
+            _listStale = false;
+            _ = SafeAsync(async () =>
+            {
+                using (_timer.Step("page.concepts.refresh", countConnections: true))
+                {
+                    await ReloadAsync().ConfigureAwait(true);
+                }
+            });
+        }
+    }
+
+    /// <inheritdoc />
+    public override void Deactivate()
+    {
+        _shown = false;
+        base.Deactivate();
     }
 
     /// <inheritdoc />
@@ -289,7 +367,7 @@ public sealed partial class ConceptsViewModel : PageViewModelBase
 
         using (_timer.Step("page.concepts.profile_changed.settings", countConnections: true))
         {
-            await Settings.LoadAsync(_session.Profile, newProfile: true).ConfigureAwait(true);
+            await LoadSettingsAsync(newProfile: true).ConfigureAwait(true);
         }
 
         _loadedOnce = true;
@@ -371,7 +449,36 @@ public sealed partial class ConceptsViewModel : PageViewModelBase
         }
 
         Detail.Follow(card, status);
+        if (status == ConceptStatus.Approved)
+        {
+            // The developer (19 Nov 2026): after an approval the page goes to "Approved" at once, with the approved concept chosen.
+            Move(card, status, selectNext: false);
+            await ShowApprovedAsync(card).ConfigureAwait(true);
+            return;
+        }
+
         Move(card, status, selectNext: open);
+    }
+
+    /// <summary>
+    /// Shows the approved list with <paramref name="card"/> chosen and open in the panel (the search is emptied when it hides the
+    /// card). Another concept with unsaved edits in the panel stays open: nothing is lost and nothing is asked.
+    /// </summary>
+    private async Task ShowApprovedAsync(ConceptCardViewModel card)
+    {
+        if (Search.Length > 0 && !Approved.Contains(card))
+        {
+            Search = string.Empty;
+        }
+
+        SetList(approved: true);
+        if (ReferenceEquals(Detail.Card, card) || Detail.Unsaved)
+        {
+            Mark(Detail.Card);
+            return;
+        }
+
+        await ChooseAsync(card).ConfigureAwait(true);
     }
 
     /// <summary>
@@ -450,6 +557,7 @@ public sealed partial class ConceptsViewModel : PageViewModelBase
     /// </summary>
     private async Task ReloadAsync()
     {
+        _listStale = false;
         IReadOnlyList<Concept> fresh = [];
         IReadOnlyList<Concept> approved = [];
         var profile = _session.Profile;
@@ -481,6 +589,8 @@ public sealed partial class ConceptsViewModel : PageViewModelBase
         }
 
         CollectionSync.Apply(NewConcepts, fresh.DistinctBy(c => c.Id).Select(Card).ToList());
+        _listProfile = profile?.Id;
+        _listRead = true;
         _approved.Clear();
         _approved.AddRange(approved.DistinctBy(c => c.Id).Select(Card));
         Filter();
@@ -496,6 +606,25 @@ public sealed partial class ConceptsViewModel : PageViewModelBase
         Ideas.Refresh();
         Documents.Refresh();
         Research.Refresh();
+    }
+
+    /// <summary>Reads the model bar for the selected profile and remembers for which one.</summary>
+    private async Task LoadSettingsAsync(bool newProfile)
+    {
+        var profile = _session.Profile;
+
+        // Marked before reading: a change heard while it reads marks it again, so it is read once more at the next visit.
+        _settingsProfile = profile?.Id;
+        _settingsRead = true;
+        try
+        {
+            await Settings.LoadAsync(profile, newProfile).ConfigureAwait(true);
+        }
+        catch
+        {
+            _settingsRead = false;
+            throw;
+        }
     }
 
     private void Filter()

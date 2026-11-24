@@ -45,8 +45,10 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
     private readonly IReadOnlyList<IVideoEngine> _engines = engines.OrderBy(e => e.Kind).ToList();
     private readonly Catalog.ModelNotes _notes = new(text);
 
-    // Never disposed: without AvailableWaitHandle it holds nothing unmanaged (a picker lives as long as its page).
+    // Never disposed (both): without AvailableWaitHandle they hold nothing unmanaged (a picker lives as long as its page).
     private readonly SemaphoreSlim _saving = new(1, 1);
+    private readonly SemaphoreSlim _loading = new(1, 1);
+    private IReadOnlyList<string> _steps = [];
     private Guid? _profile;
     private string _language = ContentLanguages.English;
     private bool _languageFollowed;
@@ -113,20 +115,81 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
     public int NoteLines => Compact ? CompactNoteLines : 0;
 
     /// <summary>
+    /// The look for the user's own Ollama and LM Studio that the last <see cref="LoadAsync"/> started in the background, with the rows
+    /// loaded again when it added a server (tests wait for it); a finished task when nothing runs.
+    /// </summary>
+    public Task LocalServersLooked { get; private set; } = Task.CompletedTask;
+
+    /// <summary>
     /// Shows the steps <paramref name="stepCodes"/> in the page's order with the saved choices of <paramref name="profileId"/>, voices of
-    /// <paramref name="language"/>.
+    /// <paramref name="language"/>. The look for the user's own Ollama or LM Studio (up to 1.5 s per address when none answers) is not
+    /// waited for (0.1.40): the rows show the known models at once and a server found meanwhile is added to them when the look ends
+    /// (<see cref="LocalServersLooked"/>).
     /// </summary>
     public async Task LoadAsync(Guid? profileId, string language, IReadOnlyList<string> stepCodes)
     {
         ArgumentNullException.ThrowIfNull(stepCodes);
+        await LoadRowsAsync(profileId, language, stepCodes).ConfigureAwait(true);
+        LocalServersLooked = LookForLocalServersAsync();
+    }
+
+    /// <summary>
+    /// The user's own Ollama or LM Studio, not added by hand yet, is added with its models (at most once a minute) off the window's
+    /// thread; when one was added the rows are loaded again with the steps and the profile shown now (not while preparing a process).
+    /// </summary>
+    private async Task LookForLocalServersAsync()
+    {
+        int added;
+        try
+        {
+            added = await Task.Run(() => localServers.SyncAsync(force: false, CancellationToken.None)).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            logger.LogWarning(ex, "Looking for Ollama and LM Studio on this computer failed; the pickers list the saved servers only");
+            return;
+        }
+
+        if (added == 0 || Busy || _steps.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            await LoadRowsAsync(_profile, _language, _steps).ConfigureAwait(true);
+
+            // The page reads its estimate again (the rows are new).
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            logger.LogWarning(ex, "The pickers could not be loaded again with the local server that was found");
+        }
+    }
+
+    private async Task LoadRowsAsync(Guid? profileId, string language, IReadOnlyList<string> stepCodes)
+    {
+        // A load and the reload after a found server never build the rows at the same time.
+        await _loading.WaitAsync().ConfigureAwait(true);
+        try
+        {
+            await LoadRowsOnceAsync(profileId, language, stepCodes).ConfigureAwait(true);
+        }
+        finally
+        {
+            _loading.Release();
+        }
+    }
+
+    private async Task LoadRowsOnceAsync(Guid? profileId, string language, IReadOnlyList<string> stepCodes)
+    {
         _profile = profileId;
         _language = language;
+        _steps = stepCodes;
 
         // A Node.js on the PATH counts as installed only once it was looked at (once per run): before any note says "not installed".
         await installs.Planner.RefreshAllAsync(CancellationToken.None).ConfigureAwait(true);
-
-        // The user's own Ollama or LM Studio, not added by hand yet, is added with its models (at most once a minute; a short wait).
-        await localServers.SyncAsync(force: false, CancellationToken.None).ConfigureAwait(true);
 
         // The user's own voices (a voice that copies a voice lists them): added or removed on the settings page meanwhile.
         await voiceSamples.RefreshAsync(CancellationToken.None).ConfigureAwait(true);
@@ -339,6 +402,9 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
     {
         foreach (var row in rows.Where(r => Key(r) != r.Saved))
         {
+            // The key of what is written now: a change made while it is written (the database works in the background since 0.1.39)
+            // differs from it, so the next save writes that change too instead of taking it as saved.
+            var key = Key(row);
             var choice = Desired(row);
             if (choice is null)
             {
@@ -349,7 +415,7 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
                 await steps.SaveAsync(choice, CancellationToken.None).ConfigureAwait(true);
             }
 
-            row.Saved = Key(row);
+            row.Saved = key;
             logger.LogInformation("Profile choice saved: step {Step} uses {Model}", row.Step.Code, Describe(row));
         }
     }

@@ -32,6 +32,9 @@ public sealed partial class SettingsViewModel : PageViewModelBase
     /// <inheritdoc />
     public override int Order => 90;
 
+    /// <inheritdoc />
+    public override bool ChangesSettings => true;
+
     /// <summary>Tabs (built on first use; the first one is selected then).</summary>
     public ObservableCollection<SettingsSectionBase> Sections
     {

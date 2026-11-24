@@ -43,6 +43,7 @@ public sealed partial class ShellViewModel : ObservableObject
     private readonly IModelCatalog _catalog;
     private readonly UiPreferencesFile _preferences;
     private readonly IStepTimer _timer;
+    private readonly ConceptEvents _events;
     private bool _loadingProfiles;
 
     /// <summary>Lines the panel shows.</summary>
@@ -66,6 +67,7 @@ public sealed partial class ShellViewModel : ObservableObject
         ArgumentNullException.ThrowIfNull(events);
         ArgumentNullException.ThrowIfNull(preferences);
         _text = text;
+        _events = events;
         _spending = spending;
         _catalog = catalog;
         _preferences = preferences;
@@ -311,6 +313,11 @@ public sealed partial class ShellViewModel : ObservableObject
         if (Current is { } previous && !ReferenceEquals(previous, page))
         {
             previous.Deactivate();
+            if (previous.ChangesSettings)
+            {
+                // Keys, servers, a profile or the language may have changed there: pages that keep what they read look again.
+                _events.RaiseSettings(previous);
+            }
         }
 
         Current = page;

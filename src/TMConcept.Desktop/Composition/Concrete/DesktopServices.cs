@@ -435,7 +435,8 @@ public static class DesktopServices
     {
         services.AddSingleton<TPage>();
         services.AddSingleton<PageViewModelBase>(s => s.GetRequiredService<TPage>());
-        services.AddSingleton<IViewRegistration, ViewRegistration<TPage, TView>>();
+        // One view per page for the whole run (0.1.40): a page change shows the kept view again.
+        services.AddSingleton<IViewRegistration>(new ViewRegistration<TPage, TView>(cache: true));
     }
 
     /// <summary>Registers a settings section (a tab of the settings page) and its view.</summary>
@@ -446,6 +447,6 @@ public static class DesktopServices
     {
         services.AddSingleton<TSection>();
         services.AddSingleton<SettingsSectionBase>(s => s.GetRequiredService<TSection>());
-        services.AddSingleton<IViewRegistration, ViewRegistration<TSection, TView>>();
+        services.AddSingleton<IViewRegistration>(new ViewRegistration<TSection, TView>(cache: true));
     }
 }

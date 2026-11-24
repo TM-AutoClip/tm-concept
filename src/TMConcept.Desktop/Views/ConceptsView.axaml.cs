@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Threading;
 using TMConcept.Desktop.ViewModels;
 
 namespace TMConcept.Desktop.Views;
@@ -14,6 +15,7 @@ public sealed partial class ConceptsView : UserControl
 {
     private static readonly GridLength SectionsHeight = new(4, GridUnitType.Star);
     private ConceptDetailViewModel? _detail;
+    private ConceptsViewModel? _page;
 
     /// <summary>Creates.</summary>
     public ConceptsView() => InitializeComponent();
@@ -33,6 +35,17 @@ public sealed partial class ConceptsView : UserControl
             _detail.PropertyChanged += OnDetailChanged;
         }
 
+        if (_page is not null)
+        {
+            _page.PropertyChanged -= OnPageChanged;
+        }
+
+        _page = DataContext as ConceptsViewModel;
+        if (_page is not null)
+        {
+            _page.PropertyChanged += OnPageChanged;
+        }
+
         FoldSections();
     }
 
@@ -41,6 +54,21 @@ public sealed partial class ConceptsView : UserControl
         if (e.PropertyName is nameof(ConceptDetailViewModel.IsEditing) or nameof(ConceptDetailViewModel.IsAiEditing))
         {
             FoldSections();
+        }
+    }
+
+    private void OnPageChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        // An approval shows "Approved" with the approved concept chosen: the row is brought into sight once the list is laid out.
+        if (e.PropertyName == nameof(ConceptsViewModel.SelectedApproved) && _page?.SelectedApproved is { } card)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (ReferenceEquals(_page?.SelectedApproved, card))
+                {
+                    ApprovedList.ScrollIntoView(card);
+                }
+            }, DispatcherPriority.Loaded);
         }
     }
 

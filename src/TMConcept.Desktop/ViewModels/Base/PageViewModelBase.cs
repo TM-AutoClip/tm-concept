@@ -46,6 +46,12 @@ public abstract partial class PageViewModelBase : ObservableObject
     /// </summary>
     public virtual Task<bool> CanLeaveAsync() => Task.FromResult(true);
 
+    /// <summary>
+    /// Whether the page changes settings other pages read once and keep (keys, servers, models, a profile, the language): leaving it tells
+    /// them to read again (<see cref="Startup.ConceptEvents.SettingsChanged"/>, 0.1.40).
+    /// </summary>
+    public virtual bool ChangesSettings => false;
+
     /// <summary>Called when another page is opened (stop what only makes sense on screen, such as a playing video).</summary>
     public virtual void Deactivate()
     {

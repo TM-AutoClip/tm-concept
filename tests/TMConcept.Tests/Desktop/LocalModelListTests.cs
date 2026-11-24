@@ -54,6 +54,8 @@ public sealed class LocalModelListTests
 
         await picker.LoadAsync(profile.Id, ContentLanguages.English, PipelineSteps.ConceptPage);
 
+        // The look runs in the background (0.1.40): the rows are loaded again when it found the server.
+        await picker.LocalServersLooked;
         var server = h.Get<EndpointRegistry>().All.ShouldHaveSingleItem();
         server.Name.ShouldBe("Ollama");
         server.Kind.ShouldBe(EndpointKind.Ollama);
@@ -64,6 +66,7 @@ public sealed class LocalModelListTests
 
         // Loaded again at once: not looked for again; looked for again later, the saved server is left as it is.
         await picker.LoadAsync(profile.Id, ContentLanguages.English, PipelineSteps.VideoPage);
+        await picker.LocalServersLooked;
         probe.Detections.ShouldBe(1);
         (await h.Get<LocalServerSync>().SyncAsync(force: true, None)).ShouldBe(0);
         probe.Detections.ShouldBe(2);

@@ -50,6 +50,9 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
     /// <inheritdoc />
     public override int Order => 50;
 
+    /// <inheritdoc />
+    public override bool ChangesSettings => true;
+
     /// <summary>Templates.</summary>
     public ObservableCollection<TemplateOption> Templates { get; } = [];
 

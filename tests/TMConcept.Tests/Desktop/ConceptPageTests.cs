@@ -1292,7 +1292,7 @@ public sealed class ConceptPageTests
         await page.ChooseAsync(first);
 
         await page.TrashRowAsync(first);
-        await Until(() => ReferenceEquals(page.Detail.Card, second));
+        await Until(() => ReferenceEquals(page.Detail.Card, second) && ReferenceEquals(page.SelectedNew, second));
 
         var trashed = (await h.Get<IConceptStore>().GetAsync(concepts[0].Id, CancellationToken.None))!;
         trashed.Status.ShouldBe(ConceptStatus.Trashed);
@@ -1302,7 +1302,7 @@ public sealed class ConceptPageTests
     }
 
     [AvaloniaFact]
-    public async Task ARowActionOnAnotherConceptLeavesThePanelWhereItIs()
+    public async Task ADeleteOnAnotherRowLeavesThePanelWhereItIsAndAnApprovalShowsTheApprovedOne()
     {
         using var h = new DesktopHarness();
         var profile = await PrepareAsync(h);
@@ -1315,11 +1315,18 @@ public sealed class ConceptPageTests
         await page.ChooseAsync(first);
 
         await page.TrashRowAsync(third);
-        await page.ApproveRowAsync(page.NewConcepts.Single(c => c.Id == concepts[1].Id));
         Dispatcher.UIThread.RunJobs();
-
         page.Detail.Card.ShouldBe(first, "the panel stays on the concept being read");
         page.SelectedNew.ShouldBe(first);
+
+        // An approval goes to "Approved" at once with the approved concept chosen (0.1.40, the developer's request of 19 Nov 2026).
+        var second = page.NewConcepts.Single(c => c.Id == concepts[1].Id);
+        await page.ApproveRowAsync(second);
+        Dispatcher.UIThread.RunJobs();
+
+        page.ShowApproved.ShouldBeTrue();
+        page.SelectedApproved.ShouldBe(second);
+        page.Detail.Card.ShouldBe(second);
         page.NewConcepts.ShouldBe([first]);
     }
 
