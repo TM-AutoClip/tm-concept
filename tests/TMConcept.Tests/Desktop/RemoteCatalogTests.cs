@@ -246,6 +246,21 @@ public sealed class RemoteCatalogTests
     }
 
     [Fact]
+    public void AMusicModelIsLeftOutNotRefusedSinceTheFileCarriesNoMusicPrice()
+    {
+        using var h = new DesktopHarness();
+
+        var remote = Reader(h).Read(Json(Sample(f => f.Providers!.Add(new RemoteProviderModel
+        {
+            Provider = "google", Id = "lyria-remote-test", Name = "Lyria test", Capabilities = "Music",
+        }))), "0.1.26");
+
+        remote.Skipped.ShouldBe(1);
+        remote.Models.ShouldNotContain(m => m.Capabilities.HasFlag(ModelCapability.Music), "a music model would cost nothing in the estimate");
+        remote.Models.ShouldContain(m => m.Id == "gpt-test-remote", "the rest of the file still counts");
+    }
+
+    [Fact]
     public void AModelThatNeedsANewerStableDiffusionBuildIsLeftOutNotRefused()
     {
         using var h = new DesktopHarness();

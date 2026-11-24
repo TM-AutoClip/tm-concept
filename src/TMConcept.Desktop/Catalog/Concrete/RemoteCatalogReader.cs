@@ -86,6 +86,14 @@ public sealed partial class RemoteCatalogReader(EmbeddedModelCatalog catalog)
                 continue;
             }
 
+            // 0.1.46 review: the file has no music price fields, so a music model from it would be free in every estimate and record. Only an
+            // app update adds music models; such an entry is left out, never refused (the rest of the file still counts).
+            if (model.Capabilities.HasFlag(ModelCapability.Music))
+            {
+                skipped++;
+                continue;
+            }
+
             models.Add(model);
         }
 
