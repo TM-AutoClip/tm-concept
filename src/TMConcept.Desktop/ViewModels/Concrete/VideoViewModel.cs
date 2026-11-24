@@ -266,6 +266,8 @@ public sealed partial class VideoViewModel : PageViewModelBase
             {
                 if (!_loading)
                 {
+                    // This page's pickers include the concept step: the concepts page keeps its model bar (0.1.40) and reads it again.
+                    _events.RaiseSettings(this);
                     await SafeAsync(EstimateAsync).ConfigureAwait(true);
                 }
             };

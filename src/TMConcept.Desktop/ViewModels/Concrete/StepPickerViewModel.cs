@@ -157,7 +157,8 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
 
         try
         {
-            await LoadRowsAsync(_profile, _language, _steps).ConfigureAwait(true);
+            // The profile, language and steps are read after the wait (null): a load for another profile that ran meanwhile wins.
+            await LoadRowsAsync(null, string.Empty, null).ConfigureAwait(true);
 
             // The page reads its estimate again (the rows are new).
             Changed?.Invoke(this, EventArgs.Empty);
@@ -168,13 +169,24 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
         }
     }
 
-    private async Task LoadRowsAsync(Guid? profileId, string language, IReadOnlyList<string> stepCodes)
+    /// <summary>
+    /// Builds the rows; <paramref name="stepCodes"/> null (the reload after a found server) takes the profile, language and steps the
+    /// last load showed, read only once it is its turn, so it never brings back a profile that a load before it replaced.
+    /// </summary>
+    private async Task LoadRowsAsync(Guid? profileId, string language, IReadOnlyList<string>? stepCodes)
     {
         // A load and the reload after a found server never build the rows at the same time.
         await _loading.WaitAsync().ConfigureAwait(true);
         try
         {
-            await LoadRowsOnceAsync(profileId, language, stepCodes).ConfigureAwait(true);
+            if (stepCodes is null)
+            {
+                await LoadRowsOnceAsync(_profile, _language, _steps).ConfigureAwait(true);
+            }
+            else
+            {
+                await LoadRowsOnceAsync(profileId, language, stepCodes).ConfigureAwait(true);
+            }
         }
         finally
         {

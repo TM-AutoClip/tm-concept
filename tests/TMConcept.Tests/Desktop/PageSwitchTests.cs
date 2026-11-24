@@ -145,6 +145,29 @@ public sealed class PageSwitchTests
     }
 
     [AvaloniaFact]
+    public async Task AConceptModelChosenOnTheVideoPageIsShownBackOnTheConceptsPage()
+    {
+        using var c = Harness();
+        var h = c.Harness;
+        await StartAsync(h);
+        await ProfileAsync(h);
+        var shell = h.Get<ShellViewModel>();
+        await shell.StartAsync();
+        var page = (ConceptsViewModel)shell.Current!;
+
+        // The video page's pickers include the concept step (the AI edit of an approved concept uses it there).
+        var video = (await shell.NavigateAsync<VideoViewModel>()).ShouldNotBeNull();
+        var row = video.Picker.Row(PipelineSteps.Concepts).ShouldNotBeNull();
+        row.Selected = row.Options.First(o => o.Model?.Id == "claude-sonnet-5-5");
+        await UntilAsync(() => row.Saved.Contains("claude-sonnet-5-5", StringComparison.Ordinal));
+
+        await shell.NavigateAsync<ConceptsViewModel>();
+
+        page.Settings.Picker.Model(PipelineSteps.Concepts).ShouldNotBeNull().Id.ShouldBe("claude-sonnet-5-5",
+            "the concepts page runs with the model chosen on the video page, not the one it kept");
+    }
+
+    [AvaloniaFact]
     public async Task AConceptChangedElsewhereComesInTheBackgroundAndKeepsTheRows()
     {
         using var c = Harness();
