@@ -712,6 +712,9 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
     /// <summary>The character sheet in a concept's image cache (F14, 0.1.50; careful mode).</summary>
     private const string CharacterSheetFile = "character-sheet.png";
 
+    /// <summary>The suffix of a scene picture kept aside while the careful mode makes it again (0.1.50).</summary>
+    private const string KeptSuffix = ".kept";
+
     /// <summary>
     /// The quality check step's model (F11, 0.1.50) when the template's quality mode reviews: null in Fast mode; null with a yellow warning when
     /// the step is off or its model cannot be made ready (the video is made without the check: a review never stops a video).
@@ -802,12 +805,37 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
             var prompts = set.Prompts.ToList();
             foreach (var scene in scenes)
             {
-                File.Delete(Path.Combine(set.Cache, SceneImageName(scene)));
+                // The old picture is kept aside until the new one is made: a failed redraw puts it back (the quality step skips the round).
+                var file = Path.Combine(set.Cache, SceneImageName(scene));
+                if (File.Exists(file))
+                {
+                    File.Move(file, file + KeptSuffix, overwrite: true);
+                }
+
                 prompts[scene - 1] = prompts[scene - 1].TrimEnd() + " Avoid: " + string.Join("; ", findings.Where(f => f.Scene == scene).Select(f => f.Problem));
             }
 
-            await GuardImagesAsync(() => DrawImagesAsync(set with { Prompts = prompts }, imageModel, work, steps, id, width, height, prompts.Count, token))
-                .ConfigureAwait(false);
+            try
+            {
+                await GuardImagesAsync(() => DrawImagesAsync(set with { Prompts = prompts }, imageModel, work, steps, id, width, height, prompts.Count, token))
+                    .ConfigureAwait(false);
+            }
+            finally
+            {
+                foreach (var scene in scenes)
+                {
+                    var file = Path.Combine(set.Cache, SceneImageName(scene));
+                    if (File.Exists(file))
+                    {
+                        File.Delete(file + KeptSuffix);
+                    }
+                    else if (File.Exists(file + KeptSuffix))
+                    {
+                        File.Move(file + KeptSuffix, file);
+                    }
+                }
+            }
+
             logger.LogInformation(LogEvents.OnScreen, "Quality check: the pictures of scenes {Scenes} were made again", string.Join(", ", scenes));
             return scenes;
         }

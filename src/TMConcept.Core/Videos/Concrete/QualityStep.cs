@@ -35,6 +35,12 @@ public sealed class QualityStep(IQualityReviewer reviewer, IPlanSheet sheets, IL
         var style = options.Style;
         if (!QualityRules.Reviews(style) || job.Reviewer is not { } model)
         {
+            if (QualityRules.Reviews(style))
+            {
+                // The step was planned (a reviewer was chosen) but could not be made ready: its row ends here, not left waiting.
+                job.Steps.Finish(VideoSteps.Quality);
+            }
+
             return job.Render;
         }
 
@@ -75,7 +81,7 @@ public sealed class QualityStep(IQualityReviewer reviewer, IPlanSheet sheets, IL
 
             lastSheet = sheet;
             lastFrames = frames;
-            var found = await reviewer.FramesAsync(call, sheet, input, frames, subtitles, token).ConfigureAwait(false);
+            var found = await SafeAsync("frame review", () => reviewer.FramesAsync(call, sheet, input, frames, subtitles, token), null).ConfigureAwait(false);
             if (found is not null)
             {
                 Log("frames", round, found);
@@ -90,8 +96,10 @@ public sealed class QualityStep(IQualityReviewer reviewer, IPlanSheet sheets, IL
             var items = new List<PlanItem>();
             foreach (var scene in QualityRules.Scenes(counted))
             {
-                var item = await reviewer.RepairAsync(new QualityRepairRequest(codeCall, input, style, scene, job.Spans.ElementAtOrDefault(scene - 1),
-                    job.ImagePrompts.ElementAtOrDefault(scene - 1) ?? string.Empty, counted.Where(f => f.Scene == scene).ToList()), token).ConfigureAwait(false);
+                var request = new QualityRepairRequest(codeCall, input, style, scene, job.Spans.ElementAtOrDefault(scene - 1),
+                    job.ImagePrompts.ElementAtOrDefault(scene - 1) ?? string.Empty, counted.Where(f => f.Scene == scene).ToList());
+                var item = await SafeAsync("repair of scene " + scene.ToString(CultureInfo.InvariantCulture), () => reviewer.RepairAsync(request, token), null)
+                    .ConfigureAwait(false);
                 if (item is not null)
                 {
                     items.Add(item);
@@ -106,7 +114,7 @@ public sealed class QualityStep(IQualityReviewer reviewer, IPlanSheet sheets, IL
             // A repaired render goes into a new file: a failure keeps the video that was reviewed (its plans and its project as they were).
             var kept = input.Scenes.Select(s => s.Plan).ToList();
             SceneFixer.NewPlans(input, items, job.Spans);
-            var request = outcome.Request with
+            var repaired = outcome.Request with
             {
                 Input = RenderInputBuilder.ForEngine(input, subtitles),
                 Output = Path.Combine(job.Work, "silent-q" + (round + 1).ToString(CultureInfo.InvariantCulture) + ".mp4"),
@@ -114,8 +122,8 @@ public sealed class QualityStep(IQualityReviewer reviewer, IPlanSheet sheets, IL
             try
             {
                 steps.Report(VideoSteps.Quality, Math.Min(0.9, 0.2 + ((round - 1) * 0.25)), "repair " + round.ToString(CultureInfo.InvariantCulture));
-                job.Engine.WriteProject(request);
-                await job.Engine.RenderAsync(request, null, token).ConfigureAwait(false);
+                job.Engine.WriteProject(repaired);
+                await job.Engine.RenderAsync(repaired, null, token).ConfigureAwait(false);
             }
             catch (EngineException ex)
             {
@@ -129,7 +137,7 @@ public sealed class QualityStep(IQualityReviewer reviewer, IPlanSheet sheets, IL
                 return [];
             }
 
-            outcome = outcome with { Request = request };
+            outcome = outcome with { Request = repaired };
             var scenes = items.Select(i => i.Scene).Distinct().Order().ToList();
             logger.LogInformation(LogEvents.OnScreen, "Quality check: scenes {Scenes} planned again and the video rendered again (round {Round})",
                 string.Join(", ", scenes), round);
@@ -151,7 +159,8 @@ public sealed class QualityStep(IQualityReviewer reviewer, IPlanSheet sheets, IL
         if (lastSheet is { } final)
         {
             steps.Report(VideoSteps.Quality, 0.95, "critic");
-            report.Critic = [.. await reviewer.CriticAsync(call, final, input, lastFrames, subtitles, cancellationToken).ConfigureAwait(false)];
+            report.Critic = [.. await SafeAsync("final critic", () => reviewer.CriticAsync(call, final, input, lastFrames, subtitles, cancellationToken),
+                (IReadOnlyList<CriticScore>)[]).ConfigureAwait(false)];
             report.Files.Add(final);
             var failing = report.Critic.Where(c => c.Fails).ToList();
             if (failing.Count > 0)
@@ -194,7 +203,8 @@ public sealed class QualityStep(IQualityReviewer reviewer, IPlanSheet sheets, IL
             {
                 report.CharacterSheet = true;
                 report.Files.Add(sheet);
-                different = await reviewer.CharacterAsync(call, sheet, job.Character, job.Pictures, job.Scenes, cancellationToken).ConfigureAwait(false) ?? [];
+                different = await SafeAsync("character comparison", () => reviewer.CharacterAsync(call, sheet, job.Character, job.Pictures, job.Scenes,
+                    cancellationToken), null).ConfigureAwait(false) ?? [];
                 report.CharacterMismatch = [.. QualityRules.Scenes(different)];
                 if (different.Count > 0)
                 {
@@ -214,7 +224,7 @@ public sealed class QualityStep(IQualityReviewer reviewer, IPlanSheet sheets, IL
         async Task<IReadOnlyList<QualityFinding>?> ReviewAsync(int round, CancellationToken token)
         {
             job.Steps.Report(VideoSteps.Images, 1, "picture review " + round.ToString(CultureInfo.InvariantCulture));
-            var found = await reviewer.PicturesAsync(call, job.Pictures, job.Scenes, token).ConfigureAwait(false);
+            var found = await SafeAsync("picture review", () => reviewer.PicturesAsync(call, job.Pictures, job.Scenes, token), null).ConfigureAwait(false);
             if (found is null)
             {
                 return null;
@@ -226,7 +236,7 @@ public sealed class QualityStep(IQualityReviewer reviewer, IPlanSheet sheets, IL
 
         async Task<IReadOnlyList<int>> RedrawAsync(IReadOnlyList<QualityFinding> counted, int round, CancellationToken token)
         {
-            var scenes = await job.Redraw(counted, token).ConfigureAwait(false);
+            var scenes = await SafeAsync("pictures made again", () => job.Redraw(counted, token), (IReadOnlyList<int>)[]).ConfigureAwait(false);
             redrawn.UnionWith(scenes);
             return scenes;
         }
@@ -238,6 +248,24 @@ public sealed class QualityStep(IQualityReviewer reviewer, IPlanSheet sheets, IL
         // A picture made again for its character is no longer the one the sheet was compared with.
         report.CharacterMismatch = report.CharacterMismatch.Where(s => !redrawn.Contains(s)).ToList();
         logger.LogInformation("Picture review: {Rounds} rounds, ended {Stop}, {Redrawn} pictures made again", rounds.Count, stop, redrawn.Count);
+    }
+
+    /// <summary>
+    /// One call of the quality mode: a failure of the reviewer, the repair or a picture made again (a provider's error, an unreachable local
+    /// server, a failed picture) is logged and gives <paramref name="fallback"/>, so an optional check never stops a paid video; what the call
+    /// was charged is already spent by the reviewer. A cancel goes up.
+    /// </summary>
+    private async Task<T> SafeAsync<T>(string what, Func<Task<T>> call, T fallback)
+    {
+        try
+        {
+            return await call().ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException and not OutOfMemoryException)
+        {
+            logger.LogWarning(LogEvents.OnScreen, "Quality check: the {What} could not run ({Error}); it is skipped, the video is kept", what, ex.Message);
+            return fallback;
+        }
     }
 
     private void Log(string what, int round, IReadOnlyList<QualityFinding> found)

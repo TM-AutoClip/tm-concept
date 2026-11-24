@@ -348,6 +348,81 @@ public sealed class QualityModeTests : IDisposable
             .ShouldBe(QualityStops.ReportOnly);
     }
 
+    /// <summary>A reviewer whose every call fails (a provider's error, an unreachable local server).</summary>
+    private sealed class FailingReviewer : IQualityReviewer
+    {
+        public int Calls { get; private set; }
+
+        public Task<IReadOnlyList<QualityFinding>?> FramesAsync(QualityCall call, string sheet, RenderInput input, IReadOnlyList<QualityFrame> frames, bool subtitles,
+            CancellationToken cancellationToken) => Fail<IReadOnlyList<QualityFinding>?>();
+
+        public Task<IReadOnlyList<QualityFinding>?> PicturesAsync(QualityCall call, IReadOnlyList<QualityPicture> pictures, int scenes, CancellationToken cancellationToken) =>
+            Fail<IReadOnlyList<QualityFinding>?>();
+
+        public Task<IReadOnlyList<QualityFinding>?> CharacterAsync(QualityCall call, string sheet, string character, IReadOnlyList<QualityPicture> pictures, int scenes,
+            CancellationToken cancellationToken) => Fail<IReadOnlyList<QualityFinding>?>();
+
+        public Task<IReadOnlyList<CriticScore>> CriticAsync(QualityCall call, string sheet, RenderInput input, IReadOnlyList<QualityFrame> frames, bool subtitles,
+            CancellationToken cancellationToken) => Fail<IReadOnlyList<CriticScore>>();
+
+        public Task<PlanItem?> RepairAsync(QualityRepairRequest request, CancellationToken cancellationToken) => Fail<PlanItem?>();
+
+        private Task<T> Fail<T>()
+        {
+            Calls++;
+            throw new HttpRequestException("the reviewer cannot be reached");
+        }
+    }
+
+    [Fact]
+    public async Task AFailingReviewerNeverStopsTheVideo()
+    {
+        var (job, engine) = Job(QualityMode.Careful, SceneDrawer.App);
+        var reviewer = new FailingReviewer();
+        var outcome = await new QualityStep(reviewer, new FakeSheet(), NullLogger<QualityStep>.Instance).AfterRenderAsync(job, CancellationToken.None);
+
+        outcome.ShouldBeSameAs(job.Render, "the rendered video is kept");
+        reviewer.Calls.ShouldBe(2, "one frame review and the critic, both failed");
+        engine.Renders.ShouldBe(0);
+        job.Report.FrameStop.ShouldBe(QualityStops.Skipped);
+        job.Report.Critic.ShouldBeEmpty();
+
+        // A failed repair of a scene and a failed redraw of the pictures end the rounds instead of the video.
+        var repairs = new FakeReviewer().Frames([Blocker(2)]);
+        var (second, secondEngine) = Job(QualityMode.Careful, SceneDrawer.App);
+        var failingRepair = new RepairFailingReviewer(repairs);
+        (await new QualityStep(failingRepair, new FakeSheet(), NullLogger<QualityStep>.Instance).AfterRenderAsync(second, CancellationToken.None))
+            .ShouldBeSameAs(second.Render);
+        secondEngine.Renders.ShouldBe(0);
+        second.Report.FrameStop.ShouldBe(QualityStops.NoRepair);
+
+        var report = new QualityReport { Mode = QualityMode.Careful };
+        var pictures = new PictureQualityJob(Model(), Loop: true, [new QualityPicture(1, "scene-1.png", "a map")], 1, string.Empty, null,
+            (_, _) => throw new VideoException("the image model failed") { Code = "images" }, new VideoStepProgress([(VideoSteps.Images, 1)], null),
+            Guid.NewGuid(), report);
+        await Step(new FakeReviewer().Pictures([Blocker(1)])).PicturesAsync(pictures, CancellationToken.None);
+        report.PictureStop.ShouldBe(QualityStops.NoRepair);
+    }
+
+    /// <summary>The fake reviewer, but every repair call fails.</summary>
+    private sealed class RepairFailingReviewer(FakeReviewer inner) : IQualityReviewer
+    {
+        public Task<IReadOnlyList<QualityFinding>?> FramesAsync(QualityCall call, string sheet, RenderInput input, IReadOnlyList<QualityFrame> frames, bool subtitles,
+            CancellationToken cancellationToken) => inner.FramesAsync(call, sheet, input, frames, subtitles, cancellationToken);
+
+        public Task<IReadOnlyList<QualityFinding>?> PicturesAsync(QualityCall call, IReadOnlyList<QualityPicture> pictures, int scenes, CancellationToken cancellationToken) =>
+            inner.PicturesAsync(call, pictures, scenes, cancellationToken);
+
+        public Task<IReadOnlyList<QualityFinding>?> CharacterAsync(QualityCall call, string sheet, string character, IReadOnlyList<QualityPicture> pictures, int scenes,
+            CancellationToken cancellationToken) => inner.CharacterAsync(call, sheet, character, pictures, scenes, cancellationToken);
+
+        public Task<IReadOnlyList<CriticScore>> CriticAsync(QualityCall call, string sheet, RenderInput input, IReadOnlyList<QualityFrame> frames, bool subtitles,
+            CancellationToken cancellationToken) => inner.CriticAsync(call, sheet, input, frames, subtitles, cancellationToken);
+
+        public Task<PlanItem?> RepairAsync(QualityRepairRequest request, CancellationToken cancellationToken) =>
+            throw new HttpRequestException("the code model cannot be reached");
+    }
+
     [Fact]
     public void ARecordedReviewIsReadTolerantly()
     {
