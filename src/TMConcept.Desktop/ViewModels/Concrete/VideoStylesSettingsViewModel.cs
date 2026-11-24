@@ -170,6 +170,15 @@ public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store,
     /// <summary>The last switch to another template in the list (its question may still be open); awaited by tests.</summary>
     public Task Switching { get; private set; } = Task.CompletedTask;
 
+    /// <summary>A closed or replaced form stops its running Openverse search or download (0.1.45 review).</summary>
+    partial void OnEditorChanged(VideoStyleEditorViewModel? oldValue, VideoStyleEditorViewModel? newValue)
+    {
+        if (oldValue is not null && !ReferenceEquals(oldValue, newValue))
+        {
+            oldValue.MusicPicker?.Dispose();
+        }
+    }
+
     partial void OnSelectedStyleChanged(VideoStyle? oldValue, VideoStyle? newValue)
     {
         if (_loading || newValue is null)

@@ -20,8 +20,8 @@ public sealed class OpenverseAudioClient(ProviderTransport transport, ILogger<Op
     public async Task<MusicSearchPage> SearchAsync(string query, int page, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(query);
-        var open = await GetAsync(OpenverseAudioReader.Address(query, page, "license_type=commercial,modification"), cancellationToken).ConfigureAwait(false);
-        var free = await GetAsync(OpenverseAudioReader.Address(query, page, "license=cc0"), cancellationToken).ConfigureAwait(false);
+        var open = await GetAsync(OpenverseAudioReader.Address(query, page, "license_type=commercial,modification"), page, cancellationToken).ConfigureAwait(false);
+        var free = await GetAsync(OpenverseAudioReader.Address(query, page, "license=cc0"), page, cancellationToken).ConfigureAwait(false);
         var tracks = open.Tracks.Concat(free.Tracks).GroupBy(t => t.Id, StringComparer.Ordinal).Select(g => g.First()).ToList();
         logger.LogInformation("Openverse search page {Page}: {Count} usable tracks, {Dropped} left out for their licence", page, tracks.Count,
             open.Dropped + free.Dropped);
@@ -116,7 +116,11 @@ public sealed class OpenverseAudioClient(ProviderTransport transport, ILogger<Op
         return words.Length > 1 && words[0].Equals("CC", StringComparison.OrdinalIgnoreCase) ? words[1].ToLowerInvariant() : string.Empty;
     }
 
-    private async Task<MusicSearchPage> GetAsync(Uri address, CancellationToken cancellationToken)
+    /// <summary>
+    /// One request's page. The two requests of a page have their own page counts (CC0 results are usually fewer), and the next page is offered
+    /// by the larger one: a page past the end of one request (Openverse answers 400/401/404 there) is an empty page of it, not a failed search.
+    /// </summary>
+    private async Task<MusicSearchPage> GetAsync(Uri address, int page, CancellationToken cancellationToken)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(OpenverseRules.Timeout);
@@ -124,6 +128,12 @@ public sealed class OpenverseAudioClient(ProviderTransport transport, ILogger<Op
         if (response.StatusCode == HttpStatusCode.TooManyRequests)
         {
             throw new HttpRequestException("Openverse asks to wait before the next search.", null, response.StatusCode);
+        }
+
+        if (page > 1 && response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Unauthorized or HttpStatusCode.NotFound)
+        {
+            logger.LogInformation("Openverse search page {Page} is past the end of one request ({Status})", page, (int)response.StatusCode);
+            return new MusicSearchPage([], page, page - 1, 0);
         }
 
         response.EnsureSuccessStatusCode();

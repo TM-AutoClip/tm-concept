@@ -1,5 +1,8 @@
+using System.Net;
+using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using TMConcept.Core.Music;
+using TMConcept.Providers.Common;
 using TMConcept.Providers.Music;
 
 namespace TMConcept.Tests.Providers;
@@ -95,5 +98,37 @@ public sealed class OpenverseAudioTests
         open.Query.ShouldContain("page_size=20");
         free.Query.ShouldContain("license=cc0");
         OpenverseAudioReader.Address(new string('x', 500), 1, "license=cc0").Query.Length.ShouldBeLessThan(300, "the words are cut");
+    }
+
+    [Fact]
+    public async Task APagePastTheEndOfTheCc0RequestKeepsTheOtherRequestsTracks()
+    {
+        // Page 2 of the search: the commercial request still has results, the CC0 one has fewer pages and Openverse refuses its page 2.
+        var server = new FakeOpenverse(request => request.RequestUri!.Query.Contains("license=cc0", StringComparison.Ordinal)
+            ? new HttpResponseMessage(HttpStatusCode.BadRequest) { Content = new StringContent("{\"detail\": \"Invalid page.\"}") }
+            : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(Answer) });
+        using var client = new OpenverseAudioClient(new ProviderTransport(() => server), NullLogger<OpenverseAudioClient>.Instance);
+
+        var page = await client.SearchAsync("calm", 2, CancellationToken.None);
+
+        page.Tracks.Count.ShouldBe(3);
+        (page.Page, page.PageCount).ShouldBe((2, 16));
+        server.Requests.ShouldBe(2);
+
+        // Page 1 has no "past the end": a refused first page is a failed search.
+        await Should.ThrowAsync<HttpRequestException>(() => client.SearchAsync("calm", 1, CancellationToken.None));
+    }
+
+    private sealed class FakeOpenverse(Func<HttpRequestMessage, HttpResponseMessage> answer) : HttpMessageHandler
+    {
+        public int Requests { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Requests++;
+            request.RequestUri!.Host.ShouldBe("api.openverse.org");
+            request.Headers.Authorization.ShouldBeNull("the search is anonymous");
+            return Task.FromResult(answer(request));
+        }
     }
 }
