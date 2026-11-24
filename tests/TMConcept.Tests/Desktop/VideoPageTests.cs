@@ -121,6 +121,35 @@ public sealed class VideoPageTests
     }
 
     [AvaloniaFact]
+    public async Task MotionCheckFindingsAreYellowWarningsWithAFrameStripAndNeverStopTheVideo()
+    {
+        // 0.1.41 (F3): black frames inside the film are a yellow warning (badge code, activity line) with a strip in checks/; old strips go.
+        var engine = new FakeEngine();
+        var motion = new FakeMotion();
+        using var h = Harness(new FakeChat().Answer(_ => Code(engine.SampleCode)).Answer(_ => Code(engine.SampleCode)), engine,
+            s => s.AddSingleton<IMotionFrames>(motion));
+        var (page, concept) = await PrepareAsync(h);
+        await page.ProduceAllAsync();
+
+        var video = (await h.Get<IVideoStore>().ListAsync(concept.ProfileId, CancellationToken.None)).Single();
+        video.Warnings.Split(',').ShouldContain(VideoWarnings.MotionBlack);
+        var folder = LibraryPaths.Resolve(h.Get<IAppPaths>().LibraryDirectory, video.Folder);
+        var strip = motion.Strips.ShouldHaveSingleItem();
+        Path.GetDirectoryName(strip).ShouldBe(Path.Combine(folder, VideoFolders.Checks));
+        File.Exists(strip).ShouldBeTrue();
+        var text = h.Get<TMConcept.Desktop.Localization.Localizer>();
+        h.Get<TMConcept.Core.Activity.IActivityFeed>().Recent()
+            .ShouldContain(l => l.Text == text.Format("video." + VideoWarnings.MotionBlack, "Greek fire"));
+
+        // A check that cannot run is skipped: the video is still made, without a motion warning and without strips.
+        motion.Fail = true;
+        var second = await RunAsync(h, concept, new VideoOptions { Engine = engine.Kind, Speech = false, Images = ImageSources.None });
+        second.Warnings.Split(',').ShouldNotContain(VideoWarnings.MotionBlack);
+        Directory.Exists(Path.Combine(LibraryPaths.Resolve(h.Get<IAppPaths>().LibraryDirectory, second.Folder), VideoFolders.Checks)).ShouldBeFalse();
+        motion.Strips.Count.ShouldBe(1);
+    }
+
+    [AvaloniaFact]
     public async Task AQueuedConceptBecomesASilentVideoInTheLibrary()
     {
         var engine = new FakeEngine();
@@ -1762,6 +1791,33 @@ public sealed class VideoPageTests
 
             TMConcept.Core.Speech.WaveFile.WritePcm16(request.OutputWav, samples, 24_000);
             return Task.FromResult(new TMConcept.Core.Speech.SpeechClip(request.OutputWav, Samples * 1000L / 24_000, request.Text.Length, 0, Code));
+        }
+    }
+
+    /// <summary>The motion check's frames without ffmpeg (0.1.41): three seconds of a lit picture with black frames at 1.0–1.2 s.</summary>
+    internal sealed class FakeMotion : IMotionFrames
+    {
+        public bool Fail { get; set; }
+
+        public List<string> Strips { get; } = [];
+
+        public Task<MotionSeries?> ReadAsync(string video, double fps, string workFolder, CancellationToken cancellationToken)
+        {
+            if (Fail)
+            {
+                throw new InvalidOperationException("ffmpeg is not installed");
+            }
+
+            var luminance = Enumerable.Range(0, 30).Select(i => i is >= 10 and <= 12 ? 0.0 : 0.5).ToList();
+            return Task.FromResult<MotionSeries?>(new MotionSeries(10, luminance, Enumerable.Repeat(0.01, 30).ToList(), Enumerable.Repeat(0.0, 30).ToList()));
+        }
+
+        public Task<bool> StripAsync(string video, double atSeconds, double spanSeconds, double fps, string png, CancellationToken cancellationToken)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(png)!);
+            File.WriteAllBytes(png, [1, 2, 3]);
+            Strips.Add(png);
+            return Task.FromResult(true);
         }
     }
 }

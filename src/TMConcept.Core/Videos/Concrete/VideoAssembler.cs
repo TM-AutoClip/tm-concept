@@ -492,6 +492,9 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
     /// </summary>
     private async Task<IReadOnlyList<string>> MotionAsync(string video, RenderInput input, string folder, string work, CancellationToken cancellationToken)
     {
+        // The strips belong to this video only: an existing folder's older strips would show findings it does not have.
+        var checks = Path.Combine(folder, VideoFolders.Checks);
+        TryDelete(checks);
         IReadOnlyList<MotionFinding> findings;
         try
         {
@@ -517,7 +520,6 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
 
         // Logged for the file only: the activity panel gets the warnings in the user's language from the codes (the video page).
         logger.LogWarning(Activity.LogEvents.OnScreen, "Motion check findings: {Findings}", string.Join(" · ", findings));
-        var checks = Path.Combine(folder, VideoFolders.Checks);
         foreach (var finding in findings.Take(MotionCheckLimits.MaxStrips))
         {
             try
@@ -680,6 +682,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
 
                 TryDelete(Path.Combine(folder, VideoFolders.Source));
                 TryDelete(Path.Combine(folder, VideoFolders.Audio));
+                TryDelete(Path.Combine(folder, VideoFolders.Checks));
             }
         }
 

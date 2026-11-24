@@ -67,9 +67,14 @@ public sealed class FfmpegMotionFrames(ToolInstaller tools, IProcessRunner runne
         }
         finally
         {
-            if (File.Exists(raw))
+            // A cancel kills ffmpeg, which can hold the file a moment longer: the cancel goes up as it is, the work folder's clean-up removes it.
+            try
             {
                 File.Delete(raw);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                logger.LogInformation("The motion check's frame file could not be removed yet ({Error})", ex.Message);
             }
         }
     }
