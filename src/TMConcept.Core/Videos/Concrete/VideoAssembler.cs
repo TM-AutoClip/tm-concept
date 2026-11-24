@@ -449,8 +449,10 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         var cueSources = input.Scenes.Select(s => new SubtitleSource((long)Math.Round(s.StartSeconds * 1000),
             clips.ElementAtOrDefault(s.Number - 1)?.DurationMs ?? (long)Math.Round(s.DurationSeconds * 1000), s.Caption)).ToList();
         // 0.1.48: the line leaves room for a growing highlighted word (F6), and the words are timed by the voice when whisper.cpp is there (F5).
+        // Subtitles that are not drawn (a template without them, or subtitles off) are not heard: no whisper.cpp run for the SRT file alone.
         var timing = await subtitleTiming.BuildAsync(input, clips, save.Profile.ContentLanguage,
-            SubtitleBuilder.LineLength(input.Width, input.Height, WordHighlight.GrowPercent(save.Options.Style)), cancellationToken).ConfigureAwait(false);
+            SubtitleBuilder.LineLength(input.Width, input.Height, WordHighlight.GrowPercent(save.Options.Style)),
+            save.Options.Style?.Subtitles ?? save.Options.Subtitles, cancellationToken).ConfigureAwait(false);
         var cues = timing.Cues;
         var overlay = await OverlayAsync(save, cues, cancellationToken).ConfigureAwait(false);
         if (save.Music is { } music)

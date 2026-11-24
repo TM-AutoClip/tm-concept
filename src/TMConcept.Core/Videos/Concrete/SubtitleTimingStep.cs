@@ -23,14 +23,16 @@ public sealed class SubtitleTimingStep(IWordRecognizer recognizer, ILogger<Subti
 
     /// <summary>
     /// The cues of <paramref name="input"/>'s narration (<paramref name="clips"/> per scene, <paramref name="language"/> the narration's
-    /// language code) at <paramref name="lineLength"/> characters per line.
+    /// language code) at <paramref name="lineLength"/> characters per line. <paramref name="shown"/>: whether the subtitles are drawn on the
+    /// picture; subtitles that are not (only the SRT file next to the video) are never heard, so a video without subtitles costs no
+    /// whisper.cpp run and gets no subtitle warning (times a voice engine gave itself are still used).
     /// </summary>
     public async Task<SubtitleTimingResult> BuildAsync(RenderInput input, IReadOnlyList<SpeechClip?> clips, string language, int lineLength,
-        CancellationToken cancellationToken)
+        bool shown, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(clips);
-        var hears = Hears;
+        var hears = shown && Hears;
         if (!hears && !clips.Any(c => c is { Words.Count: > 0 }))
         {
             return new SubtitleTimingResult(SubtitleBuilder.Build(VideoAssembler.SubtitleSources(input, clips), lineLength), [], []);

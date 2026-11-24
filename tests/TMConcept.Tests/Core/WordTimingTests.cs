@@ -239,13 +239,32 @@ public sealed class WordTimingTests
             foreach (var recognizer in new[] { new FakeWordRecognizer(supported: true, ready: false), new FakeWordRecognizer(supported: false, ready: true) })
             {
                 var step = new SubtitleTimingStep(recognizer, NullLogger<SubtitleTimingStep>.Instance);
-                var result = await step.BuildAsync(input, clips, "en", 26, CancellationToken.None);
+                var result = await step.BuildAsync(input, clips, "en", 26, shown: true, CancellationToken.None);
                 Shape(result.Cues).ShouldBe(Shape(SubtitleBuilder.Build(VideoAssembler.SubtitleSources(input, clips), 26)));
                 result.Cues.ShouldAllBe(c => c.Words.Count == 0);
                 result.Warnings.ShouldBeEmpty();
                 result.Heard.ShouldBeFalse();
                 recognizer.Heard.ShouldBeEmpty("nothing is heard without the component");
             }
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task SubtitlesThatAreNotDrawnAreNotHeard()
+    {
+        var (input, clips, folder) = Video();
+        try
+        {
+            var recognizer = new FakeWordRecognizer(true, true, _ => [H("The", 100, 300)]);
+            var step = new SubtitleTimingStep(recognizer, NullLogger<SubtitleTimingStep>.Instance);
+            var result = await step.BuildAsync(input, clips, "en", 26, shown: false, CancellationToken.None);
+            recognizer.Heard.ShouldBeEmpty("no whisper.cpp run for the SRT file alone");
+            Shape(result.Cues).ShouldBe(Shape(SubtitleBuilder.Build(VideoAssembler.SubtitleSources(input, clips), 26)));
+            result.Warnings.ShouldBeEmpty();
         }
         finally
         {
@@ -263,7 +282,7 @@ public sealed class WordTimingTests
                 ? [H("The", 100, 300), H("city", 300, 700), H("fell", 700, 1000), H("at", 1000, 1100), H("dawn", 1100, 1500), H("the", 2000, 2200), H("walls", 2200, 2500), H("were", 2500, 2650), H("silent", 2650, 2950)]
                 : [H("a", 100, 200), H("new", 200, 450), H("age", 450, 800), H("began", 800, 1300)]);
             var step = new SubtitleTimingStep(recognizer, NullLogger<SubtitleTimingStep>.Instance);
-            var result = await step.BuildAsync(input, clips, "en", 26, CancellationToken.None);
+            var result = await step.BuildAsync(input, clips, "en", 26, shown: true, CancellationToken.None);
             recognizer.Heard.Count.ShouldBe(2);
             result.Heard.ShouldBeTrue();
             result.Warnings.ShouldBeEmpty();
@@ -289,7 +308,7 @@ public sealed class WordTimingTests
                 ? throw new InvalidOperationException("whisper.cpp ended with code 3")
                 : [H("The", 100, 300), H("city", 300, 700), H("fell", 700, 1000), H("at", 1000, 1100), H("dawn", 1100, 1500)]);
             var step = new SubtitleTimingStep(recognizer, NullLogger<SubtitleTimingStep>.Instance);
-            var result = await step.BuildAsync(input, clips, "en", 26, CancellationToken.None);
+            var result = await step.BuildAsync(input, clips, "en", 26, shown: true, CancellationToken.None);
             result.Warnings.ShouldContain(VideoWarnings.SubtitleEstimated);
             result.Warnings.ShouldContain(VideoWarnings.SubtitleListen, "the second sentence of scene 1 was not heard");
             var estimated = SubtitleBuilder.Build(VideoAssembler.SceneSources(input.Scenes[1], clips[1]), 26);
@@ -310,7 +329,7 @@ public sealed class WordTimingTests
             clips[1] = clips[1]! with { Words = [H("A", 0, 100), H("new", 100, 300), H("age", 300, 600), H("began.", 600, 1000)] };
             var recognizer = new FakeWordRecognizer(true, false);
             var step = new SubtitleTimingStep(recognizer, NullLogger<SubtitleTimingStep>.Instance);
-            var result = await step.BuildAsync(input, clips, "en", 26, CancellationToken.None);
+            var result = await step.BuildAsync(input, clips, "en", 26, shown: true, CancellationToken.None);
             recognizer.Heard.ShouldBeEmpty();
             result.Cues.Single(c => c.StartMs >= 3000).Words.Count.ShouldBe(4);
             result.Cues.Where(c => c.StartMs < 3000).ShouldAllBe(c => c.Words.Count == 0, "the other scene keeps its estimate");

@@ -62,6 +62,12 @@ public sealed class WhisperCppRecognizer(ToolInstaller tools, RecognizerModelSto
             logger.LogInformation("whisper.cpp heard {Count} words in {Seconds:0.0} s", words.Count, watch.Elapsed.TotalSeconds);
             return words;
         }
+        catch (Exception ex) when (ex is ToolInstallException or System.ComponentModel.Win32Exception)
+        {
+            // A program removed since Ready was read, or one Windows will not start (blocked, a missing library): the subtitles keep their
+            // estimated times like any other failure of the hearing (IWordRecognizer's contract), the video goes on.
+            throw new InvalidOperationException("whisper.cpp could not be started: " + ex.Message, ex);
+        }
         finally
         {
             _one.Release();
