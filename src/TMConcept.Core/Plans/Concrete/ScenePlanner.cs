@@ -13,7 +13,7 @@ namespace TMConcept.Core.Plans;
 /// 0.1.41) gets ONE repair request), cleaned
 /// (<see cref="PlanReader"/>); then, when an image points model is chosen, every image scene's points are placed where that model sees them
 /// (<see cref="ImagePointPrompt"/>, one call per picture, a failure keeps the plan's guesses); then the beats are timed from the spoken
-/// sentences (<see cref="PlanTiming"/>). A plan that still does not fit after the repair is used as far as it goes: a scene without a plan
+/// sentences (<see cref="PlanTiming"/>). The transitions, eases and drifts are settled without a call (<see cref="PlanMotion"/>, 0.1.42). A plan that still does not fit after the repair is used as far as it goes: a scene without a plan
 /// shows its picture or its title (never a stopped video for an overlay). Every call is counted.
 /// </summary>
 public sealed class ScenePlanner(IChatClientFactory chats, ICostCalculator costs, ILogger<ScenePlanner> logger)
@@ -31,7 +31,9 @@ public sealed class ScenePlanner(IChatClientFactory chats, ICostCalculator costs
             return new PlanScene(s.Number, s.DurationSeconds, s.Visual, PlanTiming.Sentences(s.Caption, spans), prompt);
         }).ToList();
         var motion = request.Style?.Motion ?? Styles.MotionIntensity.Normal;
-        var system = PlanPromptBuilder.System(motion);
+        var tempo = request.Style?.Tempo ?? Speech.NarrationTempos.Default;
+        var family = request.Style is { DrawStyle: not Styles.DrawStyle.Auto } style ? Styles.DrawStyles.Of(style.DrawStyle).Transition : string.Empty;
+        var system = PlanPromptBuilder.System(motion, tempo, family);
         var user = PlanPromptBuilder.User(input.Title, input.Language, request.Style, scenes);
         var model = request.CodeModel;
         var chat = chats.Create(model.Model, model.Key.Secret);
@@ -71,7 +73,7 @@ public sealed class ScenePlanner(IChatClientFactory chats, ICostCalculator costs
         var items = PlanReader.Read(first[0]);
 
         // The structure and the plan rules (0.1.41) share the single repair; a repair that still breaks a rule is used as far as it goes.
-        var check = new PlanCheck(scenes, input.Scenes.Select(s => s.Image.Length > 0).ToList(), request.Subtitles);
+        var check = new PlanCheck(scenes, input.Scenes.Select(s => s.Image.Length > 0).ToList(), request.Subtitles, tempo);
         var problems = PlanReader.Problems(items, check);
         if (problems.Count > 0)
         {
@@ -97,6 +99,7 @@ public sealed class ScenePlanner(IChatClientFactory chats, ICostCalculator costs
         }
 
         var cleaned = PlanReader.Clean(items, scenes.Select(s => s.Sentences.Count).ToList(), input.Scenes.Select(s => s.Image.Length > 0).ToList());
+        PlanMotion.Apply(cleaned, input.Scenes.Select(s => s.Transition).ToList(), tempo, family);
         steps.Report(VideoSteps.Code, 0.7);
         if (request.PointsModel is { } points)
         {
@@ -112,8 +115,8 @@ public sealed class ScenePlanner(IChatClientFactory chats, ICostCalculator costs
             scene.Plan = plan;
         }
 
-        logger.LogInformation("Scene plan: {Bases}; {Beats} beats", string.Join(", ", cleaned.GroupBy(c => c.Plan.Base).Select(g => g.Key + " " + g.Count())),
-            cleaned.Sum(c => c.Plan.Beats.Count));
+        logger.LogInformation("Scene plan: {Bases}; {Beats} beats; transitions {Transitions}", string.Join(", ", cleaned.GroupBy(c => c.Plan.Base).Select(g => g.Key + " " + g.Count())),
+            cleaned.Sum(c => c.Plan.Beats.Count), string.Join(", ", cleaned.Skip(1).Select(c => c.Plan.Transition.Length > 0 ? c.Plan.Transition : "-")));
         return missing;
     }
 

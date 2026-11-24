@@ -8,4 +8,10 @@ public sealed class PlanCamera
 
     /// <summary>Zoom, 1 to 2.2.</summary>
     public double Zoom { get; set; } = 1;
+
+    /// <summary>
+    /// The GSAP ease of the move (F9, 0.1.42; one of <see cref="PlanEases.All"/>, checked by <see cref="PlanMotion"/>); empty in a plan made
+    /// before, which moves on <see cref="PlanEases.Classic"/> as it did.
+    /// </summary>
+    public string Ease { get; set; } = string.Empty;
 }

@@ -131,6 +131,36 @@ public sealed class MotionCheckTests
     }
 
     [Fact]
+    public void TheDrawersTransitionIsNoCutFindingAPlaceholderSceneKeepsTheOldWindow()
+    {
+        var series = Series([.. Moves(0, 10), .. Enumerable.Range(10, 10).Select(Other)]);
+        Codes(series, new MotionExpectations([0.6], [], [])).ShouldBe([VideoWarnings.MotionCut], "0.4 s after the start is no longer the scene's own cut");
+        Codes(series, new MotionExpectations([0.6], [], [], [(0.15, 1.05)])).ShouldBeEmpty("a push of 0.45 s moves most of the frame at once");
+
+        var input = new RenderInput
+        {
+            DurationSeconds = 12,
+            Scenes =
+            [
+                new RenderScene { Number = 1, StartSeconds = 0, DurationSeconds = 4, Plan = new RenderPlan { Base = PlanBases.Title } },
+                new RenderScene
+                {
+                    Number = 2, StartSeconds = 4, DurationSeconds = 4,
+                    Plan = new RenderPlan { Base = PlanBases.Title, Transition = "push-left", TransitionSeconds = 0.45 },
+                },
+                new RenderScene
+                {
+                    Number = 3, StartSeconds = 8, DurationSeconds = 4, Transition = SceneTransitions.Cut,
+                    Plan = new RenderPlan { Base = PlanBases.Title, Transition = "push-left", TransitionSeconds = 0.45 },
+                },
+            ],
+        };
+        var window = MotionCheck.Expect(input).Transitions.ShouldNotBeNull().ShouldHaveSingleItem("the placeholder's hard cut wins over the plan");
+        window.From.ShouldBe(3.55, 1e-9);
+        window.To.ShouldBe(4.45, 1e-9);
+    }
+
+    [Fact]
     public void AHardCutToBlackAtTheEndIsFoundAFadeOutIsNot()
     {
         Codes(Series([.. Moves(0, 20), Plain(1), Plain(1)])).ShouldBe([VideoWarnings.MotionEndBlack]);

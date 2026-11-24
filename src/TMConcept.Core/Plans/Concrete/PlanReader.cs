@@ -51,11 +51,13 @@ public static class PlanReader
 
     /// <summary>
     /// The plan rules the code enforces (F2, 0.1.41), applied in this order after the structure: one background at most 40 % of the video,
-    /// no repeated shot, beats per sentence, label words, the subtitles' bottom quarter, every action's points in its own scene.
+    /// no repeated shot, beats per sentence, label words, the subtitles' bottom quarter, every action's points in its own scene and (0.1.42) the
+    /// tempo's targets.
     /// </summary>
     public static IReadOnlyList<IPlanRule> Rules { get; } =
     [
         new BackgroundShareRule(), new RepeatedShotRule(), new BeatsPerSentenceRule(), new LabelWordsRule(), new SubtitleAreaRule(), new ActionPointsRule(),
+        new TempoTargetRule(),
     ];
 
     /// <summary>
@@ -239,6 +241,7 @@ public static class PlanReader
         {
             Base = Str(scene["base"]).ToLowerInvariant(),
             Title = Str(scene["title"]),
+            Transition = Str(scene["transition"]).ToLowerInvariant(),
             Map = scene["region"] is JsonArray region ? new PlanMap { Region = region.Select(Num).Where(v => v is not null).Select(v => v!.Value).ToList() } : null,
             Nodes = Objects(scene["nodes"]).Select(n => new PlanNode { Id = Str(n["id"]), Label = Str(n["label"]), X = Num(n["x"]) ?? 0.5, Y = Num(n["y"]) ?? 0.5 }).ToList(),
             Links = Objects(scene["links"]).Select(l => new PlanLink { From = Str(l["from"]), To = Str(l["to"]) }).ToList(),
@@ -249,7 +252,9 @@ public static class PlanReader
             Beats = Objects(scene["beats"]).Select(b => new PlanBeat
             {
                 Sentence = (int)(Num(b["sentence"]) ?? 1),
-                Camera = Str(b["focus"]).Length > 0 || (Num(b["zoom"]) ?? 1) > 1 ? new PlanCamera { Focus = Str(b["focus"]), Zoom = Num(b["zoom"]) ?? 1 } : null,
+                Camera = Str(b["focus"]).Length > 0 || (Num(b["zoom"]) ?? 1) > 1
+                    ? new PlanCamera { Focus = Str(b["focus"]), Zoom = Num(b["zoom"]) ?? 1, Ease = Str(b["ease"]) }
+                    : null,
                 Actions = Objects(b["actions"]).Select(a => new PlanAction
                 {
                     Type = Str(a["type"]).ToLowerInvariant(), From = Str(a["from"]), To = Str(a["to"]),

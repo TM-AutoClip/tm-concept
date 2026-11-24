@@ -308,7 +308,52 @@
     var x = Math.min(0, Math.max(W - W * z, W / 2 - cx * z));
     var y = Math.min(0, Math.max(H - H * z, (upper + lower) / 2 - cy * z));
     var d = calm ? Math.max(1.5, span) : Math.max(0.8, Math.min(1.6, span * 0.5));
-    tl.to(ctx.camera, { x: x, y: y, scale: z, duration: d, ease: "power2.inOut" }, at);
+    tl.to(ctx.camera, { x: x, y: y, scale: z, duration: d, ease: cam.ease || "power2.inOut" }, at);
+  }
+
+  // The way a scene comes in (0.1.42, plan.transition, settled by the app): the new layer over the old one, which is hidden once it is
+  // covered. Directions are where the picture moves ("left": the new scene comes from the right). Without a transition (a plan made before,
+  // the first scene, a placeholder of the text) the scene appears at once, as it always did.
+  var shifts = { left: [1, 0], right: [-1, 0], up: [0, 1], down: [0, -1] };
+  var wipes = { left: "inset(0% 0% 0% 100%)", right: "inset(0% 100% 0% 0%)", up: "inset(100% 0% 0% 0%)", down: "inset(0% 0% 100% 0%)" };
+
+  function transitionIn(layer, previous, scene, plan, start) {
+    var name = plan.transition || "";
+    var d = plan.transitionSeconds || 0;
+    var dash = name.lastIndexOf("-");
+    var family = name === "blur-dissolve" || name === "zoom-through" || dash < 0 ? name : name.slice(0, dash);
+    var way = shifts[name.slice(dash + 1)] ? name.slice(dash + 1) : "left";
+    var v = shifts[way];
+    if (!previous || scene.transition || d <= 0 || ["crossfade", "blur-dissolve", "slide", "push", "wipe", "zoom-through"].indexOf(family) < 0) {
+      tl.set(layer, { opacity: 1 }, start);
+      return;
+    }
+
+    if (family === "crossfade") {
+      tl.fromTo(layer, { opacity: 0 }, { opacity: 1, duration: d, ease: "power2.inOut", immediateRender: false }, start);
+    } else if (family === "blur-dissolve") {
+      tl.fromTo(previous, { filter: "blur(0px)" }, { filter: "blur(10px)", duration: d, ease: "power2.inOut", immediateRender: false }, start);
+      tl.fromTo(layer, { opacity: 0, filter: "blur(10px)" }, { opacity: 1, filter: "blur(0px)", duration: d, ease: "power2.inOut", immediateRender: false }, start);
+    } else if (family === "zoom-through") {
+      // Out 1 -> 1.2 on power3.in before the start, in 0.75 -> 1 on expo.out after it, never more than 10 px of blur.
+      var half = d / 2;
+      tl.fromTo(previous, { scale: 1, filter: "blur(0px)", transformOrigin: "50% 50%" },
+        { scale: 1.2, filter: "blur(10px)", duration: half, ease: "power3.in", transformOrigin: "50% 50%", immediateRender: false }, Math.max(0, start - half));
+      tl.fromTo(layer, { opacity: 0, scale: 0.75, filter: "blur(10px)", transformOrigin: "50% 50%" },
+        { opacity: 1, scale: 1, filter: "blur(0px)", duration: half, ease: "expo.out", transformOrigin: "50% 50%", immediateRender: false }, start);
+      d = half;
+    } else if (family === "wipe") {
+      tl.set(layer, { opacity: 1 }, start);
+      tl.fromTo(layer, { clipPath: wipes[way] }, { clipPath: "inset(0% 0% 0% 0%)", duration: d, ease: "power2.inOut", immediateRender: false }, start);
+    } else {
+      tl.set(layer, { opacity: 1 }, start);
+      tl.fromTo(layer, { x: v[0] * W, y: v[1] * H }, { x: 0, y: 0, duration: d, ease: "power3.inOut", immediateRender: false }, start);
+      if (family === "push") {
+        tl.fromTo(previous, { x: 0, y: 0 }, { x: -v[0] * W, y: -v[1] * H, duration: d, ease: "power3.inOut", immediateRender: false }, start);
+      }
+    }
+
+    tl.set(previous, { opacity: 0 }, start + d);
   }
 
   function presenter(ctx, beats, sceneStart, sceneEnd) {
@@ -342,20 +387,34 @@
     tl.set(spot, {}, sceneEnd);
   }
 
+  var previous = null;
   input.scenes.forEach(function (scene, index) {
     var plan = scene.plan || { base: scene.image ? "image" : "title" };
     var start = scene.startSeconds, end = scene.startSeconds + scene.durationSeconds;
     var layer = el("div", root, "position:absolute;left:0;top:0;width:100%;height:100%;overflow:hidden;opacity:0;background:" + C.background + ";");
-    tl.set(layer, { opacity: 1 }, start);
+    transitionIn(layer, previous, scene, plan, start);
+    previous = layer;
     var camera = el("div", layer, "position:absolute;left:0;top:0;width:100%;height:100%;transform-origin:0 0;");
     var project = null;
     var countries = {};
     if (scene.image && plan.base === "image") {
       var picture = el("img", camera, "position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;");
       picture.src = scene.image;
-      // A slow drift keeps a still picture alive; the plan's camera takes over at its beats.
+      // A slow drift keeps a still picture alive; the plan's camera takes over at its beats. A tight tempo (0.1.42, plan.drift) moves it the
+      // film's way (a pan at 1.12 over 80 % of the room that leaves) or pushes in; otherwise the slight zoom it always had.
       if (!(plan.beats || []).some(function (b) { return b.camera; })) {
-        tl.fromTo(camera, { scale: 1 }, { scale: calm ? 1.04 : 1.08, duration: scene.durationSeconds, ease: "none", transformOrigin: "50% 50%" }, start);
+        var drift = plan.drift || "";
+        var big = calm ? 1.06 : 1.12;
+        if (shifts[drift]) {
+          var room = (big - 1) / 2 * 0.8;
+          var s = shifts[drift];
+          tl.fromTo(camera, { scale: big, x: s[0] * room * W, y: s[1] * room * H, transformOrigin: "50% 50%" },
+            { scale: big, x: -s[0] * room * W, y: -s[1] * room * H, duration: scene.durationSeconds, ease: "sine.inOut", transformOrigin: "50% 50%" }, start);
+        } else if (drift === "in") {
+          tl.fromTo(camera, { scale: 1, transformOrigin: "50% 50%" }, { scale: big, duration: scene.durationSeconds, ease: "power1.inOut", transformOrigin: "50% 50%" }, start);
+        } else {
+          tl.fromTo(camera, { scale: 1 }, { scale: calm ? 1.04 : 1.08, duration: scene.durationSeconds, ease: "none", transformOrigin: "50% 50%" }, start);
+        }
       }
     }
 

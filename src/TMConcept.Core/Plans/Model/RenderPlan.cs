@@ -30,4 +30,21 @@ public sealed class RenderPlan
 
     /// <summary>The beats, in order.</summary>
     public List<PlanBeat> Beats { get; set; } = [];
+
+    /// <summary>
+    /// How the scene comes in (F1, 0.1.42): a full name of the drawer's catalog (<see cref="Scenes.SceneTransitions.Catalog"/>, e.g.
+    /// <c>push-left</c>), chosen by the plan and settled by <see cref="PlanMotion"/>. Empty for the first scene, for a scene whose text asks for
+    /// its own transition (a placeholder wins) and in a plan made before: then the scene appears at once, as it always did.
+    /// </summary>
+    public string Transition { get; set; } = string.Empty;
+
+    /// <summary>Seconds of <see cref="Transition"/> (the app's, from the tempo's energy; 0 = none).</summary>
+    public double TransitionSeconds { get; set; }
+
+    /// <summary>
+    /// The slow move of a still picture without camera beats (S4, 0.1.42): empty = the slight zoom it always had (natural and relaxed tempo);
+    /// for a tight tempo the film's direction (<c>left</c>, <c>right</c>, <c>up</c>, <c>down</c>: a pan that way) or <c>in</c> (a push in)
+    /// when the film has no directional transition.
+    /// </summary>
+    public string Drift { get; set; } = string.Empty;
 }

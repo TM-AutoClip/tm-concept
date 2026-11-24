@@ -8,10 +8,12 @@ namespace TMConcept.Core.Styles;
 /// (<paramref name="Drawing"/>), its material and motion rules (<paramref name="Craft"/>), the texture the app lays over the picture, a matching
 /// built-in palette (<paramref name="PaletteId"/>, empty = none) and, for a storytelling style, what the concept must be written for
 /// (<paramref name="ConceptGuidance"/>, empty = nothing). <paramref name="PrefersImages"/>: the look needs an image model (code alone draws
-/// it only roughly). The prompts are English (models write code best in English); the guidance is in the concept prompt's language.
+/// it only roughly). <paramref name="Transition"/> (F1, 0.1.42): the family of scene transitions the look uses in the app's drawer
+/// (<see cref="Scenes.SceneTransitions"/>: paper slides, a drafting board or a pencil wipes like an eraser, a terminal cuts; empty = the
+/// tempo's own). The prompts are English (models write code best in English); the guidance is in the concept prompt's language.
 /// </summary>
 public sealed record DrawStyleDefinition(DrawStyle Style, string Key, string ImagePrompt, string Drawing, string Craft, StyleTexture Texture,
-    string PaletteId, LocalizedText ConceptGuidance, bool PrefersImages = false)
+    string PaletteId, LocalizedText ConceptGuidance, bool PrefersImages = false, string Transition = "")
 {
     /// <summary>Whether a concept written for this style differs from a plain one.</summary>
     public bool HasConceptGuidance => ConceptGuidance.Tr.Length > 0 || ConceptGuidance.En.Length > 0;

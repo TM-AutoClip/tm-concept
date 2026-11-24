@@ -144,7 +144,7 @@ public sealed class PlanRulesTests
     public void TheStructureComesFirstThenTheRulesInOrderAndARepairThatLosesASceneIsNotUsed()
     {
         PlanReader.Rules.Select(r => r.GetType()).ShouldBe([typeof(BackgroundShareRule), typeof(RepeatedShotRule), typeof(BeatsPerSentenceRule),
-            typeof(LabelWordsRule), typeof(SubtitleAreaRule), typeof(ActionPointsRule)]);
+            typeof(LabelWordsRule), typeof(SubtitleAreaRule), typeof(ActionPointsRule), typeof(TempoTargetRule)]);
         var check = Check(3);
         var first = new[] { Item(1, Title()), Item(2, Title("Two")), Item(3, Map(20, Beat(1, actions: [Pin("a", "A very long label here")]))) };
         var problems = PlanReader.Problems(first, check);

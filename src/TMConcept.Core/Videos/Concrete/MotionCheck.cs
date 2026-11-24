@@ -22,6 +22,7 @@ public static class MotionCheck
         var starts = input.Scenes.Where(s => s.Number > 1).Select(s => s.StartSeconds).ToList();
         var fades = VideoAssembler.Fades(input).Select(ms => ms / 1000.0).ToList();
         var still = new List<(double From, double To)>();
+        var moves = new List<(double From, double To)>();
         if (input.Style is { EndCardSeconds: > 0 } style)
         {
             var card = Math.Max(0, input.DurationSeconds - style.EndCardSeconds);
@@ -32,11 +33,16 @@ public static class MotionCheck
         foreach (var scene in input.Scenes.Where(s => s.Plan is not null))
         {
             var end = scene.StartSeconds + scene.DurationSeconds;
-            var moves = scene.Plan!.Beats.Where(b => b.Camera is not null || b.Actions.Count > 0)
+            if (scene.Plan!.TransitionSeconds > 0 && scene.Transition.Length == 0)
+            {
+                moves.Add((scene.StartSeconds - scene.Plan.TransitionSeconds, scene.StartSeconds + scene.Plan.TransitionSeconds));
+            }
+
+            var beats = scene.Plan.Beats.Where(b => b.Camera is not null || b.Actions.Count > 0)
                 .Select(b => (From: b.Start, To: b.Start + MotionCheckLimits.BeatMotionSeconds)).Prepend((From: scene.StartSeconds, To: scene.StartSeconds))
                 .OrderBy(m => m.From).ToList();
             var at = scene.StartSeconds;
-            foreach (var (from, to) in moves)
+            foreach (var (from, to) in beats)
             {
                 if (from > at)
                 {
@@ -52,7 +58,7 @@ public static class MotionCheck
             }
         }
 
-        return new MotionExpectations(starts, fades, still);
+        return new MotionExpectations(starts, fades, still, moves);
     }
 
     /// <summary>The findings of <paramref name="series"/> in time order (empty = nothing to look at).</summary>
@@ -88,7 +94,8 @@ public static class MotionCheck
             if (series.CutShare[i] > MotionCheckLimits.CutShare && series.Change[i] > MotionCheckLimits.CutChange
                 && t > MotionCheckLimits.StartSkipSeconds
                 && !edges.Any(e => Math.Abs(e - t) <= MotionCheckLimits.SceneEdgeSeconds + (1 / series.Fps))
-                && !NearFade(t, expect) && !Extreme(series.Luminance[i]) && !Extreme(series.Luminance[i - 1]))
+                && !NearFade(t, expect) && !(expect.Transitions ?? []).Any(m => t >= m.From && t <= m.To + (1 / series.Fps))
+                && !Extreme(series.Luminance[i]) && !Extreme(series.Luminance[i - 1]))
             {
                 findings.Add(new MotionFinding(VideoWarnings.MotionCut, t, t));
             }

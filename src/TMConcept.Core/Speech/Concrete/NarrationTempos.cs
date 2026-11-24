@@ -17,4 +17,12 @@ public static class NarrationTempos
         NarrationTempo.Relaxed => new NarrationPacing(550, 1050),
         _ => new NarrationPacing(300, 650),
     };
+
+    /// <summary>The plan targets of <paramref name="tempo"/> (F9, 0.1.42; an unknown value reads as <see cref="Default"/>).</summary>
+    public static TempoTarget Targets(NarrationTempo tempo) => tempo switch
+    {
+        NarrationTempo.Tight => NarrationTempoTargets.Tight,
+        NarrationTempo.Relaxed => NarrationTempoTargets.Relaxed,
+        _ => NarrationTempoTargets.Natural,
+    };
 }
