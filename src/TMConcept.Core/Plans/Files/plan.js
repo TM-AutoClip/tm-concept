@@ -17,6 +17,8 @@
   var crafts = { "paper-cut": "slide", "terminal": "type", "flat": "pop", "cartoon": "pop", "infographic": "pop", "isometric": "rise" };
   var craft = crafts[style.drawStyle] || "draw";
   var glow = ["neon", "hologram", "terminal"].indexOf(style.drawStyle) >= 0;
+  // F13 (0.1.51): the pixel art layer (input.style.pixel, only for that style; absent = nothing of it runs, the video as before).
+  var pixel = style.pixel || null;
   var C = {
     accent: TM.color("accent"), accent2: TM.color("accent2"), text: TM.color("text"), background: TM.color("background"),
     surface: TM.color("surface"), muted: TM.color("muted")
@@ -324,12 +326,16 @@
     var family = name === "blur-dissolve" || name === "zoom-through" || dash < 0 ? name : name.slice(0, dash);
     var way = shifts[name.slice(dash + 1)] ? name.slice(dash + 1) : "left";
     var v = shifts[way];
-    if (!previous || scene.transition || d <= 0 || ["crossfade", "blur-dissolve", "slide", "push", "wipe", "zoom-through"].indexOf(family) < 0) {
+    var known = ["crossfade", "blur-dissolve", "slide", "push", "wipe", "zoom-through"];
+    if (pixel) known = known.concat(["dissolve", "iris", "blocks"]);
+    if (!previous || scene.transition || d <= 0 || known.indexOf(family) < 0) {
       tl.set(layer, { opacity: 1 }, start);
       return;
     }
 
-    if (family === "crossfade") {
+    if (family === "dissolve" || family === "iris" || family === "blocks") {
+      pixelTransition(layer, family, way, start, d);
+    } else if (family === "crossfade") {
       tl.fromTo(layer, { opacity: 0 }, { opacity: 1, duration: d, ease: "power2.inOut", immediateRender: false }, start);
     } else if (family === "blur-dissolve") {
       tl.fromTo(previous, { filter: "blur(0px)" }, { filter: "blur(10px)", duration: d, ease: "power2.inOut", immediateRender: false }, start);
@@ -575,6 +581,239 @@
     tl.to(clock, { t: length, duration: length, ease: "none", onUpdate: function () { paint(tl.time()); } }, 0);
   }
 
+  // F13 (0.1.51): pixel art, after ReelMimic's own pixel-art engine (MIT: a small buffer blown up without smoothing, colour ramps, ordered
+  // dithering, a dissolve, an iris and blocks; written again here). Every scene's ground (its picture, or a dithered sky with hills for a
+  // title, or a plain dithered sky under a map or a diagram) is drawn on a pixel.width x pixel.height buffer in the ramps' colours and blown
+  // up onto a canvas under the scene's drawings; a tween of the timeline repaints it pixel.steps times a second (the clouds move in whole art
+  // pixels). No timer, no other process, no unseeded randomness: a frame is the same however it is reached.
+  var grounds = [];
+  var masks = {};
+  var BAYER8 = pixel ? bayer(8) : null;
+  var BAYER4 = pixel ? bayer(4) : null;
+
+  // The ordered dither matrix of side n (a power of two) by the recursive rule [[4M, 4M+2], [4M+3, 4M+1]], as thresholds from 0 to 1.
+  function bayer(n) {
+    var m = [0];
+    for (var size = 1; size < n; size *= 2) {
+      var next = new Array(size * size * 4);
+      for (var y = 0; y < size; y++) {
+        for (var x = 0; x < size; x++) {
+          var v = m[y * size + x] * 4;
+          next[y * 2 * size + x] = v;
+          next[y * 2 * size + x + size] = v + 2;
+          next[(y + size) * 2 * size + x] = v + 3;
+          next[(y + size) * 2 * size + x + size] = v + 1;
+        }
+      }
+      m = next;
+    }
+    return m.map(function (v) { return (v + 0.5) / (n * n); });
+  }
+
+  function ramp(name) {
+    var list = (pixel.ramps && pixel.ramps[name]) || [];
+    return list.length > 0 ? list.map(rgb) : [rgb(C[name] || C.background)];
+  }
+
+  function rampAt(list, i) { return list[Math.max(0, Math.min(list.length - 1, i))]; }
+
+  // Every colour of every ramp: the only colours a pixel picture may have.
+  function inks() {
+    var all = [];
+    for (var name in pixel.ramps || {}) if (Object.prototype.hasOwnProperty.call(pixel.ramps, name)) all = all.concat(ramp(name));
+    return all.length > 0 ? all : [rgb(C.background), rgb(C.surface), rgb(C.accent), rgb(C.text)];
+  }
+
+  function pixelGround(scene, plan, camera, picture, index) {
+    var lw = pixel.width || 480, lh = pixel.height || 270;
+    var canvas = el("canvas", camera, "position:absolute;left:0;top:0;width:100%;height:100%;image-rendering:pixelated;");
+    canvas.setAttribute("data-tm-pixel", "1");
+    canvas.width = W;
+    canvas.height = H;
+    var g = canvas.getContext("2d");
+    var low = document.createElement("canvas");
+    low.width = lw;
+    low.height = lh;
+    var lg = low.getContext("2d");
+    if (!g || !lg) return;
+    g.imageSmoothingEnabled = false;
+    grounds.push({
+      from: scene.startSeconds, to: scene.startSeconds + scene.durationSeconds, g: g, low: low, lg: lg, lw: lw, lh: lh, picture: picture,
+      hills: plan.base === "title" || (!picture && plan.base === "image"), key: "pixel" + index, base: null, clouds: null, painted: -1
+    });
+  }
+
+  // A picture: cropped like object-fit: cover, shrunk onto the buffer, then every pixel moved to the nearest ramp colour after an ordered
+  // dither offset. A picture the page may not read keeps its shrunk pixels (still blocky, in its own colours).
+  function pictureBase(gr) {
+    var img = gr.picture;
+    if (!img.complete || !img.naturalWidth) return null;
+    var k = Math.max(gr.lw / img.naturalWidth, gr.lh / img.naturalHeight);
+    var dw = img.naturalWidth * k, dh = img.naturalHeight * k;
+    gr.lg.imageSmoothingEnabled = true;
+    gr.lg.imageSmoothingQuality = "high";
+    gr.lg.drawImage(img, (gr.lw - dw) / 2, (gr.lh - dh) / 2, dw, dh);
+    var data;
+    try {
+      data = gr.lg.getImageData(0, 0, gr.lw, gr.lh);
+    } catch (e) {
+      return "drawn";
+    }
+    var colors = inks();
+    var d = data.data;
+    for (var i = 0, p = 0; i < d.length; i += 4, p++) {
+      var x = p % gr.lw, y = (p / gr.lw) | 0;
+      var t = (BAYER4[((y & 3) << 2) | (x & 3)] - 0.5) * 40;
+      var r = d[i] + t, gg = d[i + 1] + t, b = d[i + 2] + t;
+      var best = colors[0], bd = Infinity;
+      for (var c = 0; c < colors.length; c++) {
+        var q = colors[c], dr = r - q[0], dg = gg - q[1], db = b - q[2];
+        var dist = 3 * dr * dr + 4 * dg * dg + 2 * db * db;
+        if (dist < bd) { bd = dist; best = q; }
+      }
+      d[i] = best[0]; d[i + 1] = best[1]; d[i + 2] = best[2]; d[i + 3] = 255;
+    }
+    return data;
+  }
+
+  // No picture: the background ramp from dark (top) to light (horizon) in dithered bands; under a title, seeded hills in the surface ramp
+  // with a light rim; three clouds in the light end of the background ramp that drift in whole art pixels.
+  function skyBase(gr) {
+    var data = gr.lg.createImageData(gr.lw, gr.lh);
+    var d = data.data;
+    var sky = ramp("background"), land = ramp("surface");
+    var horizon = gr.hills ? Math.round(gr.lh * 0.72) : gr.lh;
+    var r = rnd(gr.key);
+    var a1 = r() * 6.283, a2 = r() * 6.283, f1 = 1.5 + r() * 1.5, f2 = 4 + r() * 3;
+    var mid = Math.floor(sky.length / 2);
+    for (var y = 0; y < gr.lh; y++) {
+      for (var x = 0; x < gr.lw; x++) {
+        var i = (y * gr.lw + x) * 4;
+        var th = BAYER4[((y & 3) << 2) | (x & 3)];
+        var top = horizon - Math.round(gr.lh * (0.05 * Math.sin(a1 + f1 * x / gr.lw * 6.283) + 0.025 * Math.sin(a2 + f2 * x / gr.lw * 6.283) + 0.06));
+        var c;
+        if (gr.hills && y >= top) {
+          var depth = (y - top) / Math.max(1, gr.lh - top) * 2;
+          c = y === top ? rampAt(land, mid + 1) : rampAt(land, mid - Math.floor(depth) - (depth % 1 > th ? 1 : 0));
+        } else {
+          var f = y / Math.max(1, horizon) * 2;
+          c = rampAt(sky, mid - 1 + Math.floor(f) + (f % 1 > th ? 1 : 0));
+        }
+        d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = 255;
+      }
+    }
+    gr.clouds = [0, 1, 2].map(function () {
+      return { x: r() * gr.lw, y: Math.round(gr.lh * (0.08 + r() * 0.3)), w: Math.round(gr.lw * (0.06 + r() * 0.06)), every: 2 + Math.floor(r() * 3) };
+    });
+    gr.cloud = rampAt(sky, sky.length - 1);
+    return data;
+  }
+
+  function paintGround(gr, time) {
+    if (time < gr.from || time > gr.to + 1) return;
+    var step = Math.max(0, Math.floor(Math.min(time, gr.to) * (pixel.steps || 12) + 1e-6));
+    if (gr.base && (gr.picture || step === gr.painted)) return;
+    if (!gr.base) {
+      gr.base = gr.picture ? pictureBase(gr) : skyBase(gr);
+      if (!gr.base) return;
+    }
+
+    gr.painted = step;
+    if (gr.base !== "drawn") gr.lg.putImageData(gr.base, 0, 0);
+    if (gr.clouds) {
+      gr.lg.fillStyle = "rgb(" + gr.cloud.join(",") + ")";
+      gr.clouds.forEach(function (c) {
+        var x = Math.round(((c.x + Math.floor(step / c.every)) % (gr.lw + c.w * 2)) - c.w);
+        gr.lg.fillRect(x, c.y, c.w, 2);
+        gr.lg.fillRect(x + Math.round(c.w * 0.2), c.y - 2, Math.round(c.w * 0.5), 2);
+        gr.lg.fillRect(x + Math.round(c.w * 0.35), c.y - 4, Math.round(c.w * 0.25), 2);
+      });
+    }
+    gr.g.clearRect(0, 0, W, H);
+    gr.g.drawImage(gr.low, 0, 0, W, H);
+  }
+
+  function pixelLayer() {
+    var length = input.durationSeconds || tl.duration();
+    var clock = { t: 0 };
+    grounds.forEach(function (gr) { paintGround(gr, gr.from); });
+    tl.to(clock, { t: length, duration: length, ease: "none", onUpdate: function () {
+      var t = tl.time();
+      grounds.forEach(function (gr) { paintGround(gr, t); });
+    } }, 0);
+  }
+
+  // The pixel transitions (plan.transition dissolve, iris, blocks-<way>): the new layer is uncovered over the old one in pixel.steps steps a
+  // second and whole art pixels, so no frame between the scenes is ever a colour of its own: never black (three dark frames in a row read
+  // as a blink). Dissolve = an 8 x 8 Bayer mask tiled at art-pixel size; iris = a circle from the middle; blocks = rows (columns for up and
+  // down) of pixel.block art pixels, each a little after the one before, coming from the side the picture moves away from.
+  function ditherMask(level) {
+    if (masks[level]) return masks[level];
+    var cell = Math.max(1, Math.round(W / (pixel.width || 480)));
+    var c = document.createElement("canvas");
+    c.width = 8 * cell;
+    c.height = 8 * cell;
+    var g = c.getContext("2d");
+    if (g) {
+      g.fillStyle = "#000";
+      for (var y = 0; y < 8; y++) for (var x = 0; x < 8; x++) if (BAYER8[y * 8 + x] < level / 64) g.fillRect(x * cell, y * cell, cell, cell);
+    }
+    masks[level] = { image: "url(" + c.toDataURL() + ")", size: (8 * cell) + "px " + (8 * cell) + "px" };
+    return masks[level];
+  }
+
+  function stairs(k, way, cell) {
+    var block = Math.max(2, (pixel.block || 16)) * cell;
+    var across = way !== "up" && way !== "down";
+    var span = across ? W : H, side = across ? H : W;
+    var rows = Math.ceil(side / block), lag = 0.5;
+    var pts = [];
+    for (var r = 0; r < rows; r++) {
+      var e = Math.max(0, Math.min(1, k * (1 + lag) - (r / rows) * lag));
+      var reach = Math.min(span, Math.round(e * span / block) * block);
+      var at = way === "left" ? W - reach : way === "up" ? H - reach : reach;
+      var a = r * block, b = Math.min(side, (r + 1) * block);
+      if (across) pts.push(at + "px " + a + "px", at + "px " + b + "px");
+      else pts.push(a + "px " + at + "px", b + "px " + at + "px");
+    }
+    var edge = way === "left" ? [W + "px 0px", W + "px " + H + "px"] : way === "up" ? ["0px " + H + "px", W + "px " + H + "px"]
+      : way === "down" ? ["0px 0px", W + "px 0px"] : ["0px 0px", "0px " + H + "px"];
+    return "polygon(" + [edge[0]].concat(pts).concat([edge[1]]).join(", ") + ")";
+  }
+
+  function pixelTransition(layer, family, way, start, d) {
+    var steps = Math.max(1, Math.round(d * (pixel.steps || 12)));
+    var cell = W / (pixel.width || 480);
+    var state = { k: 0 };
+    var shown = -1;
+    var apply = function () {
+      var s = Math.min(steps, Math.floor(state.k * steps + 1e-6));
+      if (s === shown) return;
+      shown = s;
+      var k = s / steps;
+      layer.style.clipPath = "";
+      layer.style.maskImage = "";
+      layer.style.webkitMaskImage = "";
+      if (k >= 1) return;
+      if (family === "dissolve") {
+        var m = ditherMask(Math.round(k * 64));
+        layer.style.maskImage = m.image;
+        layer.style.webkitMaskImage = m.image;
+        layer.style.maskSize = m.size;
+        layer.style.webkitMaskSize = m.size;
+        layer.style.maskRepeat = "repeat";
+        layer.style.webkitMaskRepeat = "repeat";
+      } else if (family === "iris") {
+        var reach = Math.sqrt(W * W + H * H) / 2;
+        layer.style.clipPath = "circle(" + (Math.round(reach * k / cell) * cell).toFixed(1) + "px at 50% 50%)";
+      } else {
+        layer.style.clipPath = stairs(k, way, cell);
+      }
+    };
+    tl.set(layer, { opacity: 1 }, start);
+    tl.fromTo(state, { k: 0 }, { k: 1, duration: d, ease: "none", immediateRender: false, onUpdate: apply }, start);
+  }
+
   var previous = null;
   input.scenes.forEach(function (scene, index) {
     var plan = scene.plan || { base: scene.image ? "image" : "title" };
@@ -606,7 +845,9 @@
       }
     }
 
+    if (pixel) pixelGround(scene, plan, camera, scene.image && plan.base === "image" ? picture : null, index);
     var svg = sv("svg", camera, { viewBox: "0 0 " + W + " " + H, width: W, height: H });
+    if (pixel) svg.setAttribute("shape-rendering", "crispEdges");
     svg.style.position = "absolute";
     svg.style.left = "0px";
     svg.style.setProperty("top", "0px");
@@ -643,6 +884,7 @@
   });
 
   if (finish) finishLayer();
+  if (pixel && grounds.length > 0) pixelLayer();
 
   window.__timelines = window.__timelines || {};
   window.__timelines["concept"] = tl;

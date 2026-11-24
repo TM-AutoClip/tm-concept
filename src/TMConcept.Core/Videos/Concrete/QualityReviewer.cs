@@ -78,7 +78,7 @@ public sealed class QualityReviewer(IChatClientFactory chats, ICostCalculator co
         var style = request.Style;
         var motion = style?.Motion ?? Styles.MotionIntensity.Normal;
         var tempo = style?.Tempo ?? Speech.NarrationTempos.Default;
-        var family = style is { DrawStyle: not Styles.DrawStyle.Auto } drawn ? Styles.DrawStyles.Of(drawn.DrawStyle).Transition : string.Empty;
+        var family = style is { DrawStyle: not Styles.DrawStyle.Auto } drawn ? Styles.DrawStyles.Of(drawn.DrawStyle).Families : [];
         var planScene = new PlanScene(scene.Number, scene.DurationSeconds, scene.Visual, PlanTiming.Sentences(scene.Caption, request.Spans),
             scene.Image.Length == 0 ? string.Empty : request.ImagePrompt.Length > 0 ? request.ImagePrompt : scene.Visual);
         var user = QualityPrompt.RepairUser(PlanPromptBuilder.User(input.Title, input.Language, style, [planScene]), scene.Number, scene.Plan, request.Findings);

@@ -10,7 +10,8 @@ namespace TMConcept.Core.Styles;
 /// (a stick-figure presenter, setup → action → reaction, a visual change every two to three seconds). F12 (0.1.43): every style's known
 /// mistakes (<see cref="DrawStyleDefinition.Pitfalls"/>, a "known pitfalls" list per style as in ReelMimic's style file template, MIT) and
 /// its finishing layer (<see cref="DrawStyleDefinition.Finish"/>: paper tooth, grain, vignette, glow, shadow by depth and a 12-step boil,
-/// effects read from ReelMimic's own engines, MIT; the watercolour and pastel engines built on p5.js are not used).
+/// effects read from ReelMimic's own engines, MIT; the watercolour and pastel engines built on p5.js are not used). F13 (0.1.51): pixel art,
+/// after ReelMimic's own pixel-art engine (MIT; <see cref="PixelArtLimits"/>), with its own transition family and no finishing layer.
 /// </summary>
 public static class DrawStyles
 {
@@ -217,6 +218,22 @@ public static class DrawStyles
                 "No hard pops: counters and fast camera moves fight the look; prefer slow drifts.",
             ],
             Finish = new(Tooth: 0.8, Grain: 0.15, Vignette: 0.3, Bloom: 0.2),
+        },
+        new(DrawStyle.PixelArt, "pixel-art",
+            "pixel art, 16-bit retro game scene, limited colour palette, crisp square pixels, dithered shading, no anti-aliasing, no text",
+            "chunky pixel art on a 480 × 270 grid blown up four times: a few colour ramps of the palette, shading by ordered dithering instead "
+            + "of gradients, hard square edges",
+            "Everything snaps to whole pixels and changes in steps, 12 a second; no soft gradients, glows or blur; scenes change by a dither "
+            + "dissolve, an iris or stair-stepped blocks straight into the next scene, never through black.",
+            StyleTexture.None, string.Empty, NoGuidance, Transition: Scenes.SceneTransitions.Dissolve)
+        {
+            Transitions = [Scenes.SceneTransitions.Dissolve, Scenes.SceneTransitions.Iris, Scenes.SceneTransitions.Blocks],
+            Pitfalls =
+            [
+                "A transition through black for three or more frames reads as a blink: go from scene to scene by dissolve, iris or blocks.",
+                "Pixels are few: labels of at most two words, and no map region smaller than a large country.",
+                "Soft moves break the grid: few camera moves, zoom 1 or 2, and no counter on a sentence shorter than two seconds.",
+            ],
         },
     ];
 

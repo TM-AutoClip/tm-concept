@@ -70,6 +70,13 @@ public sealed class RenderStyle
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public RenderFinish? Finish { get; set; }
 
+    /// <summary>
+    /// The pixel layer of the app's drawer (F13, 0.1.51, <see cref="RenderPixel"/>): only for the pixel art style; null (and absent from the
+    /// file) for every other style and in the input of older videos.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public RenderPixel? Pixel { get; set; }
+
     /// <summary>How much moves: calm, normal or lively.</summary>
     public string Motion { get; set; } = string.Empty;
 

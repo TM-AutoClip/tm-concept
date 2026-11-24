@@ -18,12 +18,21 @@ public static class PlanMotion
     /// (<see cref="SceneTransitions.Cut"/>, <see cref="SceneTransitions.Fade"/> or empty); <paramref name="styleFamily"/>: the drawing style's
     /// transition family (<see cref="Styles.DrawStyleDefinition.Transition"/>, empty = none).
     /// </summary>
-    public static void Apply(IReadOnlyList<PlanItem> plans, IReadOnlyList<string> asked, NarrationTempo tempo, string styleFamily)
+    public static void Apply(IReadOnlyList<PlanItem> plans, IReadOnlyList<string> asked, NarrationTempo tempo, string styleFamily) =>
+        Apply(plans, asked, tempo, TransitionCatalog.One(styleFamily));
+
+    /// <summary>
+    /// The same for a style with several families (F13, 0.1.51, <see cref="Styles.DrawStyleDefinition.Families"/>): the plan's choice is kept
+    /// when it is one of them, otherwise the first that fits the energy. A family only a style may use (<see cref="TransitionDefinition.StyleOnly"/>)
+    /// is never kept for a video whose style does not name it.
+    /// </summary>
+    public static void Apply(IReadOnlyList<PlanItem> plans, IReadOnlyList<string> asked, NarrationTempo tempo, IReadOnlyList<string> styleFamilies)
     {
         ArgumentNullException.ThrowIfNull(plans);
         ArgumentNullException.ThrowIfNull(asked);
+        ArgumentNullException.ThrowIfNull(styleFamilies);
         var energy = TransitionCatalog.EnergyOf(tempo);
-        var family = TransitionCatalog.Family(styleFamily) is { } style && style.Energies.Contains(energy) ? style.Family : string.Empty;
+        var families = TransitionCatalog.StyleFamilies(styleFamilies, energy).Select(d => d.Family).ToList();
         var direction = Direction(plans.Skip(1).Select(p => p.Plan.Transition));
         for (var i = 0; i < plans.Count; i++)
         {
@@ -35,10 +44,11 @@ public static class PlanMotion
                 continue;
             }
 
-            var chosen = TransitionCatalog.Allowed(plan.Transition, energy) ? TransitionCatalog.Find(plan.Transition)!.Value.Definition.Family : string.Empty;
-            if (chosen.Length == 0 || (family.Length > 0 && chosen != family))
+            var found = TransitionCatalog.Allowed(plan.Transition, energy) ? TransitionCatalog.Find(plan.Transition)!.Value.Definition : null;
+            var chosen = found?.Family ?? string.Empty;
+            if (chosen.Length == 0 || (families.Count > 0 ? !families.Contains(chosen) : found!.StyleOnly))
             {
-                chosen = TransitionCatalog.DefaultFamily(energy, family);
+                chosen = TransitionCatalog.DefaultFamily(energy, styleFamilies);
             }
 
             plan.Transition = TransitionCatalog.Name(chosen, direction);

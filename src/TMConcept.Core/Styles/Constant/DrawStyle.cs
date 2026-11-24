@@ -49,4 +49,10 @@ public enum DrawStyle
 
     /// <summary>No style given (0.1.32, the default of a new template): the model chooses the style that fits each video's topic.</summary>
     Auto = 13,
+
+    /// <summary>
+    /// Pixel art (F13, 0.1.51): the scene drawn on a small buffer (480 × 270, 270 × 480 upright) and blown up four times without smoothing,
+    /// colours from ramps of the palette, shading by ordered (Bayer) dithering; scenes change by a dither dissolve, an iris or blocks.
+    /// </summary>
+    PixelArt = 14,
 }

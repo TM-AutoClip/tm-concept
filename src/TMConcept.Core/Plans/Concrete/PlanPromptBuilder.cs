@@ -27,8 +27,16 @@ public static class PlanPromptBuilder
     /// <paramref name="music"/>: each scene also gets a music hint (0.1.45, C4: the template's library music is chosen by the concept; the
     /// same call, no call is added).
     /// </summary>
-    public static string System(MotionIntensity motion, NarrationTempo tempo = NarrationTempos.Default, string styleFamily = "", bool music = false)
+    public static string System(MotionIntensity motion, NarrationTempo tempo = NarrationTempos.Default, string styleFamily = "", bool music = false) =>
+        System(motion, tempo, TransitionCatalog.One(styleFamily), music);
+
+    /// <summary>
+    /// The same for a style with several transition families (F13, 0.1.51: pixel art's dissolve, iris and blocks;
+    /// <see cref="DrawStyleDefinition.Families"/>): the prompt offers only those of them that fit the tempo's energy.
+    /// </summary>
+    public static string System(MotionIntensity motion, NarrationTempo tempo, IReadOnlyList<string> styleFamilies, bool music = false)
     {
+        ArgumentNullException.ThrowIfNull(styleFamilies);
         var text = new StringBuilder("""
             You plan an animated explainer video that an app draws. For every scene choose what it stands on ("base") and write its beats:
             at most one per narration sentence, each with an optional camera move and overlay actions. The app draws everything; you only
@@ -71,7 +79,7 @@ public static class PlanPromptBuilder
 
                 """,
         });
-        text.Append(Pace(motion, tempo, styleFamily));
+        text.Append(Pace(motion, tempo, styleFamilies));
         if (music)
         {
             text.Append(MusicText());
@@ -88,12 +96,13 @@ public static class PlanPromptBuilder
     /// The transitions, the eases and the targets of <paramref name="tempo"/> (F1, F9); the beat and camera targets only when the motion does
     /// not contradict them (<see cref="TempoTargetRule.Applies"/>).
     /// </summary>
-    private static string Pace(MotionIntensity motion, NarrationTempo tempo, string styleFamily)
+    private static string Pace(MotionIntensity motion, NarrationTempo tempo, IReadOnlyList<string> styleFamilies)
     {
         var c = CultureInfo.InvariantCulture;
         var energy = TransitionCatalog.EnergyOf(tempo);
-        var family = TransitionCatalog.Family(styleFamily) is { } style && style.Energies.Contains(energy) ? style : null;
-        var names = family is null ? TransitionCatalog.Names(energy) : TransitionCatalog.Names(family).ToList();
+        var own = TransitionCatalog.StyleFamilies(styleFamilies, energy);
+        var family = own.Count > 0 ? own : null;
+        var names = family is null ? TransitionCatalog.Names(energy) : family.SelectMany(TransitionCatalog.Names).ToList();
         var target = NarrationTempos.Targets(tempo);
         var word = tempo switch { NarrationTempo.Tight => "tight", NarrationTempo.Relaxed => "relaxed", _ => "natural" };
         var text = new StringBuilder();

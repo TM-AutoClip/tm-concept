@@ -11,7 +11,9 @@ namespace TMConcept.Core.Scenes;
 /// list (<see cref="Catalog"/>), each with the energies it fits. Directional ones carry their direction in the name (<c>slide-left</c>: the
 /// picture moves to the left). The numbers of the zoom-through (out 1 → 1.2 on power3.in, in 0.75 → 1 on expo.out, at most 10 px of blur)
 /// and the rule "the way a scene leaves is the way the next one enters, one direction in a film" follow ReelMimic's transition registry and
-/// motion doctrine (Apache-2.0: only the numbers and the rule, no code or template taken; <c>plan.js</c> draws them).</item>
+/// motion doctrine (Apache-2.0: only the numbers and the rule, no code or template taken; <c>plan.js</c> draws them). The pixel art
+/// family (F13, 0.1.51: <see cref="Dissolve"/>, <see cref="Iris"/>, <see cref="Blocks"/>) is offered only to that style
+/// (<see cref="TransitionDefinition.StyleOnly"/>) and always shows the new scene over the old one, never a black frame between them.</item>
 /// </list>
 /// </summary>
 public static class SceneTransitions
@@ -48,6 +50,21 @@ public static class SceneTransitions
 
     /// <summary>The camera flies through: the old scene grows 1 → 1.2 and blurs, the new one grows 0.75 → 1 out of the blur.</summary>
     public const string ZoomThrough = "zoom-through";
+
+    /// <summary>
+    /// Pixel art (F13, 0.1.51, style only): the new scene shows through an ordered (Bayer 8 × 8) dither pattern over the old one that fills
+    /// in 12 steps a second, never through a colour.
+    /// </summary>
+    public const string Dissolve = "dissolve";
+
+    /// <summary>Pixel art (F13, style only): the new scene opens in a growing circle from the middle, in steps of whole pixels.</summary>
+    public const string Iris = "iris";
+
+    /// <summary>
+    /// Pixel art (F13, style only): the new scene comes in as rows of square blocks, each row a little after the one before, like a stair
+    /// (directional).
+    /// </summary>
+    public const string Blocks = "blocks";
 
     /// <summary>The picture moves to the left (the default direction of a film).</summary>
     public const string Left = "left";
@@ -86,5 +103,8 @@ public static class SceneTransitions
         new(Wipe, true, [TransitionEnergy.Medium, TransitionEnergy.High]),
         new(Push, true, [TransitionEnergy.Medium, TransitionEnergy.High]),
         new(ZoomThrough, false, [TransitionEnergy.High]),
+        new(Dissolve, false, [TransitionEnergy.Calm, TransitionEnergy.Medium, TransitionEnergy.High], StyleOnly: true),
+        new(Iris, false, [TransitionEnergy.Medium, TransitionEnergy.High], StyleOnly: true),
+        new(Blocks, true, [TransitionEnergy.Medium, TransitionEnergy.High], StyleOnly: true),
     ];
 }

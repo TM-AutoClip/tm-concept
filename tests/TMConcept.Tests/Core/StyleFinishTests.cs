@@ -18,12 +18,12 @@ public sealed class StyleFinishTests
     [Fact]
     public void EveryStyleHasTwoToFourPitfallsAndAFinishingLayer()
     {
-        DrawStyles.Choosable.Count().ShouldBe(13);
+        DrawStyles.Choosable.Count().ShouldBe(14, "0.1.51: pixel art is the 14th look");
         foreach (var definition in DrawStyles.Choosable)
         {
             definition.Pitfalls.Count.ShouldBeInRange(2, 4, definition.Key);
             definition.Pitfalls.ShouldAllBe(p => p.Trim().Length > 10 && p.Length <= 200);
-            definition.Finish.IsEmpty.ShouldBeFalse(definition.Key);
+            definition.Finish.IsEmpty.ShouldBe(definition.Style == DrawStyle.PixelArt, definition.Key + ": pixel art alone has no finishing layer");
             new[] { definition.Finish.Tooth, definition.Finish.Grain, definition.Finish.Vignette, definition.Finish.Bloom, definition.Finish.Shadow,
                 definition.Finish.Boil }.ShouldAllBe(v => v >= 0 && v <= 1);
         }
@@ -79,13 +79,16 @@ public sealed class StyleFinishTests
         RenderStyleBuilder.Apply(auto, new VideoStyle { Name = "t", DrawStyle = DrawStyle.Auto, Finish = true });
         auto.Style.ShouldNotBeNull().Finish.ShouldBeNull("no preset chosen, no look to finish");
 
-        // The drawer makes its one canvas inside finishLayer, which runs only when the input carries style.finish.
+        // The drawer makes its one finishing canvas inside finishLayer, which runs only when the input carries style.finish; the only other
+        // canvas is pixel art's ground (0.1.51), made only when the input carries style.pixel.
         var code = PlanDrawer.Code;
         code.ShouldContain("var finish = style.finish || null;");
         code.ShouldContain("if (finish) finishLayer();");
         var canvas = code.IndexOf("el(\"canvas\"", StringComparison.Ordinal);
         canvas.ShouldBeGreaterThan(code.IndexOf("function finishLayer()", StringComparison.Ordinal));
-        code.IndexOf("el(\"canvas\"", canvas + 1, StringComparison.Ordinal).ShouldBe(-1, "one canvas");
+        var ground = code.IndexOf("el(\"canvas\"", canvas + 1, StringComparison.Ordinal);
+        ground.ShouldBeGreaterThan(code.IndexOf("function pixelGround(", StringComparison.Ordinal), "one finishing canvas, then pixel art's ground");
+        code.IndexOf("el(\"canvas\"", ground + 1, StringComparison.Ordinal).ShouldBe(-1);
         code.Split("finishLayer()").Length.ShouldBe(3, "defined once, called once");
         code.ShouldNotContain("camera.style.translate", Case.Sensitive, "GSAP folds a CSS translate on an element it tweens into its own transform");
         code.ShouldContain("p.svg.style.translate = shift;");

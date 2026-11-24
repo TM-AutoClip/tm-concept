@@ -23,8 +23,20 @@ public sealed record DrawStyleDefinition(DrawStyle Style, string Key, string Ima
     /// </summary>
     public IReadOnlyList<string> Pitfalls { get; init; } = [];
 
-    /// <summary>The finishing layer of the look (F12, 0.1.43; <see cref="StyleFinish.None"/> for <see cref="DrawStyle.Auto"/>).</summary>
+    /// <summary>
+    /// The finishing layer of the look (F12, 0.1.43; <see cref="StyleFinish.None"/> for <see cref="DrawStyle.Auto"/> and for pixel art, whose
+    /// look is its own buffer and would only be blurred by one).
+    /// </summary>
     public StyleFinish Finish { get; init; } = StyleFinish.None;
+
+    /// <summary>
+    /// Several transition families of the look (F13, 0.1.51; pixel art: dissolve, iris and blocks, in order of preference); empty = the single
+    /// <see cref="Transition"/> (or none). Read through <see cref="Families"/>.
+    /// </summary>
+    public IReadOnlyList<string> Transitions { get; init; } = [];
+
+    /// <summary>Every transition family of the look, in order of preference (<see cref="Transitions"/>, else <see cref="Transition"/>; empty = none).</summary>
+    public IReadOnlyList<string> Families => Transitions.Count > 0 ? Transitions : Scenes.TransitionCatalog.One(Transition);
 
     /// <summary>Whether a concept written for this style differs from a plain one.</summary>
     public bool HasConceptGuidance => ConceptGuidance.Tr.Length > 0 || ConceptGuidance.En.Length > 0;

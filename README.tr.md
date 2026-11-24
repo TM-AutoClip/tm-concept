@@ -526,9 +526,11 @@ Bir şablonla (Ayarlar → Şablonlar) üretilen video, modelin iyi niyetine kal
   durur), tekrar eden karakterin sayfasıyla resimlerin karşılaştırılması ve yerel denetçinin kusurlu bulduğu yerel resimlerin yeniden
   yapılması. Her istek tahmine girer. Tekrar eden karakter bir kez tarif edilip her resim istemine eklenir (Standart ve Özenli).
 - **Çizim tarzı:** görseli olmayan sahneler şablonun tarzında çizilir, üretilen görseller de aynı tarzda istenir. Düzenleyicide her
-  biri açıklamalı on dört seçenek: *Yapay zekâ seçsin* (yeni şablonun varsayılanı: her videoda konuya uyan görünüşü model seçer), düz
+  biri açıklamalı on beş seçenek: *Yapay zekâ seçsin* (yeni şablonun varsayılanı: her videoda konuya uyan görünüşü model seçer), düz
   şekiller, çöp adam anlatıcı, çizgi çizim, kâğıt kesme, infografik, neon, kara kalem, animasyon (çizgi film), teknik çizim (blueprint),
-  hologram, eski terminal, izometrik ve suluboya. Her tarzın kendi hareket kuralları var (kâğıt kayarak gelir, blueprint çizgileri
+  hologram, eski terminal, izometrik, suluboya ve **piksel sanatı** (0.1.51: dört kat büyütülen 480 × 270 ızgara, paletin renk
+  merdivenleri, noktalamayla gölge; sahneler noktalı çözülme, iris ya da bloklarla, asla siyahtan geçmeden değişir; görsel kaynağı
+  Kapalı iken kendi gökyüzünü ve tepelerini çizer). Her tarzın kendi hareket kuralları var (kâğıt kayarak gelir, blueprint çizgileri
   çizilerek belirir, terminal yazısı harf harf yazılır); bazılarında programın resmin üstüne koyduğu hafif bir doku (kâğıt, gren, tarama
   çizgisi, ızgara) ve önerilen bir palet var. **Çöp adam anlatıcı** konseptin yazılışını da değiştirir: Konseptler sayfasında İnce ayar →
   Çizim tarzı'ndan seç ya da sonradan Yapay zekâyla düzenle → Tarza uyarla ile uyarla.

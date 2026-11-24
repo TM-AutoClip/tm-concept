@@ -536,9 +536,11 @@ A video made with a template (Settings → Templates) follows it without relying
   character's sheet compared with the pictures, and local pictures made again when a local reviewer finds them faulty. Every request is in
   the estimate. A recurring character is described once and added to every picture prompt (Standard and Careful).
 - **Drawing style:** scenes without an image are drawn in the template's style, and generated images are asked for in the same style.
-  Fourteen choices, each described in the editor: *Let the AI choose* (the default of a new template: the model picks the look that fits
+  Fifteen choices, each described in the editor: *Let the AI choose* (the default of a new template: the model picks the look that fits
   each video), flat shapes, stick-figure narrator, line art, paper cut-out, infographic, neon, pencil sketch, animation (cartoon),
-  blueprint, hologram, retro terminal, isometric and watercolour. Each style brings its own motion rules (paper slides in, blueprint lines
+  blueprint, hologram, retro terminal, isometric, watercolour and **pixel art** (0.1.51: a 480 × 270 grid blown up four times, colour ramps
+  of the palette, dithered shading, scenes changing by a dither dissolve, an iris or blocks, never through black; it draws its own sky and
+  hills when the image source is off). Each style brings its own motion rules (paper slides in, blueprint lines
   draw on, terminal text types in) and, for some, a faint texture the app lays over the picture (paper, grain, scanlines, grid) and a
   suggested palette. The **stick-figure narrator** also changes how concepts are written: choose it on the Concepts page (Fine-tuning →
   Drawing style) or adapt a concept later (AI edit → Adapt to a style).

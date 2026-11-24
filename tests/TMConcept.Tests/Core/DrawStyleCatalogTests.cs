@@ -59,6 +59,7 @@ public sealed class DrawStyleCatalogTests
         ((int)DrawStyle.Flat).ShouldBe(0);
         ((int)DrawStyle.Neon).ShouldBe(5, "stored as numbers: older values never move");
         ((int)DrawStyle.Auto).ShouldBe(13);
+        ((int)DrawStyle.PixelArt).ShouldBe(14, "0.1.51: added at the end");
     }
 
     [Fact]

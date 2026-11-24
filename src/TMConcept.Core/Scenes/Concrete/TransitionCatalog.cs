@@ -16,9 +16,25 @@ public static class TransitionCatalog
         _ => TransitionEnergy.Medium,
     };
 
-    /// <summary>Every full name allowed at <paramref name="energy"/>, in catalog order (a directional one once per direction).</summary>
+    /// <summary>
+    /// Every full name allowed at <paramref name="energy"/> for a video without a style family, in catalog order (a directional one once per
+    /// direction; the style-only families, <see cref="TransitionDefinition.StyleOnly"/>, are left out).
+    /// </summary>
     public static IReadOnlyList<string> Names(TransitionEnergy energy) =>
-        SceneTransitions.Catalog.Where(d => d.Energies.Contains(energy)).SelectMany(Names).ToList();
+        SceneTransitions.Catalog.Where(d => !d.StyleOnly && d.Energies.Contains(energy)).SelectMany(Names).ToList();
+
+    /// <summary>
+    /// The definitions of a drawing style's families (<paramref name="families"/>, <see cref="Styles.DrawStyleDefinition.Families"/>) that are
+    /// in the catalog and fit <paramref name="energy"/>, in the style's order; empty = the style has none that fits (the energy's own apply).
+    /// </summary>
+    public static IReadOnlyList<TransitionDefinition> StyleFamilies(IReadOnlyList<string> families, TransitionEnergy energy)
+    {
+        ArgumentNullException.ThrowIfNull(families);
+        return families.Select(Family).OfType<TransitionDefinition>().Where(d => d.Energies.Contains(energy)).Distinct().ToList();
+    }
+
+    /// <summary>A single family as a family list (empty for none).</summary>
+    public static IReadOnlyList<string> One(string? family) => string.IsNullOrEmpty(family) ? [] : [family];
 
     /// <summary>Every full name of <paramref name="definition"/> (one per direction for a directional one).</summary>
     public static IEnumerable<string> Names(TransitionDefinition definition)
@@ -76,9 +92,15 @@ public static class TransitionCatalog
     /// The family a scene gets when the plan chose none (or one that does not fit): the drawing style's family when it fits the energy
     /// (<paramref name="styleFamily"/>, empty = none), otherwise the energy's: calm = crossfade, medium = slide, high = push.
     /// </summary>
-    public static string DefaultFamily(TransitionEnergy energy, string styleFamily)
+    public static string DefaultFamily(TransitionEnergy energy, string styleFamily) => DefaultFamily(energy, One(styleFamily));
+
+    /// <summary>
+    /// The same for a style with several families (F13, 0.1.51): the first of <paramref name="styleFamilies"/> that fits the energy, otherwise
+    /// the energy's own.
+    /// </summary>
+    public static string DefaultFamily(TransitionEnergy energy, IReadOnlyList<string> styleFamilies)
     {
-        if (Family(styleFamily) is { } style && style.Energies.Contains(energy))
+        if (StyleFamilies(styleFamilies, energy) is [var style, ..])
         {
             return style.Family;
         }

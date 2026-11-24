@@ -39,7 +39,7 @@ public sealed class ScenePlanner(IChatClientFactory chats, ICostCalculator costs
         }).ToList();
         var motion = request.Style?.Motion ?? Styles.MotionIntensity.Normal;
         var tempo = request.Style?.Tempo ?? Speech.NarrationTempos.Default;
-        var family = request.Style is { DrawStyle: not Styles.DrawStyle.Auto } style ? Styles.DrawStyles.Of(style.DrawStyle).Transition : string.Empty;
+        var family = request.Style is { DrawStyle: not Styles.DrawStyle.Auto } style ? Styles.DrawStyles.Of(style.DrawStyle).Families : [];
         var system = PlanPromptBuilder.System(motion, tempo, family, request.MusicHints);
         var user = PlanPromptBuilder.User(input.Title, input.Language, request.Style, scenes);
         if (request.Notes is { Count: > 0 } notes)
