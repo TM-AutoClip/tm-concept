@@ -6,7 +6,7 @@ namespace TMConcept.Providers.GoogleAuth;
 
 /// <summary>
 /// The one-time local address of a sign-in: listens on 127.0.0.1 on a free port the system picks (never on another interface), takes the
-/// first answer that carries <c>code</c> or <c>error</c> for the root path, shows the browser a short page and closes. A plain TCP listener
+/// first answer that carries <c>code</c>, <c>state</c> or <c>error</c> for the root path, shows the browser a short page and closes. A plain TCP listener
 /// (HttpListener needs a URL reservation for 127.0.0.1 on Windows). An answer with another state ends the sign-in with <c>state</c> (it was
 /// not this sign-in's); a request for another path (the browser's icon) gets 404 and the listener waits on. Each connection is read
 /// apart, so a browser connection that sends nothing does not hold up the real answer.
@@ -106,14 +106,7 @@ public sealed class LoopbackCodeListener : IDisposable
                 }
 
                 var query = Query(target);
-                if (query.TryGetValue("error", out var error))
-                {
-                    await WriteAsync(stream, 200, _pages.Failed, limit.Token).ConfigureAwait(false);
-                    done.TrySetException(new GoogleSignInException("The sign-in was refused in the browser (" + Clean(error) + ").") { Code = "denied" });
-                    return;
-                }
-
-                if (!query.TryGetValue("code", out var code) && !query.ContainsKey("state"))
+                if (!query.TryGetValue("code", out var code) && !query.ContainsKey("state") && !query.ContainsKey("error"))
                 {
                     // Not an answer of the sign-in (the address opened by hand): nothing to do with it.
                     await WriteAsync(stream, 404, string.Empty, limit.Token).ConfigureAwait(false);
@@ -124,6 +117,15 @@ public sealed class LoopbackCodeListener : IDisposable
                 {
                     await WriteAsync(stream, 400, _pages.Failed, limit.Token).ConfigureAwait(false);
                     done.TrySetException(new GoogleSignInException("The answer to the local address was not of this sign-in.") { Code = "state" });
+                    return;
+                }
+
+                // A refusal is believed only with this sign-in's state (Google sends it back with the error too): another page cannot
+                // pass a refusal off as the user's.
+                if (query.TryGetValue("error", out var error))
+                {
+                    await WriteAsync(stream, 200, _pages.Failed, limit.Token).ConfigureAwait(false);
+                    done.TrySetException(new GoogleSignInException("The sign-in was refused in the browser (" + Clean(error) + ").") { Code = "denied" });
                     return;
                 }
 

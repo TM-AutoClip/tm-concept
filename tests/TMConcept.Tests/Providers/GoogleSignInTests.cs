@@ -109,6 +109,15 @@ public sealed class GoogleSignInTests : IDisposable
             (await Should.ThrowAsync<GoogleSignInException>(() => waiting)).Code.ShouldBe("denied");
         }
 
+        // A refusal with another state (or none) is not this sign-in's: it is refused as a wrong state, not believed.
+        using (var listener = new LoopbackCodeListener())
+        {
+            var waiting = listener.WaitForCodeAsync("s", CancellationToken.None);
+            (await _local.GetAsync(new Uri(listener.RedirectUri, "?error=access_denied&state=other"), TestContext.Current.CancellationToken))
+                .StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+            (await Should.ThrowAsync<GoogleSignInException>(() => waiting)).Code.ShouldBe("state");
+        }
+
         using (var listener = new LoopbackCodeListener())
         {
             using var cancel = new CancellationTokenSource();

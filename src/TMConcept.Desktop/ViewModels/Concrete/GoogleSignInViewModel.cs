@@ -184,6 +184,13 @@ public sealed partial class GoogleSignInViewModel(GoogleCloudSignIn signIn, File
             Failed = true;
             Status = "✗ " + text.Format("google.fail.exchange", ProviderErrors.Text(text, ex.Code));
         }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The local listener could not start (SocketException) or the sign-in could not be saved: the page says so, the app goes on.
+            Failed = true;
+            Status = "✗ " + text.Format("error.generic", ex.Message);
+            logger.LogError(ex, "Google sign-in failed");
+        }
         finally
         {
             _running = null;
