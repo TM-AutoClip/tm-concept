@@ -220,6 +220,21 @@ public sealed class PixelArtStyleTests
     }
 
     [Fact]
+    public void InPixelArtTheAppsCameraMovesInStepsAndEveryOtherStyleKeepsItsEase()
+    {
+        // 0.1.51 review: a smooth drift or zoom over blown-up pixels makes the grid crawl; the app's camera steps like the layer.
+        var code = PlanDrawer.Code;
+        var pace = Body(code, "function pace(");
+        pace.ShouldContain("if (!pixel) return ease;", Case.Sensitive, "every other style keeps its ease as it was");
+        pace.ShouldContain("pixel.steps");
+        pace.ShouldContain("Math.floor(");
+        Body(code, "function cameraTo(").ShouldContain("ease: pace(cam.ease || \"power2.inOut\", d)");
+        code.ShouldContain("ease: pace(\"sine.inOut\", scene.durationSeconds)");
+        code.ShouldContain("ease: pace(\"power1.inOut\", scene.durationSeconds)");
+        code.ShouldContain("ease: pace(\"none\", scene.durationSeconds)");
+    }
+
+    [Fact]
     public void APixelDissolveBetweenLitScenesHasNoBlackFramesAThreeFrameBlinkIsReported()
     {
         // The dissolve uncovers the new scene over the old one: every frame lies between the two pictures' brightness.

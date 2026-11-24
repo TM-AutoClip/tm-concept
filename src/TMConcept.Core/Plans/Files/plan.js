@@ -301,6 +301,16 @@
     }
   }
 
+  // F13 (0.1.51 review): in pixel art the app's own camera (a picture's drift, a beat's zoom or pan) moves in pixel.steps steps a second
+  // like the rest of the layer: a smooth slide or zoom over blown-up pixels makes the grid crawl from frame to frame. Every other style keeps
+  // its ease as it was.
+  function pace(ease, seconds) {
+    if (!pixel) return ease;
+    var n = Math.max(1, Math.round(seconds * (pixel.steps || 12)));
+    var curve = gsap.parseEase(ease) || function (p) { return p; };
+    return function (p) { return curve(Math.min(1, Math.floor(p * n + 1e-6) / n)); };
+  }
+
   // The camera: a zoom on a named point, centred in the safe area, never showing past the picture's edges.
   function cameraTo(ctx, cam, at, span) {
     if (!cam) return;
@@ -310,7 +320,7 @@
     var x = Math.min(0, Math.max(W - W * z, W / 2 - cx * z));
     var y = Math.min(0, Math.max(H - H * z, (upper + lower) / 2 - cy * z));
     var d = calm ? Math.max(1.5, span) : Math.max(0.8, Math.min(1.6, span * 0.5));
-    tl.to(ctx.camera, { x: x, y: y, scale: z, duration: d, ease: cam.ease || "power2.inOut" }, at);
+    tl.to(ctx.camera, { x: x, y: y, scale: z, duration: d, ease: pace(cam.ease || "power2.inOut", d) }, at);
   }
 
   // The way a scene comes in (0.1.42, plan.transition, settled by the app): the new layer over the old one, which is hidden once it is
@@ -836,11 +846,11 @@
           var room = (big - 1) / 2 * 0.8;
           var s = shifts[drift];
           tl.fromTo(camera, { scale: big, x: s[0] * room * W, y: s[1] * room * H, transformOrigin: "50% 50%" },
-            { scale: big, x: -s[0] * room * W, y: -s[1] * room * H, duration: scene.durationSeconds, ease: "sine.inOut", transformOrigin: "50% 50%" }, start);
+            { scale: big, x: -s[0] * room * W, y: -s[1] * room * H, duration: scene.durationSeconds, ease: pace("sine.inOut", scene.durationSeconds), transformOrigin: "50% 50%" }, start);
         } else if (drift === "in") {
-          tl.fromTo(camera, { scale: 1, transformOrigin: "50% 50%" }, { scale: big, duration: scene.durationSeconds, ease: "power1.inOut", transformOrigin: "50% 50%" }, start);
+          tl.fromTo(camera, { scale: 1, transformOrigin: "50% 50%" }, { scale: big, duration: scene.durationSeconds, ease: pace("power1.inOut", scene.durationSeconds), transformOrigin: "50% 50%" }, start);
         } else {
-          tl.fromTo(camera, { scale: 1 }, { scale: calm ? 1.04 : 1.08, duration: scene.durationSeconds, ease: "none", transformOrigin: "50% 50%" }, start);
+          tl.fromTo(camera, { scale: 1 }, { scale: calm ? 1.04 : 1.08, duration: scene.durationSeconds, ease: pace("none", scene.durationSeconds), transformOrigin: "50% 50%" }, start);
         }
       }
     }
