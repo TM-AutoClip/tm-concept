@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
+using Avalonia.Input.Platform;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
@@ -67,6 +68,8 @@ public sealed partial class VideoViewModel : PageViewModelBase
     private readonly ILogger<VideoViewModel> _logger;
     private readonly Paths.UiPreferencesFile _preferences;
     private readonly IVideoStyleStore _styles;
+    private readonly Core.Paths.IAppPaths _paths;
+    private readonly WindowHost _host;
     private readonly Dictionary<Guid, Concept> _queued = [];
     private CancellationTokenSource? _cancel;
     private Guid? _running;
@@ -80,7 +83,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
         IEnumerable<IVideoEngine> engines, StepModelResolver resolver, Core.Media.IMediaTools media, VideoCostEstimator estimator, StepPickerViewModel picker,
         ConceptDetailViewModel detail, ConceptActions actions, VideoRows rows, VideoFiles files, PlayerViewModel player,
         Func<ProductionProgressViewModel> progress, ConceptEvents events, INotifier notifier, IVideoQueueRunner runner, IActivityLog activity, Localizer text,
-        Paths.UiPreferencesFile preferences, IVideoStyleStore styles, ILogger<VideoViewModel> logger)
+        Paths.UiPreferencesFile preferences, IVideoStyleStore styles, Core.Paths.IAppPaths paths, WindowHost host, ILogger<VideoViewModel> logger)
     {
         _session = session;
         _concepts = concepts;
@@ -104,6 +107,8 @@ public sealed partial class VideoViewModel : PageViewModelBase
 
         _preferences = preferences;
         _styles = styles;
+        _paths = paths;
+        _host = host;
         Player = player;
         Detail = detail;
 
@@ -206,6 +211,36 @@ public sealed partial class VideoViewModel : PageViewModelBase
     /// <summary>The last video of this session: "Last: Theodosian walls · 0.38 $ · 6:12" (or what a failed one paid).</summary>
     [ObservableProperty]
     public partial string LastLine { get; set; } = string.Empty;
+
+    /// <summary>
+    /// H2 (0.1.44): the credit the last made video's music asks for (its version's asset record, <see cref="AssetLedger"/>), to paste into
+    /// the video's description; never drawn into the video. Empty when nothing asks for credit.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasAttribution))]
+    public partial string Attribution { get; set; } = string.Empty;
+
+    /// <summary>The yellow attribution note is shown.</summary>
+    public bool HasAttribution => Attribution.Length > 0;
+
+    /// <summary>Copies <see cref="Attribution"/> to the clipboard.</summary>
+    [RelayCommand]
+    public async Task CopyAttributionAsync()
+    {
+        if (Attribution.Length == 0)
+        {
+            return;
+        }
+
+        if (_host.Active?.Clipboard is { } clipboard)
+        {
+            await clipboard.SetTextAsync(Attribution).ConfigureAwait(true);
+        }
+        else
+        {
+            _logger.LogWarning("No window to copy the attribution to the clipboard from");
+        }
+    }
 
     /// <summary>The made videos, newest version of each, newest first.</summary>
     public ObservableCollection<VideoRowViewModel> Produced { get; } = [];
@@ -873,6 +908,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
                 outcome = QueueItemOutcome.Made;
                 await _queue.RemoveAsync(row.Item.Id, CancellationToken.None).ConfigureAwait(true);
                 Report(record);
+                await ShowAttributionAsync(record).ConfigureAwait(true);
             }
             finally
             {
@@ -964,6 +1000,31 @@ public sealed partial class VideoViewModel : PageViewModelBase
         _notifier.Notify(new AppNotification(problems.Count == 0 ? NotificationKind.Done : NotificationKind.Warning, _text["video.done.title"],
             string.Join("\n", problems.Prepend(done))));
         _events.Raise(this);
+    }
+
+    /// <summary>
+    /// H2 (0.1.44): reads the made version's asset record off the window's thread and shows the credit it asks for at the bottom of the page
+    /// (yellow, with a copy button; a line in the activity panel too); an empty record clears the note.
+    /// </summary>
+    private async Task ShowAttributionAsync(VideoRecord record)
+    {
+        try
+        {
+            var folder = Core.Paths.LibraryPaths.Resolve(_paths.LibraryDirectory, record.Folder);
+            var text = await Task.Run(async () => AssetLedger.AttributionText(await AssetLedger.ReadAsync(folder, CancellationToken.None).ConfigureAwait(false)))
+                .ConfigureAwait(true);
+            Attribution = text;
+            if (text.Length > 0)
+            {
+                _activity.Add(ActivityLevel.Warning, _text.Format("video.attribution.log", record.Title, text),
+                    _text.Format("video.attribution.log", ActivityPlaceholders.Title, text));
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            _logger.LogWarning(ex, "The asset record of the made video could not be read");
+            Attribution = string.Empty;
+        }
     }
 
     /// <summary>

@@ -15,4 +15,5 @@ namespace TMConcept.Core.Render;
 [JsonSerializable(typeof(List<Styles.SavedPalette>))]
 [JsonSerializable(typeof(Concepts.FocusCatalogFile))]
 [JsonSerializable(typeof(List<string>))]
+[JsonSerializable(typeof(List<Videos.AssetEntry>))]
 public sealed partial class CoreJsonContext : JsonSerializerContext;

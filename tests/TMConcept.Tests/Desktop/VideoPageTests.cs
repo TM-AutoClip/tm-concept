@@ -1730,6 +1730,18 @@ public sealed class VideoPageTests
 
         public bool FailThumbnail { get; init; }
 
+        /// <summary>The length ffmpeg reads from a music file (0.1.44); null = a damaged file.</summary>
+        public long? MusicMs { get; set; } = 5000;
+
+        /// <summary>The music files read, by name.</summary>
+        public List<string> MusicRead { get; } = [];
+
+        public Task<long?> AudioDurationAsync(string file, CancellationToken cancellationToken)
+        {
+            MusicRead.Add(Path.GetFileName(file));
+            return Task.FromResult(MusicMs);
+        }
+
         public Task<bool> ThumbnailAsync(string video, string jpeg, CancellationToken cancellationToken) =>
             FailThumbnail ? throw new IOException("disk full") : Task.FromResult(false);
 

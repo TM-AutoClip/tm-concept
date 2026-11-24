@@ -12,8 +12,9 @@ namespace TMConcept.Engines.Media;
 /// are chosen or the template draws something (progress bar, closing card; with the template's fonts), lays the round channel photo over the
 /// closing card, and fades through black at the start of every scene with a soft transition: the picture (subtitles too) goes dark over
 /// <see cref="Core.Scenes.SceneTransitions.FadeHalfMs"/> before the scene's start and comes back over the same time after it, whatever the
-/// video code drew; the timing does not change. Without narration, subtitles and fades the video is only copied. The app's own ffmpeg;
-/// processor only.
+/// video code drew; the timing does not change. Background music (0.1.44), when the template has it, is one more input of the narration's
+/// mix with its own level envelope (<see cref="MusicChain"/>). Without narration, music, subtitles and fades the video is only copied. The
+/// app's own ffmpeg; processor only.
 /// </summary>
 public sealed class FfmpegMuxer(ToolInstaller tools, IProcessRunner runner, ILogger<FfmpegMuxer> logger)
 {
@@ -60,6 +61,19 @@ public sealed class FfmpegMuxer(ToolInstaller tools, IProcessRunner runner, ILog
         {
             var seconds = Math.Max(0.1, photo.EndSeconds - photo.StartSeconds);
             arguments.AddRange(["-loop", "1", "-framerate", photo.Fps.ToString(c), "-t", seconds.ToString("0.###", c), "-i", photo.File]);
+        }
+
+        var music = overlay.Music;
+        if (music is not null)
+        {
+            // A track shorter than the video plays again from its start (an input loop, no length to know in samples); it is cut at the
+            // video's end below either way.
+            if (music.Loop)
+            {
+                arguments.AddRange(["-stream_loop", "-1"]);
+            }
+
+            arguments.AddRange(["-i", music.File]);
         }
 
         var filter = new StringBuilder();
@@ -112,14 +126,29 @@ public sealed class FfmpegMuxer(ToolInstaller tools, IProcessRunner runner, ILog
                 var delay = Math.Max(0, clips[i].StartMs).ToString(c);
                 filter.Append(c, $"[{i + 1}:a]aresample=48000,adelay={delay}|{delay}[a{i}]");
             }
+        }
 
+        if (music is not null)
+        {
+            if (filter.Length > 0)
+            {
+                filter.Append(';');
+            }
+
+            filter.Append(c, $"[{clips.Count + 1 + (photo is null ? 0 : 1)}:a]").Append(MusicChain(music)).Append(clips.Count > 0 ? "[music]" : "[a]");
+        }
+
+        if (clips.Count > 0)
+        {
             filter.Append(';');
             for (var i = 0; i < clips.Count; i++)
             {
                 filter.Append(c, $"[a{i}]");
             }
 
-            filter.Append(c, $"amix=inputs={clips.Count}:normalize=0:dropout_transition=0[a]");
+            // The music is one more input of the same mix (no normalising: the narration keeps its level, the music its envelope).
+            filter.Append(music is null ? string.Empty : "[music]")
+                .Append(c, $"amix=inputs={clips.Count + (music is null ? 0 : 1)}:normalize=0:dropout_transition=0[a]");
         }
 
         if (filter.Length > 0)
@@ -128,7 +157,7 @@ public sealed class FfmpegMuxer(ToolInstaller tools, IProcessRunner runner, ILog
         }
 
         arguments.AddRange(["-map", drawn ? "[v]" : "0:v"]);
-        if (clips.Count > 0)
+        if (clips.Count > 0 || music is not null)
         {
             arguments.AddRange(["-map", "[a]", "-c:a", "aac", "-b:a", "192k"]);
         }
@@ -136,6 +165,26 @@ public sealed class FfmpegMuxer(ToolInstaller tools, IProcessRunner runner, ILog
         arguments.AddRange(drawn ? ["-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p"] : ["-c:v", "copy"]);
         arguments.AddRange(["-movflags", "+faststart", output]);
         return arguments;
+    }
+
+    /// <summary>
+    /// The music's filters (0.1.44, C3): 48 kHz stereo, cut at the video's length (a looped track too), the level envelope evaluated every
+    /// frame (<see cref="Core.Media.MusicEnvelope.Expression"/>: ducked under the narration) and the fade-out at the end.
+    /// </summary>
+    public static string MusicChain(Core.Media.MuxMusic music)
+    {
+        ArgumentNullException.ThrowIfNull(music);
+        var c = CultureInfo.InvariantCulture;
+        var length = Math.Max(0.1, music.DurationSeconds);
+        var chain = new StringBuilder(string.Create(c, $"aresample=48000,aformat=channel_layouts=stereo,atrim=duration={length:0.###},asetpts=PTS-STARTPTS"));
+        chain.Append(",volume='").Append(music.Volume).Append("':eval=frame");
+        var fade = Math.Min(Math.Max(0, music.FadeOutSeconds), length);
+        if (fade > 0)
+        {
+            chain.Append(c, $",afade=t=out:st={length - fade:0.###}:d={fade:0.###}");
+        }
+
+        return chain.ToString();
     }
 
     /// <summary>

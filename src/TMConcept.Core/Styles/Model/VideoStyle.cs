@@ -97,6 +97,12 @@ public sealed class VideoStyle
     /// </summary>
     public bool Finish { get; set; }
 
+    /// <summary>
+    /// Background music (0.1.44, C3): its source, level, ducking under the narration and fade-out. A template saved before has none in its
+    /// JSON and reads as off, so its videos sound as they did.
+    /// </summary>
+    public VideoMusic Music { get; set; } = new();
+
     /// <summary>Where the closing call to action goes.</summary>
     public ClosingPlacement Closing { get; set; } = ClosingPlacement.Off;
 

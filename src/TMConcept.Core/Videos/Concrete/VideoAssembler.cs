@@ -439,6 +439,10 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
             clips.ElementAtOrDefault(s.Number - 1)?.DurationMs ?? (long)Math.Round(s.DurationSeconds * 1000), s.Caption)).ToList();
         var cues = SubtitleBuilder.Build(SubtitleSources(input, clips), SubtitleBuilder.LineLength(input.Width, input.Height));
         var overlay = await OverlayAsync(save, cues, cancellationToken).ConfigureAwait(false);
+        if (save.Music is { } music)
+        {
+            overlay = overlay with { Music = MuxMusicOf(music, save.Options.Style!.Music, clips, input) };
+        }
 
         var audio = clips.Select((c, i) => (Clip: c, Start: (long)Math.Round(input.Scenes[i].StartSeconds * 1000))).Where(x => x.Clip is not null)
             .Select(x => (x.Clip!.File, x.Start)).ToList();
@@ -450,7 +454,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         }
         catch (InvalidOperationException ex)
         {
-            throw new VideoException("Joining video and narration failed: " + ex.Message, ex) { Code = "mux" };
+            throw new VideoException("Joining video and narration failed: " + ex.Message, ex) { Code = save.Music is null ? "mux" : "music" };
         }
 
         var folder = save.TargetFolder;
@@ -463,6 +467,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         await File.WriteAllTextAsync(Path.Combine(folder, VideoFolders.NarrationFile), NarrationScript.Text(save.Title, save.Profile.ContentLanguage,
             cueSources), cancellationToken).ConfigureAwait(false);
         KeepSources(save.Render.Request.Folder, folder, clips);
+        await KeepMusicAsync(save.Music, folder, cancellationToken).ConfigureAwait(false);
 
         // The kept input.json has the real captions also when the engine got none (subtitles off): a later version and the Produced page's
         // narration read them from there.
@@ -511,6 +516,127 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         await videos.AddAsync(record, [.. save.ExtraCosts, .. save.Spent], CancellationToken.None).ConfigureAwait(false);
         steps.Finish(VideoSteps.Save);
         return record;
+    }
+
+    /// <summary>
+    /// The template's background music for a run (0.1.44, C3), checked before anything is paid for: off = <c>null</c>. The user's own file
+    /// (a new version uses the copy kept in <paramref name="keptVersion"/>'s <see cref="VideoFolders.Music"/> folder, so it sounds the same
+    /// even when the original was moved) is copied into the work folder and read by ffmpeg. A missing or unreadable file, or a source this
+    /// version cannot make yet, is an unexpected failure: the video stops with <c>music</c> (rule 17; only a template with music off goes
+    /// on without it).
+    /// </summary>
+    public async Task<PreparedMusic?> PrepareMusicAsync(VideoStyle? style, string? keptVersion, string work, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(work);
+        if (!VideoStyleRules.MusicOn(style))
+        {
+            return null;
+        }
+
+        var music = style!.Music;
+        if (music.Source != MusicSource.OwnFile)
+        {
+            logger.LogError(Activity.LogEvents.OnScreen, "The template's music source {Source} cannot be made by this version; the video is stopped", music.Source);
+            throw new VideoException($"The music source {music.Source} is not available in this version.") { Code = "music" };
+        }
+
+        var kept = keptVersion is null ? null : KeptMusic(keptVersion);
+        var from = kept ?? music.File;
+        if (string.IsNullOrWhiteSpace(from) || !File.Exists(from))
+        {
+            // The file name only: the folder is the user's.
+            logger.LogError(Activity.LogEvents.OnScreen, "The template's music file {File} was not found; the video is stopped", Path.GetFileName(from ?? string.Empty));
+            throw new VideoException("The music file was not found: " + Path.GetFileName(from ?? string.Empty)) { Code = "music" };
+        }
+
+        var folder = Path.Combine(work, VideoFolders.Music);
+        Directory.CreateDirectory(folder);
+        var name = LibraryPaths.SafeName(Path.GetFileNameWithoutExtension(from), "music") + Path.GetExtension(from).ToLowerInvariant();
+        var copy = Path.Combine(folder, name);
+        try
+        {
+            await using var source = new FileStream(from, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
+            await using var target = new FileStream(copy, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
+            await source.CopyToAsync(target, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            logger.LogError(Activity.LogEvents.OnScreen, ex, "The music file {File} could not be read; the video is stopped", Path.GetFileName(from));
+            throw new VideoException("The music file could not be read: " + Path.GetFileName(from), ex) { Code = "music" };
+        }
+
+        var duration = await media.AudioDurationAsync(copy, cancellationToken).ConfigureAwait(false);
+        if (duration is not > 0)
+        {
+            logger.LogError(Activity.LogEvents.OnScreen, "The music file {File} is damaged or has no sound; the video is stopped", Path.GetFileName(from));
+            throw new VideoException("The music file is damaged or has no sound: " + Path.GetFileName(from)) { Code = "music" };
+        }
+
+        logger.LogInformation("Background music: {File} ({Seconds:0.0} s, {Origin})", name, duration.Value / 1000.0,
+            kept is null ? "the template's file" : "kept with the video");
+        var attribution = music.Attribution.Trim();
+        var entry = new AssetEntry
+        {
+            Kind = AssetKinds.Music,
+            Name = Path.GetFileNameWithoutExtension(from),
+            License = AssetLicenses.OwnFile,
+            Attribution = attribution.Length > MusicMixDefaults.AttributionMax ? attribution[..MusicMixDefaults.AttributionMax] : attribution,
+            File = name,
+        };
+        return new PreparedMusic(copy, duration.Value, entry);
+    }
+
+    /// <summary>The music kept in a version folder (the first file of its <see cref="VideoFolders.Music"/> folder); null when it has none.</summary>
+    public static string? KeptMusic(string versionFolder)
+    {
+        var folder = Path.Combine(versionFolder, VideoFolders.Music);
+        return Directory.Exists(folder) ? Directory.EnumerateFiles(folder).Order(StringComparer.Ordinal).FirstOrDefault() : null;
+    }
+
+    /// <summary>
+    /// The mux's music: looped when the track is shorter than the video, ducked under the narration (each clip's spoken parts at its start;
+    /// the whole clip when its format cannot be read), faded out at the end.
+    /// </summary>
+    private static MuxMusic MuxMusicOf(PreparedMusic music, VideoMusic settings, IReadOnlyList<SpeechClip?> clips, RenderInput input)
+    {
+        var spoken = clips.Select((c, i) => (Clip: c, Start: (long)Math.Round(input.Scenes[i].StartSeconds * 1000)))
+            .Where(x => x.Clip is not null)
+            .Select(x => (x.Start, SpokenOf(x.Clip!)));
+        var spans = MusicEnvelope.Merge(MusicEnvelope.Timeline(spoken));
+        var (level, ducked, fade) = VideoStyleRules.MusicMix(settings);
+        var length = input.DurationSeconds;
+        return new MuxMusic(music.File, music.DurationMs < (long)Math.Round(length * 1000), length, MusicEnvelope.Expression(spans, level, ducked), fade);
+    }
+
+    /// <summary>The spoken parts of a clip; the whole clip when its file cannot be read as a WAV this reads (the music ducks under all of it).</summary>
+    private static IReadOnlyList<NarrationSpan> SpokenOf(SpeechClip clip)
+    {
+        try
+        {
+            return NarrationSilence.Spoken(clip.File) ?? [new NarrationSpan(0, clip.DurationMs)];
+        }
+        catch (Exception ex) when (ex is InvalidDataException or IOException or ArgumentException)
+        {
+            return [new NarrationSpan(0, clip.DurationMs)];
+        }
+    }
+
+    /// <summary>
+    /// The version's music copy and asset record (F15): the track into <see cref="VideoFolders.Music"/>, every outside file's line into
+    /// <see cref="VideoFolders.AssetsFile"/> (an empty list without music).
+    /// </summary>
+    private static async Task KeepMusicAsync(PreparedMusic? music, string folder, CancellationToken cancellationToken)
+    {
+        var entries = new List<AssetEntry>();
+        if (music is not null)
+        {
+            var target = Path.Combine(folder, VideoFolders.Music);
+            Directory.CreateDirectory(target);
+            File.Copy(music.File, Path.Combine(target, music.Entry.File), overwrite: true);
+            entries.Add(music.Entry);
+        }
+
+        await AssetLedger.WriteAsync(folder, entries, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

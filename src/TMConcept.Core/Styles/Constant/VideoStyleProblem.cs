@@ -20,4 +20,7 @@ public enum VideoStyleProblem
 
     /// <summary>The template's own colours cannot be read well (<see cref="PaletteDesigner.Check"/>).</summary>
     PaletteContrast = 5,
+
+    /// <summary>"Own file" music is chosen but no file is (0.1.44).</summary>
+    MusicFileMissing = 6,
 }

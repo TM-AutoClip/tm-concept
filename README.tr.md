@@ -482,6 +482,12 @@ Bir şablonla (Ayarlar → Şablonlar) üretilen video, modelin iyi niyetine kal
 - **Son işlem (0.1.43, yeni şablonlarda açık):** programın çizdiği sahnelerin üstüne çizim tarzına uygun bir katman: kâğıt dokusu, gren,
   köşe gölgesi, yumuşak ışıma, derinliğe göre gölge ve saniyede 12 adımlık hafif titreme, hepsi sabit bir tohumdan. Her tarz bilinen
   tuzaklarını da sahne planı isteğine yazar. Yapay zekâya ek istek yok.
+- **Arka plan müziği (0.1.44, varsayılan kapalı):** *Kendi dosyam* videonun tamamının altına kendi parçanı koyar. Anlatım konuşurken
+  kısılır, sahne aralarında yükselir (cümleler arasındaki kısa nefeslerde yükselmez); kısa parça döner, uzun parça kesilir, sonda kararır.
+  Düzey, kısma miktarı ve kararma şablonda ayarlanır. Dosya her videonun sürüm klasörüne (`music/`) kopyalanır, yeni sürüm aynı parçayı
+  kullanır. Lisansı senin sorumluluğunda; isteğe bağlı atıf, video bitince video sayfasında açıklamaya kopyalanmak üzere gösterilir
+  (videoya yazılmaz). Her sürüm klasöründe videonun kullandığı dış dosyaları listeleyen bir `assets.json` var. Hazır kütüphane ve müzik
+  üretimi sonraki sürümlerde.
 - **Kelime kelime vurgu (0.1.34, isteğe bağlı):** o an söylenen kelime vurgu renginde görünür; çizim tarzına göre parlar, büyür ya da
   yalnız rengi değişir.
 - **Çizim tarzı:** görseli olmayan sahneler şablonun tarzında çizilir, üretilen görseller de aynı tarzda istenir. Düzenleyicide her

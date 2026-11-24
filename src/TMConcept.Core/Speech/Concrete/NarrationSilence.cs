@@ -83,6 +83,40 @@ public static class NarrationSilence
         return gaps;
     }
 
+    /// <summary>
+    /// The spoken parts of a clip in milliseconds (every run of windows louder than <see cref="NarrationGaps.SilenceLevel"/>), in order; the
+    /// background music ducks under them (0.1.44, <see cref="Media.MusicEnvelope"/>). <c>null</c> for a format this does not read; empty for
+    /// a clip that is silence only.
+    /// </summary>
+    public static IReadOnlyList<Media.NarrationSpan>? Spoken(string path)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(path);
+        var (format, data) = WaveFile.Read(path);
+        if (Layout(format) is not { } layout)
+        {
+            return null;
+        }
+
+        var windows = Windows(data, layout);
+        var spans = new List<Media.NarrationSpan>();
+        var start = -1;
+        for (var w = 0; w <= windows.Length; w++)
+        {
+            var loud = w < windows.Length && !windows[w];
+            if (loud && start < 0)
+            {
+                start = w;
+            }
+            else if (!loud && start >= 0)
+            {
+                spans.Add(new Media.NarrationSpan((long)start * NarrationGaps.WindowMs, (long)w * NarrationGaps.WindowMs));
+                start = -1;
+            }
+        }
+
+        return spans;
+    }
+
     /// <summary>The byte ranges kept: every loud window, and of each silent run only its allowed margins.</summary>
     private static List<(int Start, int Length)> Keep(bool[] windows, int windowBytes, int total)
     {

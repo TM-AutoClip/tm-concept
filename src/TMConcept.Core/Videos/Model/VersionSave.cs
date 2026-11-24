@@ -19,4 +19,10 @@ public sealed record VersionSave(Guid Id, Profile Profile, Guid? ConceptId, stri
 
     /// <summary>The edited scene texts with their markers (a new voice), kept as <see cref="VideoFolders.ScriptFile"/>; null = none.</summary>
     public IReadOnlyList<string>? Script { get; init; }
+
+    /// <summary>
+    /// The background music checked when the run started (0.1.44, <see cref="VideoAssembler.PrepareMusicAsync"/>); null = none. It is mixed
+    /// under the narration and copied into the version folder with its line in the asset record.
+    /// </summary>
+    public PreparedMusic? Music { get; init; }
 }

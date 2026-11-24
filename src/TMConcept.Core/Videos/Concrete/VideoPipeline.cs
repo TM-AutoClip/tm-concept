@@ -163,6 +163,9 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
 
         Directory.CreateDirectory(work);
 
+        // The template's background music (0.1.44): copied and read before anything is paid for; a damaged file stops the video here.
+        var music = await assembler.PrepareMusicAsync(options.Style, null, work, cancellationToken).ConfigureAwait(false);
+
         // The template's spoken closing: its sentence (in the video's language) ends the last scene's narration before the voice reads it, so
         // the timing follows the real clip, the subtitles show it and a later version keeps it. Images are made from the scenes as written.
         var closing = Styles.VideoStyleRules.Closing(options.Style, profile.ContentLanguage);
@@ -264,6 +267,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         {
             // Each scene's text with its placeholders and the transition into it: a new version is edited from this.
             Script = scenes.Select(s => VideoRemaker.WithTransition(s.Transition, s.Script, profile.ContentLanguage)).ToList(),
+            Music = music,
         }, steps,
             cancellationToken).ConfigureAwait(false);
         await concepts.SetStatusAsync([job.Concept.Id], ConceptStatus.Produced, CancellationToken.None).ConfigureAwait(false);

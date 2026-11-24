@@ -187,9 +187,15 @@ public static class VideoStyleRules
 
         if (!Enum.IsDefined(style.TitleStyle) || !Enum.IsDefined(style.TitlePosition) || !Enum.IsDefined(style.DrawStyle) ||
             !Enum.IsDefined(style.Motion) || !Enum.IsDefined(style.Closing) || !Enum.IsDefined(style.ClosingPhrase) ||
-            !Enum.IsDefined(style.ClosingPlatform) || !Enum.IsDefined(style.FontEmphasis) || !Enum.IsDefined(style.Tempo))
+            !Enum.IsDefined(style.ClosingPlatform) || !Enum.IsDefined(style.FontEmphasis) || !Enum.IsDefined(style.Tempo) ||
+            !Enum.IsDefined(style.Music?.Source ?? MusicSource.Off))
         {
             problems.Add(VideoStyleProblem.UnknownValue);
+        }
+
+        if (style.Music is { Source: MusicSource.OwnFile } music && string.IsNullOrWhiteSpace(music.File))
+        {
+            problems.Add(VideoStyleProblem.MusicFileMissing);
         }
 
         return problems;
@@ -235,4 +241,22 @@ public static class VideoStyleRules
         ArgumentNullException.ThrowIfNull(options);
         return options.Style?.ProgressBar ?? false;
     }
+
+    /// <summary>The video has background music (0.1.44): its template snapshot chose a source other than off.</summary>
+    public static bool MusicOn(VideoStyle? style) => style?.Music is { Source: not MusicSource.Off };
+
+    /// <summary>
+    /// The music's levels as factors and its fade-out, kept inside the editor's bounds (<see cref="MusicMixDefaults"/>): the level where
+    /// nobody speaks, the level under narration (the level lowered by the ducking) and the fade-out in seconds.
+    /// </summary>
+    public static (double Level, double Ducked, double FadeOutSeconds) MusicMix(VideoMusic music)
+    {
+        ArgumentNullException.ThrowIfNull(music);
+        var level = Math.Clamp(Finite(music.LevelDb, MusicMixDefaults.LevelDb), MusicMixDefaults.MinLevelDb, MusicMixDefaults.MaxLevelDb);
+        var duck = Math.Clamp(Finite(music.DuckDb, MusicMixDefaults.DuckDb), MusicMixDefaults.MinDuckDb, 0);
+        var fade = Math.Clamp(Finite(music.FadeOutSeconds, MusicMixDefaults.FadeOutSeconds), 0, MusicMixDefaults.MaxFadeOutSeconds);
+        return (Media.MusicEnvelope.Linear(level), Media.MusicEnvelope.Linear(level + duck), fade);
+    }
+
+    private static double Finite(double value, double fallback) => double.IsFinite(value) ? value : fallback;
 }

@@ -18,7 +18,7 @@ namespace TMConcept.Desktop.ViewModels;
 /// before they are dropped. A database error is logged and shown, never left to the dispatcher.
 /// </summary>
 public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store, IVideoPaletteStore palettes, Localizer text, IConfirmDialog confirm,
-    IActivityLog activity, ILogger<VideoStylesSettingsViewModel> logger) : SettingsSectionBase
+    IActivityLog activity, Startup.FileDialogs dialogs, ILogger<VideoStylesSettingsViewModel> logger) : SettingsSectionBase
 {
     private bool _loading;
     private IReadOnlyList<SavedPalette> _saved = [];
@@ -365,7 +365,8 @@ public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store,
         Status = text.Format("styles.own.deleted", palette.Name);
     }
 
-    private VideoStyleEditorViewModel NewEditor(VideoStyle style, bool isNew) => new(style, isNew, text, _saved);
+    private VideoStyleEditorViewModel NewEditor(VideoStyle style, bool isNew) => new(style, isNew, text, _saved,
+        () => dialogs.OpenAsync("styles.music.pick", "styles.music.filter", MusicSources.FilePatterns));
 
     private string NewName()
     {

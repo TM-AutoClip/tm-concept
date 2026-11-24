@@ -20,6 +20,65 @@ public sealed class FfmpegMedia(FfmpegMuxer muxer, ToolInstaller tools, IProcess
         IReadOnlyList<long> fadesMs, string output, CancellationToken cancellationToken) =>
         muxer.MuxAsync(folder, silentVideo, clips, overlay, fadesMs, output, cancellationToken);
 
+    /// <summary>The ffprobe arguments that print the codec type of every stream and the file's length (pure; tests read them).</summary>
+    public static IReadOnlyList<string> ProbeArguments(string file) =>
+        ["-v", "error", "-show_entries", "stream=codec_type:format=duration", "-of", "default=noprint_wrappers=1", file];
+
+    /// <summary>
+    /// The length in milliseconds from ffprobe's lines (<see cref="ProbeArguments"/>): only when a stream is audio and the length is a positive
+    /// number; <c>null</c> otherwise.
+    /// </summary>
+    public static long? ProbeDuration(IEnumerable<string> lines)
+    {
+        ArgumentNullException.ThrowIfNull(lines);
+        var audio = false;
+        double? seconds = null;
+        foreach (var line in lines.Select(l => l.Trim()))
+        {
+            if (line == "codec_type=audio")
+            {
+                audio = true;
+            }
+            else if (line.StartsWith("duration=", StringComparison.Ordinal)
+                && double.TryParse(line.AsSpan("duration=".Length), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) && value > 0)
+            {
+                seconds = value;
+            }
+        }
+
+        return audio && seconds is { } s ? (long)Math.Round(s * 1000) : null;
+    }
+
+    /// <inheritdoc />
+    public async Task<long?> AudioDurationAsync(string file, CancellationToken cancellationToken)
+    {
+        var ffprobe = tools.Sibling(ToolKind.Ffmpeg, "ffprobe");
+        var folder = Path.GetDirectoryName(Path.GetFullPath(file))!;
+        var lines = new List<string>();
+        var result = await runner.RunAsync(new ProcessStart(ffprobe, [.. ProbeArguments(file)], folder), line =>
+        {
+            lock (lines)
+            {
+                lines.Add(line);
+            }
+        }, cancellationToken).ConfigureAwait(false);
+        List<string> read;
+        lock (lines)
+        {
+            read = [.. lines];
+        }
+
+        var duration = result.ExitCode == 0 ? ProbeDuration(read) : null;
+        if (duration is null)
+        {
+            // The file name only: the folder is the user's.
+            logger.LogError("ffprobe could not read the sound of {File} (exit {Code}): {Error}", Path.GetFileName(file), result.ExitCode,
+                Core.Processes.ChildOutput.Summary(result.LastLines.Replace(folder, "<folder>", StringComparison.Ordinal)).Trim());
+        }
+
+        return duration;
+    }
+
     /// <summary>
     /// ffmpeg's error lines without the user's folders (they name the files it read and wrote): the paths are replaced first and the text is
     /// cut after, so a cut never leaves part of a path.

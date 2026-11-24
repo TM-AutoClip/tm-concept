@@ -80,6 +80,9 @@ public sealed class VideoRemaker(IEnumerable<IVideoEngine> engines, SceneNarrato
         {
             steps.Report(VideoSteps.Prepare, 0);
             VideoAssembler.CopyProject(Path.Combine(source.Folder, VideoFolders.Source), Path.Combine(work, "project"));
+
+            // The version's music (0.1.44): the track kept with the video is used again, nothing is made or paid for it.
+            var music = await assembler.PrepareMusicAsync(Options(source.Record).Style, source.Folder, work, cancellationToken).ConfigureAwait(false);
             steps.Finish(VideoSteps.Prepare);
 
             var warnings = new List<string>();
@@ -138,7 +141,7 @@ public sealed class VideoRemaker(IEnumerable<IVideoEngine> engines, SceneNarrato
             var record = await assembler.SaveAsync(new VersionSave(id, job.Profile, source.Record.ConceptId, source.Record.Title, work, rendered, clips, target,
                 VersionFolders.Next(Path.GetDirectoryName(source.Folder)!), options, source.Engine.Name, source.Record.CodeModel,
                 voice is null ? string.Empty : voice.Model.Provider + "/" + voice.Model.Id + ":" + voice.Voice, source.Record.ImageModel, source.Record.PromptVersion,
-                warnings, steps.Spent, [], watch) { Script = job.SceneTexts }, steps, cancellationToken).ConfigureAwait(false);
+                warnings, steps.Spent, [], watch) { Script = job.SceneTexts, Music = music }, steps, cancellationToken).ConfigureAwait(false);
             logger.LogInformation("New version {Id} made in {Seconds:0} s with the kept code ({Usd} USD for the voice)", id, watch.Elapsed.TotalSeconds,
                 record.TotalUsd);
             assembler.TryDelete(work);
@@ -169,6 +172,7 @@ public sealed class VideoRemaker(IEnumerable<IVideoEngine> engines, SceneNarrato
             PlaceImages(source, Path.Combine(work, "project"));
             var clips = input.Scenes.Select(s => VersionFolders.Clip(source.Folder, s.Number))
                 .Select(f => File.Exists(f) ? new SpeechClip(f, WaveFile.DurationMs(f), 0, 0, "kept") : null).ToList();
+            var music = await assembler.PrepareMusicAsync(Options(source.Record).Style, source.Folder, work, cancellationToken).ConfigureAwait(false);
             steps.Finish(VideoSteps.Prepare);
 
             var options = Options(source.Record);
@@ -183,7 +187,7 @@ public sealed class VideoRemaker(IEnumerable<IVideoEngine> engines, SceneNarrato
             options.CodeModel = job.CodeModel.Model.Id;
             var record = await assembler.SaveAsync(new VersionSave(id, job.Profile, source.Record.ConceptId, source.Record.Title, work, rendered, clips, target,
                 VersionFolders.Next(Path.GetDirectoryName(source.Folder)!), options, job.Engine.Name, job.CodeModel.Model.Provider + "/" + job.CodeModel.Model.Id,
-                source.Record.SpeechModel, source.Record.ImageModel, VideoCodePrompt.Version, warnings, steps.Spent, [], watch) { Script = source.Texts }, steps,
+                source.Record.SpeechModel, source.Record.ImageModel, VideoCodePrompt.Version, warnings, steps.Spent, [], watch) { Script = source.Texts, Music = music }, steps,
                 cancellationToken).ConfigureAwait(false);
             logger.LogInformation("New version {Id} for {Engine} made in {Seconds:0} s ({Usd} USD)", id, job.Engine.Name, watch.Elapsed.TotalSeconds, record.TotalUsd);
             assembler.TryDelete(work);

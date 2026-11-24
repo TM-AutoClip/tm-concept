@@ -92,6 +92,17 @@
               <TextBlock Text="{Binding Status}" Classes="error" TextWrapping="Wrap"
                          IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
             </StackPanel>
+            <!-- H2 (0.1.44): the credit the made video's music asks for, for the description; never drawn into the video. -->
+            <Border Name="AttributionNote" DockPanel.Dock="Bottom" Classes="card" Margin="0,6,0,0" IsVisible="{Binding HasAttribution}">
+              <StackPanel Spacing="6">
+                <TextBlock Text="{DynamicResource video.attribution}" Classes="warning" FontWeight="SemiBold" TextWrapping="Wrap" />
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                  <SelectableTextBlock Name="AttributionText" Text="{Binding Attribution}" TextWrapping="Wrap" />
+                  <Button Name="CopyAttributionButton" Grid.Column="1" Classes="small" Content="{DynamicResource video.attribution.copy}"
+                          Command="{Binding CopyAttributionCommand}" VerticalAlignment="Top" />
+                </Grid>
+              </StackPanel>
+            </Border>
             <TextBlock Name="LastLine" DockPanel.Dock="Bottom" Text="{Binding LastLine}" Classes="tiny" TextTrimming="CharacterEllipsis" Margin="2,4,0,0"
                        ToolTip.Tip="{Binding LastLine}" IsVisible="{Binding LastLine, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
             <Panel>

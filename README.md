@@ -489,6 +489,12 @@ A video made with a template (Settings → Templates) follows it without relying
 - **Finishing (0.1.43, on in new templates):** over the scenes the app draws, a layer that fits the drawing style: paper texture, grain,
   darker corners, a soft glow, a shadow by depth and a slight 12-steps-a-second tremble, all from a fixed seed. Each style also lists
   its known pitfalls in the scene plan request. No extra AI request.
+- **Background music (0.1.44, off by default):** *My own file* puts a track of your own under the whole video. It is quieter while
+  the narration speaks and comes back up between scenes (short breaths between sentences do not lift it); a short track loops, a long
+  one is cut, and it fades out at the end. Level, ducking and fade-out are set in the template. The file is copied into each video's
+  version folder (`music/`), so a new version uses the same track. Its licence is your responsibility; an optional attribution is shown
+  on the video page after the video, ready to copy into the description (never drawn into the video). Every version folder has an
+  `assets.json` listing the outside files the video uses. The ready library and generated music come in later versions.
 - **Word-by-word highlight (0.1.34, optional):** the word being said shows in the accent colour, glowing, growing or only recoloured
   as the drawing style suits.
 - **Drawing style:** scenes without an image are drawn in the template's style, and generated images are asked for in the same style.

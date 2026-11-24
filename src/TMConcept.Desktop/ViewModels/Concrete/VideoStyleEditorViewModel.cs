@@ -21,18 +21,22 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
 {
     private readonly VideoStyle _source;
     private readonly Localizer _text;
+    private readonly Func<Task<string?>>? _pickMusic;
     private bool _filling;
 
     /// <summary>
     /// Fills the form from <paramref name="source"/> (a copy is edited; the source is not changed); <paramref name="saved"/> are the user's
-    /// saved palettes, listed after the shipped ones and before the template's own colours.
+    /// saved palettes, listed after the shipped ones and before the template's own colours. <paramref name="pickMusic"/> asks for the
+    /// user's own music file (0.1.44; a file dialog, <c>null</c> when canceled); without it the file can only be kept as it is.
     /// </summary>
-    public VideoStyleEditorViewModel(VideoStyle source, bool isNew, Localizer text, IReadOnlyList<SavedPalette>? saved = null)
+    public VideoStyleEditorViewModel(VideoStyle source, bool isNew, Localizer text, IReadOnlyList<SavedPalette>? saved = null,
+        Func<Task<string?>>? pickMusic = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(text);
         _source = VideoStyleRules.Copy(source);
         _text = text;
+        _pickMusic = pickMusic;
         IsNew = isNew;
         Palettes = new ObservableCollection<PaletteOption>(VideoPalettes.All.Select(p => Option(p, Label("style.palette." + p.Id, p.Id))));
         foreach (var palette in saved ?? [])
@@ -52,6 +56,10 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         Drawers = Choices<SceneDrawer>("style.drawer.");
         Placements = Choices<ClosingPlacement>("style.closing.");
         Platforms = Choices<ClosingPlatform>("style.platform.");
+
+        // 0.1.44: only the sources this version makes (off, own file); the library and generated music come later.
+        MusicSources = Core.Styles.MusicSources.Available
+            .Select(m => new NumberChoice((int)m, Label("style.music." + Key(m), m.ToString()))).ToList();
         TitleCells = Enum.GetValues<TitlePosition>().Select(p => new TitleCellViewModel(p, Label("style.position." + Key(p), p.ToString()))).ToList();
         foreach (var cell in TitleCells)
         {
@@ -84,6 +92,13 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         Phrases = PhraseChoices((ClosingPlatform)Platform.Value);
         Phrase = Pick(Phrases, (int)_source.ClosingPhrase);
         Position = _source.TitlePosition;
+        var music = _source.Music ?? new VideoMusic();
+        MusicSource = Pick(MusicSources, (int)music.Source);
+        MusicFile = music.File;
+        MusicAttribution = music.Attribution;
+        MusicLevel = (decimal)Math.Round(music.LevelDb, 1);
+        MusicDuck = (decimal)Math.Round(music.DuckDb, 1);
+        MusicFadeOut = (decimal)Math.Round(music.FadeOutSeconds, 1);
         _filling = false;
         Refresh();
     }
@@ -302,6 +317,59 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
     [ObservableProperty]
     public partial TitlePosition Position { get; set; }
 
+    /// <summary>The music sources this version can make (0.1.44: off, own file).</summary>
+    public IReadOnlyList<NumberChoice> MusicSources { get; }
+
+    /// <summary>Where the background music comes from.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MusicOn), nameof(MusicOwnFile))]
+    public partial NumberChoice MusicSource { get; set; }
+
+    /// <summary>The music has settings to show (a source other than off).</summary>
+    public bool MusicOn => (MusicSource?.Value ?? 0) != (int)Core.Styles.MusicSource.Off;
+
+    /// <summary>The user's own file is the source.</summary>
+    public bool MusicOwnFile => (MusicSource?.Value ?? 0) == (int)Core.Styles.MusicSource.OwnFile;
+
+    /// <summary>The own music file's full path (empty = none chosen).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MusicFileName))]
+    public partial string MusicFile { get; set; } = string.Empty;
+
+    /// <summary>The chosen file's name, or "no file chosen".</summary>
+    public string MusicFileName => MusicFile.Length > 0 ? Path.GetFileName(MusicFile) : _text["styles.music.no_file"];
+
+    /// <summary>The attribution the track asks for (optional).</summary>
+    [ObservableProperty]
+    public partial string MusicAttribution { get; set; } = string.Empty;
+
+    /// <summary>The music's level where nobody speaks (dB).</summary>
+    [ObservableProperty]
+    public partial decimal? MusicLevel { get; set; }
+
+    /// <summary>How much lower the music is under narration (dB).</summary>
+    [ObservableProperty]
+    public partial decimal? MusicDuck { get; set; }
+
+    /// <summary>The fade-out at the end of the video (seconds).</summary>
+    [ObservableProperty]
+    public partial decimal? MusicFadeOut { get; set; }
+
+    /// <summary>Asks for the own music file (a file dialog; the window's thread only waits for the dialog, nothing is read).</summary>
+    [RelayCommand]
+    public async Task PickMusicAsync()
+    {
+        if (_pickMusic is null)
+        {
+            return;
+        }
+
+        if (await _pickMusic().ConfigureAwait(true) is { Length: > 0 } file)
+        {
+            MusicFile = file;
+        }
+    }
+
     /// <summary>The closing has a sentence and a platform to choose (it is not off).</summary>
     [ObservableProperty]
     public partial bool ClosingOn { get; set; }
@@ -386,6 +454,15 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         style.Drawer = (SceneDrawer)Drawer.Value;
         style.WordHighlight = WordHighlight;
         style.Finish = Finish;
+        style.Music = new VideoMusic
+        {
+            Source = (Core.Styles.MusicSource)(MusicSource?.Value ?? 0),
+            File = MusicFile.Trim(),
+            Attribution = MusicAttribution.Trim(),
+            LevelDb = (double)Math.Clamp(MusicLevel ?? (decimal)MusicMixDefaults.LevelDb, (decimal)MusicMixDefaults.MinLevelDb, (decimal)MusicMixDefaults.MaxLevelDb),
+            DuckDb = (double)Math.Clamp(MusicDuck ?? (decimal)MusicMixDefaults.DuckDb, (decimal)MusicMixDefaults.MinDuckDb, 0m),
+            FadeOutSeconds = (double)Math.Clamp(MusicFadeOut ?? (decimal)MusicMixDefaults.FadeOutSeconds, 0m, (decimal)MusicMixDefaults.MaxFadeOutSeconds),
+        };
         style.Closing = (ClosingPlacement)Closing.Value;
         style.ClosingPlatform = (ClosingPlatform)Platform.Value;
         style.ClosingPhrase = (ClosingPhrase)(Phrase?.Value ?? 0);
@@ -406,7 +483,7 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
 
         if (e.PropertyName is nameof(BaseColour) or nameof(GenerateLight) or nameof(PaletteName) or nameof(PaletteStatus) or nameof(PaletteOk)
             or nameof(OwnColours) or nameof(SavedChosen) or nameof(DrawStyleNote) or nameof(SuggestedPalette) or nameof(HasSuggestedPalette)
-            or nameof(SuggestedPaletteText))
+            or nameof(SuggestedPaletteText) or nameof(MusicOn) or nameof(MusicOwnFile) or nameof(MusicFileName))
         {
             return;
         }

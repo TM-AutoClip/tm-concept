@@ -41,6 +41,18 @@ public static class VideoFolders
     /// <summary>The frame strips of the motion check's findings (0.1.41; PNG, one per finding, named by its kind and second).</summary>
     public const string Checks = "checks";
 
+    /// <summary>
+    /// The background music of the version (0.1.44): the track as it was mixed in, copied here so a later version (a new voice, another
+    /// engine) uses the same music without asking for it again.
+    /// </summary>
+    public const string Music = "music";
+
+    /// <summary>
+    /// The version's asset record (0.1.44, F15; <see cref="AssetLedger"/>): every outside file the video uses (music, pictures) with its
+    /// source, licence and the attribution it asks for. Always written; an empty list when there is none.
+    /// </summary>
+    public const string AssetsFile = "assets.json";
+
     /// <summary>The thumbnail (the Produced videos page makes it again when it is missing).</summary>
     public const string ThumbnailFile = "thumbnail.jpg";
 

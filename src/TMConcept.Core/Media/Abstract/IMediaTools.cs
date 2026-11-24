@@ -14,6 +14,12 @@ public interface IMediaTools
     Task MuxAsync(string folder, string silentVideo, IReadOnlyList<(string Wav, long StartMs)> clips, MuxOverlay overlay, IReadOnlyList<long> fadesMs, string output,
         CancellationToken cancellationToken);
 
+    /// <summary>
+    /// The length of the first audio stream of <paramref name="file"/> in milliseconds (0.1.44, the background music is checked before a
+    /// video is paid for); <c>null</c> when ffmpeg cannot read the file, finds no sound in it or no length.
+    /// </summary>
+    Task<long?> AudioDurationAsync(string file, CancellationToken cancellationToken);
+
     /// <summary>Writes a thumbnail from the first frame that is not black; false when none was found.</summary>
     Task<bool> ThumbnailAsync(string video, string jpeg, CancellationToken cancellationToken);
 
