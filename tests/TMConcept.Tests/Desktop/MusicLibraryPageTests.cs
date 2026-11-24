@@ -43,7 +43,8 @@ public sealed class MusicLibraryPageTests
         var library = editor.MusicSources.Single(c => c.Value == (int)MusicSource.Library);
         library.Label.ShouldBe(text["style.music.library"]);
         library.Enabled.ShouldBeFalse("the library is not on this computer");
-        editor.MusicSources.Where(c => c.Value != (int)MusicSource.Library).ShouldAllBe(c => c.Enabled);
+        editor.MusicSources.Where(c => c.Value is not ((int)MusicSource.Library or (int)MusicSource.GenerateLocal)).ShouldAllBe(c => c.Enabled,
+            "0.1.46: the local music model is greyed out until installed too");
         editor.MusicPicker.ShouldNotBeNull().Ready.ShouldBeFalse();
         editor.MusicPicker!.InstallText.ShouldContain(MusicCatalog.Shipped.Tracks.Count.ToString(text.Culture));
 

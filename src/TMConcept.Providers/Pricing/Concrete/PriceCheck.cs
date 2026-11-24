@@ -168,7 +168,9 @@ public static class PriceCheck
             && Fits(price.CacheReadUsd, model.CacheReadUsd, PriceLimits.MaxTokenUsd) && Fits(price.CacheWriteUsd, model.CacheWriteUsd, PriceLimits.MaxTokenUsd)
             && Fits(price.LongInputUsd, model.LongInputUsd, PriceLimits.MaxTokenUsd) && Fits(price.LongOutputUsd, model.LongOutputUsd, PriceLimits.MaxTokenUsd)
             && Fits(price.ImageUsd, model.ImageUsd, PriceLimits.MaxImageUsd)
-            && Fits(price.SpeechUsdPerMillionCharacters, model.SpeechUsdPerMillionCharacters, PriceLimits.MaxSpeechUsd);
+            && Fits(price.SpeechUsdPerMillionCharacters, model.SpeechUsdPerMillionCharacters, PriceLimits.MaxSpeechUsd)
+            && Fits(price.MusicUsdPerPiece, model.MusicUsdPerPiece, PriceLimits.MaxImageUsd)
+            && Fits(price.MusicUsdPerMinute, model.MusicUsdPerMinute, PriceLimits.MaxImageUsd);
     }
 
     private static bool Fits(decimal? value, decimal builtIn, decimal max)

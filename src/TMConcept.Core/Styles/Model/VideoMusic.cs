@@ -23,6 +23,15 @@ public sealed class VideoMusic
     /// </summary>
     public Music.MusicTrack? Track { get; set; }
 
+    /// <summary>
+    /// The music model of generated music (0.1.46, C5; <see cref="MusicSource.GenerateLocal"/> / <see cref="MusicSource.GenerateOnline"/>):
+    /// its catalog key "provider/id" ("local/ace-step-1.5", "google/lyria-3-clip-preview", "elevenlabs/music_v1"). Empty = not chosen.
+    /// </summary>
+    public string Generator { get; set; } = string.Empty;
+
+    /// <summary>Generated music without words (0.1.46; the default: nothing sings over the narration).</summary>
+    public bool Instrumental { get; set; } = true;
+
     /// <summary>The attribution the track asks for (optional; empty = none). Shown after the video for the description, never drawn into it.</summary>
     public string Attribution { get; set; } = string.Empty;
 

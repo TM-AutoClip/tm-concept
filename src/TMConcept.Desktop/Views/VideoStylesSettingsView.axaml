@@ -327,6 +327,30 @@
                     <TextBlock Name="StyleMusicNote" Text="{Binding MusicNote}" Classes="small warning" TextWrapping="Wrap"
                                IsVisible="{Binding MusicNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
 
+                    <!-- 0.1.46 (C5): generated music. The local model (NVIDIA only; installed after one confirmation) and the online models. -->
+                    <TextBlock Name="StyleMusicCardWarning" Text="{Binding MusicCardWarning}" Classes="small warning" TextWrapping="Wrap"
+                               IsVisible="{Binding MusicCardWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                    <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding CanInstallLocalMusic}">
+                      <TextBlock Name="StyleMusicLocalMissing" Text="{Binding LocalMusicInstallText}" Classes="small muted" VerticalAlignment="Center"
+                                 TextWrapping="Wrap" MaxWidth="460" />
+                      <Button Name="StyleMusicLocalInstall" Classes="small" Content="{DynamicResource styles.music.generate.local.install}"
+                              Command="{Binding InstallLocalMusicCommand}" VerticalAlignment="Center" />
+                      <views:HelpTip Text="{DynamicResource styles.music.generate.local.tip}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding MusicGenerateOnline}">
+                      <TextBlock Text="{DynamicResource styles.music.generate.model}" VerticalAlignment="Center" />
+                      <ComboBox Name="StyleMusicModel" ItemsSource="{Binding OnlineMusicModels}" SelectedItem="{Binding OnlineMusicModel}" MinWidth="320">
+                        <ComboBox.ItemTemplate>
+                          <DataTemplate x:DataType="vm:MusicModelOption">
+                            <TextBlock Text="{Binding Label}" />
+                          </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                      </ComboBox>
+                      <views:HelpTip Text="{DynamicResource styles.music.generate.model.tip}" />
+                    </StackPanel>
+                    <TextBlock Name="StyleMusicGeneratedNote" Text="{DynamicResource styles.music.generate.note}" Classes="small muted" TextWrapping="Wrap"
+                               IsVisible="{Binding MusicGenerated}" />
+
                     <!-- 0.1.45 (C4, S6): the ready library (installed after one confirmation), its track and the Openverse search. -->
                     <StackPanel Spacing="8" IsVisible="{Binding MusicPicker, Converter={x:Static ObjectConverters.IsNotNull}}">
                       <StackPanel Orientation="Horizontal" Spacing="8" DataContext="{Binding MusicPicker}" x:DataType="vm:MusicPickerViewModel"

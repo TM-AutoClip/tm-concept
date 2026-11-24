@@ -5,6 +5,7 @@
     { "id": "eleven_v4", "name": "Eleven v4 (speech)", "capabilities": "Speech", "inputUsd": 0, "outputUsd": 0, "speechUsdPerMillionCharacters": 80.0 },
     { "id": "eleven_v4_turbo", "name": "Eleven v4 Turbo (speech)", "capabilities": "Speech", "inputUsd": 0, "outputUsd": 0, "speechUsdPerMillionCharacters": 40.0 },
     { "id": "eleven_flash_v2_5", "name": "Eleven Flash v2.5 (speech)", "capabilities": "Speech", "inputUsd": 0, "outputUsd": 0, "speechUsdPerMillionCharacters": 40.0 },
-    { "id": "eleven_multilingual_v2", "name": "Eleven Multilingual v2 (speech)", "capabilities": "Speech", "inputUsd": 0, "outputUsd": 0, "speechUsdPerMillionCharacters": 80.0 }
+    { "id": "eleven_multilingual_v2", "name": "Eleven Multilingual v2 (speech)", "capabilities": "Speech", "inputUsd": 0, "outputUsd": 0, "speechUsdPerMillionCharacters": 80.0 },
+    { "id": "music_v1", "name": "Eleven Music (music)", "capabilities": "Music", "inputUsd": 0, "outputUsd": 0, "musicUsdPerMinute": 0.15 }
   ]
 }

@@ -13,9 +13,11 @@ namespace TMConcept.Core.Videos;
 /// The estimate of making videos before anything is paid for, with the models chosen on the page: the video code call (its real prompt is
 /// built from the concept's scenes; the answer is a range from <see cref="CodeOutputMin"/> tokens to the whole output budget of the call,
 /// <see cref="VideoCodeBudget.For"/>, and one repair may double it: the high end counts it), the image prompts and one image per scene when an image model is chosen, and the narration's
-/// characters for an online voice. Local models cost nothing. The exact cost of a made video is its own record.
+/// characters for an online voice, and (0.1.46, C5) a template's generated music: one piece per video at the music model's price
+/// (<see cref="Music.MusicPricing"/>; a shorter piece is looped, never a second one made). Local models cost nothing. The exact cost of a made
+/// video is its own record. <paramref name="catalog"/> finds a template's music model (none = its music is not counted).
 /// </summary>
-public sealed class VideoCostEstimator(ICostCalculator costs)
+public sealed class VideoCostEstimator(ICostCalculator costs, IModelCatalog? catalog = null)
 {
     /// <summary>Fewest output tokens of a video code answer (a short HyperFrames scene file).</summary>
     public const long CodeOutputMin = 3_000;
@@ -71,10 +73,31 @@ public sealed class VideoCostEstimator(ICostCalculator costs)
                 var voice = Speech(speech, spoken.Sum(s => (long)s.Narration.Length));
                 total = total.Plus(new CostEstimate(voice, voice, 0, 0, 0));
             }
+
+            if (MusicModel(style) is { } music)
+            {
+                var seconds = spoken.Sum(s => VideoRemaker.SilentMs(s.Script, profile.ContentLanguage)) / 1000.0;
+                var usd = Music(music, seconds);
+                total = total.Plus(new CostEstimate(usd, usd, 0, 0, 0));
+            }
         }
 
         return total;
     }
+
+    /// <summary>What a video of <paramref name="videoSeconds"/> pays for its generated music with <paramref name="music"/> (a local model nothing).</summary>
+    public static decimal Music(CatalogModel music, double videoSeconds)
+    {
+        ArgumentNullException.ThrowIfNull(music);
+        return Core.Music.MusicPricing.Usd(music, Core.Music.MusicPricing.Seconds(music, videoSeconds));
+    }
+
+    /// <summary>The music model of a template whose music is generated (null otherwise, or when the catalog does not know it).</summary>
+    private CatalogModel? MusicModel(Styles.VideoStyle? style) =>
+        style?.Music is { Source: Styles.MusicSource.GenerateLocal or Styles.MusicSource.GenerateOnline, Generator: { Length: > 0 } key }
+        && key.Split('/', 2) is [{ } provider, { } id] && catalog?.Find(provider, id) is { } model && model.Capabilities.HasFlag(ModelCapability.Music)
+            ? model
+            : null;
 
     /// <summary>
     /// The video code call for <paramref name="input"/> (its real prompt): from <see cref="CodeOutputMin"/> output tokens to the call's whole

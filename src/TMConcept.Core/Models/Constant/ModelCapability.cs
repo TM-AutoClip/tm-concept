@@ -24,4 +24,7 @@ public enum ModelCapability
 
     /// <summary>Makes embedding vectors.</summary>
     Embedding = 32,
+
+    /// <summary>Makes music (0.1.46, C5: a template's generated background music; not a pipeline step).</summary>
+    Music = 64,
 }

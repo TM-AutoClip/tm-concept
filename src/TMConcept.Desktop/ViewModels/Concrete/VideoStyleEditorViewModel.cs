@@ -22,6 +22,7 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
     private readonly VideoStyle _source;
     private readonly Localizer _text;
     private readonly Func<Task<string?>>? _pickMusic;
+    private readonly MusicGeneratorServices? _generators;
     private bool _filling;
     private MusicSourceChoice? _lastSource;
 
@@ -30,16 +31,18 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
     /// saved palettes, listed after the shipped ones and before the template's own colours. <paramref name="pickMusic"/> asks for the
     /// user's own music file (0.1.44; a file dialog, <c>null</c> when canceled); without it the file can only be kept as it is.
     /// <paramref name="musicServices"/> serves the library music (0.1.45: the library's install, its tracks and the Openverse search); without it
-    /// the library cannot be chosen.
+    /// the library cannot be chosen. <paramref name="generatorServices"/> serves generated music (0.1.46: the music models, the local model's
+    /// install and how it fits this card); without it generated music cannot be chosen.
     /// </summary>
     public VideoStyleEditorViewModel(VideoStyle source, bool isNew, Localizer text, IReadOnlyList<SavedPalette>? saved = null,
-        Func<Task<string?>>? pickMusic = null, MusicPickerServices? musicServices = null)
+        Func<Task<string?>>? pickMusic = null, MusicPickerServices? musicServices = null, MusicGeneratorServices? generatorServices = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(text);
         _source = VideoStyleRules.Copy(source);
         _text = text;
         _pickMusic = pickMusic;
+        _generators = generatorServices;
         IsNew = isNew;
         Palettes = new ObservableCollection<PaletteOption>(VideoPalettes.All.Select(p => Option(p, Label("style.palette." + p.Id, p.Id))));
         foreach (var palette in saved ?? [])
@@ -67,6 +70,11 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
             MusicPicker.PropertyChanged += OnPickerChanged;
         }
 
+        // 0.1.46: generated music — the local model (enabled once installed) and the online models with their prices.
+        LocalMusicModel = generatorServices?.Models.FirstOrDefault(m => m.Provider == Core.Models.ModelProviders.Local);
+        LocalMusicReady = LocalMusicModel is not null && generatorServices!.Ready(LocalMusicModel);
+        OnlineMusicModels = (generatorServices?.Models ?? []).Where(m => m.Provider != Core.Models.ModelProviders.Local)
+            .Select(m => new MusicModelOption(Core.Models.ModelBase.KeyOf(m), MusicModelLabel(m))).ToList();
         MusicSources = SourceChoices();
         TitleCells = Enum.GetValues<TitlePosition>().Select(p => new TitleCellViewModel(p, Label("style.position." + Key(p), p.ToString()))).ToList();
         foreach (var cell in TitleCells)
@@ -104,6 +112,7 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         MusicSource = MusicSources.FirstOrDefault(c => c.Value == (int)music.Source) ?? MusicSources[0];
         _lastSource = MusicSource;
         MusicFile = music.File;
+        OnlineMusicModel = OnlineMusicModels.FirstOrDefault(o => o.Key == music.Generator) ?? OnlineMusicModels.FirstOrDefault();
         MusicAttribution = music.Attribution;
         MusicLevel = (decimal)Math.Round(music.LevelDb, 1);
         MusicDuck = (decimal)Math.Round(music.DuckDb, 1);
@@ -332,7 +341,8 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
 
     /// <summary>Where the background music comes from.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(MusicOn), nameof(MusicOwnFile), nameof(MusicLibrary))]
+    [NotifyPropertyChangedFor(nameof(MusicOn), nameof(MusicOwnFile), nameof(MusicLibrary), nameof(MusicGenerateLocal), nameof(MusicGenerateOnline),
+        nameof(MusicGenerated), nameof(MusicCardWarning))]
     public partial MusicSourceChoice MusicSource { get; set; }
 
     /// <summary>The library music's part of the form (0.1.45); null when the editor has no library services.</summary>
@@ -344,6 +354,90 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
     /// <summary>A short note under the source: why the library cannot be chosen yet (empty = nothing to say).</summary>
     [ObservableProperty]
     public partial string MusicNote { get; set; } = string.Empty;
+
+    /// <summary>The local music model's catalog entry (0.1.46); null when the editor has no generated music services.</summary>
+    public Core.Models.CatalogModel? LocalMusicModel { get; }
+
+    /// <summary>The local music model is installed (its source can be chosen).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanInstallLocalMusic))]
+    public partial bool LocalMusicReady { get; set; }
+
+    /// <summary>The local music model can be installed from here (it is known and not installed yet).</summary>
+    public bool CanInstallLocalMusic => LocalMusicModel is not null && !LocalMusicReady;
+
+    /// <summary>What the local music model's install takes (about 23 GB, 16 GB of main memory) and where it runs.</summary>
+    public string LocalMusicInstallText => _text.Format("styles.music.generate.local.missing",
+        Math.Round(Core.Music.MusicGenerationRules.LocalInstallBytes / 1e9), Core.Music.MusicGenerationRules.LocalMemoryGb);
+
+    /// <summary>The local model is the source (0.1.46).</summary>
+    public bool MusicGenerateLocal => (MusicSource?.Value ?? 0) == (int)Core.Styles.MusicSource.GenerateLocal;
+
+    /// <summary>An online model is the source (0.1.46; its model list is shown).</summary>
+    public bool MusicGenerateOnline => (MusicSource?.Value ?? 0) == (int)Core.Styles.MusicSource.GenerateOnline;
+
+    /// <summary>The music is generated (locally or online; its note is shown).</summary>
+    public bool MusicGenerated => MusicGenerateLocal || MusicGenerateOnline;
+
+    /// <summary>The online music models with their prices.</summary>
+    public IReadOnlyList<MusicModelOption> OnlineMusicModels { get; }
+
+    /// <summary>The chosen online music model.</summary>
+    [ObservableProperty]
+    public partial MusicModelOption? OnlineMusicModel { get; set; }
+
+    /// <summary>
+    /// The yellow note of the local model on this computer (0.1.46): a card that is not NVIDIA ("this card is not supported, it may not work";
+    /// the choice is not blocked) and Linux (never tried there). Empty when there is nothing to say or another source is chosen.
+    /// </summary>
+    public string MusicCardWarning
+    {
+        get
+        {
+            if (!MusicGenerateLocal || _generators is null)
+            {
+                return string.Empty;
+            }
+
+            var parts = new List<string>();
+            if (_generators.Card.NvidiaOnly)
+            {
+                parts.Add(_text["styles.music.generate.nvidia_warning"]);
+            }
+
+            if (_generators.Card.Linux)
+            {
+                parts.Add(_text["styles.music.generate.linux"]);
+            }
+
+            return string.Join(" ", parts);
+        }
+    }
+
+    /// <summary>Installs the local music model (one confirmation of the app's install flow; nothing is downloaded without the yes).</summary>
+    [RelayCommand(CanExecute = nameof(CanInstallLocalMusic))]
+    public async Task InstallLocalMusicAsync()
+    {
+        if (_generators is null || LocalMusicModel is null)
+        {
+            return;
+        }
+
+        LocalMusicReady = await _generators.InstallLocalAsync().ConfigureAwait(true) && _generators.Ready(LocalMusicModel);
+        InstallLocalMusicCommand.NotifyCanExecuteChanged();
+        if (!LocalMusicReady)
+        {
+            return;
+        }
+
+        var chosen = MusicSource?.Value ?? 0;
+        _filling = true;
+        MusicSources = SourceChoices();
+        MusicSource = MusicSources.FirstOrDefault(c => c.Value == chosen) ?? MusicSources[0];
+        _lastSource = MusicSource;
+        _filling = false;
+        MusicNote = string.Empty;
+    }
 
     /// <summary>The music has settings to show (a source other than off).</summary>
     public bool MusicOn => (MusicSource?.Value ?? 0) != (int)Core.Styles.MusicSource.Off;
@@ -479,6 +573,10 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
             Source = (Core.Styles.MusicSource)(MusicSource?.Value ?? 0),
             File = MusicFile.Trim(),
             Track = MusicLibrary ? MusicPicker?.Track ?? (MusicPicker is null ? _source.Music?.Track : null) : null,
+            Generator = MusicGenerateLocal ? (LocalMusicModel is { } local ? Core.Models.ModelBase.KeyOf(local) : _source.Music?.Generator ?? string.Empty)
+                : MusicGenerateOnline ? OnlineMusicModel?.Key ?? _source.Music?.Generator ?? string.Empty
+                : string.Empty,
+            Instrumental = _source.Music?.Instrumental ?? true,
             Attribution = MusicAttribution.Trim(),
             LevelDb = (double)Math.Clamp(MusicLevel ?? (decimal)MusicMixDefaults.LevelDb, (decimal)MusicMixDefaults.MinLevelDb, (decimal)MusicMixDefaults.MaxLevelDb),
             DuckDb = (double)Math.Clamp(MusicDuck ?? (decimal)MusicMixDefaults.DuckDb, (decimal)MusicMixDefaults.MinDuckDb, 0m),
@@ -505,7 +603,8 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         if (e.PropertyName is nameof(BaseColour) or nameof(GenerateLight) or nameof(PaletteName) or nameof(PaletteStatus) or nameof(PaletteOk)
             or nameof(OwnColours) or nameof(SavedChosen) or nameof(DrawStyleNote) or nameof(SuggestedPalette) or nameof(HasSuggestedPalette)
             or nameof(SuggestedPaletteText) or nameof(MusicOn) or nameof(MusicOwnFile) or nameof(MusicFileName) or nameof(MusicLibrary)
-            or nameof(MusicSources) or nameof(MusicNote))
+            or nameof(MusicSources) or nameof(MusicNote) or nameof(MusicGenerateLocal) or nameof(MusicGenerateOnline) or nameof(MusicGenerated) or nameof(MusicCardWarning)
+            or nameof(LocalMusicReady) or nameof(CanInstallLocalMusic))
         {
             return;
         }
@@ -516,6 +615,16 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
             if (MusicLibrary && MusicPicker is not { Ready: true } && _lastSource is not null && _lastSource.Value != MusicSource.Value)
             {
                 MusicNote = _text["styles.music.library.not_ready"];
+                _filling = true;
+                MusicSource = _lastSource;
+                _filling = false;
+                return;
+            }
+
+            // 0.1.46: the local music model can be chosen only once it is installed (rule 18: never downloaded by itself).
+            if (MusicGenerateLocal && !LocalMusicReady && _lastSource is not null && _lastSource.Value != MusicSource.Value)
+            {
+                MusicNote = _text["styles.music.generate.local.not_ready"];
                 _filling = true;
                 MusicSource = _lastSource;
                 _filling = false;
@@ -735,11 +844,38 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
 
     private string Label(string key, string fallback) => _text.Has(key) ? _text[key] : fallback;
 
-    /// <summary>The music sources with the library enabled only when it is installed.</summary>
+    /// <summary>
+    /// The music sources with the library and the local model enabled only when installed (0.1.46: generated music only with its services;
+    /// the local model's label says "(NVIDIA only)" on another card and "not verified" on Linux).
+    /// </summary>
     private List<MusicSourceChoice> SourceChoices() => Core.Styles.MusicSources.Available
-        .Select(m => new MusicSourceChoice((int)m, Label("style.music." + Key(m), m.ToString()),
-            m != Core.Styles.MusicSource.Library || MusicPicker is { Ready: true }))
+        .Where(m => _generators is not null || m is not (Core.Styles.MusicSource.GenerateLocal or Core.Styles.MusicSource.GenerateOnline))
+        .Where(m => m != Core.Styles.MusicSource.GenerateLocal || LocalMusicModel is not null)
+        .Where(m => m != Core.Styles.MusicSource.GenerateOnline || OnlineMusicModels.Count > 0)
+        .Select(m => new MusicSourceChoice((int)m, SourceLabel(m), m switch
+        {
+            Core.Styles.MusicSource.Library => MusicPicker is { Ready: true },
+            Core.Styles.MusicSource.GenerateLocal => LocalMusicReady,
+            _ => true,
+        }))
         .ToList();
+
+    private string SourceLabel(Core.Styles.MusicSource source)
+    {
+        var label = Label("style.music." + Key(source), source.ToString());
+        if (source == Core.Styles.MusicSource.GenerateLocal && _generators is { } services)
+        {
+            label += (services.Card.NvidiaOnly ? " " + _text["style.music.generatelocal.nvidia_only"] : string.Empty)
+                + (services.Card.Linux ? " " + _text["style.music.generatelocal.unverified"] : string.Empty);
+        }
+
+        return label;
+    }
+
+    /// <summary>An online music model's label with its price (per piece or per minute).</summary>
+    private string MusicModelLabel(Core.Models.CatalogModel model) => model.MusicUsdPerPiece > 0
+        ? _text.Format("styles.music.generate.price.piece", model.Name, _text.Usd(model.MusicUsdPerPiece))
+        : _text.Format("styles.music.generate.price.minute", model.Name, _text.Usd(model.MusicUsdPerMinute));
 
     /// <summary>The library was installed: its source becomes usable.</summary>
     private void OnPickerChanged(object? sender, PropertyChangedEventArgs e)

@@ -19,9 +19,11 @@ namespace TMConcept.Desktop.ViewModels;
 /// </summary>
 public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store, IVideoPaletteStore palettes, Localizer text, IConfirmDialog confirm,
     IActivityLog activity, Startup.FileDialogs dialogs, Core.Music.IMusicLibrary musicLibrary, Core.Music.IMusicSearch musicSearch,
-    Components.ComponentInstallFlow installs, ILogger<VideoStylesSettingsViewModel> logger) : SettingsSectionBase
+    Components.ComponentInstallFlow installs, Core.Music.IMusicGenerators musicModels, Core.Hardware.IGpuInfo gpu,
+    ILogger<VideoStylesSettingsViewModel> logger) : SettingsSectionBase
 {
     private bool _loading;
+    private Core.Music.LocalMusicCard? _card;
     private IReadOnlyList<SavedPalette> _saved = [];
     private bool _fontsLogged;
 
@@ -250,6 +252,9 @@ public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store,
     {
         // The fonts installed on this computer are read once, off the interface thread (the editor lists them after the shipped ones).
         var installed = await Task.Run(() => SystemFonts.Installed).ConfigureAwait(true);
+
+        // 0.1.46: how the local music model fits this computer's card, read once off the interface thread.
+        _card ??= await Task.Run(() => Core.Music.LocalMusicSupport.Of(gpu.Detect(), OperatingSystem.IsLinux())).ConfigureAwait(true);
         if (!_fontsLogged)
         {
             _fontsLogged = true;
@@ -377,7 +382,26 @@ public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store,
 
     private VideoStyleEditorViewModel NewEditor(VideoStyle style, bool isNew) => new(style, isNew, text, _saved,
         () => dialogs.OpenAsync("styles.music.pick", "styles.music.filter", MusicSources.FilePatterns),
-        new MusicPickerServices(musicLibrary, musicSearch, InstallLibraryAsync, activity));
+        new MusicPickerServices(musicLibrary, musicSearch, InstallLibraryAsync, activity),
+        new MusicGeneratorServices(musicModels.Models, musicModels.Ready, _card ?? new Core.Music.LocalMusicCard(true, OperatingSystem.IsLinux()),
+            InstallLocalMusicAsync));
+
+    /// <summary>
+    /// Installs the local music model (0.1.46, C5): its environment and its weights, listed with their sizes in the app's install flow with the
+    /// note of its whole size and memory need; nothing is downloaded without the yes (rule 18). True when it is ready afterwards.
+    /// </summary>
+    private async Task<bool> InstallLocalMusicAsync()
+    {
+        var outcome = await installs.EnsureAsync([Core.Components.ComponentCodes.MusicModel], "install.purpose.music_model", null, CancellationToken.None)
+            .ConfigureAwait(true);
+        if (!outcome.Ready && outcome.Reason.Length > 0)
+        {
+            logger.LogInformation("The local music model was not installed: {Reason}", outcome.Reason);
+            Status = outcome.Reason;
+        }
+
+        return outcome.Ready;
+    }
 
     /// <summary>
     /// Installs the ready music library (0.1.45): the app's install flow lists every track with its size and asks once; nothing is downloaded

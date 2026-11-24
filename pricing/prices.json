@@ -57,6 +57,13 @@
     },
     {
       "provider": "elevenlabs",
+      "id": "music_v1",
+      "inputUsd": 0,
+      "outputUsd": 0,
+      "musicUsdPerMinute": 0.15
+    },
+    {
+      "provider": "elevenlabs",
       "id": "eleven_v4_turbo",
       "inputUsd": 0,
       "outputUsd": 0,
@@ -97,6 +104,20 @@
       "inputUsd": 0,
       "outputUsd": 0,
       "speechUsdPerMillionCharacters": 30.0
+    },
+    {
+      "provider": "google",
+      "id": "lyria-3-clip-preview",
+      "inputUsd": 0,
+      "outputUsd": 0,
+      "musicUsdPerPiece": 0.04
+    },
+    {
+      "provider": "google",
+      "id": "lyria-3.5",
+      "inputUsd": 0,
+      "outputUsd": 0,
+      "musicUsdPerPiece": 0.08
     },
     {
       "provider": "google",

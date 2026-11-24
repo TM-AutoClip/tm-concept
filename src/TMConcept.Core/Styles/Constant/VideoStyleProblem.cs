@@ -23,4 +23,7 @@ public enum VideoStyleProblem
 
     /// <summary>"Own file" music is chosen but no file is (0.1.44).</summary>
     MusicFileMissing = 6,
+
+    /// <summary>Generated music is chosen but no music model is (0.1.46).</summary>
+    MusicModelMissing = 7,
 }

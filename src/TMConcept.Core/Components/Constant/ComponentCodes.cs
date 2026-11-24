@@ -48,6 +48,18 @@ public static class ComponentCodes
     /// <summary>The ready music library (0.1.45: Incompetech tracks of <c>catalog/music.json</c>, downloaded after the user agreed).</summary>
     public const string MusicLibrary = "music-library";
 
+    /// <summary>
+    /// The Python environment of the local music model (0.1.46, C5): rakkase and ACE-Step 1.5 at pinned commits, their packages installed by
+    /// uv (PyTorch for NVIDIA CUDA included). A component of its own, apart from the model's weights (rule 18).
+    /// </summary>
+    public const string MusicEnvironment = PythonEnvironmentPrefix + "ace-step";
+
+    /// <summary>Prefix of local music model weight components ("music.ace-step-1.5").</summary>
+    public const string MusicModelPrefix = "music.";
+
+    /// <summary>The weights of ACE-Step 1.5 with its Qwen3-Embedding text encoder (0.1.46, C5; about 6 GB, each file pinned by its SHA-256).</summary>
+    public const string MusicModel = MusicModelPrefix + "ace-step-1.5";
+
     /// <summary>The start of the code of the text recognition's model and runtime (kept like a model by the clean-ups).</summary>
     public const string OcrPrefix = "ocr.";
 }

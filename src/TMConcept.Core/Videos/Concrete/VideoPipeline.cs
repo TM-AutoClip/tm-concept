@@ -254,7 +254,8 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         var planChooses = music is { Automatic: true } && Plans.PlanDrawer.Draws(engine.Kind, options.Style);
         if (!planChooses)
         {
-            music = await assembler.Music.SettleAsync(music, options.Style, input, clips, work, align: true, cancellationToken).ConfigureAwait(false);
+            music = await assembler.Music.SettleAsync(music, options.Style, input, clips, work, align: true, cancellationToken, VideoMusicStep.Spender(steps, id))
+                .ConfigureAwait(false);
         }
 
         steps.Finish(VideoSteps.Timing);

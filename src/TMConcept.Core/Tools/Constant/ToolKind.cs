@@ -81,6 +81,12 @@ public enum ToolKind
     /// <summary>A track of the ready music library (0.1.45; one file from incompetech.com, pinned by its SHA-256; not an archive).</summary>
     MusicTrack = 20,
 
+    /// <summary>A source archive of the local music model (0.1.46: rakkase and ACE-Step 1.5 at pinned commits, from GitHub; not a program).</summary>
+    MusicCode = 21,
+
+    /// <summary>One weight file of the local music model (0.1.46: ACE-Step 1.5 and Qwen3-Embedding from Hugging Face, pinned by SHA-256).</summary>
+    MusicWeights = 22,
+
     /// <summary>A new version of the app itself (a release asset; its SHA-256 comes from the release notes). Not a component.</summary>
     AppUpdate = 100,
 }

@@ -250,8 +250,10 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
             cancellationToken).ConfigureAwait(false);
 
         // 0.1.45: a library track chosen by the concept follows the plan's music hints; the scene changes move onto its beats before the render.
+        // 0.1.46: generated music is made here from the same hints (after the narration), its price spent as the "music" line.
         var chosen = context.Music is { Automatic: true }
-            ? await musicStep.SettleAsync(context.Music, style, input, context.Clips, work, align: true, cancellationToken).ConfigureAwait(false)
+            ? await musicStep.SettleAsync(context.Music, style, input, context.Clips, work, align: true, cancellationToken, VideoMusicStep.Spender(steps, id))
+                .ConfigureAwait(false)
             : null;
         steps.Finish(VideoSteps.Code);
         var request = new EngineRenderRequest(project, Plans.PlanDrawer.Code, RenderInputBuilder.ForEngine(input, VideoStyleRules.SubtitlesOn(options)),

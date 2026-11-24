@@ -86,6 +86,16 @@ public static class DesktopServices
         services.AddSingleton<Core.Components.IComponentSource, Core.Music.MusicLibraryComponentSource>();
         services.AddSingleton<Core.Music.IMusicAudio, Engines.Media.FfmpegMusicAudio>();
         services.AddSingleton<Core.Music.IMusicSearch, Providers.Music.OpenverseAudioClient>();
+        // 0.1.46 (C5): generated music — the local ACE-Step 1.5 through rakkase (two components, installed only after a yes) and the online
+        // Lyria / ElevenLabs Music models.
+        services.AddSingleton<Speech.Music.RakkaseLayout>();
+        services.AddSingleton<Speech.Music.RakkaseInstaller>();
+        services.AddSingleton<Core.Components.IComponentSource, Speech.Music.MusicComponentSource>();
+        services.AddSingleton<ILocalModelSource, Speech.Music.MusicModelSource>();
+        services.AddSingleton<Core.Music.IMusicGenerator, Speech.Music.RakkaseMusicGenerator>();
+        services.AddSingleton<Core.Music.IMusicGenerator, Providers.Music.LyriaMusicGenerator>();
+        services.AddSingleton<Core.Music.IMusicGenerator, Providers.Music.ElevenLabsMusicGenerator>();
+        services.AddSingleton<Core.Music.IMusicGenerators, Core.Music.MusicGenerators>();
         services.AddSingleton<Core.Videos.VideoMusicStep>();
         services.AddSingleton<Core.Videos.VideoAssembler>();
         services.AddSingleton<Core.Videos.VideoPipeline>();

@@ -56,7 +56,7 @@ public static class ToolManifest
 
     /// <summary>Tools that are libraries, not programs: never looked for on the system PATH.</summary>
     public static readonly IReadOnlyList<ToolKind> Libraries = [ToolKind.SpeechRuntime, ToolKind.ImageRuntime, ToolKind.ImageRuntimeCuda, ToolKind.ImageRuntimeVulkan,
-        ToolKind.ImageRuntimeCpu, ToolKind.ImageWeights, ToolKind.EmbeddingWeights, ToolKind.Uv, ToolKind.PythonVoiceWeights, ToolKind.OcrWeights];
+        ToolKind.ImageRuntimeCpu, ToolKind.ImageWeights, ToolKind.EmbeddingWeights, ToolKind.Uv, ToolKind.PythonVoiceWeights, ToolKind.OcrWeights, ToolKind.MusicCode, ToolKind.MusicWeights];
 
     /// <summary>Tools that may come from the system PATH when their pinned download is gone (404) or does not match its hash.</summary>
     public static readonly IReadOnlyList<ToolKind> FallbackToSystem = [ToolKind.Ffmpeg];
@@ -75,6 +75,9 @@ public static class ToolManifest
 
         // The ready music library (0.1.45): Kevin MacLeod's tracks, served directly (no redirect); each file is pinned by its SHA-256.
         "incompetech.com",
+
+        // The local music model (0.1.46): GitHub's source archives of rakkase and ACE-Step 1.5 at pinned commits, each pinned by its SHA-256.
+        "codeload.github.com",
     ];
 
     /// <summary>Host suffixes a download may be redirected to: Hugging Face's own file servers (us.aws.cdn.hf.co, cas-bridge.xethub.hf.co …).</summary>

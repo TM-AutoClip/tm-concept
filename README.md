@@ -494,13 +494,19 @@ A video made with a template (Settings → Templates) follows it without relying
   one is cut, and it fades out at the end. Level, ducking and fade-out are set in the template. The file is copied into each video's
   version folder (`music/`), so a new version uses the same track. Its licence is your responsibility; an optional attribution is shown
   on the video page after the video, ready to copy into the description (never drawn into the video). Every version folder has an
-  `assets.json` listing the outside files the video uses. Generated music comes in a later version.
+  `assets.json` listing the outside files the video uses.
 - **Ready music library (0.1.45):** *From the library* uses a small, hand-picked set of Kevin MacLeod's tracks (incompetech.com,
   CC BY 4.0) tagged by mood, style and tempo, downloaded only after you confirm (about 114 MB). Each video's concept can choose the
   track: the scene plan writes a music hint for every scene in the same request, and the closest track is used (the nearest style when
   none has the asked one). You can also pick a library track, or search Openverse (no key; only CC0, CC BY and CC BY-SA). The music
   starts on a bar line at its strongest clean opening, scene changes move onto its beats by a small margin, a short track is lengthened
   with a beat-aligned cross-faded loop, and the credit a track asks for is shown on the video page.
+- **Generated music (0.1.46):** *Generate (local)* makes the music with ACE-Step 1.5 through rakkase (MIT; made for NVIDIA cards, 16 GB of
+  memory, about 23 GB on disk, downloaded only after you confirm; on another card it is labelled "NVIDIA only" with a warning, on Linux
+  "not verified"). *Generate (online)* uses Google Lyria 3 Clip ($0.04 a 30 s piece) or Lyria 3.5 ($0.08 a song) with your Gemini key,
+  or Eleven Music ($0.15 a minute) with your ElevenLabs key. The piece is made after the narration from the scene plan's music hints,
+  without words, looped when shorter than the video, counted in the estimate and the cost details, and kept with the video: a new
+  version does not make it again.
 - **Word-by-word highlight (0.1.34, optional):** the word being said shows in the accent colour, glowing, growing or only recoloured
   as the drawing style suits.
 - **Drawing style:** scenes without an image are drawn in the template's style, and generated images are asked for in the same style.

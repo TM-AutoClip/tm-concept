@@ -117,6 +117,8 @@ public sealed class EmbeddedModelCatalog : IModelCatalog
                 model.LongOutputUsd = price.LongOutputUsd ?? model.LongOutputUsd;
                 model.ImageUsd = price.ImageUsd ?? model.ImageUsd;
                 model.SpeechUsdPerMillionCharacters = price.SpeechUsdPerMillionCharacters ?? model.SpeechUsdPerMillionCharacters;
+                model.MusicUsdPerPiece = price.MusicUsdPerPiece ?? model.MusicUsdPerPiece;
+                model.MusicUsdPerMinute = price.MusicUsdPerMinute ?? model.MusicUsdPerMinute;
                 model.PricedOn = table.PricedOn;
                 model.PriceSource = table.Source;
             }
@@ -141,6 +143,9 @@ public sealed class EmbeddedModelCatalog : IModelCatalog
         LongOutputUsd = m.LongOutputUsd,
         ImageUsd = m.ImageUsd,
         SpeechUsdPerMillionCharacters = m.SpeechUsdPerMillionCharacters,
+        MusicUsdPerPiece = m.MusicUsdPerPiece,
+        MusicUsdPerMinute = m.MusicUsdPerMinute,
+        MusicSeconds = m.MusicSeconds,
         ContextTokens = m.ContextTokens,
         MaxOutputTokens = m.MaxOutputTokens,
         Efforts = [.. m.Efforts],

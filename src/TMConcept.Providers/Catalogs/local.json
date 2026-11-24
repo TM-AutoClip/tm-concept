@@ -15,6 +15,7 @@
     { "id": "yazgi-tts-1", "name": "yazgı-tts-1 (Turkish, processor)", "capabilities": "Speech", "requires": ["voice.yazgi-tts-1"], "memoryGb": 2, "license": "apache-2.0", "licenseUrl": "https://huggingface.co/erkamk/yazgi-tts-1" },
     { "id": "ahenk-cep", "name": "Ahenk Cep (Turkish)", "capabilities": "Speech", "requires": ["voice.ahenk-cep"], "license": "cc-by-4.0" },
     { "id": "pp-ocr-latin", "name": "PaddleOCR PP-OCRv5 (reads scanned pages, Latin script)", "capabilities": "Vision", "requires": ["ocr.pp-ocr-latin"], "license": "apache-2.0" },
+    { "id": "ace-step-1.5", "name": "ACE-Step 1.5 (music, NVIDIA only)", "capabilities": "Music", "requires": ["speech-env.ace-step", "music.ace-step-1.5"], "minVideoMemoryGb": 4, "memoryGb": 16, "license": "mit", "licenseUrl": "https://huggingface.co/ACE-Step/Ace-Step1.5" },
     { "id": "paraphrase-multilingual-minilm", "name": "Multilingual MiniLM (meaning check)", "capabilities": "Embedding", "requires": ["embedding.paraphrase-multilingual-minilm"] },
     { "id": "z-image-turbo-q3", "name": "Z-Image Turbo (small)", "capabilities": "Image", "requires": ["image.z-image-turbo-q3"], "minVideoMemoryGb": 4, "license": "apache-2.0" },
     { "id": "flux2-klein-4b", "name": "FLUX.2 klein 4B", "capabilities": "Image", "requires": ["image.flux2-klein-4b"], "minVideoMemoryGb": 4, "license": "apache-2.0" },

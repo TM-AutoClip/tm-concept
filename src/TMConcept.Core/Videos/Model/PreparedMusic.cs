@@ -15,6 +15,12 @@ public sealed record PreparedMusic(string File, long DurationMs, AssetEntry Entr
     /// </summary>
     public bool Automatic { get; init; }
 
+    /// <summary>
+    /// The music is made for this video (0.1.46, C5): the model with its key, checked before anything is paid for; the piece is made in
+    /// <see cref="VideoMusicStep.SettleAsync"/> after the narration (<see cref="Automatic"/> is also set, so the scene plan writes its hints).
+    /// </summary>
+    public Models.ResolvedModel? Generate { get; init; }
+
     /// <summary>How the track is laid under the video (0.1.45, F7 + F8; null = as it is, from its start, looped when short).</summary>
     public MusicPlacement? Placement { get; init; }
 }

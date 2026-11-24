@@ -35,4 +35,10 @@ public sealed class ModelPrice
 
     /// <summary>Price per one million characters of speech.</summary>
     public decimal? SpeechUsdPerMillionCharacters { get; set; }
+
+    /// <summary>Price of one generated piece of music (0.1.46).</summary>
+    public decimal? MusicUsdPerPiece { get; set; }
+
+    /// <summary>Price of one minute of generated music (0.1.46).</summary>
+    public decimal? MusicUsdPerMinute { get; set; }
 }

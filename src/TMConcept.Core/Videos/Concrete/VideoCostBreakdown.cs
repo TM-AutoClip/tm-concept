@@ -5,7 +5,7 @@ namespace TMConcept.Core.Videos;
 /// <summary>
 /// The cost details of a video in the order the work happens: the concept's share of its generation run, the narration text and its
 /// split into scenes (done on this computer, free; shown so every step is there), the image prompts, the images, the narration audio, the
-/// video code (with its repair), then the total. The lines of one step are added up (one line per image or per code call is stored).
+/// generated music (0.1.46), the video code (with its repair), then the total. The lines of one step are added up (one line per image or per code call is stored).
 /// </summary>
 public static class VideoCostBreakdown
 {
@@ -21,7 +21,7 @@ public static class VideoCostBreakdown
 
     /// <summary>The display order.</summary>
     public static readonly IReadOnlyList<string> Order =
-        [PipelineSteps.Concepts, ConceptEdits, NarrationText, PipelineSteps.ImagePromptCost, PipelineSteps.Images, PipelineSteps.ImagePoints, PipelineSteps.Speech, PipelineSteps.ScenePlanCost, PipelineSteps.VideoCode];
+        [PipelineSteps.Concepts, ConceptEdits, NarrationText, PipelineSteps.ImagePromptCost, PipelineSteps.Images, PipelineSteps.ImagePoints, PipelineSteps.Speech, PipelineSteps.Music, PipelineSteps.ScenePlanCost, PipelineSteps.VideoCode];
 
     /// <summary>
     /// The concept's share of the run it was generated in: the run's cost divided by the concepts it kept (5 concepts for 0.11 $ → 0.022 $

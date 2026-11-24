@@ -205,6 +205,12 @@ public static class VideoStyleRules
             problems.Add(VideoStyleProblem.MusicFileMissing);
         }
 
+        // 0.1.46: generated music needs its model.
+        if (style.Music is { Source: MusicSource.GenerateLocal or MusicSource.GenerateOnline } generated && string.IsNullOrWhiteSpace(generated.Generator))
+        {
+            problems.Add(VideoStyleProblem.MusicModelMissing);
+        }
+
         return problems;
     }
 

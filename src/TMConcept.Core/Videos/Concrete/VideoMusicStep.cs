@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using TMConcept.Core.Media;
+using TMConcept.Core.Models;
 using TMConcept.Core.Music;
 using TMConcept.Core.Paths;
 using TMConcept.Core.Render;
@@ -16,8 +17,15 @@ namespace TMConcept.Core.Videos;
 /// loudness), the scene changes inside the music move onto its beats (<see cref="BeatAligner"/>), the track's entry point and loop are laid out
 /// (<see cref="MusicBedPlanner"/>) and written by ffmpeg. A track that cannot be measured or laid out plays as it is (logged); a missing,
 /// damaged or silent file, or a library that is not installed, stops the video with <c>music</c> (rule 17).
+/// 0.1.46 (C5): generated music is checked in <see cref="PrepareAsync"/> (its model known, installed, with a key) and made in
+/// <see cref="SettleAsync"/> — after the narration, with the scene plan's music hints in its prompt — by the local model under the graphics
+/// card lock (one local model at a time, with the memory rules of <see cref="IGpuCoordinator"/>) or by an online model, whose price is spent
+/// as the video's "music" cost line. A piece shorter than the video is looped (F8); no second piece is made. A failure stops the video with
+/// <c>music</c> (the queue's night mode then goes on with the next video). A new version uses the piece kept with the version: the music is
+/// never made again for another voice or engine (rule 12).
 /// </summary>
-public sealed class VideoMusicStep(IMediaTools media, IMusicLibrary library, IMusicAudio audio, ILogger<VideoMusicStep> logger)
+public sealed class VideoMusicStep(IMediaTools media, IMusicLibrary library, IMusicAudio audio, ILogger<VideoMusicStep> logger,
+    IMusicGenerators? generators = null, IGpuCoordinator? gpu = null)
 {
     /// <summary>The laid-out track's name in the work folder's music folder.</summary>
     public const string BedName = "bed.flac";
@@ -36,7 +44,7 @@ public sealed class VideoMusicStep(IMediaTools media, IMusicLibrary library, IMu
         }
 
         var music = style!.Music;
-        if (music.Source is not (MusicSource.OwnFile or MusicSource.Library))
+        if (music.Source is not (MusicSource.OwnFile or MusicSource.Library or MusicSource.GenerateLocal or MusicSource.GenerateOnline))
         {
             logger.LogError(Activity.LogEvents.OnScreen, "The template's music source {Source} cannot be made by this version; the video is stopped", music.Source);
             throw new VideoException($"The music source {music.Source} is not available in this version.") { Code = "music" };
@@ -51,6 +59,11 @@ public sealed class VideoMusicStep(IMediaTools media, IMusicLibrary library, IMu
         if (music.Source == MusicSource.OwnFile)
         {
             return await CopyAsync(music.File, OwnEntry(music, music.File), "the template's file", work, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (music.Source is MusicSource.GenerateLocal or MusicSource.GenerateOnline)
+        {
+            return await GeneratorAsync(music, cancellationToken).ConfigureAwait(false);
         }
 
         if (music.Track is { } picked)
@@ -80,8 +93,9 @@ public sealed class VideoMusicStep(IMediaTools media, IMusicLibrary library, IMu
     /// Lays the music under the timed <paramref name="input"/> (and, with <paramref name="align"/>, moves its scene changes onto the beats; the
     /// scene plans' beats are timed again). Returns the music to mix; <paramref name="music"/> null = null.
     /// </summary>
+    /// <param name="spend">Gets what generated music cost (its USD and whether that is exact) as soon as it is made (0.1.46).</param>
     public async Task<PreparedMusic?> SettleAsync(PreparedMusic? music, VideoStyle? style, RenderInput input, IReadOnlyList<SpeechClip?> clips, string work,
-        bool align, CancellationToken cancellationToken)
+        bool align, CancellationToken cancellationToken, Action<decimal, bool>? spend = null)
     {
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(clips);
@@ -92,7 +106,12 @@ public sealed class VideoMusicStep(IMediaTools media, IMusicLibrary library, IMu
 
         var hints = input.Scenes.Select(s => s.Plan?.Music).ToList();
         var tempo = style?.Tempo ?? NarrationTempos.Default;
-        if (music.Automatic)
+        if (music.Generate is { } generate)
+        {
+            music = await GenerateAsync(generate, style?.Music ?? new VideoMusic(), hints, tempo, input.DurationSeconds, work, spend, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        else if (music.Automatic)
         {
             music = await ChooseAsync(hints, tempo, work, cancellationToken).ConfigureAwait(false);
         }
@@ -109,8 +128,11 @@ public sealed class VideoMusicStep(IMediaTools media, IMusicLibrary library, IMu
             MusicBedPlanner.Measure(samples, MusicLibraryRules.SampleRate)), cancellationToken).ConfigureAwait(false);
         var startSeconds = input.Scenes[window.FirstScene].StartSeconds;
 
-        // The user's own file plays from its start, as the user chose it (only a library or picked track takes its strongest opening).
-        var entry = music.Entry.License == AssetLicenses.OwnFile ? 0 : MusicBedPlanner.Entry(energy, grid, End(input, window) - startSeconds);
+        // The user's own file and a generated piece play from their start (only a library or picked track takes its strongest opening; a
+        // generated piece was made for this video and opens as its model made it).
+        var entry = music.Entry.License == AssetLicenses.OwnFile || music.Entry.License.StartsWith(AssetLicenses.GeneratedPrefix, StringComparison.Ordinal)
+            ? 0
+            : MusicBedPlanner.Entry(energy, grid, End(input, window) - startSeconds);
         var moved = 0;
         if (align && grid is not null)
         {
@@ -144,6 +166,119 @@ public sealed class VideoMusicStep(IMediaTools media, IMusicLibrary library, IMu
             + "{Moved} scene changes moved onto the beat, scenes {From}-{To}{Laid}", music.Entry.Name, grid?.Bpm ?? 0, grid?.FirstBeatSeconds ?? 0, entry,
             bed.Copies, bed.CrossfadeSeconds, moved, window.FirstScene + 1, window.LastScene + 1, made ? string.Empty : " (played as it is)");
         return music with { Placement = Place(input, window, made ? output : null, made ? bed.TotalSeconds : 0) };
+    }
+
+    /// <summary>
+    /// The generated music's model, checked before anything is paid for: in the catalog, of the template's source, installed (the local model's
+    /// components; never installed here, rule 18) and with a key (an online model). Anything missing stops the video with <c>music</c>.
+    /// </summary>
+    private async Task<PreparedMusic> GeneratorAsync(VideoMusic music, CancellationToken cancellationToken)
+    {
+        if (generators?.Find(music.Generator) is not { } model)
+        {
+            logger.LogError(Activity.LogEvents.OnScreen, "The template's music model {Model} is not known; the video is stopped",
+                music.Generator.Length > 0 ? music.Generator : "(none)");
+            throw new VideoException("No music model is chosen for the generated music.") { Code = "music" };
+        }
+
+        if ((model.Provider == ModelProviders.Local) != (music.Source == MusicSource.GenerateLocal))
+        {
+            logger.LogError(Activity.LogEvents.OnScreen, "The template's music model {Model} does not fit its source {Source}; the video is stopped",
+                ModelBase.KeyOf(model), music.Source);
+            throw new VideoException("The music model does not fit the music source: " + model.Name) { Code = "music" };
+        }
+
+        if (generators.For(model) is null || !generators.Ready(model))
+        {
+            logger.LogError(Activity.LogEvents.OnScreen, "The music model {Model} is not installed; the video is stopped", model.Name);
+            throw new VideoException("The music model is not installed: " + model.Name) { Code = "music" };
+        }
+
+        ResolvedModel resolved;
+        try
+        {
+            resolved = await generators.ResolveAsync(model, cancellationToken).ConfigureAwait(false);
+        }
+        catch (ModelNotReadyException ex)
+        {
+            logger.LogError(Activity.LogEvents.OnScreen, "The music model {Model} is not ready (no {Missing}); the video is stopped", model.Name, ex.Missing);
+            throw new VideoException(ex.Message, ex) { Code = "music" };
+        }
+
+        logger.LogInformation("Background music: made by {Model} after the narration", ModelBase.KeyOf(model));
+        return new PreparedMusic(string.Empty, 0, new AssetEntry { Kind = AssetKinds.Music }) { Automatic = true, Generate = resolved };
+    }
+
+    /// <summary>
+    /// Makes the piece with the hints in its prompt (the local model under the graphics card lock), spends its price and copies it into the
+    /// work folder like any other track. Any failure stops the video with <c>music</c>.
+    /// </summary>
+    private async Task<PreparedMusic> GenerateAsync(ResolvedModel model, VideoMusic settings, IReadOnlyList<MusicHint?> hints, NarrationTempo tempo,
+        double videoSeconds, string work, Action<decimal, bool>? spend, CancellationToken cancellationToken)
+    {
+        var generator = generators?.For(model.Model)
+            ?? throw new VideoException("The music model is not installed: " + model.Model.Name) { Code = "music" };
+        var seconds = MusicPricing.Seconds(model.Model, videoSeconds);
+        var (_, _, pace) = MusicPromptBuilder.Choose(hints, tempo);
+        var prompt = MusicPromptBuilder.Build(hints, tempo, settings.Instrumental, seconds);
+        var folder = Path.Combine(work, MusicGenerationRules.WorkFolder);
+        Directory.CreateDirectory(folder);
+        logger.LogInformation("Music generation: {Model}, {Seconds} s, {Pace}, {Words} (prompt: {Prompt})", ModelBase.KeyOf(model.Model), seconds, pace,
+            settings.Instrumental ? "instrumental" : "with words", prompt);
+        var request = new MusicGenerationRequest(model, prompt, seconds, MusicPromptBuilder.Bpm(pace), settings.Instrumental, folder,
+            MusicGenerationRules.DefaultSeed);
+        GeneratedMusic made;
+        try
+        {
+            if (model.Model.Provider == ModelProviders.Local && gpu is not null)
+            {
+                // The graphics card's one local model at a time (rule 18): the narration's worker has ended, an image model is unloaded first.
+                await using var lease = await gpu.AcquireAsync(model.Model, cancellationToken).ConfigureAwait(false);
+                made = await generator.GenerateAsync(request, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                made = await generator.GenerateAsync(request, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException and not VideoException)
+        {
+            // Rule 17: an unexpected failure stops the video (shown, logged in red); in night mode the queue goes on with the next one.
+            logger.LogError(Activity.LogEvents.OnScreen, ex, "The music could not be made by {Model}; the video is stopped", model.Model.Name);
+            throw new VideoException("The music could not be made: " + ex.Message, ex) { Code = ex is MemoryShortfallException ? "memory" : "music" };
+        }
+
+        if (made.Usd > 0)
+        {
+            spend?.Invoke(made.Usd, made.Exact);
+        }
+
+        logger.LogInformation("Music made by {Model} ({Usd} USD{Exact})", model.Model.Name, made.Usd, made.Exact ? string.Empty : ", estimated");
+        return await CopyAsync(made.File, GeneratedEntry(model.Model), "made for this video", work, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>The spending of generated music as the video's <see cref="Pipeline.PipelineSteps.Music"/> cost line (0.1.46).</summary>
+    public static Action<decimal, bool> Spender(VideoStepProgress steps, Guid videoId)
+    {
+        ArgumentNullException.ThrowIfNull(steps);
+        return (usd, exact) => steps.Spend(new VideoCost { VideoId = videoId, Step = Pipeline.PipelineSteps.Music, Usd = usd, Exact = exact });
+    }
+
+    /// <summary>The asset record line of generated music (F15): "generated: &lt;model&gt;, &lt;licence&gt;".</summary>
+    public static AssetEntry GeneratedEntry(CatalogModel model)
+    {
+        ArgumentNullException.ThrowIfNull(model);
+        var license = model.Provider == ModelProviders.Local
+            ? (model.License.Length > 0 ? model.License.ToUpperInvariant() : "unknown")
+            : model.Provider + " terms of use";
+        return new AssetEntry
+        {
+            Kind = AssetKinds.Music,
+            Name = "Generated music",
+            Artist = model.Name,
+            License = AssetLicenses.GeneratedPrefix + " " + model.Name + ", " + license,
+            SourceUrl = model.LicenseUrl,
+        };
     }
 
     /// <summary>The library track for the hints (only installed tracks); stops the video when there is none.</summary>

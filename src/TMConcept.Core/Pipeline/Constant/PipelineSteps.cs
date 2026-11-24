@@ -51,6 +51,12 @@ public static class PipelineSteps
     /// </summary>
     public const string ImagePoints = "image-points";
 
+    /// <summary>
+    /// Cost label of a template's generated background music (0.1.46, C5; not a step of its own: the template names the music model) and the
+    /// step name its key is resolved under.
+    /// </summary>
+    public const string Music = "music";
+
     /// <summary>Every step in display order.</summary>
     public static readonly IReadOnlyList<PipelineStep> All =
     [

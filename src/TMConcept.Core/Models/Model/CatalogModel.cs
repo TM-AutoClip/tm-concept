@@ -49,6 +49,18 @@ public sealed class CatalogModel
     /// <summary>Price per one million characters of speech (speech models).</summary>
     public decimal SpeechUsdPerMillionCharacters { get; set; }
 
+    /// <summary>Price of one generated piece of music, whatever its length (music models billed per piece: Lyria).</summary>
+    public decimal MusicUsdPerPiece { get; set; }
+
+    /// <summary>Price of one minute of generated music (music models billed by length: ElevenLabs Music).</summary>
+    public decimal MusicUsdPerMinute { get; set; }
+
+    /// <summary>
+    /// The fixed length of a music model's piece in seconds (Lyria 3 Clip: always 30 s); 0 = the length asked for (or the model's own for a
+    /// whole song).
+    /// </summary>
+    public int MusicSeconds { get; set; }
+
     /// <summary>Context window in tokens.</summary>
     public long ContextTokens { get; set; }
 

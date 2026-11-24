@@ -38,7 +38,7 @@ public sealed class SystemReport(Localizer text, UiPreferencesFile preferences, 
         // Voice models are installed by their voice (listed below), not as tools: the tool locator never knows them.
         foreach (var tool in Enum.GetValues<ToolKind>().Where(t => t is not (ToolKind.ImageWeights or ToolKind.EmbeddingWeights or ToolKind.SupertonicVoice
             or ToolKind.KokoroVoice or ToolKind.PocketVoice or ToolKind.ChatterboxVoice or ToolKind.PythonVoiceWeights or ToolKind.AhenkCepVoice or ToolKind.OcrWeights
-            or ToolKind.PdfRenderer or ToolKind.OcrGpuRuntime)))
+            or ToolKind.PdfRenderer or ToolKind.OcrGpuRuntime or ToolKind.MusicCode or ToolKind.MusicWeights)))
         {
             var status = tools.Status(tool);
             var state = !status.Ready ? "not installed"
