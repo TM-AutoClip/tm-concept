@@ -124,6 +124,14 @@ public sealed class VideoStyle
     /// </summary>
     public VideoMusic Music { get; set; } = new();
 
+    /// <summary>
+    /// The reference video ("bu videonun temposunda yap", S1, 0.1.52): the measured numbers of a video the user chose (cuts, camera, colour,
+    /// beat, peaks; never its picture or sound). With one, the scene plan is asked for the reference's changes, camera share and eases and its
+    /// emphasis moments, and the plan rule checks them (<see cref="References.ReferenceTempoMapper"/>). Null by default and in a template saved
+    /// before (its JSON has none), so its videos are planned as they were.
+    /// </summary>
+    public References.ReferenceTempoProfile? Reference { get; set; }
+
     /// <summary>Where the closing call to action goes.</summary>
     public ClosingPlacement Closing { get; set; } = ClosingPlacement.Off;
 

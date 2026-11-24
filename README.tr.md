@@ -536,6 +536,12 @@ Bir şablonla (Ayarlar → Şablonlar) üretilen video, modelin iyi niyetine kal
   Çizim tarzı'ndan seç ya da sonradan Yapay zekâyla düzenle → Tarza uyarla ile uyarla.
 - **Anlatım temposu:** seslendirme cümle cümle okunur; her cümleden sonra bir duraklama, sahneler arasında daha uzun bir ara olur:
   *Sıkı*, *Doğal* (varsayılan) ya da *Rahat*. Kendi duraklama yer tutucuların bunun üstüne eklenir.
+- **Referans video (0.1.52, isteğe bağlı):** "bu videonun temposunda yap". Bir video dosyası seç ya da tek bir videonun adresini yapıştır
+  (yt-dlp ile iner, yalnız onaylayınca kurulur: tek video, oynatma listesi yok, çerez ya da giriş yok, düşük çözünürlük, ilk 10 dakika,
+  ölçümden hemen sonra silinir). Program 10 saniyedeki kesme sayısını, kamera hareketlerini ve yönünü, renklerini, vuruşunu ve en güçlü
+  anlarını ölçer ve şablonda yalnız bu sayıları saklar. Tempo en yakın ön ayara getirilir; her videonun sahne planından aynı sıklıkta
+  değişiklik, kameralı oran ve yumuşatma ile aynı yerlerde vurgu istenir, plan denetimi planı bunlara uydurur. Renkleri yalnız sen alırsan
+  şablonun kendi paleti olur.
 - Saklanan koddan yapılan yeni bir sürüm, videonun üretildiği şablonu korur.
 
 ## Güncelleme

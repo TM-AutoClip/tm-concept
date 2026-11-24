@@ -105,6 +105,11 @@ public static class DesktopServices
         services.AddSingleton<Core.Components.IComponentSource, Engines.Recognition.RecognizerComponentSource>();
         services.AddSingleton<Core.Subtitles.IWordRecognizer, Engines.Recognition.WhisperCppRecognizer>();
         services.AddSingleton<Core.Videos.SubtitleTimingStep>();
+        // 0.1.52 (S1): the template's reference video — yt-dlp (a component installed only after a yes), ffmpeg's frames and sound, numbers only.
+        services.AddSingleton<Core.Components.IComponentSource, Engines.References.YtDlpComponentSource>();
+        services.AddSingleton<Core.References.IReferenceDownloader, Engines.References.YtDlpDownloader>();
+        services.AddSingleton<Core.References.IReferenceVideoReader, Engines.Media.FfmpegReferenceVideo>();
+        services.AddSingleton<Core.References.IReferenceMeasurer, Core.References.ReferenceMeasurer>();
         services.AddSingleton<Core.Videos.VideoAssembler>();
         services.AddSingleton<Core.Videos.IQualityReviewer, Core.Videos.QualityReviewer>();
         services.AddSingleton<Core.Videos.QualityStep>();

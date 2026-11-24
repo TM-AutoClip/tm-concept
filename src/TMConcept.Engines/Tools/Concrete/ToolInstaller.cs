@@ -138,7 +138,21 @@ public sealed class ToolInstaller(IAppPaths paths, IToolPlatform platform, ToolD
             Directory.CreateDirectory(unpack);
             try
             {
-                await platform.ExtractAsync(file, unpack, cancellationToken).ConfigureAwait(false);
+                if (IsProgram(archive))
+                {
+                    // 0.1.52: a release that is the program itself (yt-dlp): copied into place, executable on Linux.
+                    var program = Path.Combine(unpack, archive.Root, archive.ExecutablePath);
+                    Directory.CreateDirectory(Path.GetDirectoryName(program)!);
+                    File.Copy(file, program);
+                    if (!OperatingSystem.IsWindows())
+                    {
+                        File.SetUnixFileMode(program, File.GetUnixFileMode(program) | UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute);
+                    }
+                }
+                else
+                {
+                    await platform.ExtractAsync(file, unpack, cancellationToken).ConfigureAwait(false);
+                }
             }
             catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException)
             {
@@ -170,6 +184,15 @@ public sealed class ToolInstaller(IAppPaths paths, IToolPlatform platform, ToolD
                 File.Delete(file);
             }
         }
+    }
+
+    /// <summary>
+    /// The download is the program itself, not an archive (0.1.52, yt-dlp): no root folder and the download's file name is the program's.
+    /// </summary>
+    public static bool IsProgram(ToolArchive archive)
+    {
+        ArgumentNullException.ThrowIfNull(archive);
+        return archive.Root.Length == 0 && string.Equals(archive.Url.Segments[^1], archive.ExecutablePath, StringComparison.Ordinal);
     }
 
     /// <summary>The executable of a tool, or an exception that tells the user to install it.</summary>
@@ -231,6 +254,7 @@ public sealed class ToolInstaller(IAppPaths paths, IToolPlatform platform, ToolD
         ToolKind.ImageRuntimeVulkan => "sd-cpp-vulkan",
         ToolKind.ImageRuntimeCpu => "sd-cpp-cpu",
         ToolKind.SpeechRecognizer => "whisper-cpp",
+        ToolKind.VideoDownloader => "yt-dlp",
         _ => tool.ToString().ToLowerInvariant(),
     };
 

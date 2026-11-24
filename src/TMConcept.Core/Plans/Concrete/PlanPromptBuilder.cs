@@ -19,7 +19,7 @@ namespace TMConcept.Core.Plans;
 public static class PlanPromptBuilder
 {
     /// <summary>The version of the plan prompt, kept with every video made with the drawer.</summary>
-    public const string Version = "4";
+    public const string Version = "5";
 
     /// <summary>
     /// The system text for a video in <paramref name="motion"/> at <paramref name="tempo"/> (its transitions, eases and targets);
@@ -32,9 +32,11 @@ public static class PlanPromptBuilder
 
     /// <summary>
     /// The same for a style with several transition families (F13, 0.1.51: pixel art's dissolve, iris and blocks;
-    /// <see cref="DrawStyleDefinition.Families"/>): the prompt offers only those of them that fit the tempo's energy.
+    /// <see cref="DrawStyleDefinition.Families"/>): the prompt offers only those of them that fit the tempo's energy. <paramref name="target"/>
+    /// (S1, 0.1.52): a reference video's targets instead of the tempo's (null = the tempo's).
     /// </summary>
-    public static string System(MotionIntensity motion, NarrationTempo tempo, IReadOnlyList<string> styleFamilies, bool music = false)
+    public static string System(MotionIntensity motion, NarrationTempo tempo, IReadOnlyList<string> styleFamilies, bool music = false,
+        TempoTarget? target = null)
     {
         ArgumentNullException.ThrowIfNull(styleFamilies);
         var text = new StringBuilder("""
@@ -79,7 +81,7 @@ public static class PlanPromptBuilder
 
                 """,
         });
-        text.Append(Pace(motion, tempo, styleFamilies));
+        text.Append(Pace(motion, tempo, styleFamilies, target));
         if (music)
         {
             text.Append(MusicText());
@@ -96,21 +98,21 @@ public static class PlanPromptBuilder
     /// The transitions, the eases and the targets of <paramref name="tempo"/> (F1, F9); the beat and camera targets only when the motion does
     /// not contradict them (<see cref="TempoTargetRule.Applies"/>).
     /// </summary>
-    private static string Pace(MotionIntensity motion, NarrationTempo tempo, IReadOnlyList<string> styleFamilies)
+    private static string Pace(MotionIntensity motion, NarrationTempo tempo, IReadOnlyList<string> styleFamilies, TempoTarget? reference)
     {
         var c = CultureInfo.InvariantCulture;
         var energy = TransitionCatalog.EnergyOf(tempo);
         var own = TransitionCatalog.StyleFamilies(styleFamilies, energy);
         var family = own.Count > 0 ? own : null;
         var names = family is null ? TransitionCatalog.Names(energy) : family.SelectMany(TransitionCatalog.Names).ToList();
-        var target = NarrationTempos.Targets(tempo);
+        var target = reference ?? NarrationTempos.Targets(tempo);
         var word = tempo switch { NarrationTempo.Tight => "tight", NarrationTempo.Relaxed => "relaxed", _ => "natural" };
         var text = new StringBuilder();
         text.Append(c, $"Transitions: every scene after the first starts with a \"transition\", one of: {string.Join(", ", names)}");
         text.Append(family is null ? ". Vary them with the story" : ". This look uses only these");
         text.Append("; slide, push and wipe move one way: the way a scene leaves is the way the next one enters, so the whole film keeps one");
         text.Append(" direction (left unless the story moves another way). \"\" for the first scene.\n");
-        text.Append(c, $"Tempo: {word}. ");
+        text.Append(c, $"Tempo: {word}{(reference is null ? string.Empty : ", measured from a reference video")}. ");
         if (TempoTargetRule.Applies(tempo, motion))
         {
             text.Append(c, $"Something new (a camera move or an action) about {target.BeatsPer10Seconds:0.#} times every 10 seconds; a camera move");
@@ -139,6 +141,12 @@ public static class PlanPromptBuilder
         var text = new StringBuilder();
         text.Append(c, $"Video: «{Clean(title, 200)}», {scenes.Count} scenes, language {video.English} ({video.Code}): every label and text in {video.English}.\n");
         text.Append("Look: ").Append(Look(style)).Append('\n');
+        // S1 (0.1.52): the reference video's emphasis moments, by scene (not for a single scene asked again: it has no place in the whole).
+        if (scenes.Count > 1 && References.ReferenceTempoMapper.PlanText(style, [.. scenes.Select(s => s.Seconds)]) is { Length: > 0 } reference)
+        {
+            text.Append(reference).Append('\n');
+        }
+
         if (Pitfalls(style) is { Count: > 0 } pitfalls)
         {
             text.Append("Known pitfalls of this look (avoid them): ").Append(string.Join(" ", pitfalls)).Append('\n');

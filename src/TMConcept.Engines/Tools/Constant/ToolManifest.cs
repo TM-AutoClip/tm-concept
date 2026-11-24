@@ -27,8 +27,10 @@ namespace TMConcept.Engines.Tools;
 /// tagged release v1.9.5 (6 Oct 2026, commit d1be6fde; the tagged release itself carries no files); hash and size are the GitHub release
 /// asset digest read on 2026-11-24, and its file list was read from the zip's central directory (Release/whisper-cli.exe with whisper.dll and
 /// the ggml libraries that pick the processor's best variant). Windows x64 only: the Linux tarballs of that release were not checked, so
-/// Linux has no build for now (the subtitles keep their estimated times there). Updating a version = new rows here with new hashes (and
-/// the sd-cli options checked again).
+/// Linux has no build for now (the subtitles keep their estimated times there). yt-dlp (Unlicense; 0.1.52, the reference video download): the
+/// single-file programs of release 2026.11.23 (yt-dlp.exe for Windows, yt-dlp_linux and yt-dlp_linux_aarch64), not archives: the download is
+/// the program itself; hash and size are the GitHub release asset digests read on 2026-11-24 and checked against the release's own
+/// SHA2-256SUMS file. Updating a version = new rows here with new hashes (and the sd-cli options checked again).
 /// </summary>
 public static class ToolManifest
 {
@@ -56,6 +58,9 @@ public static class ToolManifest
     /// <summary>whisper.cpp version of <see cref="WhisperTag"/>.</summary>
     public const string WhisperVersion = "1.9.5";
 
+    /// <summary>yt-dlp release (the reference video download, 0.1.52).</summary>
+    public const string YtDlpVersion = "2026.11.23";
+
     /// <summary>uv release (installs the Python voices' Python and packages).</summary>
     public const string UvVersion = "0.13.6";
 
@@ -68,7 +73,7 @@ public static class ToolManifest
     /// <summary>Tools that are libraries, not programs: never looked for on the system PATH.</summary>
     public static readonly IReadOnlyList<ToolKind> Libraries = [ToolKind.SpeechRuntime, ToolKind.ImageRuntime, ToolKind.ImageRuntimeCuda, ToolKind.ImageRuntimeVulkan,
         ToolKind.ImageRuntimeCpu, ToolKind.ImageWeights, ToolKind.EmbeddingWeights, ToolKind.Uv, ToolKind.PythonVoiceWeights, ToolKind.OcrWeights, ToolKind.MusicCode, ToolKind.MusicWeights,
-        ToolKind.SpeechRecognizer, ToolKind.RecognizerWeights];
+        ToolKind.SpeechRecognizer, ToolKind.RecognizerWeights, ToolKind.VideoDownloader];
 
     /// <summary>Tools that may come from the system PATH when their pinned download is gone (404) or does not match its hash.</summary>
     public static readonly IReadOnlyList<ToolKind> FallbackToSystem = [ToolKind.Ffmpeg];
@@ -149,5 +154,12 @@ public static class ToolManifest
         new(ToolKind.SpeechRecognizer, WhisperVersion, "win-x64",
             new Uri($"https://github.com/ggml-org/whisper.cpp/releases/download/{WhisperTag}/whisper-bin-x64.zip"),
             "6ba69e3482d7826214f90a6a9c84ca07782aec1e1d0c6a7c30c994fd5d816ccb", "Release", "whisper-cli.exe", 8_928_640),
+        new(ToolKind.VideoDownloader, YtDlpVersion, "win-x64", new Uri($"https://github.com/yt-dlp/yt-dlp/releases/download/{YtDlpVersion}/yt-dlp.exe"),
+            "622ed48023cac1daa52a3bf3a6ac38f03514de214b5f0fa069389fd0f6d17e5c", string.Empty, "yt-dlp.exe", 23_627_865),
+        new(ToolKind.VideoDownloader, YtDlpVersion, "linux-x64", new Uri($"https://github.com/yt-dlp/yt-dlp/releases/download/{YtDlpVersion}/yt-dlp_linux"),
+            "249ddb058234276bc449b9cd9492aad9f133bda5923c61a9e39983ae114ef17d", string.Empty, "yt-dlp_linux", 41_184_064),
+        new(ToolKind.VideoDownloader, YtDlpVersion, "linux-arm64",
+            new Uri($"https://github.com/yt-dlp/yt-dlp/releases/download/{YtDlpVersion}/yt-dlp_linux_aarch64"),
+            "fb847a2e4a9ddc8cf5fcfb4bb7f42ba8969ecf72068def0278074f9d300bd13c", string.Empty, "yt-dlp_linux_aarch64", 40_807_480),
     ];
 }

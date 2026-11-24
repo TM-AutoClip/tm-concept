@@ -32,10 +32,12 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
     /// user's own music file (0.1.44; a file dialog, <c>null</c> when canceled); without it the file can only be kept as it is.
     /// <paramref name="musicServices"/> serves the library music (0.1.45: the library's install, its tracks and the Openverse search); without it
     /// the library cannot be chosen. <paramref name="generatorServices"/> serves generated music (0.1.46: the music models, the local model's
-    /// install and how it fits this card); without it generated music cannot be chosen.
+    /// install and how it fits this card); without it generated music cannot be chosen. <paramref name="referenceServices"/> serves the
+    /// reference video (S1, 0.1.52: the measure of a file or an address); without it the template keeps its reference as it is.
     /// </summary>
     public VideoStyleEditorViewModel(VideoStyle source, bool isNew, Localizer text, IReadOnlyList<SavedPalette>? saved = null,
-        Func<Task<string?>>? pickMusic = null, MusicPickerServices? musicServices = null, MusicGeneratorServices? generatorServices = null)
+        Func<Task<string?>>? pickMusic = null, MusicPickerServices? musicServices = null, MusicGeneratorServices? generatorServices = null,
+        ReferenceVideoServices? referenceServices = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(text);
@@ -69,6 +71,12 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         {
             MusicPicker = new MusicPickerViewModel(musicServices, text, _source.Music?.Track);
             MusicPicker.PropertyChanged += OnPickerChanged;
+        }
+
+        // S1 (0.1.52): the reference video; a measure sets the tempo, its colours are taken only on "Use the colours".
+        if (referenceServices is not null)
+        {
+            ReferenceVideo = new ReferenceVideoViewModel(referenceServices, text, _source.Reference, ApplyReference);
         }
 
         // 0.1.46: generated music — the local model (enabled once installed) and the online models with their prices.
@@ -367,6 +375,27 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
     /// <summary>The library music's part of the form (0.1.45); null when the editor has no library services.</summary>
     public MusicPickerViewModel? MusicPicker { get; }
 
+    /// <summary>The reference video's part of the form (S1, 0.1.52); null when the editor has no reference services.</summary>
+    public ReferenceVideoViewModel? ReferenceVideo { get; }
+
+    /// <summary>
+    /// Takes a reference video's suggestion into the form (S1, 0.1.52): the nearest narration tempo, and with <paramref name="palette"/> its
+    /// colours as the template's own palette (they can be changed like any own colours).
+    /// </summary>
+    public void ApplyReference(Core.References.ReferenceSuggestion suggestion, bool palette)
+    {
+        ArgumentNullException.ThrowIfNull(suggestion);
+        Tempo = Pick(Tempos, (int)suggestion.Tempo);
+        if (palette && suggestion.Palette is { } colours)
+        {
+            _filling = true;
+            Fill(colours);
+            _filling = false;
+            Edited();
+            Refresh();
+        }
+    }
+
     /// <summary>The ready library is the source (its track list and the Openverse search are shown).</summary>
     public bool MusicLibrary => (MusicSource?.Value ?? 0) == (int)Core.Styles.MusicSource.Library;
 
@@ -604,6 +633,11 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
             DuckDb = (double)Math.Clamp(MusicDuck ?? (decimal)MusicMixDefaults.DuckDb, (decimal)MusicMixDefaults.MinDuckDb, 0m),
             FadeOutSeconds = (double)Math.Clamp(MusicFadeOut ?? (decimal)MusicMixDefaults.FadeOutSeconds, 0m, (decimal)MusicMixDefaults.MaxFadeOutSeconds),
         };
+        if (ReferenceVideo is not null)
+        {
+            style.Reference = ReferenceVideo.Profile;
+        }
+
         style.Closing = (ClosingPlacement)Closing.Value;
         style.ClosingPlatform = (ClosingPlatform)Platform.Value;
         style.ClosingPhrase = (ClosingPhrase)(Phrase?.Value ?? 0);

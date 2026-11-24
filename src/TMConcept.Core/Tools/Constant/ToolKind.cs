@@ -96,6 +96,12 @@ public enum ToolKind
     /// <summary>The multilingual ggml model file of whisper.cpp (0.1.48; one file from Hugging Face, pinned by commit and SHA-256).</summary>
     RecognizerWeights = 24,
 
+    /// <summary>
+    /// yt-dlp (0.1.52, Unlicense): the official single-file program of its GitHub release, which downloads one reference video (S1: no
+    /// playlist, no cookies or sign-in, at most 480p, the first minutes only).
+    /// </summary>
+    VideoDownloader = 25,
+
     /// <summary>A new version of the app itself (a release asset; its SHA-256 comes from the release notes). Not a component.</summary>
     AppUpdate = 100,
 }

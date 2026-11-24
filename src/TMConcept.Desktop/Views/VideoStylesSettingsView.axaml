@@ -306,6 +306,58 @@
                   </StackPanel>
                 </Border>
 
+                <!-- S1 (0.1.52): the reference video ("bu videonun temposunda yap"): a file or an address, measured into numbers only. -->
+                <Border Classes="card" IsVisible="{Binding ReferenceVideo, Converter={x:Static ObjectConverters.IsNotNull}}">
+                  <StackPanel Spacing="8" DataContext="{Binding ReferenceVideo}" x:DataType="vm:ReferenceVideoViewModel">
+                    <StackPanel Orientation="Horizontal">
+                      <TextBlock Text="{DynamicResource styles.reference}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                      <views:HelpTip Text="{DynamicResource styles.reference.tip}" />
+                    </StackPanel>
+                    <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="8">
+                      <Button Name="StyleReferenceFile" Classes="small" Content="{DynamicResource styles.reference.file}" Command="{Binding MeasureFileCommand}"
+                              VerticalAlignment="Center" />
+                      <TextBox Name="StyleReferenceAddress" Text="{Binding Address}" MinWidth="320" MaxWidth="460" MaxLength="2000"
+                               PlaceholderText="{DynamicResource styles.reference.address.hint}" VerticalAlignment="Center" />
+                      <Button Name="StyleReferenceMeasure" Classes="small" Content="{DynamicResource styles.reference.measure}"
+                              Command="{Binding MeasureAddressCommand}" VerticalAlignment="Center" />
+                      <Button Name="StyleReferenceCancel" Classes="small" Content="{DynamicResource styles.reference.cancel}" Command="{Binding CancelCommand}"
+                              IsVisible="{Binding Busy}" VerticalAlignment="Center" />
+                      <views:HelpTip Text="{DynamicResource styles.reference.address.tip}" />
+                    </WrapPanel>
+                    <ProgressBar Name="StyleReferenceProgress" IsVisible="{Binding Busy}" IsIndeterminate="{Binding ProgressIndeterminate}"
+                                 Value="{Binding ProgressValue}" Minimum="0" Maximum="100" Height="4" MaxWidth="460" HorizontalAlignment="Left" />
+                    <TextBlock Name="StyleReferenceStatus" Text="{Binding Status}" Classes="small muted" TextWrapping="Wrap"
+                               IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                    <StackPanel Spacing="4" IsVisible="{Binding HasProfile}">
+                      <TextBlock Name="StyleReferenceSource" Text="{Binding SourceText}" TextTrimming="CharacterEllipsis" MaxWidth="640" HorizontalAlignment="Left"
+                                 ToolTip.Tip="{Binding SourceText}" />
+                      <TextBlock Name="StyleReferenceTempo" Text="{Binding TempoText}" Classes="small" TextWrapping="Wrap" />
+                      <TextBlock Name="StyleReferenceSound" Text="{Binding SoundText}" Classes="small" TextWrapping="Wrap" />
+                      <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Name="StyleReferenceColor" Text="{Binding ColorText}" Classes="small" VerticalAlignment="Center" />
+                        <ItemsControl ItemsSource="{Binding Swatches}" VerticalAlignment="Center">
+                          <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                              <StackPanel Orientation="Horizontal" Spacing="4" />
+                            </ItemsPanelTemplate>
+                          </ItemsControl.ItemsPanel>
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                              <Border Width="18" Height="18" CornerRadius="3" Background="{Binding}" BorderBrush="Gray" BorderThickness="1" />
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                      </StackPanel>
+                      <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Name="StyleReferenceColors" Classes="small" Content="{DynamicResource styles.reference.use_colors}" Command="{Binding UseColorsCommand}"
+                                IsVisible="{Binding HasPalette}" />
+                        <Button Name="StyleReferenceRemove" Classes="small" Content="{DynamicResource styles.reference.remove}" Command="{Binding RemoveCommand}" />
+                        <views:HelpTip Text="{DynamicResource styles.reference.applied.tip}" />
+                      </StackPanel>
+                    </StackPanel>
+                  </StackPanel>
+                </Border>
+
                 <Border Classes="card">
                   <StackPanel Spacing="8">
                     <StackPanel Orientation="Horizontal">

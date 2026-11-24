@@ -82,7 +82,8 @@ public sealed class QualityReviewer(IChatClientFactory chats, ICostCalculator co
         var planScene = new PlanScene(scene.Number, scene.DurationSeconds, scene.Visual, PlanTiming.Sentences(scene.Caption, request.Spans),
             scene.Image.Length == 0 ? string.Empty : request.ImagePrompt.Length > 0 ? request.ImagePrompt : scene.Visual);
         var user = QualityPrompt.RepairUser(PlanPromptBuilder.User(input.Title, input.Language, style, [planScene]), scene.Number, scene.Plan, request.Findings);
-        var answer = await AskAsync(request.Call, PipelineSteps.QualityRepairCost, PlanPromptBuilder.System(motion, tempo, family), user,
+        var answer = await AskAsync(request.Call, PipelineSteps.QualityRepairCost, PlanPromptBuilder.System(motion, tempo, family, false,
+            References.ReferenceTempoMapper.Target(style)), user,
             PlanPromptBuilder.Schema(), QualityLimits.RepairOutputTokens, [], cancellationToken).ConfigureAwait(false);
         var items = PlanReader.Read(answer);
         var item = items.FirstOrDefault(i => i.Scene == scene.Number) ?? (items.Count == 1 ? items[0] : null);

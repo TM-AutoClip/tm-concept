@@ -24,9 +24,11 @@ public static class PlanMotion
     /// <summary>
     /// The same for a style with several families (F13, 0.1.51, <see cref="Styles.DrawStyleDefinition.Families"/>): the plan's choice is kept
     /// when it is one of them, otherwise the first that fits the energy. A family only a style may use (<see cref="TransitionDefinition.StyleOnly"/>)
-    /// is never kept for a video whose style does not name it.
+    /// is never kept for a video whose style does not name it. <paramref name="target"/> (S1, 0.1.52): a reference video's targets, whose
+    /// first ease is the default of a camera move (null = the tempo's).
     /// </summary>
-    public static void Apply(IReadOnlyList<PlanItem> plans, IReadOnlyList<string> asked, NarrationTempo tempo, IReadOnlyList<string> styleFamilies)
+    public static void Apply(IReadOnlyList<PlanItem> plans, IReadOnlyList<string> asked, NarrationTempo tempo, IReadOnlyList<string> styleFamilies,
+        TempoTarget? target = null)
     {
         ArgumentNullException.ThrowIfNull(plans);
         ArgumentNullException.ThrowIfNull(asked);
@@ -55,7 +57,7 @@ public static class PlanMotion
             plan.TransitionSeconds = TransitionCatalog.Seconds(chosen, energy);
         }
 
-        var target = NarrationTempos.Targets(tempo);
+        target ??= NarrationTempos.Targets(tempo);
         var directional = plans.Any(p => TransitionCatalog.Find(p.Plan.Transition) is { Definition.Directional: true });
         foreach (var plan in plans.Select(p => p.Plan))
         {

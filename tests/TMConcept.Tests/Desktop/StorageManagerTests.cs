@@ -37,7 +37,7 @@ public sealed class StorageManagerTests
 
         usage.Uses.Keys.Order(StringComparer.Ordinal).ShouldBe(
             ["engine.remotion", "ffmpeg", "image.z-image-turbo", "music-library", "music.ace-step-1.5", "node", "sd-cpp", "sherpa-onnx", "voice.kokoro",
-                "whisper-cpp", "whisper-model.base"]);
+                "whisper-cpp", "whisper-model.base", "yt-dlp"]);
         usage.For("music-library").ShouldBe([new DiskUse(string.Empty, string.Empty)], "templates choose the music library, so the app keeps it (0.1.45)");
         usage.For("music.ace-step-1.5").ShouldBe([new DiskUse(string.Empty, string.Empty)], "templates choose the local music model too (0.1.46)");
         usage.For("whisper-model.base").ShouldBe([new DiskUse(string.Empty, string.Empty)], "every video's subtitles use whisper.cpp once installed (0.1.48)");

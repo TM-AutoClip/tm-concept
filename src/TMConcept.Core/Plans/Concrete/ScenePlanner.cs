@@ -40,7 +40,8 @@ public sealed class ScenePlanner(IChatClientFactory chats, ICostCalculator costs
         var motion = request.Style?.Motion ?? Styles.MotionIntensity.Normal;
         var tempo = request.Style?.Tempo ?? Speech.NarrationTempos.Default;
         var family = request.Style is { DrawStyle: not Styles.DrawStyle.Auto } style ? Styles.DrawStyles.Of(style.DrawStyle).Families : [];
-        var system = PlanPromptBuilder.System(motion, tempo, family, request.MusicHints);
+        var target = References.ReferenceTempoMapper.Target(request.Style);
+        var system = PlanPromptBuilder.System(motion, tempo, family, request.MusicHints, target);
         var user = PlanPromptBuilder.User(input.Title, input.Language, request.Style, scenes);
         if (request.Notes is { Count: > 0 } notes)
         {
@@ -88,7 +89,7 @@ public sealed class ScenePlanner(IChatClientFactory chats, ICostCalculator costs
         var answer = first[0];
 
         // The structure and the plan rules (0.1.41) share the single repair; a repair that still breaks a rule is used as far as it goes.
-        var check = new PlanCheck(scenes, input.Scenes.Select(s => s.Image.Length > 0).ToList(), request.Subtitles, tempo, motion);
+        var check = new PlanCheck(scenes, input.Scenes.Select(s => s.Image.Length > 0).ToList(), request.Subtitles, tempo, motion, target);
         var problems = PlanReader.Problems(items, check);
         if (problems.Count > 0)
         {
@@ -116,7 +117,7 @@ public sealed class ScenePlanner(IChatClientFactory chats, ICostCalculator costs
         }
 
         var cleaned = PlanReader.Clean(items, scenes.Select(s => s.Sentences.Count).ToList(), input.Scenes.Select(s => s.Image.Length > 0).ToList());
-        PlanMotion.Apply(cleaned, input.Scenes.Select(s => s.Transition).ToList(), tempo, family);
+        PlanMotion.Apply(cleaned, input.Scenes.Select(s => s.Transition).ToList(), tempo, family, target);
         steps.Report(VideoSteps.Code, 0.7);
         if (request.PointsModel is { } points)
         {

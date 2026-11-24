@@ -408,6 +408,9 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         CleanOld();
         assembler.TryDelete(Path.Combine(paths.WorkDirectory, "listen"));
         assembler.TryDelete(Path.Combine(paths.WorkDirectory, "sample"));
+
+        // 0.1.52 (S1): a reference measure's folder left by a closed or killed app (with a downloaded video in it); nothing measures at start.
+        assembler.TryDelete(Path.Combine(paths.WorkDirectory, References.ReferenceLimits.Folder));
     }
 
     /// <summary>

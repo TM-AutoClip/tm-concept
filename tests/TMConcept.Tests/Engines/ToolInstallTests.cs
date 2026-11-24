@@ -229,6 +229,38 @@ public sealed class ToolInstallTests
         node.Folders().ShouldBeEmpty();
     }
 
+    /// <summary>
+    /// 0.1.52 (S1): yt-dlp's release is the program itself, not an archive: it is installed as it came (checked by its hash, never unpacked),
+    /// ready only from the app's copy, and the download leaves nothing behind. Nothing reaches the network (a fake transport).
+    /// </summary>
+    [Fact]
+    public async Task ASingleFileProgramIsInstalledAsItCame()
+    {
+        var body = "fake yt-dlp"u8.ToArray();
+        var paths = new TempPaths();
+        var fake = new FakeDownloads(body);
+        var row = ToolManifest.Archives.Single(a => a.Tool == ToolKind.VideoDownloader && a.Rid == "win-x64");
+        ToolInstaller.IsProgram(row).ShouldBeTrue("yt-dlp.exe is the download itself");
+        ToolInstaller.IsProgram(ToolManifest.Archives.First(a => a.Tool == ToolKind.Ffmpeg)).ShouldBeFalse();
+        var installer = new ToolInstaller(paths, new FakePlatform(), new ToolDownloader(new DownloadTransport(() => fake), NullLogger<ToolDownloader>.Instance),
+            NullLogger<ToolInstaller>.Instance)
+        {
+            Archives = [row with { Sha256 = Convert.ToHexStringLower(SHA256.HashData(body)) }],
+            SearchPath = string.Empty,
+        };
+        installer.Status(ToolKind.VideoDownloader).Ready.ShouldBeFalse();
+
+        var status = await installer.InstallAsync(ToolKind.VideoDownloader, agreed: true, null, TestContext.Current.CancellationToken);
+
+        status.Ready.ShouldBeTrue();
+        status.Source.ShouldBe("app");
+        Path.GetFileName(status.ExecutablePath).ShouldBe("yt-dlp.exe");
+        (await File.ReadAllBytesAsync(status.ExecutablePath, TestContext.Current.CancellationToken)).ShouldBe(body);
+        fake.Requests.Single().Host.ShouldBe("github.com");
+        Directory.EnumerateFiles(Path.Combine(paths.ToolsDirectory, "downloads")).ShouldBeEmpty();
+        paths.Dispose();
+    }
+
     private sealed class VersionRunner(string version) : TMConcept.Core.Processes.IProcessRunner
     {
         public Task<TMConcept.Core.Processes.ProcessResult> RunAsync(TMConcept.Core.Processes.ProcessStart start, Action<string>? onLine,

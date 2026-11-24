@@ -546,6 +546,12 @@ A video made with a template (Settings → Templates) follows it without relying
   Drawing style) or adapt a concept later (AI edit → Adapt to a style).
 - **Narration tempo:** the narration is spoken sentence by sentence with a pause after every sentence and a longer one between scenes:
   *Tight*, *Natural* (default) or *Relaxed*. Your own pause placeholders are added on top.
+- **Reference video (0.1.52, optional):** "make it at the tempo of this video". Choose a video file or paste the address of one video
+  (downloaded by yt-dlp, installed only after a yes: one video, no playlist, no cookies or sign-in, low resolution, the first 10 minutes,
+  deleted right after the measure). The app measures its cuts every 10 seconds, its camera moves and their way, its colours, its beat and
+  its strongest moments, and keeps only these numbers in the template. The tempo is set to the nearest preset; every video's scene plan is
+  asked for the same changes, camera share and eases and for emphasis at the same places, and the plan check holds it to them. Its colours
+  become the template's own palette only when you take them.
 - A new version made from the kept code keeps the template the video was made with.
 
 ## Update

@@ -72,6 +72,12 @@ public static class ComponentCodes
     /// <summary>The multilingual base model of whisper.cpp (about 148 MB; the default, a small multilingual model would be "whisper-model.small").</summary>
     public const string RecognizerModel = RecognizerModelPrefix + "base";
 
+    /// <summary>
+    /// yt-dlp (0.1.52, S1): downloads one reference video from a web address for the template's tempo measure. A component of its own, never
+    /// downloaded without the user's yes (rule 18), only called when the user measures an address.
+    /// </summary>
+    public const string VideoDownloader = "yt-dlp";
+
     /// <summary>The start of the code of the text recognition's model and runtime (kept like a model by the clean-ups).</summary>
     public const string OcrPrefix = "ocr.";
 }
