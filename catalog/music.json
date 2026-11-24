@@ -1,0 +1,425 @@
+{
+  "schema": 1,
+  "version": "2026.11.24",
+  "source": "incompetech.com (Kevin MacLeod), CC BY 4.0; addresses, lengths, tempos and SHA-256 read from the public site on 24 Nov 2026",
+  "tracks": [
+    {
+      "id": "incompetech:achilles",
+      "title": "Achilles",
+      "artist": "Kevin MacLeod",
+      "pageUrl": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100463",
+      "downloadUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Achilles.mp3",
+      "license": "CC BY 4.0",
+      "attribution": "\"Achilles\" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0 License\nhttp://creativecommons.org/licenses/by/4.0/",
+      "moods": [
+        "epic",
+        "dark",
+        "action"
+      ],
+      "styles": [
+        "orchestral",
+        "cinematic"
+      ],
+      "bpm": 110,
+      "durationSeconds": 61,
+      "bytes": 2540613,
+      "sha256": "03917669cba8086f921712e0db8c59d32e02d63e3be443d8d4458a9d2786ded3",
+      "file": "achilles.mp3"
+    },
+    {
+      "id": "incompetech:carefree",
+      "title": "Carefree",
+      "artist": "Kevin MacLeod",
+      "pageUrl": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1400037",
+      "downloadUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Carefree.mp3",
+      "license": "CC BY 4.0",
+      "attribution": "\"Carefree\" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0 License\nhttp://creativecommons.org/licenses/by/4.0/",
+      "moods": [
+        "uplifting",
+        "playful"
+      ],
+      "styles": [
+        "acoustic"
+      ],
+      "bpm": 96,
+      "durationSeconds": 205,
+      "bytes": 6566713,
+      "sha256": "8433b770a630d9b1594fd484442c677907ece899a4d149954cd2e74fd733e311",
+      "file": "carefree.mp3"
+    },
+    {
+      "id": "incompetech:cipher",
+      "title": "Cipher",
+      "artist": "Kevin MacLeod",
+      "pageUrl": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100844",
+      "downloadUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Cipher2.mp3",
+      "license": "CC BY 4.0",
+      "attribution": "\"Cipher\" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0 License\nhttp://creativecommons.org/licenses/by/4.0/",
+      "moods": [
+        "uplifting"
+      ],
+      "styles": [
+        "electronic"
+      ],
+      "bpm": 150,
+      "durationSeconds": 231,
+      "bytes": 9252699,
+      "sha256": "d3d0614535a61d748e2fd8d5117fc4d781022a7624794802a2462d8af3fdd522",
+      "file": "cipher.mp3"
+    },
+    {
+      "id": "incompetech:crusade",
+      "title": "Crusade",
+      "artist": "Kevin MacLeod",
+      "pageUrl": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100884",
+      "downloadUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Crusade.mp3",
+      "license": "CC BY 4.0",
+      "attribution": "\"Crusade\" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0 License\nhttp://creativecommons.org/licenses/by/4.0/",
+      "moods": [
+        "dark",
+        "epic",
+        "sad",
+        "tense"
+      ],
+      "styles": [
+        "orchestral",
+        "cinematic",
+        "medieval"
+      ],
+      "bpm": 89,
+      "durationSeconds": 199,
+      "bytes": 7951802,
+      "sha256": "863758365f6a03cd0cf85237d7d49448d5cb3c1af2e0858dc7c786bc9c0b981e",
+      "file": "crusade.mp3"
+    },
+    {
+      "id": "incompetech:dark-times",
+      "title": "Dark Times",
+      "artist": "Kevin MacLeod",
+      "pageUrl": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100747",
+      "downloadUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Dark%20Times.mp3",
+      "license": "CC BY 4.0",
+      "attribution": "\"Dark Times\" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0 License\nhttp://creativecommons.org/licenses/by/4.0/",
+      "moods": [
+        "sad",
+        "dark"
+      ],
+      "styles": [
+        "orchestral"
+      ],
+      "bpm": 48,
+      "durationSeconds": 184,
+      "bytes": 7349969,
+      "sha256": "8c05efb338ee645a1f630c7d2aafbb64ac04ad1fee79c6325eafe22f3ad7f15f",
+      "file": "dark-times.mp3"
+    },
+    {
+      "id": "incompetech:deliberate-thought",
+      "title": "Deliberate Thought",
+      "artist": "Kevin MacLeod",
+      "pageUrl": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100261",
+      "downloadUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Deliberate%20Thought.mp3",
+      "license": "CC BY 4.0",
+      "attribution": "\"Deliberate Thought\" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0 License\nhttp://creativecommons.org/licenses/by/4.0/",
+      "moods": [
+        "calm"
+      ],
+      "styles": [
+        "electronic",
+        "ambient"
+      ],
+      "bpm": 69,
+      "durationSeconds": 177,
+      "bytes": 7224606,
+      "sha256": "243d5543c930bf54e95868bab9da860e67ce8835e3698881fda287bc58cc343f",
+      "file": "deliberate-thought.mp3"
+    },
+    {
+      "id": "incompetech:desert-city",
+      "title": "Desert City",
+      "artist": "Kevin MacLeod",
+      "pageUrl": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100564",
+      "downloadUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Desert%20City.mp3",
+      "license": "CC BY 4.0",
+      "attribution": "\"Desert City\" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0 License\nhttp://creativecommons.org/licenses/by/4.0/",
+      "moods": [
+        "mysterious",
+        "calm"
+      ],
+      "styles": [
+        "world"
+      ],
+      "bpm": 86,
+      "durationSeconds": 89,
+      "bytes": 3679550,
+      "sha256": "aeefb582c77059aaf5b10d1e9125d7b19adca07cd841f3654e74aed7da9a3a71",
+      "file": "desert-city.mp3"
+    },
+    {
+      "id": "incompetech:floating-cities",
+      "title": "Floating Cities",
+      "artist": "Kevin MacLeod",
+      "pageUrl": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1600018",
+      "downloadUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Floating%20Cities.mp3",
+      "license": "CC BY 4.0",
+      "attribution": "\"Floating Cities\" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0 License\nhttp://creativecommons.org/licenses/by/4.0/",
+      "moods": [
+        "calm",
+        "sad"
+      ],
+      "styles": [
+        "ambient",
+        "electronic"
+      ],
+      "bpm": 120,
+      "durationSeconds": 184,
+      "bytes": 5892113,
+      "sha256": "e7365652410d1fbc8a14d87537855d625c1a5fa8b7de8c626f47c13256ef2ddd",
+      "file": "floating-cities.mp3"
+    },
+    {
+      "id": "incompetech:fluffing-a-duck",
+      "title": "Fluffing a Duck",
+      "artist": "Kevin MacLeod",
+      "pageUrl": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100768",
+      "downloadUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Fluffing%20a%20Duck.mp3",
+      "license": "CC BY 4.0",
+      "attribution": "\"Fluffing a Duck\" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0 License\nhttp://creativecommons.org/licenses/by/4.0/",
+      "moods": [
+        "playful"
+      ],
+      "styles": [
+        "orchestral"
+      ],
+      "bpm": 122,
+      "durationSeconds": 67,
+      "bytes": 2696840,
+      "sha256": "cb23b1833c35e391de10d998d6a40cfc760565ce31d23014c86025523ca8239b",
+      "file": "fluffing-a-duck.mp3"
+    },
+    {
+      "id": "incompetech:heroic-age",
+      "title": "Heroic Age",
+      "artist": "Kevin MacLeod",
+      "pageUrl": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100848",
+      "downloadUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Heroic%20Age.mp3",
+      "license": "CC BY 4.0",
+      "attribution": "\"Heroic Age\" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0 License\nhttp://creativecommons.org/licenses/by/4.0/",
+      "moods": [
+        "epic",
+        "action",
+        "uplifting"
+      ],
+      "styles": [
+        "orchestral",
+        "cinematic"
+      ],
+      "bpm": 129,
+      "durationSeconds": 97,
+      "bytes": 3902611,
+      "sha256": "d0bbd367ab8c6d744e18f317df12de67e1b40f8b5d1c3812d7025eec9e9a0e7b",
+      "file": "heroic-age.mp3"
+    },
+    {
+      "id": "incompetech:inspired",
+      "title": "Inspired",
+      "artist": "Kevin MacLeod",
+      "pageUrl": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1600022",
+      "downloadUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Inspired.mp3",
+      "license": "CC BY 4.0",
+      "attribution": "\"Inspired\" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0 License\nhttp://creativecommons.org/licenses/by/4.0/",
+      "moods": [
+        "uplifting",
+        "calm"
+      ],
+      "styles": [
+        "electronic",
+        "acoustic"
+      ],
+      "bpm": 120,
+      "durationSeconds": 286,
+      "bytes": 9156393,
+      "sha256": "40b1af74145cedac77814d060155ad4658e04efa14d1b649decedc98fbb25f69",
+      "file": "inspired.mp3"
+    },
+    {
+      "id": "incompetech:investigations",
+      "title": "Investigations",
+      "artist": "Kevin MacLeod",
+      "pageUrl": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100646",
+      "downloadUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Investigations.mp3",
+      "license": "CC BY 4.0",
+      "attribution": "\"Investigations\" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0 License\nhttp://creativecommons.org/licenses/by/4.0/",
+      "moods": [
+        "mysterious",
+        "playful"
+      ],
+      "styles": [
+        "orchestral",
+        "cinematic"
+      ],
+      "bpm": 94,
+      "durationSeconds": 94,
+      "bytes": 3745876,
+      "sha256": "699f7a3cd227dfe5c1e88099b45af57202bfe9d56f86b8b43e4252b65dd96768",
+      "file": "investigations.mp3"
+    },
+    {
+      "id": "incompetech:lord-of-the-land",
+      "title": "Lord of the Land",
+      "artist": "Kevin MacLeod",
+      "pageUrl": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1400022",
+      "downloadUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Lord%20of%20the%20Land.mp3",
+      "license": "CC BY 4.0",
+      "attribution": "\"Lord of the Land\" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0 License\nhttp://creativecommons.org/licenses/by/4.0/",
+      "moods": [
+        "mysterious",
+        "tense"
+      ],
+      "styles": [
+        "world",
+        "medieval"
+      ],
+      "bpm": 112,
+      "durationSeconds": 186,
+      "bytes": 5969863,
+      "sha256": "47ce185fdc1f2e5514566307d652d6cb62a06bed47ea730e28214d3cedc2f948",
+      "file": "lord-of-the-land.mp3"
+    },
+    {
+      "id": "incompetech:mystery-bazaar",
+      "title": "Mystery Bazaar",
+      "artist": "Kevin MacLeod",
+      "pageUrl": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1700005",
+      "downloadUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Mystery%20Bazaar.mp3",
+      "license": "CC BY 4.0",
+      "attribution": "\"Mystery Bazaar\" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0 License\nhttp://creativecommons.org/licenses/by/4.0/",
+      "moods": [
+        "mysterious",
+        "calm",
+        "dark"
+      ],
+      "styles": [
+        "world"
+      ],
+      "bpm": 75,
+      "durationSeconds": 158,
+      "bytes": 5072914,
+      "sha256": "c4cd13a22b5bcf2191e2de0f8c30b94751987ee47ffcaff7bd9b76a4f81305d0",
+      "file": "mystery-bazaar.mp3"
+    },
+    {
+      "id": "incompetech:thatched-villagers",
+      "title": "Thatched Villagers",
+      "artist": "Kevin MacLeod",
+      "pageUrl": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100720",
+      "downloadUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Thatched%20Villagers.mp3",
+      "license": "CC BY 4.0",
+      "attribution": "\"Thatched Villagers\" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0 License\nhttp://creativecommons.org/licenses/by/4.0/",
+      "moods": [
+        "playful",
+        "uplifting"
+      ],
+      "styles": [
+        "medieval",
+        "acoustic"
+      ],
+      "bpm": 95,
+      "durationSeconds": 245,
+      "bytes": 9808523,
+      "sha256": "148094b997a55e6ff8506d063720bc852830d9761f6c9c1d6ab7aea284754ca0",
+      "file": "thatched-villagers.mp3"
+    },
+    {
+      "id": "incompetech:the-descent",
+      "title": "The Descent",
+      "artist": "Kevin MacLeod",
+      "pageUrl": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1200094",
+      "downloadUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/The%20Descent.mp3",
+      "license": "CC BY 4.0",
+      "attribution": "\"The Descent\" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0 License\nhttp://creativecommons.org/licenses/by/4.0/",
+      "moods": [
+        "action",
+        "dark",
+        "epic"
+      ],
+      "styles": [
+        "orchestral",
+        "cinematic"
+      ],
+      "bpm": 103,
+      "durationSeconds": 192,
+      "bytes": 7672813,
+      "sha256": "f097d51700b970efffc62499473ea3a31e09aad4172e787978bc9c2a644d53a2",
+      "file": "the-descent.mp3"
+    },
+    {
+      "id": "incompetech:unanswered-questions",
+      "title": "Unanswered Questions",
+      "artist": "Kevin MacLeod",
+      "pageUrl": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1200025",
+      "downloadUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Unanswered%20Questions.mp3",
+      "license": "CC BY 4.0",
+      "attribution": "\"Unanswered Questions\" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0 License\nhttp://creativecommons.org/licenses/by/4.0/",
+      "moods": [
+        "tense",
+        "mysterious"
+      ],
+      "styles": [
+        "world",
+        "acoustic"
+      ],
+      "bpm": 84,
+      "durationSeconds": 166,
+      "bytes": 6629900,
+      "sha256": "b6dc744497a197ed1f0dd7a56025293df181155018038a74cfe8116b6206ac91",
+      "file": "unanswered-questions.mp3"
+    },
+    {
+      "id": "incompetech:volatile-reaction",
+      "title": "Volatile Reaction",
+      "artist": "Kevin MacLeod",
+      "pageUrl": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1400039",
+      "downloadUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Volatile%20Reaction.mp3",
+      "license": "CC BY 4.0",
+      "attribution": "\"Volatile Reaction\" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0 License\nhttp://creativecommons.org/licenses/by/4.0/",
+      "moods": [
+        "action",
+        "tense",
+        "dark"
+      ],
+      "styles": [
+        "orchestral",
+        "cinematic"
+      ],
+      "bpm": 155,
+      "durationSeconds": 165,
+      "bytes": 5293585,
+      "sha256": "ced1148df201a6c69062a96b7ef49c49924572ca5023c2ac5a2d6c5828ecb218",
+      "file": "volatile-reaction.mp3"
+    },
+    {
+      "id": "incompetech:wallpaper",
+      "title": "Wallpaper",
+      "artist": "Kevin MacLeod",
+      "pageUrl": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100843",
+      "downloadUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Wallpaper.mp3",
+      "license": "CC BY 4.0",
+      "attribution": "\"Wallpaper\" Kevin MacLeod (incompetech.com)\nLicensed under Creative Commons: By Attribution 4.0 License\nhttp://creativecommons.org/licenses/by/4.0/",
+      "moods": [
+        "uplifting",
+        "calm",
+        "playful"
+      ],
+      "styles": [
+        "electronic",
+        "pop"
+      ],
+      "bpm": 92,
+      "durationSeconds": 220,
+      "bytes": 8804339,
+      "sha256": "9fa810e5193c88f1b360537366f210f16c2588106d5292f0659e9957fa274f96",
+      "file": "wallpaper.mp3"
+    }
+  ]
+}

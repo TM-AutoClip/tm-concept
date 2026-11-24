@@ -36,7 +36,8 @@ public sealed class StorageManagerTests
         var usage = await h.Get<IComponentUsage>().ComputeAsync(None);
 
         usage.Uses.Keys.Order(StringComparer.Ordinal).ShouldBe(
-            ["engine.remotion", "ffmpeg", "image.z-image-turbo", "node", "sd-cpp", "sherpa-onnx", "voice.kokoro"]);
+            ["engine.remotion", "ffmpeg", "image.z-image-turbo", "music-library", "node", "sd-cpp", "sherpa-onnx", "voice.kokoro"]);
+        usage.For("music-library").ShouldBe([new DiskUse(string.Empty, string.Empty)], "templates choose the music library, so the app keeps it (0.1.45)");
         usage.For("voice.kokoro").ShouldBe([new DiskUse("Ottoman", PipelineSteps.Speech)]);
         usage.For("sherpa-onnx").ShouldBe([new DiskUse("Ottoman", PipelineSteps.Speech)], "a dependency is used by whoever uses the voice");
         usage.For("sd-cpp").ShouldBe([new DiskUse("Byzantium", PipelineSteps.Images)]);

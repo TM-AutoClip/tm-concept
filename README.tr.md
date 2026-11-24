@@ -486,8 +486,14 @@ Bir şablonla (Ayarlar → Şablonlar) üretilen video, modelin iyi niyetine kal
   kısılır, sahne aralarında yükselir (cümleler arasındaki kısa nefeslerde yükselmez); kısa parça döner, uzun parça kesilir, sonda kararır.
   Düzey, kısma miktarı ve kararma şablonda ayarlanır. Dosya her videonun sürüm klasörüne (`music/`) kopyalanır, yeni sürüm aynı parçayı
   kullanır. Lisansı senin sorumluluğunda; isteğe bağlı atıf, video bitince video sayfasında açıklamaya kopyalanmak üzere gösterilir
-  (videoya yazılmaz). Her sürüm klasöründe videonun kullandığı dış dosyaları listeleyen bir `assets.json` var. Hazır kütüphane ve müzik
-  üretimi sonraki sürümlerde.
+  (videoya yazılmaz). Her sürüm klasöründe videonun kullandığı dış dosyaları listeleyen bir `assets.json` var. Müzik üretimi sonraki
+  sürümde.
+- **Hazır müzik kütüphanesi (0.1.45):** *Kütüphaneden seç*, Kevin MacLeod'un parçalarından elle seçilmiş, duygu, tarz ve tempo
+  etiketli küçük bir paket kullanır (incompetech.com, CC BY 4.0); yalnız onayladıktan sonra iner (yaklaşık 114 MB). Parçayı her videonun
+  konsepti seçebilir: sahne planı aynı istekte her sahneye bir müzik ipucu yazar, en yakın parça kullanılır (istenen tarzda parça yoksa
+  en yakın tarz). Kütüphaneden bir parça da seçebilir ya da Openverse'te arayabilirsin (anahtar yok; yalnız CC0, CC BY ve CC BY-SA).
+  Müzik en güçlü temiz girişinden bir ölçü başında başlar, sahne geçişleri küçük bir payla vuruşa kayar, kısa parça vuruşa hizalı ve
+  çapraz geçişli döngüyle uzar; parçanın istediği atıf video sayfasında gösterilir.
 - **Kelime kelime vurgu (0.1.34, isteğe bağlı):** o an söylenen kelime vurgu renginde görünür; çizim tarzına göre parlar, büyür ya da
   yalnız rengi değişir.
 - **Çizim tarzı:** görseli olmayan sahneler şablonun tarzında çizilir, üretilen görseller de aynı tarzda istenir. Düzenleyicide her

@@ -22,8 +22,11 @@ namespace TMConcept.Core.Videos;
 /// the pipeline unchanged, so a version is made exactly as the first video was.
 /// </summary>
 public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator costs, IMediaTools media, IVideoStore videos, IRunStore runs, IAppPaths paths,
-    TimeProvider clock, Plans.ScenePlanner planner, IMotionFrames motion, ILogger<VideoAssembler> logger)
+    TimeProvider clock, Plans.ScenePlanner planner, IMotionFrames motion, VideoMusicStep musicStep, ILogger<VideoAssembler> logger)
 {
+    /// <summary>The background music step (0.1.44 C3, 0.1.45 C4 + F7 + F8).</summary>
+    public VideoMusicStep Music => musicStep;
+
     /// <summary>The start of a rejected code's file name in a work folder (kept for reading until the start-up clean-up).</summary>
     public const string Rejected = "rejected-";
 
@@ -243,8 +246,13 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         PlaceFonts(project, style, input.Language);
         steps.Report(VideoSteps.Code, 0.1);
         await planner.PlanAsync(new Plans.PlanRequest(codeModel, context.PointsModel, input, style, context.Spans, context.ImagePrompts, project, id,
-            VideoStyleRules.SubtitlesOn(options)), steps,
+            VideoStyleRules.SubtitlesOn(options), MusicHints: context.Music is { Automatic: true }), steps,
             cancellationToken).ConfigureAwait(false);
+
+        // 0.1.45: a library track chosen by the concept follows the plan's music hints; the scene changes move onto its beats before the render.
+        var chosen = context.Music is { Automatic: true }
+            ? await musicStep.SettleAsync(context.Music, style, input, context.Clips, work, align: true, cancellationToken).ConfigureAwait(false)
+            : null;
         steps.Finish(VideoSteps.Code);
         var request = new EngineRenderRequest(project, Plans.PlanDrawer.Code, RenderInputBuilder.ForEngine(input, VideoStyleRules.SubtitlesOn(options)),
             Path.Combine(work, "silent.mp4"), Workers());
@@ -282,7 +290,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         }
 
         steps.Finish(VideoSteps.Render);
-        return new RenderOutcome(request, false, input) { AppCode = appCode, FrameWeak = findings.Count > 0 };
+        return new RenderOutcome(request, false, input) { AppCode = appCode, FrameWeak = findings.Count > 0, Music = chosen };
     }
 
     /// <summary>Renders the app's own animation (no repair: the app's code is not sent to a model).</summary>
@@ -519,72 +527,11 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
     }
 
     /// <summary>
-    /// The template's background music for a run (0.1.44, C3), checked before anything is paid for: off = <c>null</c>. The user's own file
-    /// (a new version uses the copy kept in <paramref name="keptVersion"/>'s <see cref="VideoFolders.Music"/> folder, so it sounds the same
-    /// even when the original was moved) is copied into the work folder and read by ffmpeg. A missing or unreadable file, or a source this
-    /// version cannot make yet, is an unexpected failure: the video stops with <c>music</c> (rule 17; only a template with music off goes
-    /// on without it).
+    /// The template's background music for a run, checked before anything is paid for (<see cref="VideoMusicStep.PrepareAsync"/>): off =
+    /// <c>null</c>; a missing or unreadable file, or a library that is not installed, stops the video with <c>music</c> (rule 17).
     /// </summary>
-    public async Task<PreparedMusic?> PrepareMusicAsync(VideoStyle? style, string? keptVersion, string work, CancellationToken cancellationToken)
-    {
-        ArgumentException.ThrowIfNullOrEmpty(work);
-        if (!VideoStyleRules.MusicOn(style))
-        {
-            return null;
-        }
-
-        var music = style!.Music;
-        if (music.Source != MusicSource.OwnFile)
-        {
-            logger.LogError(Activity.LogEvents.OnScreen, "The template's music source {Source} cannot be made by this version; the video is stopped", music.Source);
-            throw new VideoException($"The music source {music.Source} is not available in this version.") { Code = "music" };
-        }
-
-        var kept = keptVersion is null ? null : KeptMusic(keptVersion);
-        var from = kept ?? music.File;
-        if (string.IsNullOrWhiteSpace(from) || !File.Exists(from))
-        {
-            // The file name only: the folder is the user's.
-            logger.LogError(Activity.LogEvents.OnScreen, "The template's music file {File} was not found; the video is stopped", Path.GetFileName(from ?? string.Empty));
-            throw new VideoException("The music file was not found: " + Path.GetFileName(from ?? string.Empty)) { Code = "music" };
-        }
-
-        var folder = Path.Combine(work, VideoFolders.Music);
-        Directory.CreateDirectory(folder);
-        var name = LibraryPaths.SafeName(Path.GetFileNameWithoutExtension(from), "music") + Path.GetExtension(from).ToLowerInvariant();
-        var copy = Path.Combine(folder, name);
-        try
-        {
-            await using var source = new FileStream(from, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
-            await using var target = new FileStream(copy, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
-            await source.CopyToAsync(target, cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            logger.LogError(Activity.LogEvents.OnScreen, ex, "The music file {File} could not be read; the video is stopped", Path.GetFileName(from));
-            throw new VideoException("The music file could not be read: " + Path.GetFileName(from), ex) { Code = "music" };
-        }
-
-        var duration = await media.AudioDurationAsync(copy, cancellationToken).ConfigureAwait(false);
-        if (duration is not > 0)
-        {
-            logger.LogError(Activity.LogEvents.OnScreen, "The music file {File} is damaged or has no sound; the video is stopped", Path.GetFileName(from));
-            throw new VideoException("The music file is damaged or has no sound: " + Path.GetFileName(from)) { Code = "music" };
-        }
-
-        logger.LogInformation("Background music: {File} ({Seconds:0.0} s, {Origin})", name, duration.Value / 1000.0,
-            kept is null ? "the template's file" : "kept with the video");
-        var attribution = music.Attribution.Trim();
-        var entry = new AssetEntry
-        {
-            Kind = AssetKinds.Music,
-            Name = Path.GetFileNameWithoutExtension(from),
-            License = AssetLicenses.OwnFile,
-            Attribution = attribution.Length > MusicMixDefaults.AttributionMax ? attribution[..MusicMixDefaults.AttributionMax] : attribution,
-            File = name,
-        };
-        return new PreparedMusic(copy, duration.Value, entry);
-    }
+    public Task<PreparedMusic?> PrepareMusicAsync(VideoStyle? style, string? keptVersion, string work, CancellationToken cancellationToken) =>
+        musicStep.PrepareAsync(style, keptVersion, work, cancellationToken);
 
     /// <summary>The music kept in a version folder (the first file of its <see cref="VideoFolders.Music"/> folder); null when it has none.</summary>
     public static string? KeptMusic(string versionFolder)
@@ -597,7 +544,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
     /// The mux's music: looped when the track is shorter than the video, ducked under the narration (each clip's spoken parts at its start;
     /// the whole clip when its format cannot be read), faded out at the end.
     /// </summary>
-    private static MuxMusic MuxMusicOf(PreparedMusic music, VideoMusic settings, IReadOnlyList<SpeechClip?> clips, RenderInput input)
+    private static MuxMusic MuxMusicOf(PreparedMusic prepared, VideoMusic settings, IReadOnlyList<SpeechClip?> clips, RenderInput input)
     {
         var spoken = clips.Select((c, i) => (Clip: c, Start: (long)Math.Round(input.Scenes[i].StartSeconds * 1000)))
             .Where(x => x.Clip is not null)
@@ -605,7 +552,17 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         var spans = MusicEnvelope.Merge(MusicEnvelope.Timeline(spoken));
         var (level, ducked, fade) = VideoStyleRules.MusicMix(settings);
         var length = input.DurationSeconds;
-        return new MuxMusic(music.File, music.DurationMs < (long)Math.Round(length * 1000), length, MusicEnvelope.Expression(spans, level, ducked), fade);
+        if (prepared.Placement is not { } place)
+        {
+            return new MuxMusic(prepared.File, prepared.DurationMs < (long)Math.Round(length * 1000), length, MusicEnvelope.Expression(spans, level, ducked), fade);
+        }
+
+        // 0.1.45 (F8): the laid-out track (entry point, loop copies) when ffmpeg made it, under the scenes the plan chose.
+        var file = place.BedFile ?? prepared.File;
+        var playing = (place.EndSeconds ?? length) - place.StartSeconds;
+        var seconds = place.BedFile is null ? prepared.DurationMs / 1000.0 : place.BedSeconds;
+        return new MuxMusic(file, seconds + 0.001 < playing, length, MusicEnvelope.Expression(spans, level, ducked), place.EndSeconds is null ? fade : place.EndFadeSeconds,
+            place.StartSeconds, place.EndSeconds, place.FadeInSeconds);
     }
 
     /// <summary>The spoken parts of a clip; the whole clip when its file cannot be read as a WAV this reads (the music ducks under all of it).</summary>

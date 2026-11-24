@@ -18,7 +18,8 @@ namespace TMConcept.Desktop.ViewModels;
 /// before they are dropped. A database error is logged and shown, never left to the dispatcher.
 /// </summary>
 public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store, IVideoPaletteStore palettes, Localizer text, IConfirmDialog confirm,
-    IActivityLog activity, Startup.FileDialogs dialogs, ILogger<VideoStylesSettingsViewModel> logger) : SettingsSectionBase
+    IActivityLog activity, Startup.FileDialogs dialogs, Core.Music.IMusicLibrary musicLibrary, Core.Music.IMusicSearch musicSearch,
+    Components.ComponentInstallFlow installs, ILogger<VideoStylesSettingsViewModel> logger) : SettingsSectionBase
 {
     private bool _loading;
     private IReadOnlyList<SavedPalette> _saved = [];
@@ -366,7 +367,25 @@ public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store,
     }
 
     private VideoStyleEditorViewModel NewEditor(VideoStyle style, bool isNew) => new(style, isNew, text, _saved,
-        () => dialogs.OpenAsync("styles.music.pick", "styles.music.filter", MusicSources.FilePatterns));
+        () => dialogs.OpenAsync("styles.music.pick", "styles.music.filter", MusicSources.FilePatterns),
+        new MusicPickerServices(musicLibrary, musicSearch, InstallLibraryAsync, activity));
+
+    /// <summary>
+    /// Installs the ready music library (0.1.45): the app's install flow lists every track with its size and asks once; nothing is downloaded
+    /// without the yes. True when the library is ready afterwards.
+    /// </summary>
+    private async Task<bool> InstallLibraryAsync()
+    {
+        var outcome = await installs.EnsureAsync([Core.Components.ComponentCodes.MusicLibrary], "install.purpose.music", null, CancellationToken.None)
+            .ConfigureAwait(true);
+        if (!outcome.Ready && outcome.Reason.Length > 0)
+        {
+            logger.LogInformation("The music library was not installed: {Reason}", outcome.Reason);
+            Status = outcome.Reason;
+        }
+
+        return musicLibrary.Ready;
+    }
 
     private string NewName()
     {

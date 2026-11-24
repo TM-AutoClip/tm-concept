@@ -78,6 +78,15 @@ public static class DesktopServices
         services.AddSingleton<Core.Media.IMediaTools, Engines.Media.FfmpegMedia>();
         services.AddSingleton<Core.Media.IMotionFrames, Engines.Media.FfmpegMotionFrames>();
         services.AddSingleton<Core.Plans.ScenePlanner>();
+
+        // 0.1.45 (C4, F7, F8, S6): the ready music library (a component, downloaded after a confirmation), the music analysis with the app's
+        // ffmpeg and the Openverse audio search (no key; only when the user searches).
+        services.AddSingleton<Core.Music.MusicLibraryStore>();
+        services.AddSingleton<Core.Music.IMusicLibrary>(s => s.GetRequiredService<Core.Music.MusicLibraryStore>());
+        services.AddSingleton<Core.Components.IComponentSource, Core.Music.MusicLibraryComponentSource>();
+        services.AddSingleton<Core.Music.IMusicAudio, Engines.Media.FfmpegMusicAudio>();
+        services.AddSingleton<Core.Music.IMusicSearch, Providers.Music.OpenverseAudioClient>();
+        services.AddSingleton<Core.Videos.VideoMusicStep>();
         services.AddSingleton<Core.Videos.VideoAssembler>();
         services.AddSingleton<Core.Videos.VideoPipeline>();
         // 0.1.28: deleting something deletes everything it generated, for good (files first, the record after).

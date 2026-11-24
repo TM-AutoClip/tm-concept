@@ -176,6 +176,11 @@ public sealed class FfmpegMuxer(ToolInstaller tools, IProcessRunner runner, ILog
         ArgumentNullException.ThrowIfNull(music);
         var c = CultureInfo.InvariantCulture;
         var length = Math.Max(0.1, music.DurationSeconds);
+        if (music.StartSeconds > 0 || music.EndSeconds is not null || music.FadeInSeconds > 0)
+        {
+            return WindowChain(music, length);
+        }
+
         var chain = new StringBuilder(string.Create(c, $"aresample=48000,aformat=channel_layouts=stereo,atrim=duration={length:0.###},asetpts=PTS-STARTPTS"));
         chain.Append(",volume='").Append(music.Volume).Append("':eval=frame");
         var fade = Math.Min(Math.Max(0, music.FadeOutSeconds), length);
@@ -184,6 +189,40 @@ public sealed class FfmpegMuxer(ToolInstaller tools, IProcessRunner runner, ILog
             chain.Append(c, $",afade=t=out:st={length - fade:0.###}:d={fade:0.###}");
         }
 
+        return chain.ToString();
+    }
+
+    /// <summary>
+    /// The music's filters when it plays under only some scenes or fades in (0.1.45, the scene plan's hints): cut to the part it plays, faded in
+    /// at its start and out before its end (the video's end takes the template's fade-out), delayed to its start, then the level envelope
+    /// (its <c>t</c> is the video's time after the delay).
+    /// </summary>
+    private static string WindowChain(Core.Media.MuxMusic music, double length)
+    {
+        var c = CultureInfo.InvariantCulture;
+        var start = Math.Clamp(music.StartSeconds, 0, length - 0.1);
+        var end = Math.Clamp(music.EndSeconds ?? length, start + 0.1, length);
+        var playing = end - start;
+        var chain = new StringBuilder(string.Create(c, $"aresample=48000,aformat=channel_layouts=stereo,atrim=duration={playing:0.###},asetpts=PTS-STARTPTS"));
+        var fadeIn = Math.Min(Math.Max(0, music.FadeInSeconds), playing / 2);
+        if (fadeIn > 0)
+        {
+            chain.Append(c, $",afade=t=in:st=0:d={fadeIn:0.###}");
+        }
+
+        var fadeOut = Math.Min(Math.Max(0, music.FadeOutSeconds), playing - fadeIn);
+        if (fadeOut > 0)
+        {
+            chain.Append(c, $",afade=t=out:st={playing - fadeOut:0.###}:d={fadeOut:0.###}");
+        }
+
+        if (start > 0)
+        {
+            var delay = Math.Round(start * 1000).ToString("0", c);
+            chain.Append(c, $",adelay=delays={delay}:all=1");
+        }
+
+        chain.Append(",volume='").Append(music.Volume).Append("':eval=frame");
         return chain.ToString();
     }
 

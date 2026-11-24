@@ -33,7 +33,7 @@ public sealed class ScenePlanner(IChatClientFactory chats, ICostCalculator costs
         var motion = request.Style?.Motion ?? Styles.MotionIntensity.Normal;
         var tempo = request.Style?.Tempo ?? Speech.NarrationTempos.Default;
         var family = request.Style is { DrawStyle: not Styles.DrawStyle.Auto } style ? Styles.DrawStyles.Of(style.DrawStyle).Transition : string.Empty;
-        var system = PlanPromptBuilder.System(motion, tempo, family);
+        var system = PlanPromptBuilder.System(motion, tempo, family, request.MusicHints);
         var user = PlanPromptBuilder.User(input.Title, input.Language, request.Style, scenes);
         var model = request.CodeModel;
         var chat = chats.Create(model.Model, model.Key.Secret);
@@ -42,7 +42,7 @@ public sealed class ScenePlanner(IChatClientFactory chats, ICostCalculator costs
         {
             try
             {
-                var answer = await chat.SendAsync(new ChatRequest(system, text, CacheSystem: true, Schema: PlanPromptBuilder.Schema(), MaxOutputTokens: 16000,
+                var answer = await chat.SendAsync(new ChatRequest(system, text, CacheSystem: true, Schema: PlanPromptBuilder.Schema(request.MusicHints), MaxOutputTokens: 16000,
                     Effort: model.Effort, Stream: true), token).ConfigureAwait(false);
                 Spend(steps, request.VideoId, PipelineSteps.ScenePlanCost, model, answer.Usage, answer.ReportedCostUsd);
                 return answer.Text;
@@ -113,6 +113,12 @@ public sealed class ScenePlanner(IChatClientFactory chats, ICostCalculator costs
             var spans = i < request.Spans.Count ? request.Spans[i] : null;
             PlanTiming.Apply(plan, scene.StartSeconds, scene.DurationSeconds, PlanTiming.Starts(scenes[i].Sentences, spans, scene.DurationSeconds));
             scene.Plan = plan;
+        }
+
+        if (request.MusicHints)
+        {
+            logger.LogInformation("Scene plan music: {Hints}", string.Join(", ", cleaned.Select(c => c.Plan.Music is { } m
+                ? m.Mood + "/" + m.Style + "/" + m.Tempo + (m.Start ? " start" : string.Empty) + (m.End ? " end" : string.Empty) : "-")));
         }
 
         logger.LogInformation("Scene plan: {Bases}; {Beats} beats; transitions {Transitions}", string.Join(", ", cleaned.GroupBy(c => c.Plan.Base).Select(g => g.Key + " " + g.Count())),

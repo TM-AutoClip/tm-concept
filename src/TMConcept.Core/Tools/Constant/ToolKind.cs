@@ -78,6 +78,9 @@ public enum ToolKind
     /// </summary>
     OcrGpuRuntime = 19,
 
+    /// <summary>A track of the ready music library (0.1.45; one file from incompetech.com, pinned by its SHA-256; not an archive).</summary>
+    MusicTrack = 20,
+
     /// <summary>A new version of the app itself (a release asset; its SHA-256 comes from the release notes). Not a component.</summary>
     AppUpdate = 100,
 }

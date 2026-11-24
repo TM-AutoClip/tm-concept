@@ -133,6 +133,9 @@ public sealed class VideoRemaker(IEnumerable<IVideoEngine> engines, SceneNarrato
 
             // A video drawn by the app (0.1.33) keeps its scene plans, their beats timed again from the new sentences.
             Plans.PlanTiming.Carry(input, timed, clips.Select(c => c?.Spans).ToList());
+
+            // 0.1.45: the kept music is laid again under the new timing, its scene changes on the beats.
+            music = await assembler.Music.SettleAsync(music, options.Style, timed, clips, work, align: true, cancellationToken).ConfigureAwait(false);
             steps.Finish(VideoSteps.Timing);
             var rendered = await assembler.RenderKeptAsync(source.Engine, source.Code, options, timed, work, steps, cancellationToken)
                 .ConfigureAwait(false);
@@ -176,6 +179,9 @@ public sealed class VideoRemaker(IEnumerable<IVideoEngine> engines, SceneNarrato
             steps.Finish(VideoSteps.Prepare);
 
             var options = Options(source.Record);
+
+            // 0.1.45: the kept timing stays (its scene changes were on the beats already); only the track is laid out again.
+            music = await assembler.Music.SettleAsync(music, options.Style, input, clips, work, align: false, cancellationToken).ConfigureAwait(false);
             var rendered = await assembler.CodeAndRenderAsync(job.Engine, job.CodeModel, options, input, work, id, steps, cancellationToken)
                 .ConfigureAwait(false);
             var warnings = source.Record.Warnings.Split(',', StringSplitOptions.RemoveEmptyEntries)

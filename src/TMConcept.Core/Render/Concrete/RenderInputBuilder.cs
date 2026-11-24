@@ -74,6 +74,35 @@ public static class RenderInputBuilder
     }
 
     /// <summary>
+    /// Gives the scenes of <paramref name="input"/> new lengths in frames (0.1.45: scene changes moved onto the music's beats), in place: every
+    /// scene's start frame, start and length in seconds, and the video's frames and length follow. A scene keeps at least one frame.
+    /// </summary>
+    public static void Retime(RenderInput input, IReadOnlyList<int> frames)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(frames);
+        if (frames.Count != input.Scenes.Count)
+        {
+            throw new ArgumentException("One length per scene is needed.", nameof(frames));
+        }
+
+        var frame = 0;
+        for (var i = 0; i < input.Scenes.Count; i++)
+        {
+            var scene = input.Scenes[i];
+            var count = Math.Max(1, frames[i]);
+            scene.StartFrame = frame;
+            scene.FrameCount = count;
+            scene.StartSeconds = Math.Round(frame / (double)input.Fps, 3);
+            scene.DurationSeconds = Math.Round(count / (double)input.Fps, 3);
+            frame += count;
+        }
+
+        input.TotalFrames = frame;
+        input.DurationSeconds = Math.Round(frame / (double)input.Fps, 3);
+    }
+
+    /// <summary>
     /// What the engine (and the video code prompt) gets: <paramref name="input"/> itself with subtitles on; with subtitles off a copy whose
     /// captions are empty, so the generated code has no narration text it could draw (16 Nov 2026: with subtitles off the code drew the
     /// narration on screen). The source input, the .srt and the narration file keep the real captions.

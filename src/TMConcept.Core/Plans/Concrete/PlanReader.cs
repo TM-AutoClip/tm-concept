@@ -265,7 +265,39 @@ public static class PlanReader
                 }).ToList(),
             }).ToList(),
         };
+        plan.Music = ReadMusic(scene["music"]);
         return new PlanItem { Scene = (int)(Num(scene["scene"]) ?? 0), Plan = plan };
+    }
+
+    /// <summary>
+    /// A scene's music hint (0.1.45): only the app's words are kept (an unknown mood, style, tempo or transition is empty); null when the answer
+    /// has none or nothing in it is usable.
+    /// </summary>
+    public static Music.MusicHint? ReadMusic(JsonNode? node)
+    {
+        if (node is not JsonObject music)
+        {
+            return null;
+        }
+
+        static string Word(JsonNode? value, IReadOnlyList<string> known)
+        {
+            var text = Str(value).ToLowerInvariant();
+            return known.Contains(text, StringComparer.Ordinal) ? text : string.Empty;
+        }
+
+        static bool Flag(JsonNode? value) => value is JsonValue flag && flag.TryGetValue<bool>(out var on) && on;
+
+        var hint = new Music.MusicHint
+        {
+            Mood = Word(music["mood"], Music.MusicTags.Moods),
+            Style = Word(music["style"], Music.MusicTags.Styles),
+            Tempo = Word(music["tempo"], Music.MusicTags.Tempos),
+            Start = Flag(music["start"]),
+            End = Flag(music["end"]),
+            Transition = Word(music["transition"], Music.MusicTags.Transitions),
+        };
+        return hint is { Mood.Length: 0, Style.Length: 0, Tempo.Length: 0, Start: false, End: false, Transition.Length: 0 } ? null : hint;
     }
 
     private static IEnumerable<JsonObject> Objects(JsonNode? node) => node is JsonArray array ? array.OfType<JsonObject>() : [];

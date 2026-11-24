@@ -23,14 +23,17 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
     private readonly Localizer _text;
     private readonly Func<Task<string?>>? _pickMusic;
     private bool _filling;
+    private MusicSourceChoice? _lastSource;
 
     /// <summary>
     /// Fills the form from <paramref name="source"/> (a copy is edited; the source is not changed); <paramref name="saved"/> are the user's
     /// saved palettes, listed after the shipped ones and before the template's own colours. <paramref name="pickMusic"/> asks for the
     /// user's own music file (0.1.44; a file dialog, <c>null</c> when canceled); without it the file can only be kept as it is.
+    /// <paramref name="musicServices"/> serves the library music (0.1.45: the library's install, its tracks and the Openverse search); without it
+    /// the library cannot be chosen.
     /// </summary>
     public VideoStyleEditorViewModel(VideoStyle source, bool isNew, Localizer text, IReadOnlyList<SavedPalette>? saved = null,
-        Func<Task<string?>>? pickMusic = null)
+        Func<Task<string?>>? pickMusic = null, MusicPickerServices? musicServices = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(text);
@@ -57,9 +60,14 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         Placements = Choices<ClosingPlacement>("style.closing.");
         Platforms = Choices<ClosingPlatform>("style.platform.");
 
-        // 0.1.44: only the sources this version makes (off, own file); the library and generated music come later.
-        MusicSources = Core.Styles.MusicSources.Available
-            .Select(m => new NumberChoice((int)m, Label("style.music." + Key(m), m.ToString()))).ToList();
+        // 0.1.44: only the sources this version makes; 0.1.45: the library, usable once it is installed (generated music comes later).
+        if (musicServices is not null)
+        {
+            MusicPicker = new MusicPickerViewModel(musicServices, text, _source.Music?.Track);
+            MusicPicker.PropertyChanged += OnPickerChanged;
+        }
+
+        MusicSources = SourceChoices();
         TitleCells = Enum.GetValues<TitlePosition>().Select(p => new TitleCellViewModel(p, Label("style.position." + Key(p), p.ToString()))).ToList();
         foreach (var cell in TitleCells)
         {
@@ -93,7 +101,8 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         Phrase = Pick(Phrases, (int)_source.ClosingPhrase);
         Position = _source.TitlePosition;
         var music = _source.Music ?? new VideoMusic();
-        MusicSource = Pick(MusicSources, (int)music.Source);
+        MusicSource = MusicSources.FirstOrDefault(c => c.Value == (int)music.Source) ?? MusicSources[0];
+        _lastSource = MusicSource;
         MusicFile = music.File;
         MusicAttribution = music.Attribution;
         MusicLevel = (decimal)Math.Round(music.LevelDb, 1);
@@ -317,13 +326,24 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
     [ObservableProperty]
     public partial TitlePosition Position { get; set; }
 
-    /// <summary>The music sources this version can make (0.1.44: off, own file).</summary>
-    public IReadOnlyList<NumberChoice> MusicSources { get; }
+    /// <summary>The music sources this version can make (0.1.44: off, own file; 0.1.45: the library, enabled once it is installed).</summary>
+    [ObservableProperty]
+    public partial IReadOnlyList<MusicSourceChoice> MusicSources { get; set; }
 
     /// <summary>Where the background music comes from.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(MusicOn), nameof(MusicOwnFile))]
-    public partial NumberChoice MusicSource { get; set; }
+    [NotifyPropertyChangedFor(nameof(MusicOn), nameof(MusicOwnFile), nameof(MusicLibrary))]
+    public partial MusicSourceChoice MusicSource { get; set; }
+
+    /// <summary>The library music's part of the form (0.1.45); null when the editor has no library services.</summary>
+    public MusicPickerViewModel? MusicPicker { get; }
+
+    /// <summary>The ready library is the source (its track list and the Openverse search are shown).</summary>
+    public bool MusicLibrary => (MusicSource?.Value ?? 0) == (int)Core.Styles.MusicSource.Library;
+
+    /// <summary>A short note under the source: why the library cannot be chosen yet (empty = nothing to say).</summary>
+    [ObservableProperty]
+    public partial string MusicNote { get; set; } = string.Empty;
 
     /// <summary>The music has settings to show (a source other than off).</summary>
     public bool MusicOn => (MusicSource?.Value ?? 0) != (int)Core.Styles.MusicSource.Off;
@@ -458,6 +478,7 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         {
             Source = (Core.Styles.MusicSource)(MusicSource?.Value ?? 0),
             File = MusicFile.Trim(),
+            Track = MusicLibrary ? MusicPicker?.Track ?? (MusicPicker is null ? _source.Music?.Track : null) : null,
             Attribution = MusicAttribution.Trim(),
             LevelDb = (double)Math.Clamp(MusicLevel ?? (decimal)MusicMixDefaults.LevelDb, (decimal)MusicMixDefaults.MinLevelDb, (decimal)MusicMixDefaults.MaxLevelDb),
             DuckDb = (double)Math.Clamp(MusicDuck ?? (decimal)MusicMixDefaults.DuckDb, (decimal)MusicMixDefaults.MinDuckDb, 0m),
@@ -483,9 +504,26 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
 
         if (e.PropertyName is nameof(BaseColour) or nameof(GenerateLight) or nameof(PaletteName) or nameof(PaletteStatus) or nameof(PaletteOk)
             or nameof(OwnColours) or nameof(SavedChosen) or nameof(DrawStyleNote) or nameof(SuggestedPalette) or nameof(HasSuggestedPalette)
-            or nameof(SuggestedPaletteText) or nameof(MusicOn) or nameof(MusicOwnFile) or nameof(MusicFileName))
+            or nameof(SuggestedPaletteText) or nameof(MusicOn) or nameof(MusicOwnFile) or nameof(MusicFileName) or nameof(MusicLibrary)
+            or nameof(MusicSources) or nameof(MusicNote))
         {
             return;
+        }
+
+        if (e.PropertyName == nameof(MusicSource))
+        {
+            // 0.1.45: the library can be chosen only once it is installed (its item is greyed out; this also holds for a choice made in code).
+            if (MusicLibrary && MusicPicker is not { Ready: true } && _lastSource is not null && _lastSource.Value != MusicSource.Value)
+            {
+                MusicNote = _text["styles.music.library.not_ready"];
+                _filling = true;
+                MusicSource = _lastSource;
+                _filling = false;
+                return;
+            }
+
+            MusicNote = string.Empty;
+            _lastSource = MusicSource;
         }
 
         if (e.PropertyName is nameof(DrawStyle) or nameof(Palette))
@@ -696,6 +734,32 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
             .ToList();
 
     private string Label(string key, string fallback) => _text.Has(key) ? _text[key] : fallback;
+
+    /// <summary>The music sources with the library enabled only when it is installed.</summary>
+    private List<MusicSourceChoice> SourceChoices() => Core.Styles.MusicSources.Available
+        .Select(m => new MusicSourceChoice((int)m, Label("style.music." + Key(m), m.ToString()),
+            m != Core.Styles.MusicSource.Library || MusicPicker is { Ready: true }))
+        .ToList();
+
+    /// <summary>The library was installed: its source becomes usable.</summary>
+    private void OnPickerChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(MusicPickerViewModel.Ready))
+        {
+            return;
+        }
+
+        var chosen = MusicSource?.Value ?? 0;
+        _filling = true;
+        MusicSources = SourceChoices();
+        MusicSource = MusicSources.FirstOrDefault(c => c.Value == chosen) ?? MusicSources[0];
+        _lastSource = MusicSource;
+        _filling = false;
+        if (MusicPicker is { Ready: true })
+        {
+            MusicNote = string.Empty;
+        }
+    }
 
     private static string Key<T>(T value)
         where T : struct, Enum => value.ToString().ToLowerInvariant();

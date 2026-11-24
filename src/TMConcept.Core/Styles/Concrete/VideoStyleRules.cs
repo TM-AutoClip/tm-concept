@@ -198,6 +198,13 @@ public static class VideoStyleRules
             problems.Add(VideoStyleProblem.MusicFileMissing);
         }
 
+        // 0.1.45: a track picked from an Openverse search keeps its download's path; without one it cannot be used.
+        if (style.Music is { Source: MusicSource.Library, Track: { } track } && track.Id.StartsWith(Music.MusicLibraryRules.OpenversePrefix, StringComparison.Ordinal)
+            && string.IsNullOrWhiteSpace(track.File))
+        {
+            problems.Add(VideoStyleProblem.MusicFileMissing);
+        }
+
         return problems;
     }
 

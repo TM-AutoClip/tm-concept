@@ -16,6 +16,13 @@ public sealed class VideoMusic
     /// </summary>
     public string File { get; set; } = string.Empty;
 
+    /// <summary>
+    /// The library track (0.1.45, <see cref="MusicSource.Library"/>): a track of the ready library, or one picked from an Openverse search (its
+    /// <see cref="Music.MusicTrack.File"/> is then its download on this computer). Null = each video's concept chooses a library track from its
+    /// scene plan's music hints.
+    /// </summary>
+    public Music.MusicTrack? Track { get; set; }
+
     /// <summary>The attribution the track asks for (optional; empty = none). Shown after the video for the description, never drawn into it.</summary>
     public string Attribution { get; set; } = string.Empty;
 

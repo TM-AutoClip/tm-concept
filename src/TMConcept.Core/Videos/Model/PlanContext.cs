@@ -10,6 +10,15 @@ namespace TMConcept.Core.Videos;
 /// </summary>
 public sealed record PlanContext(IReadOnlyList<IReadOnlyList<SpeechSpan>?> Spans, IReadOnlyList<string> ImagePrompts, ResolvedModel? PointsModel)
 {
+    /// <summary>
+    /// A library music the concept chooses (0.1.45, <see cref="PreparedMusic.Automatic"/>): the plan call writes each scene's music hint and
+    /// the track is chosen and laid under the scenes before the render (<see cref="RenderOutcome.Music"/>); null otherwise.
+    /// </summary>
+    public PreparedMusic? Music { get; init; }
+
+    /// <summary>The narration clips of the scenes (their silence after the last word may be cut to meet a beat); empty = none known.</summary>
+    public IReadOnlyList<Speech.SpeechClip?> Clips { get; init; } = [];
+
     /// <summary>Nothing known: the captions' sentences, the scenes' own lines, no image points model.</summary>
     public PlanContext()
         : this([], [], null)

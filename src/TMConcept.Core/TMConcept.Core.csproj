@@ -17,6 +17,8 @@
     <!-- 0.1.33: the app's scene drawer and its world map (Natural Earth 1:110m, public domain; tools/world-map.py). -->
     <EmbeddedResource Include="Plans/Files/plan.js" LogicalName="TMConcept.Plans.plan.js" />
     <EmbeddedResource Include="Plans/Files/world.json" LogicalName="TMConcept.Plans.world.json" />
+    <!-- 0.1.45: the ready music library's catalog (the tracks themselves are a component, downloaded after the user agreed). -->
+    <EmbeddedResource Include="../../catalog/music.json" LogicalName="TMConcept.Catalog.music.json" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="TMConcept.Tests" />

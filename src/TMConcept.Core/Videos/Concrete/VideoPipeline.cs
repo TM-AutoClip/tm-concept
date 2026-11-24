@@ -248,13 +248,27 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
             clips.ElementAtOrDefault(i)?.DurationMs ?? VideoRemaker.SilentMs(s.Script, profile.ContentLanguage), s.Transition)).ToList();
         var input = RenderInputBuilder.Build(job.Concept.Title, profile.ContentLanguage, sources, width, height, 30,
             endHoldMs: Styles.VideoStyleRules.EndHoldMs(options.Style, profile.ContentLanguage));
+
+        // 0.1.45 (F7 + F8): the music is laid under the timed scenes and their changes move onto its beats; a library track the concept
+        // chooses waits for the scene plan's music hints (the app's drawer), any other music is laid now.
+        var planChooses = music is { Automatic: true } && Plans.PlanDrawer.Draws(engine.Kind, options.Style);
+        if (!planChooses)
+        {
+            music = await assembler.Music.SettleAsync(music, options.Style, input, clips, work, align: true, cancellationToken).ConfigureAwait(false);
+        }
+
         steps.Finish(VideoSteps.Timing);
 
         // E + F. code (+ one repair after a rejected check), render (+ one repair with the error text)
         var rendered = await assembler.CodeAndRenderAsync(engine, job.CodeModel, options, input, work, id, steps, cancellationToken,
             new PlanContext(clips.Select(c => c?.Spans).ToList(), imagePrompts,
-                Plans.PlanDrawer.Draws(engine.Kind, options.Style) && sceneImages.Count > 0 ? await PointsModelAsync(profile.Id, cancellationToken).ConfigureAwait(false) : null))
+                Plans.PlanDrawer.Draws(engine.Kind, options.Style) && sceneImages.Count > 0 ? await PointsModelAsync(profile.Id, cancellationToken).ConfigureAwait(false) : null)
+            {
+                Music = planChooses ? music : null,
+                Clips = clips,
+            })
             .ConfigureAwait(false);
+        music = rendered.Music ?? music;
         warnings.AddRange(rendered.Warnings());
 
         // H + I. mux into the work folder, then the version folder gets only finished files; the record.

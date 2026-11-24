@@ -24,6 +24,9 @@ public sealed record RenderOutcome(EngineRenderRequest Request, bool Repaired, R
     /// </summary>
     public bool FrameWeak { get; init; }
 
+    /// <summary>The music chosen and laid under the scenes during the plan (0.1.45, <see cref="PlanContext.Music"/>); null otherwise.</summary>
+    public PreparedMusic? Music { get; init; }
+
     /// <summary>The warning codes a render gives (each video run sets them from here, and a new version drops the old ones first).</summary>
     public static IReadOnlyList<string> Codes { get; } = [VideoWarnings.Repaired, VideoWarnings.AppCode, VideoWarnings.FrameCheck, VideoWarnings.FrameWeak];
 

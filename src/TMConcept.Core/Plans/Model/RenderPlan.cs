@@ -47,4 +47,10 @@ public sealed class RenderPlan
     /// when the film has no directional transition.
     /// </summary>
     public string Drift { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The music this scene asks for (0.1.45, C4): written by the same plan call when the template's library music is chosen by the concept,
+    /// cleaned by <see cref="PlanReader"/> (words outside <see cref="Music.MusicTags"/> are dropped); null otherwise and in a plan made before.
+    /// </summary>
+    public Music.MusicHint? Music { get; set; }
 }

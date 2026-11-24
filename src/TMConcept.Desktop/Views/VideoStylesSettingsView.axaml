@@ -283,8 +283,14 @@
                     <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="10" ColumnSpacing="12">
                       <TextBlock Text="{DynamicResource styles.music.source}" VerticalAlignment="Center" />
                       <ComboBox Name="StyleMusicSource" Grid.Column="1" ItemsSource="{Binding MusicSources}" SelectedItem="{Binding MusicSource}" MinWidth="240">
+                        <!-- 0.1.45: "Kütüphaneden seç" is greyed out until the library is installed. -->
+                        <ComboBox.Styles>
+                          <Style Selector="ComboBoxItem" x:DataType="vm:MusicSourceChoice">
+                            <Setter Property="IsEnabled" Value="{Binding Enabled}" />
+                          </Style>
+                        </ComboBox.Styles>
                         <ComboBox.ItemTemplate>
-                          <DataTemplate x:DataType="vm:NumberChoice">
+                          <DataTemplate x:DataType="vm:MusicSourceChoice">
                             <TextBlock Text="{Binding Label}" />
                           </DataTemplate>
                         </ComboBox.ItemTemplate>
@@ -318,6 +324,73 @@
                         <views:HelpTip Text="{DynamicResource styles.music.fade.tip}" />
                       </StackPanel>
                     </Grid>
+                    <TextBlock Name="StyleMusicNote" Text="{Binding MusicNote}" Classes="small warning" TextWrapping="Wrap"
+                               IsVisible="{Binding MusicNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+                    <!-- 0.1.45 (C4, S6): the ready library (installed after one confirmation), its track and the Openverse search. -->
+                    <StackPanel Spacing="8" IsVisible="{Binding MusicPicker, Converter={x:Static ObjectConverters.IsNotNull}}">
+                      <StackPanel Orientation="Horizontal" Spacing="8" DataContext="{Binding MusicPicker}" x:DataType="vm:MusicPickerViewModel"
+                                  IsVisible="{Binding !Ready}">
+                        <TextBlock Name="StyleMusicLibraryMissing" Text="{Binding InstallText}" Classes="small muted" VerticalAlignment="Center" TextWrapping="Wrap"
+                                   MaxWidth="460" />
+                        <Button Name="StyleMusicLibraryInstall" Classes="small" Content="{DynamicResource styles.music.library.install}"
+                                Command="{Binding InstallCommand}" VerticalAlignment="Center" />
+                        <views:HelpTip Text="{DynamicResource styles.music.library.tip}" />
+                      </StackPanel>
+                    </StackPanel>
+                    <StackPanel Spacing="8" IsVisible="{Binding MusicLibrary}">
+                      <StackPanel Spacing="8" DataContext="{Binding MusicPicker}" x:DataType="vm:MusicPickerViewModel">
+                        <Grid ColumnDefinitions="160,*" ColumnSpacing="12">
+                          <TextBlock Text="{DynamicResource styles.music.track}" VerticalAlignment="Center" />
+                          <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <ComboBox Name="StyleMusicTrack" ItemsSource="{Binding Tracks}" SelectedItem="{Binding SelectedTrack}" MinWidth="360" MaxWidth="520">
+                              <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:MusicTrackOption">
+                                  <StackPanel>
+                                    <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding Detail}" Classes="tiny muted" TextTrimming="CharacterEllipsis" />
+                                  </StackPanel>
+                                </DataTemplate>
+                              </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <views:HelpTip Text="{DynamicResource styles.music.track.tip}" />
+                          </StackPanel>
+                        </Grid>
+                        <TextBlock Name="StyleMusicCredit" Text="{Binding AttributionNote}" Classes="small warning" TextWrapping="Wrap"
+                                   IsVisible="{Binding HasAttributionNote}" />
+                        <StackPanel Orientation="Horizontal">
+                          <TextBlock Text="{DynamicResource styles.music.search}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                          <views:HelpTip Text="{DynamicResource styles.music.search.tip}" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                          <TextBox Name="StyleMusicQuery" Text="{Binding SearchQuery}" MinWidth="300" MaxWidth="420"
+                                   PlaceholderText="{DynamicResource styles.music.search.hint}" />
+                          <Button Name="StyleMusicSearch" Classes="small" Content="{DynamicResource styles.music.search.go}" Command="{Binding SearchCommand}" />
+                          <Button Name="StyleMusicCancel" Classes="small" Content="{DynamicResource styles.music.search.cancel}" Command="{Binding CancelCommand}"
+                                  IsVisible="{Binding Busy}" />
+                        </StackPanel>
+                        <TextBlock Name="StyleMusicStatus" Text="{Binding SearchStatus}" Classes="small muted" TextWrapping="Wrap"
+                                   IsVisible="{Binding SearchStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                        <ItemsControl Name="StyleMusicResults" ItemsSource="{Binding Results}">
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:MusicTrackOption">
+                              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="0,2">
+                                <StackPanel>
+                                  <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
+                                  <TextBlock Text="{Binding Detail}" Classes="tiny muted" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                                <Button Grid.Column="1" Classes="small" Content="{DynamicResource styles.music.search.pick}" VerticalAlignment="Center"
+                                        Command="{Binding $parent[ItemsControl].((vm:MusicPickerViewModel)DataContext).PickCommand}" CommandParameter="{Binding}" />
+                              </Grid>
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                          <Button Name="StyleMusicPrevious" Classes="small" Content="{DynamicResource styles.music.search.previous}" Command="{Binding PreviousPageCommand}" />
+                          <Button Name="StyleMusicNext" Classes="small" Content="{DynamicResource styles.music.search.next}" Command="{Binding NextPageCommand}" />
+                        </StackPanel>
+                      </StackPanel>
+                    </StackPanel>
                   </StackPanel>
                 </Border>
 
