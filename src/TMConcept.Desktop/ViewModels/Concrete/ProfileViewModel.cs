@@ -23,11 +23,13 @@ namespace TMConcept.Desktop.ViewModels;
 /// profile's id). A save copies the picked photo before it writes the row, so one that fails writes nothing and removes its copy. Saving
 /// with a required value missing is not possible. Deleting a profile is confirmed (with what goes and its size) and permanent, with
 /// everything it generated: videos, the photo, documents and work files (<see cref="Core.Deletion.ProfileDeletion"/>; when a file is in
-/// use the profile stays and the files are listed).
+/// use the profile stays and the files are listed). "Kanaldan esinlen" (0.1.53) opens a window that drafts a NEW profile from a channel's
+/// public details and measured samples (<see cref="IChannelInspirationDialog"/>); its "Profili oluştur" fills a new profile here and saves it
+/// with the same checks and photo copy as Save (<see cref="CreateFromChannelAsync"/>), so the profile being edited is never written over.
 /// </summary>
 public sealed partial class ProfileViewModel(AppSession session, IProfileStore profiles, ITemplateSource templates, IAppPaths paths, FileDialogs dialogs,
     IConfirmDialog confirm, IActivityLog activity, Localizer text, ILogger<ProfileViewModel> logger, BackupService backup,
-    Core.Deletion.ProfileDeletion deletion)
+    Core.Deletion.ProfileDeletion deletion, IChannelInspirationDialog? inspiration = null)
     : PageViewModelBase
 {
     /// <summary>The channel photo's folder under the profile's library folder.</summary>
@@ -283,6 +285,47 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
         {
             activity.Add(ActivityLevel.Info, text.Format("profile.created", _editing.Name), text.Format("profile.created", ActivityPlaceholders.Name));
         }
+    }
+
+    /// <summary>Opens "Kanaldan esinlen" (0.1.53): a channel's address → a draft of a new profile (and template) to edit and create.</summary>
+    [RelayCommand]
+    public async Task InspireFromChannelAsync()
+    {
+        if (inspiration is null)
+        {
+            return;
+        }
+
+        await inspiration.ShowAsync(CreateFromChannelAsync).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Makes a NEW profile from the edited draft of "Kanaldan esinlen": the form starts a new profile, takes the draft (and its photo, copied
+    /// into the library by the save like a picked one) and saves it. Null when it was saved; otherwise why not (the new profile stays in the
+    /// form, unsaved, so nothing typed is lost).
+    /// </summary>
+    public async Task<string?> CreateFromChannelAsync(ChannelProfileDraft draft)
+    {
+        ArgumentNullException.ThrowIfNull(draft);
+        StartNew();
+        Name = draft.Name;
+        Language = Languages.FirstOrDefault(l => l.Value == draft.Language) ?? Language;
+        Vertical = draft.Vertical;
+        TargetSeconds = draft.TargetSeconds;
+        ConceptText = draft.ConceptText;
+        if (draft.PhotoFile is { } photo && File.Exists(photo))
+        {
+            ChooseChannelPhoto(photo);
+        }
+
+        await SaveAsync().ConfigureAwait(true);
+        if (IsNew)
+        {
+            return Status.Length > 0 ? Status : text["inspire.not_created"];
+        }
+
+        logger.LogInformation("Profile {Id} made from a channel", _editing?.Id);
+        return null;
     }
 
     /// <summary>Chooses a channel photo (kept by Save).</summary>

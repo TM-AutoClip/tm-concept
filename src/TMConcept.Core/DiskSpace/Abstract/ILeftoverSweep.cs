@@ -17,4 +17,10 @@ public interface ILeftoverSweep
 
     /// <summary>The temporary folder of each of <paramref name="engineFolders"/> that is a package folder right under <c>&lt;tools&gt;/engines</c>.</summary>
     IReadOnlyList<string> EngineTemps(string tools, IEnumerable<string> engineFolders);
+
+    /// <summary>
+    /// The temporary folders of "Kanaldan esinlen" (0.1.53) a closed app left: each of <paramref name="folders"/> right under
+    /// <c>&lt;work&gt;/channel</c> that is not in <paramref name="active"/> (a look running now, or one whose preview is still open).
+    /// </summary>
+    IReadOnlyList<string> ChannelTemps(string work, IEnumerable<string> folders, IReadOnlyCollection<string> active);
 }

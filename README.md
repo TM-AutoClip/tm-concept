@@ -474,6 +474,12 @@ Then choose the models on the pages that use them (see above). Nothing paid is c
    each queued video starts: a change applies to the next video, never to the one being made.
 4. **Produced videos:** watch in the app (sound on Linux through PulseAudio or PipeWire), open the folder. Each video is a version folder (`v1/` inside the concept's folder) with `video.mp4`, `subtitles.srt`, `narration.txt` (always written) and `thumbnail.jpg`, plus `source/` (the engine project as it rendered: the model's code, `input.json`, the scene images) and `audio/` (the narration clip of each scene), kept for a later re-render.
 
+**A profile from a channel (0.1.53, optional):** on the profile page, **Inspired by a channel…** takes a channel's address and drafts a new
+profile from its public details (titles, lengths, descriptions; read by yt-dlp without cookies or sign-in) and the tempo of a few sample
+videos (downloaded at a low resolution, measured and deleted right after). With a text model chosen, one call describes the channel's style
+without copying its texts; a new template with the measured tempo is offered too. You edit the draft and create it; existing profiles and
+templates do not change, and whose channel it is is never checked.
+
 ### How a template shows in the video
 
 A video made with a template (Settings → Templates) follows it without relying on the model's good will:

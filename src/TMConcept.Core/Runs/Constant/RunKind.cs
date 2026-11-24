@@ -47,4 +47,7 @@ public enum RunKind
 
     /// <summary>Summarising the chosen pages of the documents before a "read everything" concept run (0.1.24).</summary>
     DocumentDigest = 12,
+
+    /// <summary>"Kanaldan esinlen" on the profile page: one chat call that writes a channel content draft (0.1.53; no profile yet).</summary>
+    ChannelInspiration = 13,
 }

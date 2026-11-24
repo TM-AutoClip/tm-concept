@@ -445,6 +445,7 @@ public static class DesktopServices
         services.AddTransient<ReportProblemViewModel>();
         services.AddSingleton<Func<ReportProblemViewModel>>(s => () => s.GetRequiredService<ReportProblemViewModel>());
         services.AddSingleton<Dialogs.IReportDialog, Dialogs.ReportDialog>();
+        AddChannelInspiration(services);
         services.AddSingleton<Engines.Playback.FfmpegPlayback>();
 
         // One player for the pages that show made videos (Concept → video, Produced): one page is on screen at a time and each closes it
@@ -471,6 +472,63 @@ public static class DesktopServices
         AddSection<VoiceSettingsViewModel, VoiceSettingsView>(services);
         AddSection<BackupSettingsViewModel, BackupSettingsView>(services);
         AddSection<AboutSettingsViewModel, AboutSettingsView>(services);
+    }
+
+    /// <summary>
+    /// "Kanaldan esinlen" (0.1.53): yt-dlp lists a channel's public details, the reference measure measures its samples, the channel photo is one
+    /// HTTPS request, and one call of the concept step's model writes the channel content; the window makes a new profile and template.
+    /// </summary>
+    private static void AddChannelInspiration(IServiceCollection services)
+    {
+        services.AddSingleton<Core.Channels.IChannelLister, Engines.References.YtDlpChannelLister>();
+        services.AddSingleton<Core.Channels.IChannelPhotoFetcher, Providers.Channels.ChannelPhotoClient>();
+        services.AddSingleton<Core.Channels.IChannelInspirer, Core.Channels.ChannelInspirer>();
+        services.AddSingleton<Core.Channels.IChannelStyleWriter, Core.Channels.ChannelStyleWriter>();
+        services.AddSingleton<Core.Channels.ChannelTemplateCreator>();
+        services.AddTransient(s => new ChannelInspirationServices(s.GetRequiredService<Core.Channels.IChannelInspirer>(),
+            s.GetRequiredService<Core.Channels.IChannelStyleWriter>(), s.GetRequiredService<Core.Channels.ChannelTemplateCreator>(),
+            () => EnsureChannelToolsAsync(s), token => ChannelModelAsync(s, token), s.GetRequiredService<IActivityLog>(), s.GetRequiredService<TimeProvider>()));
+        services.AddTransient<ChannelInspirationViewModel>();
+        services.AddSingleton<Func<ChannelInspirationViewModel>>(s => () => s.GetRequiredService<ChannelInspirationViewModel>());
+        services.AddSingleton<Dialogs.IChannelInspirationDialog, Dialogs.ChannelInspirationDialog>();
+    }
+
+    /// <summary>ffmpeg and yt-dlp for "Kanaldan esinlen", installed through the app's install flow after one confirmation; true when ready.</summary>
+    private static async Task<bool> EnsureChannelToolsAsync(IServiceProvider services)
+    {
+        var outcome = await services.GetRequiredService<Components.ComponentInstallFlow>().EnsureAsync(
+            [Core.Components.ComponentCodes.Ffmpeg, Core.Components.ComponentCodes.VideoDownloader], "install.purpose.channel", null, CancellationToken.None)
+            .ConfigureAwait(true);
+        return outcome.Ready;
+    }
+
+    /// <summary>
+    /// The text model of "Kanaldan esinlen": the concept step's choice of the selected profile (the model is chosen per step); null when there is
+    /// no profile, the step is off or its model is not ready (then only the numbers are drafted).
+    /// </summary>
+    private static async Task<ResolvedModel?> ChannelModelAsync(IServiceProvider services, CancellationToken cancellationToken)
+    {
+        if (services.GetRequiredService<AppSession>().Profile is not { } profile)
+        {
+            return null;
+        }
+
+        var resolver = services.GetRequiredService<StepModelResolver>();
+        var choice = await resolver.ChoiceAsync(Core.Pipeline.PipelineSteps.Concepts, profile.Id, cancellationToken).ConfigureAwait(false);
+        if (StepModelResolver.IsOff(choice))
+        {
+            return null;
+        }
+
+        try
+        {
+            var model = await resolver.ResolveAsync(Core.Pipeline.PipelineSteps.Concepts, choice, cancellationToken).ConfigureAwait(false);
+            return model.Model.Capabilities.HasFlag(ModelCapability.Chat) ? model : null;
+        }
+        catch (ModelNotReadyException)
+        {
+            return null;
+        }
     }
 
     /// <summary>Registers a page (a tab of the main window) and its view.</summary>

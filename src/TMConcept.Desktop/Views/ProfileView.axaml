@@ -26,6 +26,11 @@
             </ComboBox>
             <Button Content="{DynamicResource profile.template.apply}" Command="{Binding ApplyTemplateCommand}" />
           </StackPanel>
+          <!-- 0.1.53: "Kanaldan esinlen" drafts a NEW profile from a channel's public details (a window of its own). -->
+          <StackPanel Orientation="Horizontal" Spacing="4">
+            <Button Name="InspireButton" Content="{DynamicResource inspire.open}" Command="{Binding InspireFromChannelCommand}" />
+            <views:HelpTip Text="{DynamicResource inspire.open.tip}" />
+          </StackPanel>
         </StackPanel>
       </Border>
 

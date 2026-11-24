@@ -1,0 +1,122 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:TMConcept.Desktop.ViewModels"
+        xmlns:c="using:TMConcept.Desktop.Converters"
+        xmlns:views="using:TMConcept.Desktop.Views"
+        xmlns:sys="using:System"
+        x:Class="TMConcept.Desktop.Views.ChannelInspirationWindow"
+        x:DataType="vm:ChannelInspirationViewModel"
+        Title="{DynamicResource inspire.title}"
+        Width="760" Height="720" MinWidth="520" MinHeight="420"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+  <!-- "Kanaldan esinlen" (0.1.53): address + samples + Start (step by step, Cancel) → an editable preview → "Profili oluştur" (a new profile). -->
+  <ScrollViewer>
+    <StackPanel Margin="24" Spacing="12">
+      <StackPanel Orientation="Horizontal">
+        <TextBlock Text="{DynamicResource inspire.title}" Classes="h2" VerticalAlignment="Center" />
+        <views:HelpTip Text="{DynamicResource inspire.tip}" />
+      </StackPanel>
+
+      <Border Classes="card">
+        <StackPanel Spacing="8">
+          <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="10" ColumnSpacing="12">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+              <TextBlock Text="{DynamicResource inspire.address}" VerticalAlignment="Center" />
+              <views:HelpTip Text="{DynamicResource inspire.address.tip}" />
+            </StackPanel>
+            <TextBox Name="AddressBox" Grid.Column="1" Text="{Binding Address}" PlaceholderText="{DynamicResource inspire.address.hint}" IsEnabled="{Binding Idle}" />
+            <TextBlock Grid.Row="1" Text="{DynamicResource inspire.samples}" VerticalAlignment="Center" />
+            <NumericUpDown Name="SamplesBox" Grid.Row="1" Grid.Column="1" Value="{Binding Samples}" Minimum="1" Maximum="5" Increment="1" Width="120"
+                           HorizontalAlignment="Left" FormatString="0" IsEnabled="{Binding Idle}" />
+            <TextBlock Grid.Row="2" Text="{DynamicResource inspire.ai}" VerticalAlignment="Top" Margin="0,4,0,0" />
+            <StackPanel Grid.Row="2" Grid.Column="1" Spacing="4" IsEnabled="{Binding Idle}">
+              <RadioButton Name="WithAi" GroupName="ai" IsChecked="{Binding UseAi}" Content="{Binding AiLabel}" IsEnabled="{Binding AiAvailable}" />
+              <RadioButton Name="WithoutAi" GroupName="ai" IsChecked="{Binding WithoutAi}" Content="{DynamicResource inspire.ai.without}" />
+              <TextBlock Text="{Binding Estimate}" Classes="small muted" TextWrapping="Wrap" />
+            </StackPanel>
+            <CheckBox Grid.Row="3" Grid.Column="1" IsChecked="{Binding FetchPhoto}" Content="{DynamicResource inspire.photo.fetch}" IsEnabled="{Binding Idle}" />
+          </Grid>
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Name="StartButton" Classes="accent" Content="{DynamicResource inspire.start}" Command="{Binding StartCommand}" />
+            <Button Name="CancelButton" Content="{DynamicResource common.cancel}" Command="{Binding CancelCommand}" IsVisible="{Binding Busy}" />
+          </StackPanel>
+          <ProgressBar Minimum="0" Maximum="100" Value="{Binding ProgressValue}" IsVisible="{Binding Busy}" Height="6" />
+          <ItemsControl Name="StepList" ItemsSource="{Binding Steps}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="sys:String">
+                <TextBlock Text="{Binding}" Classes="small" TextWrapping="Wrap" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <TextBlock Name="StatusLine" Text="{Binding Status}" TextWrapping="Wrap" IsVisible="{Binding HasStatus}" />
+        </StackPanel>
+      </Border>
+
+      <Border Name="Preview" Classes="card" IsVisible="{Binding HasResult}">
+        <StackPanel Spacing="10">
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Text="{DynamicResource inspire.preview}" FontWeight="SemiBold" VerticalAlignment="Center" />
+            <views:HelpTip Text="{DynamicResource inspire.preview.tip}" />
+          </StackPanel>
+          <ItemsControl ItemsSource="{Binding Notes}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="sys:String">
+                <TextBlock Text="{Binding}" Classes="small muted" TextWrapping="Wrap" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="10" ColumnSpacing="12">
+            <TextBlock Text="{DynamicResource profile.name}" VerticalAlignment="Center" />
+            <TextBox Name="NameBox" Grid.Column="1" Text="{Binding Name}" MaxLength="80" />
+            <TextBlock Grid.Row="1" Text="{DynamicResource profile.language}" VerticalAlignment="Center" />
+            <ComboBox Name="LanguageBox" Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Languages}" SelectedItem="{Binding Language}" MinWidth="240"
+                      MaxDropDownHeight="420" PlaceholderText="{DynamicResource inspire.language.choose}">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:ChoiceOption">
+                  <TextBlock Text="{Binding Label}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <TextBlock Grid.Row="2" Text="{DynamicResource profile.format}" VerticalAlignment="Center" />
+            <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Spacing="16">
+              <RadioButton GroupName="inspire-format" IsChecked="{Binding Vertical}" Content="{DynamicResource profile.format.vertical}" />
+              <RadioButton GroupName="inspire-format" IsChecked="{Binding Horizontal}" Content="{DynamicResource profile.format.horizontal}" />
+            </StackPanel>
+            <TextBlock Grid.Row="3" Text="{DynamicResource profile.seconds}" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="3" Grid.Column="1" Value="{Binding TargetSeconds}" Minimum="15" Maximum="180" Increment="5" Width="160"
+                           HorizontalAlignment="Left" FormatString="0" />
+            <TextBlock Grid.Row="4" Text="{DynamicResource profile.photo}" VerticalAlignment="Center" IsVisible="{Binding HasPhoto}" />
+            <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal" Spacing="10" IsVisible="{Binding HasPhoto}">
+              <Border Width="56" Height="56" CornerRadius="28" ClipToBounds="True" Background="{DynamicResource tm-surface-2}"
+                      BorderBrush="{DynamicResource tm-border}" BorderThickness="1">
+                <Image Source="{Binding PhotoPath, Converter={x:Static c:FileBitmapConverter.Instance}, ConverterParameter=112}" Stretch="UniformToFill" />
+              </Border>
+              <CheckBox Name="UsePhotoBox" IsChecked="{Binding UsePhoto}" Content="{DynamicResource inspire.photo.use}" VerticalAlignment="Center" />
+            </StackPanel>
+          </Grid>
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Text="{DynamicResource profile.concept}" FontWeight="SemiBold" VerticalAlignment="Center" />
+            <views:HelpTip Text="{DynamicResource profile.concept.hint}" />
+          </StackPanel>
+          <TextBox Name="ConceptBox" Text="{Binding ConceptText}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="160" MaxLength="6000" />
+
+          <StackPanel Spacing="6" IsVisible="{Binding HasTemplate}">
+            <CheckBox Name="MakeTemplateBox" IsChecked="{Binding MakeTemplate}" Content="{DynamicResource inspire.template.make}" />
+            <Grid ColumnDefinitions="180,*" ColumnSpacing="12" IsEnabled="{Binding MakeTemplate}">
+              <TextBlock Text="{DynamicResource inspire.template.name_label}" VerticalAlignment="Center" />
+              <TextBox Grid.Column="1" Text="{Binding TemplateName}" MaxLength="60" />
+            </Grid>
+            <TextBlock Text="{Binding TemplateSummary}" Classes="small muted" TextWrapping="Wrap" />
+          </StackPanel>
+          <TextBlock Name="TemplateWarningLine" Text="{Binding TemplateWarning}" Classes="warning" TextWrapping="Wrap" IsVisible="{Binding HasTemplateWarning}" />
+        </StackPanel>
+      </Border>
+
+      <WrapPanel HorizontalAlignment="Right">
+        <Button Name="CreateButton" Classes="accent" Margin="0,0,8,8" Content="{DynamicResource inspire.create}" Command="{Binding CreateProfileCommand}"
+                IsVisible="{Binding HasResult}" />
+        <Button Name="CloseButton" Margin="0,0,0,8" Content="{DynamicResource common.close}" IsCancel="True" />
+      </WrapPanel>
+    </StackPanel>
+  </ScrollViewer>
+</Window>

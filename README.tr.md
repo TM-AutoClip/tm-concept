@@ -467,6 +467,12 @@ Sonra modelleri onları kullanan sayfalarda seç (yukarıya bak). Ücretli hiçb
    değişiklik bir sonraki videoya uygulanır, yapılmakta olana değil.
 4. **Üretilen Videolar:** program içinde izle (Linux'ta ses PulseAudio ya da PipeWire ile), klasörü aç. Her video, konseptin klasöründe bir sürüm klasörüdür (`v1/`): `video.mp4`, `subtitles.srt`, `narration.txt` (her zaman yazılır) ve `thumbnail.jpg`; ayrıca sonraki bir yeniden render için `source/` (render edildiği hâliyle motor projesi: modelin kodu, `input.json`, sahne görselleri) ve `audio/` (her sahnenin seslendirme klibi).
 
+**Kanaldan profil (0.1.53, isteğe bağlı):** profil sayfasında **Kanaldan esinlen…** bir kanalın adresini alır ve kanalın herkese açık
+bilgilerinden (başlıklar, süreler, açıklamalar; yt-dlp ile çerezsiz ve girişsiz okunur) ve birkaç örnek videosunun temposundan (düşük
+çözünürlükte iner, ölçülür ve hemen silinir) yeni bir profil taslağı hazırlar. Metin modeli seçiliyse tek bir çağrı kanalın üslubunu,
+metinlerini kopyalamadan tarif eder; ölçülen tempoyla yeni bir şablon da önerilir. Taslağı düzenleyip oluşturursun; mevcut profiller ve
+şablonlar değişmez, kanalın kimin olduğu doğrulanmaz.
+
 ### Şablon videoda nasıl görünür
 
 Bir şablonla (Ayarlar → Şablonlar) üretilen video, modelin iyi niyetine kalmadan ona uyar:

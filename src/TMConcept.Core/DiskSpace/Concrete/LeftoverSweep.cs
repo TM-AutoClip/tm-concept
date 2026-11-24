@@ -49,6 +49,18 @@ public sealed partial class LeftoverSweep : ILeftoverSweep
             .Select(f => Path.Combine(f, TempFolder)).Distinct(Comparer).Order(StringComparer.Ordinal).ToList();
     }
 
+    /// <inheritdoc />
+    public IReadOnlyList<string> ChannelTemps(string work, IEnumerable<string> folders, IReadOnlyCollection<string> active)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(work);
+        ArgumentNullException.ThrowIfNull(folders);
+        ArgumentNullException.ThrowIfNull(active);
+        var root = Path.Combine(Full(work), Channels.ChannelLimits.Folder);
+        var running = active.Select(Full).ToHashSet(Comparer);
+        return folders.Select(Full).Where(f => Same(Path.GetDirectoryName(f), root) && Path.GetFileName(f).Length > 0 && !running.Contains(f))
+            .Distinct(Comparer).Order(StringComparer.Ordinal).ToList();
+    }
+
     /// <summary>Whether <paramref name="folder"/> is exactly <paramref name="tools"/> + <c>.old-</c>/<c>.failed-</c> + a <c>yyyyMMdd-HHmmss</c> stamp.</summary>
     public static bool Matches(string tools, string folder)
     {

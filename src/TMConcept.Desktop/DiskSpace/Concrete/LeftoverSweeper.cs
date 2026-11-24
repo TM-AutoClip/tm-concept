@@ -9,7 +9,7 @@ namespace TMConcept.Desktop.DiskSpace;
 
 /// <inheritdoc cref="ILeftoverSweeper" />
 public sealed class LeftoverSweeper(AppPaths paths, ILeftoverSweep sweep, IComponentWorkGate gate, IFolderDiscard discard, IActivityLog activity,
-    Localizer text, ILogger<LeftoverSweeper> logger) : ILeftoverSweeper
+    Localizer text, ILogger<LeftoverSweeper> logger, Core.Channels.IChannelInspirer? channels = null) : ILeftoverSweeper
 {
     /// <inheritdoc />
     public async Task<long> SweepAsync(CancellationToken cancellationToken)
@@ -93,6 +93,13 @@ public sealed class LeftoverSweeper(AppPaths paths, ILeftoverSweep sweep, ICompo
         if (Directory.Exists(engines))
         {
             targets.AddRange(sweep.EngineTemps(tools, Folders(engines, "*")).Where(Directory.Exists));
+        }
+
+        // 0.1.53: "Kanaldan esinlen" folders a closed app left (a channel photo; never one of a look that runs or waits for its preview).
+        var channel = Path.Combine(paths.WorkDirectory, Core.Channels.ChannelLimits.Folder);
+        if (Directory.Exists(channel))
+        {
+            targets.AddRange(sweep.ChannelTemps(paths.WorkDirectory, Folders(channel, "*"), channels?.ActiveFolders ?? []));
         }
 
         return targets;
