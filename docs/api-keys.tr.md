@@ -69,6 +69,39 @@ API kullanımı sohbet aboneliklerinden (Claude Pro, ChatGPT Plus…) ayrı ücr
 4. Anahtarı kopyala ve TM Concept'e yapıştır.
 5. fal'da ücretsiz deneme isteği yok: anahtar denenmeden kaydedilir, ilk görselde denetlenir. Fiyat görsel başınadır (FLUX 2 Flash ≈ 0,01 $).
 
+## Google Cloud (Chirp 3 HD sesleri)
+
+İki yol var; Ayarlar → Anahtarlar → Google Cloud'da birini seç. İkisi de varsa Google ile giriş kullanılır.
+
+**Google ile giriş (önerilen)** — kendi projendeki bir OAuth istemcisiyle (programın ortak istemcisi yok):
+
+1. Google Cloud Console'da bir proje aç (console.cloud.google.com/projectcreate) ya da birini seç, **proje kimliğini** (ID) not et.
+2. Projeye bir faturalandırma hesabı bağla (Chirp 3 HD ücretli).
+3. Projede **Cloud Text-to-Speech API**'yi etkinleştir (APIs & Services → Library).
+4. **Google Auth Platform → Get started:** uygulama adı ve e-postan; kullanıcı türü **Harici** (External).
+5. **Hedef kitle (Audience) → Test kullanıcıları:** kendi Google e-postanı ekle.
+6. **İstemciler (Clients) → İstemci oluştur:** uygulama türü **Masaüstü uygulaması** (Desktop app); JSON dosyasını indir.
+7. TM Concept'te: **İstemci dosyasını seç** (o JSON) ve proje kimliğini yaz, sonra **Google ile giriş**. Tarayıcı açılır; hesabını seçip
+   izin ver ("Google bu uygulamayı doğrulamadı" uyarısı kendi uygulaman için bir kez çıkar: Devam'ı seç). Program jetonu 127.0.0.1
+   üzerindeki tek seferlik bir adresle kendisi alır; tarayıcı açılmazsa gösterilen adresi kopyalayıp tarayıcına yapıştır.
+
+İstemcin **Test** durumundayken Google girişi 7 günde düşer ve yeniden giriş gerekir; Hedef kitle sayfasında **Üretimde** (In
+production) durumuna almak bunu önler. Yenileme jetonu ve istemci şifreli veritabanında anahtarlarla aynı yerde durur, yedeğe yalnız
+*API anahtarları* işaretliyse girer. **Çıkış yap** onları burada siler ve girişi Google'da iptal eder. "Web uygulaması" istemcisinin
+dosyası reddedilir: istemci "Masaüstü uygulaması" türünde olmalı.
+
+**API anahtarı** — Credentials → Create credentials → API key, yalnız Text-to-Speech API ile sınırlı; yapıştırıp dene. Google'ın
+belgeleri bu API için yalnız OAuth gösteriyor; anahtar reddedilirse Google ile girişi kullan.
+
+## ElevenLabs (sesler ve müzik)
+
+1. **elevenlabs.io**'yu açıp gir; bir plan seç (API kullanımı karakter başına ücretli).
+2. **Settings → API Keys → Create API key**; TM Concept'e yapıştırıp dene (ücretsiz ses listesi isteği).
+3. Anahtar kaydedilince hesabındaki sesler (hazır, klon ve My Voices'a eklenen kütüphane sesleri) arkada okunur ve sabit seslerin
+   ardından sunulur. ElevenLabs'in video dilini konuşmadığını söylediği ses listelenmez; dili belli olmayan ses (genelde klon)
+   listelenir, çünkü sunulan modeller çok dilli. Ses seçicideki **↻ Sesleri yenile** hesabı yeniden okur. Okunamazsa sabit sesler
+   kalır, işlem paneli sebebini söyler.
+
 ## Tavily (araştırma, isteğe bağlı)
 
 1. **tavily.com**'u aç ve ücretsiz bir hesap aç (her ay ücretsiz kullanım hakkı var; bunun için kart gerekmez).

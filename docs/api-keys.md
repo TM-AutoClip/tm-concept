@@ -69,6 +69,39 @@ API use is billed separately from chat subscriptions (Claude Pro, ChatGPT Plus�
 4. Copy the key and paste it into TM Concept.
 5. fal has no free test request: the key is saved untested and checked at its first image. Prices are per image (FLUX 2 Flash ≈ 0.01 $).
 
+## Google Cloud (Chirp 3 HD voices)
+
+Two ways; choose one in Settings → Keys → Google Cloud. With both, the sign-in is used.
+
+**Sign in with Google (recommended)** — with an OAuth client of your own project (the app has no shared client):
+
+1. Create a project in the Google Cloud Console (console.cloud.google.com/projectcreate) or choose one, and note its **project id**.
+2. Link a billing account to it (Chirp 3 HD is paid).
+3. Enable the **Cloud Text-to-Speech API** in the project (APIs & Services → Library).
+4. **Google Auth Platform → Get started:** an app name and your email; user type **External**.
+5. **Audience → Test users:** add your own Google email.
+6. **Clients → Create client:** application type **Desktop app**; download its JSON file.
+7. In TM Concept: **Choose the client file** (that JSON) and type the project id, then **Sign in with Google**. The browser opens;
+   choose your account and allow ("Google hasn't verified this app" shows once for your own app: choose Continue). The app takes the
+   token itself through a one-time address on 127.0.0.1; if the browser does not open, copy the address shown into it.
+
+While your client is in **Testing**, Google ends the sign-in after 7 days and you sign in again; moving it to **In production** on the
+Audience page avoids that. The refresh token and the client stay in the encrypted database with the keys and go into a backup only with
+*API keys*. **Sign out** deletes them here and revokes the sign-in at Google. A "Web application" client file is refused: it must be a
+"Desktop app" client.
+
+**API key** — Credentials → Create credentials → API key, restricted to the Text-to-Speech API; paste it and test it. Google's documents
+show only OAuth for this API; if the key is refused, sign in with Google.
+
+## ElevenLabs (voices and music)
+
+1. Open **elevenlabs.io** and sign in; choose a plan (API use is paid per character).
+2. **Settings → API Keys → Create API key**; paste it into TM Concept and test it (a free voice listing).
+3. Once the key is saved, the voices of your account (premade, cloned and library voices added to My Voices) are read in the background
+   and offered after the fixed voices. A voice ElevenLabs says does not speak the video language is not listed; a voice without a
+   language (a clone, usually) is listed, because the offered models are multilingual. **↻ Refresh voices** in the voice picker reads
+   the account again. If it cannot be read, the fixed voices stay and the activity panel says why.
+
 ## Tavily (research, optional)
 
 1. Open **tavily.com** and create a free account (a free monthly allowance; no card needed for it).

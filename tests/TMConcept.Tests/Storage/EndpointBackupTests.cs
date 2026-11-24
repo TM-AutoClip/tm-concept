@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using TMConcept.Core.Endpoints;
+using TMConcept.Core.Keys;
+using TMConcept.Core.Speech;
 using TMConcept.Storage.Backup;
 using TMConcept.Storage.Crypto;
 using TMConcept.Storage.Stores;
@@ -9,7 +11,8 @@ namespace TMConcept.Tests.Storage;
 
 /// <summary>
 /// Local servers in a backup: the endpoint list goes with the settings, its tokens only with the API keys (a keyless backup holds no token,
-/// the restored endpoint works again once the token is typed in).
+/// the restored endpoint works again once the token is typed in). The same for a Google sign-in (0.1.47: client secret and refresh token),
+/// while the saved account voice list (no secret) goes with the settings.
 /// </summary>
 public sealed class EndpointBackupTests
 {
@@ -62,5 +65,45 @@ public sealed class EndpointBackupTests
         }
 
         (await new EndpointStore(source.Database).ListAsync(None)).Single().Token.ShouldBe(Token, "the source keeps its token");
+    }
+
+    [Fact]
+    public async Task ASignInGoesOnlyWithTheKeysAndTheAccountVoicesWithTheSettings()
+    {
+        using var source = await StorageHarness.CreatedAsync();
+        var signIns = new SignInStore(source.Database);
+        await signIns.SaveAsync(new SignInRecord
+        {
+            Provider = "google-cloud",
+            ClientId = "id.apps.googleusercontent.com",
+            ClientSecret = "client-secret-0123",
+            ProjectId = "my-project",
+            RefreshToken = "refresh-token-0123456789",
+            SignedInAtUtc = DateTimeOffset.UnixEpoch,
+        }, None);
+        await new AccountVoiceCache(source.Database).SaveAsync("elevenlabs", [new AccountVoice("Voice000000000000001", "Ses", "cloned", ["tr"])], None);
+        (await signIns.GetAsync("google-cloud", None))!.RefreshToken.ShouldBe("refresh-token-0123456789");
+        var service = Service(source);
+        await service.SetPasswordAsync(Password, None);
+        var automatic = Path.Combine(source.Paths.DataDirectory, "automatic" + BackupRules.Extension);
+        var withKeys = Path.Combine(source.Paths.DataDirectory, "keys" + BackupRules.Extension);
+        await service.CreateAsync(automatic, BackupContents.Automatic, None);
+        await service.CreateAsync(withKeys, new BackupContents { Keys = true }, None);
+
+        using (var target = new StorageHarness())
+        {
+            await Service(target).RestoreAsync(automatic, Password, target.Protector, None);
+            (await new SignInStore(target.Database).GetAsync("google-cloud", None)).ShouldBeNull("a keyless backup holds no sign-in");
+            (await new AccountVoiceCache(target.Database).GetAsync("elevenlabs", None))!.Single().Languages.ShouldBe(["tr"]);
+        }
+
+        using (var target = new StorageHarness())
+        {
+            await Service(target).RestoreAsync(withKeys, Password, target.Protector, None);
+            (await new SignInStore(target.Database).GetAsync("google-cloud", None))!.ProjectId.ShouldBe("my-project");
+        }
+
+        await signIns.DeleteAsync("google-cloud", None);
+        (await signIns.GetAsync("google-cloud", None)).ShouldBeNull();
     }
 }

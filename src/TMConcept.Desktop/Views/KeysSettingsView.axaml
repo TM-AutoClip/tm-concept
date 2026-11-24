@@ -18,6 +18,41 @@
             </DataTemplate>
           </ComboBox.ItemTemplate>
         </ComboBox>
+
+        <!-- Google Cloud (0.1.47): "Sign in with Google" with the user's own desktop client, or the API key. -->
+        <StackPanel Orientation="Horizontal" Spacing="16" IsVisible="{Binding IsGoogleCloud}">
+          <RadioButton GroupName="google-way" Content="{DynamicResource google.way.sign_in}" IsChecked="{Binding UseSignIn}" />
+          <RadioButton GroupName="google-way" Content="{DynamicResource google.way.key}" IsChecked="{Binding UseKey}" />
+        </StackPanel>
+        <StackPanel Spacing="8" IsVisible="{Binding IsSignIn}">
+          <StackPanel Spacing="8" DataContext="{Binding Google}" x:DataType="vm:GoogleSignInViewModel">
+            <TextBlock Text="{Binding State}" Classes.ok="{Binding SignedIn}" TextWrapping="Wrap" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Content="{DynamicResource google.file.choose}" Command="{Binding ChooseFileCommand}" IsEnabled="{Binding !Busy}" />
+              <TextBlock Text="{Binding ClientFile}" Classes="small" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="320" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal">
+              <TextBlock Text="{DynamicResource google.project}" Classes="small" VerticalAlignment="Center" />
+              <views:HelpTip Text="{DynamicResource google.project_tip}" />
+            </StackPanel>
+            <TextBox Text="{Binding ProjectId}" PlaceholderText="my-project-123456" IsEnabled="{Binding !Busy}" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Classes="accent" Content="{DynamicResource google.sign_in}" Command="{Binding SignInCommand}" IsEnabled="{Binding CanSignIn}" />
+              <Button Content="{DynamicResource common.cancel}" Command="{Binding CancelCommand}" IsVisible="{Binding Busy}" />
+              <Button Classes="danger" Content="{DynamicResource google.sign_out}" Command="{Binding SignOutCommand}" IsVisible="{Binding SignedIn}"
+                      IsEnabled="{Binding !Busy}" />
+            </StackPanel>
+            <StackPanel Spacing="4" IsVisible="{Binding HasAddress}">
+              <TextBlock Text="{DynamicResource google.address}" Classes="small" TextWrapping="Wrap" />
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <TextBox Text="{Binding Address}" IsReadOnly="True" FontFamily="Consolas, DejaVu Sans Mono, monospace" />
+                <Button Grid.Column="1" Content="{DynamicResource google.copy}" Command="{Binding CopyAddressCommand}" />
+              </Grid>
+            </StackPanel>
+            <TextBlock Text="{Binding Status}" Classes.error="{Binding Failed}" TextWrapping="Wrap" />
+          </StackPanel>
+        </StackPanel>
+
         <StackPanel Spacing="10" IsVisible="{Binding IsKey}">
           <TextBox Text="{Binding Label}" PlaceholderText="{DynamicResource keys.label}" />
           <TextBox Classes="secret" Text="{Binding Secret}" PlaceholderText="{DynamicResource keys.secret}" />
@@ -153,8 +188,21 @@
       <Border Grid.Column="2" Classes="card" VerticalAlignment="Top">
         <StackPanel Spacing="10">
           <TextBlock Text="{DynamicResource keys.guide.title}" Classes="h2" />
-          <TextBlock Text="{Binding Guide}" TextWrapping="Wrap" />
+          <TextBlock Text="{Binding Guide}" TextWrapping="Wrap" IsVisible="{Binding !IsSignIn}" />
           <Button Content="{DynamicResource keys.open_page}" Command="{Binding OpenKeyPageCommand}" IsVisible="{Binding IsKey}" />
+          <!-- The help of "Sign in with Google": Google's pages step by step, each with its button. -->
+          <ItemsControl ItemsSource="{Binding Google.Steps}" IsVisible="{Binding IsSignIn}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:HelpStep">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Margin="0,4">
+                  <TextBlock Text="{Binding Number, StringFormat='{}{0}.'}" FontWeight="SemiBold" />
+                  <TextBlock Grid.Column="1" Text="{Binding Text}" TextWrapping="Wrap" />
+                  <Button Grid.Column="2" Content="{DynamicResource google.open_step}" VerticalAlignment="Top" IsVisible="{Binding HasLink}"
+                          Command="{Binding $parent[ItemsControl].((vm:KeysSettingsViewModel)DataContext).Google.OpenStepCommand}" CommandParameter="{Binding}" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
           <TextBlock Text="{Binding Policy}" Classes="small" TextWrapping="Wrap" />
         </StackPanel>
       </Border>

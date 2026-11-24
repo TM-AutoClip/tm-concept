@@ -37,7 +37,7 @@ namespace TMConcept.Desktop.ViewModels;
 /// </summary>
 public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepModelStore steps, StepModelResolver resolver, IEnumerable<IVideoEngine> engines,
     SpeechService speech, VoiceSampleLibrary voiceSamples, ComponentInstallFlow installs, AppSession session, IConfirmDialog confirm, IApiKeyDialog keyDialog, Engines.Images.ImageBackendSelector backends, IGpuInfo gpu, IAppPaths paths,
-    ShellLauncher shell, Localizer text, ILogger<StepPickerViewModel> logger, LocalServerSync localServers) : ObservableObject
+    ShellLauncher shell, Localizer text, ILogger<StepPickerViewModel> logger, LocalServerSync localServers, AccountVoiceLibrary accountVoices) : ObservableObject
 {
     /// <summary>The "saved" mark of a row whose saved choice is not offered any more: never equal to a row's key, so it is saved again.</summary>
     private const string StaleChoice = "\u0000stale";
@@ -52,6 +52,9 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
     private Guid? _profile;
     private string _language = ContentLanguages.English;
     private bool _languageFollowed;
+
+    // Set while the voices of a row are listed again after an account read: the list change is not the user's choice and saves nothing.
+    private bool _refilling;
 
     // The image build chosen when the page was loaded (the graphics card and its class), for the colour of each local image model.
     private ImageBackendChoice? _imageChoice;
@@ -205,6 +208,10 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
 
         // The user's own voices (a voice that copies a voice lists them): added or removed on the settings page meanwhile.
         await voiceSamples.RefreshAsync(CancellationToken.None).ConfigureAwait(true);
+
+        // The account voices last read (ElevenLabs, 0.1.47): before the rows, so a saved account voice is found; the account is read
+        // again after the rows are shown (RefreshAccountVoicesAsync), never waited for here.
+        await accountVoices.LoadAsync(CancellationToken.None).ConfigureAwait(true);
         var saved = profileId is { } id ? await steps.ListAsync(id, CancellationToken.None).ConfigureAwait(true) : [];
 
         // The graphics cards are looked at once per load (native calls; on Linux maybe a short nvidia-smi run): off the UI thread.
@@ -260,6 +267,82 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
         }
 
         OnPropertyChanged(nameof(Summary));
+        _ = RefreshAccountVoicesAsync(force: false);
+    }
+
+    /// <summary>
+    /// Reads the account voices of the narration's online model again (ElevenLabs) and lists them on the row; without
+    /// <paramref name="force"/> only when the last read is older than <see cref="AccountVoiceLibrary.RefreshEvery"/>. The window never
+    /// waits: the list shown stays until the answer, a failure leaves the fixed voices (and the last saved list) with a warning.
+    /// </summary>
+    private async Task RefreshAccountVoicesAsync(bool force, StepModelRowViewModel? only = null)
+    {
+        foreach (var row in Rows.Where(r => r.CanRefreshVoices && (only is null || r == only)).ToList())
+        {
+            if (row.Selected?.Model is not { } model || (!force && !accountVoices.IsDue(model.Provider)))
+            {
+                continue;
+            }
+
+            row.VoicesBusy = true;
+            try
+            {
+                var result = await Task.Run(() => accountVoices.RefreshAsync(model.Provider, CancellationToken.None)).ConfigureAwait(true);
+                row.VoiceStatus = result.Ok
+                    ? text.Format("speech.account.read", result.Count)
+                    : result.Code == "key"
+                        ? text["speech.account.no_key"]
+                        : text.Format("speech.account.failed", ProviderErrors.Text(text, result.Code));
+                if (Rows.Contains(row) && row.Selected?.Model == model)
+                {
+                    RefillVoices(row);
+                }
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                logger.LogWarning(ex, "The account voices could not be read; the fixed voices are offered");
+                row.VoiceStatus = text.Format("speech.account.failed", ex.Message);
+            }
+            finally
+            {
+                row.VoicesBusy = false;
+            }
+        }
+    }
+
+    /// <summary>"Refresh voices" of a row: reads the account again now.</summary>
+    [RelayCommand]
+    public async Task RefreshVoicesAsync(StepModelRowViewModel? row)
+    {
+        if (row is null || row.VoicesBusy)
+        {
+            return;
+        }
+
+        await RefreshAccountVoicesAsync(force: true, row).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Lists the voices of a row again with the chosen voice kept: a voice no longer in the list stays shown and chosen (a model or voice
+    /// never changes by itself), the next process tells when the provider refuses it.
+    /// </summary>
+    private void RefillVoices(StepModelRowViewModel row)
+    {
+        var chosen = row.Voice;
+        _refilling = true;
+        try
+        {
+            FillVoices(row, chosen?.Value ?? string.Empty);
+            if (chosen is not null && chosen.Value.Length > 0 && row.Voice?.Value != chosen.Value)
+            {
+                row.Voices.Add(chosen);
+                row.Voice = chosen;
+            }
+        }
+        finally
+        {
+            _refilling = false;
+        }
     }
 
     /// <summary>The row of a step (null when the page does not show it).</summary>
@@ -814,9 +897,11 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
         if (!row.IsVoiceStep || row.Selected?.Model is not { } model || speech.EngineOf(model) is not { } engine)
         {
             row.Voice = null;
+            row.CanRefreshVoices = false;
             return;
         }
 
+        row.CanRefreshVoices = accountVoices.Supports(engine.Code);
         foreach (var item in engine.Voices(_language))
         {
             row.Voices.Add(new ChoiceOption(item.Id, item.Label));
@@ -827,6 +912,11 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
 
     private async void OnRowChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (_refilling)
+        {
+            return;
+        }
+
         if (sender is not StepModelRowViewModel row || e.PropertyName is not (nameof(StepModelRowViewModel.Selected) or nameof(StepModelRowViewModel.Engine)
             or nameof(StepModelRowViewModel.Effort) or nameof(StepModelRowViewModel.Voice) or nameof(StepModelRowViewModel.Speed)))
         {
@@ -850,6 +940,8 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
             if (e.PropertyName == nameof(StepModelRowViewModel.Selected))
             {
                 FillVoices(row, row.Voice?.Value ?? string.Empty);
+                row.VoiceStatus = string.Empty;
+                _ = RefreshAccountVoicesAsync(force: false, row);
             }
 
             if (e.PropertyName == nameof(StepModelRowViewModel.Selected) && row.Selected.Kind != StepOptionKind.Unavailable && row.Unavailable.Length > 0)

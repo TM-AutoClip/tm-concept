@@ -76,6 +76,12 @@
                   <Button Content="{DynamicResource speech.listen}" Margin="0,0,8,4"
                           Command="{Binding $parent[ItemsControl].((vm:StepPickerViewModel)DataContext).ListenCommand}" CommandParameter="{Binding}"
                           IsEnabled="{Binding !$parent[ItemsControl].((vm:StepPickerViewModel)DataContext).Listening}" />
+                  <Button Content="{DynamicResource speech.account.refresh}" Margin="0,0,8,4" IsVisible="{Binding CanRefreshVoices}"
+                          ToolTip.Tip="{DynamicResource speech.account.refresh_tip}"
+                          Command="{Binding $parent[ItemsControl].((vm:StepPickerViewModel)DataContext).RefreshVoicesCommand}" CommandParameter="{Binding}"
+                          IsEnabled="{Binding !VoicesBusy}" />
+                  <TextBlock Text="{Binding VoiceStatus}" Classes="small" VerticalAlignment="Center" Margin="0,0,0,4" TextWrapping="Wrap"
+                             IsVisible="{Binding CanRefreshVoices}" />
                 </WrapPanel>
                 <Border Classes="badge" HorizontalAlignment="Left" IsVisible="{Binding ShowRecommended}">
                   <TextBlock Text="{Binding Recommended}" Classes="small" />

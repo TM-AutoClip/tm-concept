@@ -138,6 +138,9 @@ public static class DesktopServices
         services.AddSingleton<Core.Speech.ISpeechEngine, Providers.Speech.GeminiSpeechEngine>();
         services.AddSingleton<Core.Speech.ISpeechEngine, Providers.Speech.GoogleCloudSpeechEngine>();
         services.AddSingleton<Core.Speech.ISpeechEngine, Providers.Speech.ElevenLabsSpeechEngine>();
+        // 0.1.47 (C6, H4): the voices of the user's ElevenLabs account, read when a key is saved and when a voice picker shows them.
+        services.AddSingleton<Core.Speech.IAccountVoiceSource, Providers.Speech.ElevenLabsVoiceSource>();
+        services.AddSingleton<Core.Speech.AccountVoiceLibrary>();
         services.AddSingleton<Core.Pronunciation.ISpeechTextNormalizer, Core.Pronunciation.TurkishSpeechTextNormalizer>();
         services.AddSingleton<Core.Pronunciation.PronunciationService>();
         services.AddSingleton<Core.Speech.SpeechService>();
@@ -326,6 +329,8 @@ public static class DesktopServices
 
         // Local servers (package B): kept as settings rows, no table of their own.
         services.AddSingleton<Core.Endpoints.IEndpointStore, EndpointStore>();
+        services.AddSingleton<ISignInStore, SignInStore>();
+        services.AddSingleton<Core.Speech.IAccountVoiceCache, AccountVoiceCache>();
     }
 
     private static void AddDesktop(IServiceCollection services)
@@ -371,6 +376,7 @@ public static class DesktopServices
 
         // Local servers (package B): the form on Settings → API keys that adds them.
         services.AddSingleton<EndpointEditorViewModel>();
+        services.AddSingleton<GoogleSignInViewModel>();
 
         services.AddSingleton<Dialogs.IConfirmDialog, Dialogs.ConfirmDialog>();
         services.AddSingleton<Dialogs.IInstallDialog, Dialogs.InstallDialog>();

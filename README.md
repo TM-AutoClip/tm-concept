@@ -264,6 +264,16 @@ for:
   (a Gemini API key; 30 voices, every video language), **Google Cloud Chirp 3 HD** (a Google Cloud key with the Text-to-Speech API) and
   **ElevenLabs** v4, v4 Turbo, Flash v2.5 and Multilingual v2. **yazgı-tts-1** (local, free, Turkish, eight voices, on the processor;
   Apache-2.0) is offered too, never as a default.
+- **Your ElevenLabs voices (0.1.47):** once your ElevenLabs key is saved, the voices of your account (cloned and library voices too) are
+  read in the background and offered after the fixed voices; a voice known not to speak the video language is not listed. The voice
+  picker shows the last list at once and reads the account again in the background; **↻ Refresh voices** reads it now. If the account
+  cannot be read, the fixed voices stay, with a warning in the activity panel.
+- **Sign in with Google for Chirp 3 HD (0.1.47):** Settings → Keys → Google Cloud → **Sign in with Google**, with a "Desktop app" OAuth
+  client of your own Google Cloud project (the steps are shown in the app, each with a button to its Google page). The browser opens,
+  the app gets the token by itself through a one-time address on 127.0.0.1 (PKCE), renews it when it ends and sends it with your project
+  for billing. The refresh token stays in the encrypted database with the keys. **Sign out** deletes it and revokes it at Google. While
+  your client is in "Testing", Google ends the sign-in after 7 days; moving it to "In production" avoids that. The API key works as before;
+  with both, the sign-in is used.
 - **Delivery markers (0.1.35):** [excited], [calm], [sad], [serious], [curious], [whisper], [laughing], [sigh] in a scene's text: Gemini
   and ElevenLabs v3/v4 voices read the words after it that way (a laugh or a sigh once, before them); other voices simply ignore it, and
   it is never spoken or shown.

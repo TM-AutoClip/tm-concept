@@ -259,6 +259,15 @@ yazar:
   TTS** (Gemini API anahtarı; 30 ses, bütün video dilleri), **Google Cloud Chirp 3 HD** (Text-to-Speech API'si açık bir Google Cloud
   anahtarı) ve **ElevenLabs** v4, v4 Turbo, Flash v2.5 ve Multilingual v2. **yazgı-tts-1** (yerel, ücretsiz, Türkçe, sekiz ses, işlemcide;
   Apache-2.0) da seçilebilir, hiçbir zaman varsayılan değil.
+- **ElevenLabs hesabındaki sesler (0.1.47):** ElevenLabs anahtarını kaydedince hesabındaki sesler (klon ve kütüphane sesleri dahil) arkada
+  okunur ve sabit seslerin ardından sunulur; video dilini bilmediği belli olan ses listelenmez. Ses seçici son listeyi hemen gösterir,
+  hesabı arkada yeniden okur; **↻ Sesleri yenile** hemen okur. Hesap okunamazsa sabit sesler kalır, işlem panelinde uyarı çıkar.
+- **Chirp 3 HD için Google ile giriş (0.1.47):** Ayarlar → Anahtarlar → Google Cloud → **Google ile giriş**; kendi Google Cloud projendeki
+  "Masaüstü uygulaması" türü bir OAuth istemcisiyle (adımlar programda, her adımda ilgili Google sayfasının düğmesiyle). Tarayıcı açılır,
+  program jetonu 127.0.0.1 üzerindeki tek seferlik bir adresle (PKCE) kendisi alır, süresi dolunca yeniler ve faturalandırma için
+  projenle birlikte gönderir. Yenileme jetonu şifreli veritabanında anahtarlarla aynı yerde durur. **Çıkış yap** onu siler ve Google'da
+  iptal eder. İstemcin "Test" durumundayken Google girişi 7 günde düşer; "Üretimde" durumuna almak bunu önler. API anahtarı eskisi gibi
+  çalışır; ikisi de varsa Google girişi kullanılır.
 - **Ton yer tutucuları (0.1.35):** sahne metninde [heyecanlı], [sakin], [hüzünlü], [ciddi], [meraklı], [fısıltı], [gülerek], [iç çekerek]:
   Gemini ve ElevenLabs v3/v4 sesleri sonrasını o tonda okur (gülme ya da iç çekme bir kez, önünde); diğer sesler yok sayar; hiçbir zaman
   okunmaz ve altyazıda görünmez.

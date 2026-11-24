@@ -447,6 +447,9 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
 
             // The tokens of local servers are keys too: the endpoint list goes with the settings, its tokens only with the keys.
             await db.Settings.Where(s => s.Key == Stores.EndpointStore.TokensSetting).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+
+            // A sign-in (0.1.47, "Sign in with Google": the client secret and the refresh token) is a key too.
+            await db.Settings.Where(s => EF.Functions.Like(s.Key, Stores.SignInStore.Prefix + "%")).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
         }
 
         if (!contents.Concepts || !contents.Profiles)

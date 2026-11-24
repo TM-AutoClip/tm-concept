@@ -5,16 +5,19 @@ using TMConcept.Core.Profiles;
 using TMConcept.Core.Speech;
 using TMConcept.Core.Tools;
 using TMConcept.Providers.Common;
+using TMConcept.Providers.GoogleAuth;
 
 namespace TMConcept.Providers.Speech;
 
 /// <summary>
 /// Google Cloud Text-to-Speech, Chirp 3: HD voices (0.1.35; <c>POST v1/text:synthesize</c>; the docs read on 23 Nov 2026). The voice name is
 /// <c>&lt;locale&gt;-Chirp3-HD-&lt;star&gt;</c> (tr-TR-Chirp3-HD-Achernar), LINEAR16 comes back as a base64 WAV in <c>audioContent</c>,
-/// <c>speakingRate</c> 0.25–2 is the speed. The key goes in <c>x-goog-api-key</c> (a Google Cloud API key with the Text-to-Speech API
-/// allowed; the docs show OAuth only, so this is the developer's open question). No delivery markers. Cost: the catalog's price per character.
+/// <c>speakingRate</c> 0.25–2 is the speed. Authorization (0.1.47, H3): while the user is signed in with Google
+/// (<see cref="GoogleCloudSignIn"/>) the request carries <c>Authorization: Bearer</c> and <c>x-goog-user-project</c>; otherwise the API key
+/// goes in <c>x-goog-api-key</c> (C). With both, the sign-in is used (a reversible choice: signing out brings the key back). No delivery
+/// markers. Cost: the catalog's price per character.
 /// </summary>
-public sealed class GoogleCloudSpeechEngine(GoogleCloudProvider provider, ProviderHttp http) : ISpeechEngine
+public sealed class GoogleCloudSpeechEngine(GoogleCloudProvider provider, ProviderHttp http, GoogleCloudSignIn? signIn = null) : ISpeechEngine
 {
     /// <summary>The Chirp 3: HD voice stars (the same thirty names as Gemini's voices).</summary>
     public static IReadOnlyList<string> Stars => GeminiSpeechEngine.VoiceIds;
@@ -68,15 +71,29 @@ public sealed class GoogleCloudSpeechEngine(GoogleCloudProvider provider, Provid
         ArgumentNullException.ThrowIfNull(request);
         var online = request.Online ?? throw new SpeechException("No online speech model was given.") { Code = "model" };
         var body = Body(request.Text, request.Language, request.Voice, request.Speed);
+        var access = signIn is null ? null : await signIn.AccessAsync(cancellationToken).ConfigureAwait(false);
+        if (access is null && online.Key.Secret.Length == 0)
+        {
+            throw new SpeechException("Google Cloud: neither a sign-in nor an API key.") { Code = "model" };
+        }
+
         var reply = await http.SendAsync(() =>
         {
             var message = new HttpRequestMessage(HttpMethod.Post, new Uri(provider.Address, "./text:synthesize"))
             {
                 Content = new StringContent(body, Encoding.UTF8, "application/json"),
             };
-            provider.Authorize(message, online.Key.Secret);
+            if (access is not null)
+            {
+                GoogleCloudSignIn.Apply(message, access);
+            }
+            else
+            {
+                provider.Authorize(message, online.Key.Secret);
+            }
+
             return message;
-        }, provider.Name, online.Key.Secret, cancellationToken).ConfigureAwait(false);
+        }, provider.Name, access?.AccessToken ?? online.Key.Secret, cancellationToken).ConfigureAwait(false);
 
         var data = JsonNode.Parse(reply.Body)?["audioContent"]?.GetValue<string>();
         if (string.IsNullOrEmpty(data))

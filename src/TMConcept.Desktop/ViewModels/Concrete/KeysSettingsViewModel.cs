@@ -5,9 +5,11 @@ using Microsoft.Extensions.Logging;
 using TMConcept.Core.Keys;
 using TMConcept.Core.Models;
 using TMConcept.Core.Providers;
+using TMConcept.Core.Speech;
 using TMConcept.Desktop.Dialogs;
 using TMConcept.Desktop.Localization;
 using TMConcept.Desktop.Os;
+using TMConcept.Providers.GoogleAuth;
 
 namespace TMConcept.Desktop.ViewModels;
 
@@ -15,10 +17,13 @@ namespace TMConcept.Desktop.ViewModels;
 /// API keys: provider (from the registered list), label, masked key; a step-by-step guide per provider (open account → create key → paste →
 /// "Test connection"); the test is a free request and shows ✓ or ✗; a new key is saved only when it passes (or when the provider has no free
 /// test). A provider can have several keys. Keys stay in the encrypted database and go into a password-encrypted backup only when ticked.
-/// The last entry of the provider list adds a local server (OpenAI-compatible) instead of a key (<see cref="Endpoint"/>).
+/// The last entry of the provider list adds a local server (OpenAI-compatible) instead of a key (<see cref="Endpoint"/>). Google Cloud
+/// (0.1.47, H3) has two ways: "Sign in with Google" with the user's own desktop client (<see cref="Google"/>, A) or the API key (C). A key
+/// of a provider that lists the account's voices (ElevenLabs, H4) has them read in the background once it is saved.
 /// </summary>
 public sealed partial class KeysSettingsViewModel(IEnumerable<IProvider> providers, IApiKeyStore keys, IConfirmDialog confirm, ShellLauncher shell,
-    Localizer text, TimeProvider clock, EndpointEditorViewModel endpoint, ILogger<KeysSettingsViewModel> logger) : SettingsSectionBase
+    Localizer text, TimeProvider clock, EndpointEditorViewModel endpoint, ILogger<KeysSettingsViewModel> logger, GoogleSignInViewModel google,
+    AccountVoiceLibrary accountVoices) : SettingsSectionBase
 {
     /// <inheritdoc />
     public override string TitleKey => "settings.keys";
@@ -33,18 +38,39 @@ public sealed partial class KeysSettingsViewModel(IEnumerable<IProvider> provide
     /// <summary>Adding a local server (shown when its entry is chosen).</summary>
     public EndpointEditorViewModel Endpoint { get; } = endpoint;
 
+    /// <summary>"Sign in with Google" (Google Cloud).</summary>
+    public GoogleSignInViewModel Google { get; } = google;
+
     /// <summary>The local server entry is chosen: its form replaces the key fields.</summary>
     public bool IsEndpoint => Provider?.IsEndpoint ?? false;
 
+    /// <summary>Google Cloud is chosen: the choice between "Sign in with Google" and the API key is shown.</summary>
+    public bool IsGoogleCloud => Provider?.Code == GoogleCloudSignIn.ProviderCode;
+
+    /// <summary>"Sign in with Google" is chosen for Google Cloud (otherwise its API key).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsKey), nameof(IsSignIn), nameof(UseKey))]
+    public partial bool UseSignIn { get; set; } = true;
+
+    /// <summary>The API key is chosen for Google Cloud (the other radio button).</summary>
+    public bool UseKey
+    {
+        get => !UseSignIn;
+        set => UseSignIn = !value;
+    }
+
+    /// <summary>The sign-in form and its help are shown.</summary>
+    public bool IsSignIn => IsGoogleCloud && UseSignIn;
+
     /// <summary>An online provider is chosen: the key fields and its key page are shown.</summary>
-    public bool IsKey => !IsEndpoint;
+    public bool IsKey => !IsEndpoint && !IsSignIn;
 
     /// <summary>Saved keys.</summary>
     public ObservableCollection<ApiKeyRowViewModel> Keys { get; } = [];
 
     /// <summary>Provider of the new key.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Guide), nameof(Policy), nameof(IsEndpoint), nameof(IsKey))]
+    [NotifyPropertyChangedFor(nameof(Guide), nameof(Policy), nameof(IsEndpoint), nameof(IsKey), nameof(IsGoogleCloud), nameof(IsSignIn))]
     public partial ProviderOption? Provider { get; set; }
 
     /// <summary>Label of the new key.</summary>
@@ -71,6 +97,10 @@ public sealed partial class KeysSettingsViewModel(IEnumerable<IProvider> provide
         Provider ??= Providers.FirstOrDefault();
         Endpoint.Reload();
         await ReloadAsync().ConfigureAwait(true);
+        await Google.ReloadAsync().ConfigureAwait(true);
+
+        // Google Cloud opens on the sign-in (A) unless only an API key is in use (C).
+        UseSignIn = Google.SignedIn || Keys.All(k => k.Key.Provider != GoogleCloudSignIn.ProviderCode);
         await Endpoint.DetectAsync().ConfigureAwait(true);
     }
 
@@ -156,6 +186,7 @@ public sealed partial class KeysSettingsViewModel(IEnumerable<IProvider> provide
         }
 
         logger.LogInformation("An API key was saved for {Provider}", key.Provider);
+        RefreshAccountVoices(key.Provider);
         Secret = string.Empty;
         Label = string.Empty;
         Status = result.Code == "ok" ? "✓ " + text["keys.test.ok"] : "• " + text["keys.test.untested"];
@@ -240,6 +271,27 @@ public sealed partial class KeysSettingsViewModel(IEnumerable<IProvider> provide
         {
             Status = text.Format("error.generic", ex.Message);
         }
+    }
+
+    /// <summary>Reads the account's voices of a provider that lists them (ElevenLabs) in the background; the page does not wait.</summary>
+    private void RefreshAccountVoices(string provider)
+    {
+        if (!accountVoices.Supports(provider))
+        {
+            return;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await accountVoices.RefreshAsync(provider, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                logger.LogWarning(ex, "The account voices of {Provider} could not be read after the key was saved", provider);
+            }
+        });
     }
 
     private async Task ReloadAsync()

@@ -94,6 +94,18 @@ public sealed partial class StepModelRowViewModel(PipelineStep step, string titl
     [ObservableProperty]
     public partial ChoiceOption? Voice { get; set; }
 
+    /// <summary>Whether the chosen voice model lists the voices of the user's account ("Refresh voices", 0.1.47: ElevenLabs).</summary>
+    [ObservableProperty]
+    public partial bool CanRefreshVoices { get; set; }
+
+    /// <summary>The account's voices are being read.</summary>
+    [ObservableProperty]
+    public partial bool VoicesBusy { get; set; }
+
+    /// <summary>The result of the last account read (how many voices, or why it failed and that the fixed voices are offered).</summary>
+    [ObservableProperty]
+    public partial string VoiceStatus { get; set; } = string.Empty;
+
     /// <summary>Speech speed.</summary>
     [ObservableProperty]
     public partial decimal? Speed { get; set; } = 1.0m;

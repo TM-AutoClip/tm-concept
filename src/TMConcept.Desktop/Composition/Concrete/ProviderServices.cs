@@ -40,6 +40,10 @@ public static class ProviderServices
         AddProvider<Providers.Speech.GoogleProvider>(services);
         AddProvider<Providers.Speech.GoogleCloudProvider>(services);
         AddProvider<Providers.Speech.ElevenLabsProvider>(services);
+        // 0.1.47 (C6, H3): "Sign in with Google" for Google Cloud Text-to-Speech with the user's own desktop client (the API key stays).
+        services.AddSingleton<Providers.GoogleAuth.GoogleTokenClient>();
+        services.AddSingleton<Providers.GoogleAuth.GoogleCloudSignIn>();
+        services.AddSingleton<Core.Keys.IProviderSignIn>(s => s.GetRequiredService<Providers.GoogleAuth.GoogleCloudSignIn>());
         services.AddSingleton<Providers.Embeddings.IEmbeddingTransport, Providers.Embeddings.OpenAIEmbeddings>();
         services.AddSingleton<Providers.Embeddings.IEmbeddingTransport, Providers.Embeddings.OpenRouterEmbeddings>();
         services.AddSingleton<Providers.Embeddings.EmbeddingService>();

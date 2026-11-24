@@ -11,10 +11,12 @@ namespace TMConcept.Providers.Speech;
 /// ElevenLabs speech (0.1.35; <c>POST v1/text-to-speech/{voice_id}?output_format=pcm_24000</c>, the key in <c>xi-api-key</c>; the API
 /// reference read on 23 Nov 2026). Raw 24 kHz PCM comes back and gets a WAV header. The models of the catalog (v4, v4 Turbo, Flash v2.5,
 /// Multilingual v2) all speak Turkish; v3/v4 take an audio tag for a delivery marker ("[excited]"). The voices are ElevenLabs' long-standing
-/// premade ones (a voice of the user's own library can be typed as its id). No speed of its own here (its range is 0.7–1.2; the app
-/// stretches the clip instead). The cost is the catalog's price per character.
+/// premade ones (<see cref="Premade"/>, always offered) and, from 0.1.47 (H4), the voices of the user's account (cloned and library
+/// voices too) as last read by <see cref="AccountVoiceLibrary"/>, those that speak the output language (rule 11,
+/// <see cref="AccountVoiceFilter"/>). No speed of its own here (its range is 0.7–1.2; the app stretches the clip instead). The cost is the
+/// catalog's price per character.
 /// </summary>
-public sealed class ElevenLabsSpeechEngine(ElevenLabsProvider provider, ProviderHttp http) : ISpeechEngine
+public sealed class ElevenLabsSpeechEngine(ElevenLabsProvider provider, ProviderHttp http, AccountVoiceLibrary? account = null) : ISpeechEngine
 {
     /// <summary>The premade voices offered (id, name).</summary>
     public static readonly IReadOnlyList<SpeechVoice> Premade =
@@ -46,7 +48,22 @@ public sealed class ElevenLabsSpeechEngine(ElevenLabsProvider provider, Provider
     public bool Supports(string language) => true;
 
     /// <inheritdoc />
-    public IReadOnlyList<SpeechVoice> Voices(string language) => Premade;
+    public IReadOnlyList<SpeechVoice> Voices(string language) => Merge(Premade, account?.Voices(Code) ?? [], language);
+
+    /// <summary>
+    /// The fixed voices first, then the account's voices that speak <paramref name="language"/> by name (a premade voice of the account is
+    /// already in the fixed list). A cloned or generated voice is marked so it can be told from a premade one of the same name.
+    /// </summary>
+    public static IReadOnlyList<SpeechVoice> Merge(IReadOnlyList<SpeechVoice> fixedVoices, IReadOnlyList<AccountVoice> voices, string language)
+    {
+        ArgumentNullException.ThrowIfNull(fixedVoices);
+        ArgumentNullException.ThrowIfNull(voices);
+        var ids = fixedVoices.Select(v => v.Id).ToHashSet(StringComparer.Ordinal);
+        var extra = voices.Where(v => ids.Add(v.Id) && AccountVoiceFilter.Speaks(v, language))
+            .OrderBy(v => v.Name, StringComparer.CurrentCultureIgnoreCase)
+            .Select(v => new SpeechVoice(v.Id, v.Category is "premade" or "" ? v.Name : v.Name + " (" + v.Category + ")"));
+        return [.. fixedVoices, .. extra];
+    }
 
     /// <inheritdoc />
     public Task InstallAsync(bool agreed, IProgress<ToolProgress>? progress, CancellationToken cancellationToken) => Task.CompletedTask;

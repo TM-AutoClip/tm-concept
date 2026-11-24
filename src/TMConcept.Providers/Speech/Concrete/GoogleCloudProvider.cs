@@ -5,7 +5,8 @@ namespace TMConcept.Providers.Speech;
 
 /// <summary>
 /// Google Cloud Text-to-Speech (0.1.35, Chirp 3: HD voices): texttospeech.googleapis.com, a Google Cloud API key with the Text-to-Speech API
-/// allowed, in <c>x-goog-api-key</c>; the free key test lists the voices (<c>GET v1/voices</c>).
+/// allowed, in <c>x-goog-api-key</c>; the free key test lists the voices (<c>GET v1/voices</c>). From 0.1.47 the provider can also be used
+/// through "Sign in with Google" (<see cref="GoogleAuth.GoogleCloudSignIn"/>), which needs no key row.
 /// </summary>
 public sealed class GoogleCloudProvider(ProviderHttp http, ILogger<GoogleCloudProvider> logger) : ProviderBase(http, logger)
 {

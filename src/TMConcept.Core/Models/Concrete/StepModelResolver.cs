@@ -10,12 +10,15 @@ namespace TMConcept.Core.Models;
 /// Finds the model and key of a step: a page's explicit choice when given, otherwise the profile's saved choice (the last one used on the
 /// page). A paid model is never picked automatically: no choice means <see cref="ModelNotReadyException"/> (or, for an optional step,
 /// "off"). A local model needs no key; neither does a model of a user-added local server (its optional token comes with the endpoint, see
-/// <see cref="EndpointRegistry"/>). Of several keys of a provider, the chosen one is used, else one that passed its test.
+/// <see cref="EndpointRegistry"/>). Of several keys of a provider, the chosen one is used, else one that passed its test. A provider used
+/// through a sign-in (0.1.47, <see cref="IProviderSignIn"/>: "Sign in with Google" for Google Cloud) counts as having a working key while
+/// signed in, and the sign-in comes before its API keys (a reversible choice: signing out brings the key back into use).
 /// </summary>
 public sealed class StepModelResolver(IStepModelStore steps, IApiKeyStore keys, IModelCatalog catalog, IEnumerable<IProvider> providers,
-    EndpointRegistry endpoints, TimeProvider clock, ILogger<StepModelResolver> logger)
+    EndpointRegistry endpoints, TimeProvider clock, ILogger<StepModelResolver> logger, IEnumerable<IProviderSignIn>? signIns = null)
 {
     private readonly IReadOnlyList<IProvider> _providers = providers.ToList();
+    private readonly IReadOnlyList<IProviderSignIn> _signIns = signIns?.ToList() ?? [];
 
     /// <summary>The profile's saved choice of a step (also an explicit "off"); null = none, or no profile.</summary>
     public async Task<StepModelChoice?> ChoiceAsync(string step, Guid? profileId, CancellationToken cancellationToken) =>
@@ -68,6 +71,12 @@ public sealed class StepModelResolver(IStepModelStore steps, IApiKeyStore keys, 
             return new ResolvedModel(model, new ApiKey { Provider = model.Provider, Label = endpoint.Name, Secret = endpoint.Token }, string.Empty);
         }
 
+        if (await SignedInAsync(model.Provider, cancellationToken).ConfigureAwait(false) is { } signIn)
+        {
+            // No key row: the engine of the provider authorizes with the sign-in itself; the label names it in the run.
+            return new ResolvedModel(model, new ApiKey { Provider = model.Provider, Label = signIn.Label }, options.Effort);
+        }
+
         var all = await keys.ListAsync(model.Provider, cancellationToken).ConfigureAwait(false);
         var key = all.FirstOrDefault(k => k.Id == choice.KeyId) ?? all.Where(k => k.LastOkAtUtc is not null).MaxBy(k => k.LastOkAtUtc) ?? all.FirstOrDefault()
             ?? throw new ModelNotReadyException($"There is no API key for '{model.Provider}'.") { Step = step, Missing = "key" };
@@ -108,7 +117,8 @@ public sealed class StepModelResolver(IStepModelStore steps, IApiKeyStore keys, 
         var missing = new List<string>();
         foreach (var provider in models.Where(m => NeedsKey(m.Provider)).Select(m => m.Provider).Distinct(StringComparer.Ordinal))
         {
-            if ((await keys.ListAsync(provider, cancellationToken).ConfigureAwait(false)).Count == 0)
+            if ((await keys.ListAsync(provider, cancellationToken).ConfigureAwait(false)).Count == 0
+                && await SignedInAsync(provider, cancellationToken).ConfigureAwait(false) is null)
             {
                 missing.Add(provider);
             }
@@ -117,8 +127,27 @@ public sealed class StepModelResolver(IStepModelStore steps, IApiKeyStore keys, 
         return missing;
     }
 
+    private async Task<IProviderSignIn?> SignedInAsync(string provider, CancellationToken cancellationToken)
+    {
+        foreach (var signIn in _signIns.Where(s => s.Provider == provider))
+        {
+            if (await signIn.IsSignedInAsync(cancellationToken).ConfigureAwait(false))
+            {
+                return signIn;
+            }
+        }
+
+        return null;
+    }
+
     private async Task<bool> HasWorkingKeyAsync(string provider, CancellationToken cancellationToken)
     {
+        if (await SignedInAsync(provider, cancellationToken).ConfigureAwait(false) is not null)
+        {
+            logger.LogInformation("Key gate: {Provider} is used through its sign-in", provider);
+            return true;
+        }
+
         var all = await keys.ListAsync(provider, cancellationToken).ConfigureAwait(false);
         if (all.Count == 0)
         {
