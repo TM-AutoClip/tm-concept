@@ -560,7 +560,11 @@
           var k = ((step + i * 5) % 12) * 2;
           var dx = steps ? steps[k] : rnd("boil" + step + "-" + i)() * 2 - 1;
           var dy = steps ? steps[k + 1] : rnd("boil" + step + "-" + i + "y")() * 2 - 1;
-          p.camera.style.translate = (dx * boil).toFixed(2) + "px " + (dy * boil).toFixed(2) + "px";
+          // On the drawings and their labels, never on the camera: GSAP folds a CSS translate into its own transform the first time it
+          // reads an element it tweens, so a boil on the camera would stick to it by the order frames are sought (and differ between workers).
+          var shift = (dx * boil).toFixed(2) + "px " + (dy * boil).toFixed(2) + "px";
+          p.svg.style.translate = shift;
+          p.overlay.style.translate = shift;
         });
       }
     }

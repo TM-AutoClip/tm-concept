@@ -87,6 +87,9 @@ public sealed class StyleFinishTests
         canvas.ShouldBeGreaterThan(code.IndexOf("function finishLayer()", StringComparison.Ordinal));
         code.IndexOf("el(\"canvas\"", canvas + 1, StringComparison.Ordinal).ShouldBe(-1, "one canvas");
         code.Split("finishLayer()").Length.ShouldBe(3, "defined once, called once");
+        code.ShouldNotContain("camera.style.translate", Case.Sensitive, "GSAP folds a CSS translate on an element it tweens into its own transform");
+        code.ShouldContain("p.svg.style.translate = shift;");
+        code.ShouldContain("p.overlay.style.translate = shift;");
         PlanDrawer.IsDrawer(code).ShouldBeTrue("the drawer's first line stays the same, so kept videos are drawn again by it");
     }
 
