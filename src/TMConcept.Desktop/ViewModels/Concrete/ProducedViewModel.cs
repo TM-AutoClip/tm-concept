@@ -116,6 +116,12 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
                 if (e.PropertyName == nameof(TimeNotesViewModel.Busy))
                 {
                     Working = Editor.Busy || Notes.Busy;
+
+                    // Another version chosen while a fixed one was made: its notes are read now (a busy list is not reloaded).
+                    if (!Notes.Busy && SelectedVersion?.Video.Id != Notes.VersionId)
+                    {
+                        NotesWork = NotesAsync(SelectedVersion);
+                    }
                 }
             };
             Notes.Made += async (_, record) =>

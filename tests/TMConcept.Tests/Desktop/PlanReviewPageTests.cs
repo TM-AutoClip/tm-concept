@@ -349,4 +349,34 @@ public sealed class PlanReviewPageTests
         input.Scenes[0].Caption.ShouldBe(source.Input.Scenes[0].Caption, "a scene without a note is not changed");
         Directory.Exists(source.Folder).ShouldBeTrue("the old version is kept");
     }
+
+    [AvaloniaFact]
+    public async Task NightModeSwitchedOnWhileThePreviewIsDrawnDoesNotWait()
+    {
+        // Review fix: night mode ticked after the pipeline looked at it, while the slow preview was drawn: the wait that follows goes on at once.
+        using var h = Harness(new FakeChat(), new FakeEngine());
+        var review = h.Get<PlanReviewViewModel>();
+        review.Attach(() => true);
+
+        var answer = await review.PlanAsync(new PlanPreview(string.Empty, [new PlanPreviewScene(1, "a", "title", 0)], 1), CancellationToken.None)
+            .WaitAsync(TimeSpan.FromSeconds(5));
+
+        answer.Decision.ShouldBe(PlanReviewDecision.Approve);
+        review.Waiting.ShouldBeFalse();
+    }
+
+    [AvaloniaFact]
+    public async Task ANoteEmptiedWithoutBeingAddedFreesItsMoment()
+    {
+        using var h = Harness(new FakeChat(), new FakeEngine());
+        var notes = h.Get<TimeNotesViewModel>();
+        notes.Begin(4200);
+        notes.Draft = "x";
+        notes.Draft = string.Empty;
+
+        notes.PendingMs.ShouldBeNull("the next note belongs to the moment its own writing starts");
+        notes.Begin(900);
+        notes.PendingMs.ShouldBe(900);
+        await Task.CompletedTask;
+    }
 }

@@ -29,6 +29,9 @@ public sealed partial class TimeNotesViewModel(VideoRemaker remaker, SceneFixer 
     private Profile? _profile;
     private string _folder = string.Empty;
     private CancellationTokenSource? _cancel;
+    private int _load;
+    private Guid? _madeId;
+    private string _madeStatus = string.Empty;
 
     /// <summary>A fixed version was made (the page shows it).</summary>
     public event EventHandler<VideoRecord>? Made;
@@ -39,6 +42,9 @@ public sealed partial class TimeNotesViewModel(VideoRemaker remaker, SceneFixer 
     /// <summary>The note being written.</summary>
     [ObservableProperty]
     public partial string Draft { get; set; } = string.Empty;
+
+    /// <summary>The version whose notes are shown (null = none).</summary>
+    public Guid? VersionId { get; private set; }
 
     /// <summary>The moment the note being written belongs to (set when writing starts; milliseconds).</summary>
     [ObservableProperty]
@@ -67,14 +73,19 @@ public sealed partial class TimeNotesViewModel(VideoRemaker remaker, SceneFixer 
     /// <summary>Starts from <paramref name="record"/> of <paramref name="profile"/>: its timing and its kept notes (read off the window's thread).</summary>
     public async Task LoadAsync(VideoRecord? record, Profile? profile)
     {
+        // A newer load wins over an older one that ends later (quick clicks through the versions would otherwise mix their notes).
+        var mine = ++_load;
         Notes.Clear();
         Draft = string.Empty;
         PendingMs = null;
-        Status = string.Empty;
+
+        // The fixed version just made keeps the line that says so; any other version starts without one.
+        Status = record is not null && record.Id == _madeId ? _madeStatus : string.Empty;
         Ready = false;
         _source = null;
         _profile = profile;
         _folder = string.Empty;
+        VersionId = record?.Id;
         OnPropertyChanged(nameof(CanFix));
         if (record is null || profile is null)
         {
@@ -88,6 +99,11 @@ public sealed partial class TimeNotesViewModel(VideoRemaker remaker, SceneFixer 
                 var loaded = remaker.Load(record);
                 return (loaded, await TimeNotes.ReadAsync(loaded.Folder, CancellationToken.None).ConfigureAwait(false));
             }).ConfigureAwait(true);
+            if (mine != _load)
+            {
+                return;
+            }
+
             _source = source;
             _folder = source.Folder;
             foreach (var note in notes.OrderBy(n => n.AtMs))
@@ -99,6 +115,11 @@ public sealed partial class TimeNotesViewModel(VideoRemaker remaker, SceneFixer 
         }
         catch (Exception ex) when (ex is VideoException or IOException or UnauthorizedAccessException or InvalidOperationException)
         {
+            if (mine != _load)
+            {
+                return;
+            }
+
             logger.LogInformation("A version cannot take notes: {Reason}", ex.Message);
             Status = text["notes.no_source"];
         }
@@ -108,6 +129,15 @@ public sealed partial class TimeNotesViewModel(VideoRemaker remaker, SceneFixer 
 
     /// <summary>Writing started at <paramref name="positionMs"/> of the video (the view has stopped it): the note belongs to that moment.</summary>
     public void Begin(long positionMs) => PendingMs ??= Math.Max(0, positionMs);
+
+    partial void OnDraftChanged(string value)
+    {
+        // A note emptied without being added: the next one belongs to the moment its own writing starts.
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            PendingMs = null;
+        }
+    }
 
     /// <summary>Adds the note being written at its moment and keeps the notes in the version folder.</summary>
     [RelayCommand]
@@ -196,6 +226,7 @@ public sealed partial class TimeNotesViewModel(VideoRemaker remaker, SceneFixer 
         using var cancel = new CancellationTokenSource();
         _cancel = cancel;
         var made = false;
+        VideoRecord? fixedRecord = null;
         try
         {
             Progress.Begin("work.version", code.Model.Name);
@@ -223,7 +254,9 @@ public sealed partial class TimeNotesViewModel(VideoRemaker remaker, SceneFixer 
             Status = text.Format("notes.fix.done", name, text.Usd(record.TotalUsd));
             activity.Add(ActivityLevel.Info, Status);
             notifier.Notify(new AppNotification(NotificationKind.Done, text["version.done.title"], record.Title + " · " + Status));
-            Made?.Invoke(this, record);
+            _madeId = record.Id;
+            _madeStatus = Status;
+            fixedRecord = record;
         }
         catch (VideoException ex)
         {
@@ -249,6 +282,12 @@ public sealed partial class TimeNotesViewModel(VideoRemaker remaker, SceneFixer 
             await Progress.FinishAsync(made).ConfigureAwait(true);
             _cancel = null;
             Busy = false;
+        }
+
+        // Announced once nothing runs any more, so the page that shows the new version also loads its notes (a busy list is not reloaded).
+        if (fixedRecord is not null)
+        {
+            Made?.Invoke(this, fixedRecord);
         }
     }
 

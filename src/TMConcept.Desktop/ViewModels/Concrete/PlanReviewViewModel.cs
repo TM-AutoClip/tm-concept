@@ -142,6 +142,12 @@ public sealed partial class PlanReviewViewModel(Localizer text, IActivityLog act
             ? text.Format("video.review.first.waits", ActivityPlaceholders.Title)
             : text.Format("video.review.waits", ActivityPlaceholders.Title));
         notifier.Notify(new AppNotification(NotificationKind.Warning, text["video.review.notify"], line));
+
+        // Night mode switched on while the preview was being drawn (before this wait began): nobody is there to answer, it goes on.
+        if (NightMode)
+        {
+            NightModeOn();
+        }
     }
 
     private void Hide(TaskCompletionSource<PlanReviewAnswer> wait)
