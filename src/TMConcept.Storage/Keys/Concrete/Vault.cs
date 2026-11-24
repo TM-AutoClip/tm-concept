@@ -44,6 +44,7 @@ public sealed class Vault(IAppPaths paths, DatabaseKey key, IEnumerable<IKeyProt
             if (File.Exists(paths.DatabaseFile))
             {
                 // A database without a key file cannot be opened by anyone; it is moved aside, never deleted.
+                DatabaseWork.ReleaseFiles(paths.DatabaseFile);
                 File.Move(paths.DatabaseFile, paths.DatabaseFile + ".orphan-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss", System.Globalization.CultureInfo.InvariantCulture));
             }
 
@@ -113,7 +114,7 @@ public sealed class Vault(IAppPaths paths, DatabaseKey key, IEnumerable<IKeyProt
         catch
         {
             key.Clear();
-            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            DatabaseWork.ReleaseFiles();
             throw;
         }
 
@@ -124,6 +125,9 @@ public sealed class Vault(IAppPaths paths, DatabaseKey key, IEnumerable<IKeyProt
     public async Task ChangeProtectionAsync(IKeyProtector protector, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(protector);
+
+        // The database key itself does not change (only its seal), but no pooled connection outlives the old seal.
+        DatabaseWork.ReleaseFiles();
         var old = KeyFile.Read(paths.KeyFile);
         var dek = key.Copy();
         try
@@ -171,6 +175,11 @@ public sealed class Vault(IAppPaths paths, DatabaseKey key, IEnumerable<IKeyProt
 
         var envelope = await protector.ProtectAsync(dek, cancellationToken).ConfigureAwait(false);
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(paths.DatabaseFile))!);
+        if (!DatabaseWork.ReleaseFiles(paths.DatabaseFile))
+        {
+            throw new InvalidOperationException("The database file is still in use; nothing was installed.");
+        }
+
         File.Copy(databaseFile, paths.DatabaseFile, overwrite: true);
         key.Load(dek);
 
@@ -189,7 +198,7 @@ public sealed class Vault(IAppPaths paths, DatabaseKey key, IEnumerable<IKeyProt
         {
             key.Clear();
             logger.LogError(ex, "The restored database does not have this version's schema; it is removed again and nothing is installed");
-            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            DatabaseWork.ReleaseFiles(paths.DatabaseFile);
             try
             {
                 // The removed file is this restore's own copy of the backup (the backup file itself stays where it was).
@@ -215,8 +224,12 @@ public sealed class Vault(IAppPaths paths, DatabaseKey key, IEnumerable<IKeyProt
         logger.LogInformation("Database installed from a backup (key protection: {Method})", protector.Method);
     }
 
-    /// <summary>Forgets the key in memory (the database is locked again).</summary>
-    public void Lock() => key.Clear();
+    /// <summary>Forgets the key in memory and closes the pooled connections (the database is locked again; none stays open with the key).</summary>
+    public void Lock()
+    {
+        key.Clear();
+        DatabaseWork.ReleaseFiles();
+    }
 
     /// <summary>
     /// Sets a database this version cannot open aside, with its key file (renamed <c>concept.db.set-aside-…</c>, <c>key.json.set-aside-…</c>,
@@ -226,7 +239,11 @@ public sealed class Vault(IAppPaths paths, DatabaseKey key, IEnumerable<IKeyProt
     public string SetAside()
     {
         key.Clear();
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        if (!DatabaseWork.ReleaseFiles(paths.DatabaseFile))
+        {
+            logger.LogWarning("The database file is still held open while it is set aside");
+        }
+
         var suffix = ".set-aside-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss", System.Globalization.CultureInfo.InvariantCulture);
         var database = paths.DatabaseFile + suffix;
         if (File.Exists(paths.DatabaseFile))

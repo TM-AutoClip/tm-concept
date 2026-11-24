@@ -406,6 +406,7 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
             if (File.Exists(paths.DatabaseFile))
             {
                 // A database file without a key file cannot be opened by anyone; it is moved aside, never deleted.
+                DatabaseWork.ReleaseFiles(paths.DatabaseFile);
                 File.Move(paths.DatabaseFile, paths.DatabaseFile + ".orphan-" + clock.GetUtcNow().ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture));
             }
 
@@ -700,14 +701,18 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
 
     private async Task WriteSettingAsync(string name, string value, CancellationToken cancellationToken)
     {
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        await db.UpsertAsync(new SettingRow { Key = name, Value = value }, s => s.Key == name, cancellationToken).ConfigureAwait(false);
+        await database.WriteAsync(async db =>
+        {
+            await db.UpsertAsync(new SettingRow { Key = name, Value = value }, s => s.Key == name, cancellationToken).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<SettingRow?> SettingAsync(string name, CancellationToken cancellationToken)
     {
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        return await db.Settings.FirstOrDefaultAsync(s => s.Key == name, cancellationToken).ConfigureAwait(false);
+        return await database.ReadAsync<SettingRow?>(async db =>
+        {
+            return await db.Settings.FirstOrDefaultAsync(s => s.Key == name, cancellationToken).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Keeps the newest <see cref="BackupRules.Keep"/> files of one kind (daily, Back up now, or before a change).</summary>
@@ -807,13 +812,15 @@ public sealed class BackupService(IAppPaths paths, DatabaseKey key, Vault vault,
 
     private async Task<RestoreReport> ReportAsync(BackupHeader header, int images, CancellationToken cancellationToken)
     {
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        return new RestoreReport(header.CreatedAtUtc, header.Contents,
-            await db.ApiKeys.CountAsync(cancellationToken).ConfigureAwait(false),
-            await db.Profiles.CountAsync(cancellationToken).ConfigureAwait(false),
-            images,
-            await db.Concepts.CountAsync(cancellationToken).ConfigureAwait(false),
-            await db.Videos.CountAsync(cancellationToken).ConfigureAwait(false));
+        return await database.ReadAsync<RestoreReport>(async db =>
+        {
+            return new RestoreReport(header.CreatedAtUtc, header.Contents,
+                await db.ApiKeys.CountAsync(cancellationToken).ConfigureAwait(false),
+                await db.Profiles.CountAsync(cancellationToken).ConfigureAwait(false),
+                images,
+                await db.Concepts.CountAsync(cancellationToken).ConfigureAwait(false),
+                await db.Videos.CountAsync(cancellationToken).ConfigureAwait(false));
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     private string TemporaryFile()

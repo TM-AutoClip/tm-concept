@@ -22,41 +22,47 @@ public sealed class EndpointStore(ConceptDatabase database) : IEndpointStore
     /// <inheritdoc />
     public async Task<IReadOnlyList<LocalEndpoint>> ListAsync(CancellationToken cancellationToken)
     {
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        var (list, tokens) = await ReadAsync(db, cancellationToken).ConfigureAwait(false);
-        foreach (var endpoint in list)
+        return await database.ReadAsync<IReadOnlyList<LocalEndpoint>>(async db =>
         {
-            endpoint.Token = tokens.GetValueOrDefault(Key(endpoint.Id)) ?? string.Empty;
-        }
+            var (list, tokens) = await ReadAsync(db, cancellationToken).ConfigureAwait(false);
+            foreach (var endpoint in list)
+            {
+                endpoint.Token = tokens.GetValueOrDefault(Key(endpoint.Id)) ?? string.Empty;
+            }
 
-        return list.OrderBy(e => e.CreatedAtUtc).ToList();
+            return list.OrderBy(e => e.CreatedAtUtc).ToList();
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task SaveAsync(LocalEndpoint endpoint, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(endpoint);
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        var (list, tokens) = await ReadAsync(db, cancellationToken).ConfigureAwait(false);
-        list.RemoveAll(e => e.Id == endpoint.Id);
-        list.Add(endpoint);
-        tokens.Remove(Key(endpoint.Id));
-        if (endpoint.Token.Length > 0)
+        await database.WriteAsync(async db =>
         {
-            tokens[Key(endpoint.Id)] = endpoint.Token;
-        }
+            var (list, tokens) = await ReadAsync(db, cancellationToken).ConfigureAwait(false);
+            list.RemoveAll(e => e.Id == endpoint.Id);
+            list.Add(endpoint);
+            tokens.Remove(Key(endpoint.Id));
+            if (endpoint.Token.Length > 0)
+            {
+                tokens[Key(endpoint.Id)] = endpoint.Token;
+            }
 
-        await WriteAsync(db, list, tokens, cancellationToken).ConfigureAwait(false);
+            await WriteAsync(db, list, tokens, cancellationToken).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        var (list, tokens) = await ReadAsync(db, cancellationToken).ConfigureAwait(false);
-        list.RemoveAll(e => e.Id == id);
-        tokens.Remove(Key(id));
-        await WriteAsync(db, list, tokens, cancellationToken).ConfigureAwait(false);
+        await database.WriteAsync(async db =>
+        {
+            var (list, tokens) = await ReadAsync(db, cancellationToken).ConfigureAwait(false);
+            list.RemoveAll(e => e.Id == id);
+            tokens.Remove(Key(id));
+            await WriteAsync(db, list, tokens, cancellationToken).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     private static string Key(Guid id) => id.ToString("N", System.Globalization.CultureInfo.InvariantCulture);

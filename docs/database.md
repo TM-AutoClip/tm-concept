@@ -79,3 +79,10 @@ Two versions that change the database in a row need two steps; a version that do
   its API) instead of failing at once with "database is locked". `ConceptDatabase.OpenAsync` does it; code that opens its own
   `SqliteConnection` (the backup copy) calls it right after opening. `DatabaseLockTests` checks a write while another connection holds the write lock (it fails without the wait), and concurrent writes
   and reads.
+- Stores run their work through `ConceptDatabase.ReadAsync` / `WriteAsync` (0.1.39): on the thread pool, never on the window's thread
+  (Microsoft.Data.Sqlite's async methods work on the calling thread); writes to one file go one at a time (`DatabaseWork.Writer`), reads
+  side by side. A write must not start another write inside itself. No in-memory cache with delayed writes.
+- Connections are pooled (0.1.39; the pool is keyed by the whole connection string, key included). Before a database file is replaced,
+  moved, locked, set aside or upgraded the pool lets it go (`DatabaseWork.ReleaseFiles`, which also checks that the file is no longer held).
+  `DatabaseWorkTests` checks the thread, the one-writer rule with 20 writes at once, a restore followed by a move of the file, and that
+  another key or an old master password opens nothing while the pool is on.

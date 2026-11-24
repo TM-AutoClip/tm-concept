@@ -18,30 +18,38 @@ public sealed class DocumentStore(ConceptDatabase database) : IDocumentStore, ID
     /// <inheritdoc />
     public async Task<IReadOnlyList<SourceDocument>> ListAsync(Guid profileId, CancellationToken cancellationToken)
     {
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        var documents = await db.Documents.AsNoTracking().Where(d => d.ProfileId == profileId).ToListAsync(cancellationToken).ConfigureAwait(false);
-        return documents.OrderByDescending(d => d.AddedAtUtc).ToList();
+        return await database.ReadAsync<IReadOnlyList<SourceDocument>>(async db =>
+        {
+            var documents = await db.Documents.AsNoTracking().Where(d => d.ProfileId == profileId).ToListAsync(cancellationToken).ConfigureAwait(false);
+            return documents.OrderByDescending(d => d.AddedAtUtc).ToList();
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<SourceDocument>> ListAllAsync(CancellationToken cancellationToken)
     {
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        return await db.Documents.AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false);
+        return await database.ReadAsync<IReadOnlyList<SourceDocument>>(async db =>
+        {
+            return await db.Documents.AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task<SourceDocument?> FindAsync(Guid id, CancellationToken cancellationToken)
     {
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        return await db.Documents.AsNoTracking().FirstOrDefaultAsync(d => d.Id == id, cancellationToken).ConfigureAwait(false);
+        return await database.ReadAsync<SourceDocument?>(async db =>
+        {
+            return await db.Documents.AsNoTracking().FirstOrDefaultAsync(d => d.Id == id, cancellationToken).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task<SourceDocument?> FindByContentAsync(Guid profileId, string sha256, CancellationToken cancellationToken)
     {
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        return await db.Documents.AsNoTracking().FirstOrDefaultAsync(d => d.ProfileId == profileId && d.Sha256 == sha256, cancellationToken).ConfigureAwait(false);
+        return await database.ReadAsync<SourceDocument?>(async db =>
+        {
+            return await db.Documents.AsNoTracking().FirstOrDefaultAsync(d => d.ProfileId == profileId && d.Sha256 == sha256, cancellationToken).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -51,12 +59,14 @@ public sealed class DocumentStore(ConceptDatabase database) : IDocumentStore, ID
         ArgumentNullException.ThrowIfNull(chunks);
         try
         {
-            await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-            db.Documents.Add(document);
-            db.DocumentChunks.AddRange(chunks);
-            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            await database.WriteAsync(async db =>
+            {
+                await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+                db.Documents.Add(document);
+                db.DocumentChunks.AddRange(chunks);
+                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            }, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is DbUpdateException or SqliteException)
         {
@@ -67,21 +77,23 @@ public sealed class DocumentStore(ConceptDatabase database) : IDocumentStore, ID
     /// <inheritdoc />
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-        var chunks = db.DocumentChunks.Where(c => c.DocumentId == id).Select(c => c.Id);
-        var file = await db.Documents.Where(d => d.Id == id).Select(d => new { d.ProfileId, d.FileSha256 }).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
-        await db.DocumentChunkVectors.Where(v => chunks.Contains(v.ChunkId)).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
-        await db.DocumentChunks.Where(c => c.DocumentId == id).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
-        await db.Documents.Where(d => d.Id == id).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
-        if (file is { FileSha256.Length: > 0 }
-            && !await db.Documents.AnyAsync(d => d.ProfileId == file.ProfileId && d.FileSha256 == file.FileSha256, cancellationToken).ConfigureAwait(false))
+        await database.WriteAsync(async db =>
         {
-            // The last document of this file in the profile: its kept page texts go with it.
-            await db.DocumentPages.Where(p => p.ProfileId == file.ProfileId && p.FileSha256 == file.FileSha256).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
-        }
+            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            var chunks = db.DocumentChunks.Where(c => c.DocumentId == id).Select(c => c.Id);
+            var file = await db.Documents.Where(d => d.Id == id).Select(d => new { d.ProfileId, d.FileSha256 }).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+            await db.DocumentChunkVectors.Where(v => chunks.Contains(v.ChunkId)).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+            await db.DocumentChunks.Where(c => c.DocumentId == id).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+            await db.Documents.Where(d => d.Id == id).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+            if (file is { FileSha256.Length: > 0 }
+                && !await db.Documents.AnyAsync(d => d.ProfileId == file.ProfileId && d.FileSha256 == file.FileSha256, cancellationToken).ConfigureAwait(false))
+            {
+                // The last document of this file in the profile: its kept page texts go with it.
+                await db.DocumentPages.Where(p => p.ProfileId == file.ProfileId && p.FileSha256 == file.FileSha256).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+            }
 
-        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -89,28 +101,34 @@ public sealed class DocumentStore(ConceptDatabase database) : IDocumentStore, ID
     {
         ArgumentNullException.ThrowIfNull(documentIds);
         var ids = documentIds.ToList();
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        var chunks = await db.DocumentChunks.AsNoTracking().Where(c => c.ProfileId == profileId && ids.Contains(c.DocumentId)).ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
-        var order = ids.Select((id, i) => (id, i)).ToDictionary(p => p.id, p => p.i);
-        return chunks.OrderBy(c => order[c.DocumentId]).ThenBy(c => c.Ordinal).ToList();
+        return await database.ReadAsync<IReadOnlyList<DocumentChunk>>(async db =>
+        {
+            var chunks = await db.DocumentChunks.AsNoTracking().Where(c => c.ProfileId == profileId && ids.Contains(c.DocumentId)).ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+            var order = ids.Select((id, i) => (id, i)).ToDictionary(p => p.id, p => p.i);
+            return chunks.OrderBy(c => order[c.DocumentId]).ThenBy(c => c.Ordinal).ToList();
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<DocumentChunkVector>> VectorsAsync(Guid profileId, string model, CancellationToken cancellationToken)
     {
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        return await db.DocumentChunkVectors.AsNoTracking().Where(v => v.ProfileId == profileId && v.Model == model).ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
+        return await database.ReadAsync<IReadOnlyList<DocumentChunkVector>>(async db =>
+        {
+            return await db.DocumentChunkVectors.AsNoTracking().Where(v => v.ProfileId == profileId && v.Model == model).ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<DocumentChunk>> ChunksWithoutVectorAsync(string model, CancellationToken cancellationToken)
     {
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        var embedded = db.DocumentChunkVectors.Where(v => v.Model == model).Select(v => v.ChunkId);
-        return await db.DocumentChunks.AsNoTracking().Where(c => !embedded.Contains(c.Id)).OrderBy(c => c.DocumentId).ThenBy(c => c.Ordinal)
-            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        return await database.ReadAsync<IReadOnlyList<DocumentChunk>>(async db =>
+        {
+            var embedded = db.DocumentChunkVectors.Where(v => v.Model == model).Select(v => v.ChunkId);
+            return await db.DocumentChunks.AsNoTracking().Where(c => !embedded.Contains(c.Id)).OrderBy(c => c.DocumentId).ThenBy(c => c.Ordinal)
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -126,13 +144,15 @@ public sealed class DocumentStore(ConceptDatabase database) : IDocumentStore, ID
         var model = vectors[0].Model;
         try
         {
-            await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-            var present = (await db.DocumentChunks.Where(c => ids.Contains(c.Id)).Select(c => c.Id).ToListAsync(cancellationToken).ConfigureAwait(false)).ToHashSet();
-            await db.DocumentChunkVectors.Where(v => v.Model == model && ids.Contains(v.ChunkId)).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
-            db.DocumentChunkVectors.AddRange(vectors.Where(v => present.Contains(v.ChunkId)));
-            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            await database.WriteAsync(async db =>
+            {
+                await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+                var present = (await db.DocumentChunks.Where(c => ids.Contains(c.Id)).Select(c => c.Id).ToListAsync(cancellationToken).ConfigureAwait(false)).ToHashSet();
+                await db.DocumentChunkVectors.Where(v => v.Model == model && ids.Contains(v.ChunkId)).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+                db.DocumentChunkVectors.AddRange(vectors.Where(v => present.Contains(v.ChunkId)));
+                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            }, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is DbUpdateException or SqliteException)
         {
@@ -143,9 +163,11 @@ public sealed class DocumentStore(ConceptDatabase database) : IDocumentStore, ID
     /// <inheritdoc />
     public async Task<IReadOnlyList<DocumentPageText>> PagesAsync(Guid profileId, string fileSha256, int from, int to, CancellationToken cancellationToken)
     {
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        return await db.DocumentPages.AsNoTracking().Where(p => p.ProfileId == profileId && p.FileSha256 == fileSha256 && p.Page >= from && p.Page <= to)
-            .OrderBy(p => p.Page).ToListAsync(cancellationToken).ConfigureAwait(false);
+        return await database.ReadAsync<IReadOnlyList<DocumentPageText>>(async db =>
+        {
+            return await db.DocumentPages.AsNoTracking().Where(p => p.ProfileId == profileId && p.FileSha256 == fileSha256 && p.Page >= from && p.Page <= to)
+                .OrderBy(p => p.Page).ToListAsync(cancellationToken).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -159,18 +181,20 @@ public sealed class DocumentStore(ConceptDatabase database) : IDocumentStore, ID
 
         try
         {
-            await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-            foreach (var file in pages.GroupBy(p => (p.ProfileId, p.FileSha256)))
+            await database.WriteAsync(async db =>
             {
-                var numbers = file.Select(p => p.Page).ToList();
-                await db.DocumentPages.Where(p => p.ProfileId == file.Key.ProfileId && p.FileSha256 == file.Key.FileSha256 && numbers.Contains(p.Page))
-                    .ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
-            }
+                await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+                foreach (var file in pages.GroupBy(p => (p.ProfileId, p.FileSha256)))
+                {
+                    var numbers = file.Select(p => p.Page).ToList();
+                    await db.DocumentPages.Where(p => p.ProfileId == file.Key.ProfileId && p.FileSha256 == file.Key.FileSha256 && numbers.Contains(p.Page))
+                        .ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+                }
 
-            db.DocumentPages.AddRange(pages.GroupBy(p => (p.ProfileId, p.FileSha256, p.Page)).Select(g => g.Last()));
-            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                db.DocumentPages.AddRange(pages.GroupBy(p => (p.ProfileId, p.FileSha256, p.Page)).Select(g => g.Last()));
+                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            }, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is DbUpdateException or SqliteException)
         {
@@ -181,16 +205,20 @@ public sealed class DocumentStore(ConceptDatabase database) : IDocumentStore, ID
     /// <inheritdoc />
     public async Task<IReadOnlyList<DocumentPageMark>> MarksAsync(Guid profileId, CancellationToken cancellationToken)
     {
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        return await db.DocumentPages.AsNoTracking().Where(p => p.ProfileId == profileId)
-            .Select(p => new DocumentPageMark(p.ProfileId, p.FileSha256, p.Page, p.Text.Length, p.Source)).ToListAsync(cancellationToken).ConfigureAwait(false);
+        return await database.ReadAsync<IReadOnlyList<DocumentPageMark>>(async db =>
+        {
+            return await db.DocumentPages.AsNoTracking().Where(p => p.ProfileId == profileId)
+                .Select(p => new DocumentPageMark(p.ProfileId, p.FileSha256, p.Page, p.Text.Length, p.Source)).ToListAsync(cancellationToken).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task ForgetAsync(Guid profileId, string fileSha256, CancellationToken cancellationToken)
     {
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        await db.DocumentPages.Where(p => p.ProfileId == profileId && p.FileSha256 == fileSha256).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+        await database.WriteAsync(async db =>
+        {
+            await db.DocumentPages.Where(p => p.ProfileId == profileId && p.FileSha256 == fileSha256).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -200,15 +228,17 @@ public sealed class DocumentStore(ConceptDatabase database) : IDocumentStore, ID
         ArgumentNullException.ThrowIfNull(chunks);
         try
         {
-            await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-            var old = db.DocumentChunks.Where(c => c.DocumentId == document.Id).Select(c => c.Id);
-            await db.DocumentChunkVectors.Where(v => old.Contains(v.ChunkId)).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
-            await db.DocumentChunks.Where(c => c.DocumentId == document.Id).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
-            db.Documents.Update(document);
-            db.DocumentChunks.AddRange(chunks);
-            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            await database.WriteAsync(async db =>
+            {
+                await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+                var old = db.DocumentChunks.Where(c => c.DocumentId == document.Id).Select(c => c.Id);
+                await db.DocumentChunkVectors.Where(v => old.Contains(v.ChunkId)).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+                await db.DocumentChunks.Where(c => c.DocumentId == document.Id).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+                db.Documents.Update(document);
+                db.DocumentChunks.AddRange(chunks);
+                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            }, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is DbUpdateException or SqliteException)
         {

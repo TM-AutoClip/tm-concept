@@ -17,9 +17,11 @@ public sealed class VideoPaletteStore(ConceptDatabase database) : IVideoPaletteS
     /// <inheritdoc />
     public async Task<IReadOnlyList<SavedPalette>> ListAsync(CancellationToken cancellationToken)
     {
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        return (await ReadAsync(db, cancellationToken).ConfigureAwait(false))
-            .OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(p => p.CreatedAtUtc).ToList();
+        return await database.ReadAsync<IReadOnlyList<SavedPalette>>(async db =>
+        {
+            return (await ReadAsync(db, cancellationToken).ConfigureAwait(false))
+                .OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(p => p.CreatedAtUtc).ToList();
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -40,40 +42,44 @@ public sealed class VideoPaletteStore(ConceptDatabase database) : IVideoPaletteS
 
         palette.Name = name;
         palette.Colors = palette.Colors with { Id = VideoPalettes.CustomId };
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-        var all = await ReadAsync(db, cancellationToken).ConfigureAwait(false);
-        var index = all.FindIndex(p => p.Id == palette.Id);
-        if (index >= 0)
+        await database.WriteAsync(async db =>
         {
-            all[index] = palette;
-        }
-        else
-        {
-            if (all.Count >= VideoStyleLimits.PalettesMax)
+            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            var all = await ReadAsync(db, cancellationToken).ConfigureAwait(false);
+            var index = all.FindIndex(p => p.Id == palette.Id);
+            if (index >= 0)
             {
-                throw new VideoStyleLimitException($"There are already {VideoStyleLimits.PalettesMax} saved palettes; delete one first.");
+                all[index] = palette;
+            }
+            else
+            {
+                if (all.Count >= VideoStyleLimits.PalettesMax)
+                {
+                    throw new VideoStyleLimitException($"There are already {VideoStyleLimits.PalettesMax} saved palettes; delete one first.");
+                }
+
+                all.Add(palette);
             }
 
-            all.Add(palette);
-        }
-
-        await WriteAsync(db, all, cancellationToken).ConfigureAwait(false);
-        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            await WriteAsync(db, all, cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-        var all = await ReadAsync(db, cancellationToken).ConfigureAwait(false);
-        if (all.RemoveAll(p => p.Id == id) > 0)
+        await database.WriteAsync(async db =>
         {
-            await WriteAsync(db, all, cancellationToken).ConfigureAwait(false);
-        }
+            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            var all = await ReadAsync(db, cancellationToken).ConfigureAwait(false);
+            if (all.RemoveAll(p => p.Id == id) > 0)
+            {
+                await WriteAsync(db, all, cancellationToken).ConfigureAwait(false);
+            }
 
-        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task<List<SavedPalette>> ReadAsync(ConceptDbContext db, CancellationToken cancellationToken)

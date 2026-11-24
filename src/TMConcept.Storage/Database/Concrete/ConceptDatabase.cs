@@ -10,9 +10,12 @@ namespace TMConcept.Storage.Database;
 
 /// <summary>
 /// The encrypted database (SQLite3 Multiple Ciphers; the whole file is encrypted, table names included) through EF Core
-/// (<see cref="ConceptDbContext"/>), opened for each piece of work and closed after it. The key goes in the connection string's Password
+/// (<see cref="ConceptDbContext"/>), opened for each piece of work and closed after it; the stores run each piece of work through
+/// <see cref="ReadAsync{T}"/> / <see cref="WriteAsync{T}"/> (on the thread pool, writes one at a time, <see cref="DatabaseWork"/>). The key goes in the connection string's Password
 /// (Microsoft.Data.Sqlite sends it as <c>PRAGMA key</c>; SQLite3 Multiple Ciphers encrypts with its default ChaCha20-Poly1305). Pooling is
-/// off so a closed database releases its file (restore replaces it). Foreign keys are on (cascades: deleting a profile removes its concepts,
+/// on (0.1.39): a closed connection stays open in the pool, so the next piece of work does not derive the key again; before a file is
+/// replaced, moved, locked or upgraded the pool lets it go (<see cref="DatabaseWork.ReleaseFiles"/>). The pool is keyed by the whole
+/// connection string, key included: another key never gets a pooled connection of this one. Foreign keys are on (cascades: deleting a profile removes its concepts,
 /// queue, embeddings and video records; deleting a concept removes its embedding and queue entry and leaves its videos with
 /// an empty link). Secure delete (deleted content overwritten with zeros) is how SQLite3 Multiple Ciphers is built; it is checked whenever
 /// a file comes in. EF Core writes every statement (no SQL is written by hand). Every connection waits for another connection's lock
@@ -24,12 +27,68 @@ public sealed class ConceptDatabase(IAppPaths paths, DatabaseKey key)
     internal Task<ConceptDbContext> OpenAsync(CancellationToken cancellationToken) =>
         OpenAsync(ConnectionString(paths.DatabaseFile, key.Passphrase()), cancellationToken);
 
+    /// <summary>Reads: <paramref name="work"/> on its own connection, on the thread pool (reads run side by side).</summary>
+    internal Task<T> ReadAsync<T>(Func<ConceptDbContext, Task<T>> work, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(work);
+        return DatabaseWork.RunAsync(async () =>
+        {
+            await using var db = await OpenAsync(cancellationToken).ConfigureAwait(false);
+            return await work(db).ConfigureAwait(false);
+        }, cancellationToken);
+    }
+
+    /// <summary><see cref="ReadAsync{T}"/> without a result.</summary>
+    internal Task ReadAsync(Func<ConceptDbContext, Task> work, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(work);
+        return ReadAsync<bool>(async db =>
+        {
+            await work(db).ConfigureAwait(false);
+            return true;
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Writes: <paramref name="work"/> on its own connection, on the thread pool, after every earlier write to this file has ended (one
+    /// writer at a time; reads are not held up). <paramref name="work"/> must not start another write itself (it would wait for its own turn).
+    /// </summary>
+    internal Task<T> WriteAsync<T>(Func<ConceptDbContext, Task<T>> work, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(work);
+        return DatabaseWork.RunAsync(async () =>
+        {
+            var writer = DatabaseWork.Writer(paths.DatabaseFile);
+            await writer.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await using var db = await OpenAsync(cancellationToken).ConfigureAwait(false);
+                return await work(db).ConfigureAwait(false);
+            }
+            finally
+            {
+                writer.Release();
+            }
+        }, cancellationToken);
+    }
+
+    /// <summary><see cref="WriteAsync{T}"/> without a result.</summary>
+    internal Task WriteAsync(Func<ConceptDbContext, Task> work, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(work);
+        return WriteAsync<bool>(async db =>
+        {
+            await work(db).ConfigureAwait(false);
+            return true;
+        }, cancellationToken);
+    }
+
     /// <summary>Connection string of an encrypted file.</summary>
     public static string ConnectionString(string file, string passphrase) => new SqliteConnectionStringBuilder
     {
         DataSource = file,
         Password = passphrase,
-        Pooling = false,
+        Pooling = true,
         ForeignKeys = true,
         Mode = SqliteOpenMode.ReadWriteCreate,
     }.ToString();

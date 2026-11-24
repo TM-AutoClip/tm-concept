@@ -10,39 +10,49 @@ public sealed class VoiceSampleStore(ConceptDatabase database) : IVoiceSampleSto
     /// <inheritdoc />
     public async Task<IReadOnlyList<VoiceSampleInfo>> ListAsync(CancellationToken cancellationToken)
     {
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        var rows = await db.VoiceSamples.OrderBy(v => v.AddedAtUtc).Select(v => new { v.Id, v.Name, v.DurationMs, v.AddedAtUtc })
-            .ToListAsync(cancellationToken).ConfigureAwait(false);
-        return rows.Select(r => new VoiceSampleInfo(r.Id, r.Name, r.DurationMs, r.AddedAtUtc)).ToList();
+        return await database.ReadAsync<IReadOnlyList<VoiceSampleInfo>>(async db =>
+        {
+            var rows = await db.VoiceSamples.OrderBy(v => v.AddedAtUtc).Select(v => new { v.Id, v.Name, v.DurationMs, v.AddedAtUtc })
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
+            return rows.Select(r => new VoiceSampleInfo(r.Id, r.Name, r.DurationMs, r.AddedAtUtc)).ToList();
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task<VoiceSample?> GetAsync(Guid id, CancellationToken cancellationToken)
     {
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        return await db.VoiceSamples.FirstOrDefaultAsync(v => v.Id == id, cancellationToken).ConfigureAwait(false);
+        return await database.ReadAsync<VoiceSample?>(async db =>
+        {
+            return await db.VoiceSamples.FirstOrDefaultAsync(v => v.Id == id, cancellationToken).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task<bool> HasAsync(string sha256, CancellationToken cancellationToken)
     {
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        return await db.VoiceSamples.AnyAsync(v => v.Sha256 == sha256, cancellationToken).ConfigureAwait(false);
+        return await database.ReadAsync<bool>(async db =>
+        {
+            return await db.VoiceSamples.AnyAsync(v => v.Sha256 == sha256, cancellationToken).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task AddAsync(VoiceSample sample, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(sample);
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        db.VoiceSamples.Add(sample);
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await database.WriteAsync(async db =>
+        {
+            db.VoiceSamples.Add(sample);
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        await db.VoiceSamples.Where(v => v.Id == id).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+        await database.WriteAsync(async db =>
+        {
+            await db.VoiceSamples.Where(v => v.Id == id).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 }

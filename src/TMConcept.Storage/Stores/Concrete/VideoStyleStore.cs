@@ -15,17 +15,21 @@ public sealed class VideoStyleStore(ConceptDatabase database) : IVideoStyleStore
     /// <inheritdoc />
     public async Task<IReadOnlyList<VideoStyle>> ListAsync(CancellationToken cancellationToken)
     {
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        var rows = await db.VideoStyles.AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false);
-        return rows.Select(Read).OrderBy(s => s.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(s => s.CreatedAtUtc).ToList();
+        return await database.ReadAsync<IReadOnlyList<VideoStyle>>(async db =>
+        {
+            var rows = await db.VideoStyles.AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false);
+            return rows.Select(Read).OrderBy(s => s.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(s => s.CreatedAtUtc).ToList();
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task<VideoStyle?> GetAsync(Guid id, CancellationToken cancellationToken)
     {
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        var row = await db.VideoStyles.AsNoTracking().FirstOrDefaultAsync(s => s.Id == id, cancellationToken).ConfigureAwait(false);
-        return row is null ? null : Read(row);
+        return await database.ReadAsync<VideoStyle?>(async db =>
+        {
+            var row = await db.VideoStyles.AsNoTracking().FirstOrDefaultAsync(s => s.Id == id, cancellationToken).ConfigureAwait(false);
+            return row is null ? null : Read(row);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -47,32 +51,36 @@ public sealed class VideoStyleStore(ConceptDatabase database) : IVideoStyleStore
             CreatedAtUtc = style.CreatedAtUtc,
             UpdatedAtUtc = style.UpdatedAtUtc,
         };
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-        var id = style.Id;
-        if (await db.VideoStyles.AnyAsync(s => s.Id == id, cancellationToken).ConfigureAwait(false))
+        await database.WriteAsync(async db =>
         {
-            db.VideoStyles.Update(row);
-        }
-        else
-        {
-            if (await db.VideoStyles.CountAsync(cancellationToken).ConfigureAwait(false) >= VideoStyleLimits.Max)
+            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            var id = style.Id;
+            if (await db.VideoStyles.AnyAsync(s => s.Id == id, cancellationToken).ConfigureAwait(false))
             {
-                throw new VideoStyleLimitException();
+                db.VideoStyles.Update(row);
+            }
+            else
+            {
+                if (await db.VideoStyles.CountAsync(cancellationToken).ConfigureAwait(false) >= VideoStyleLimits.Max)
+                {
+                    throw new VideoStyleLimitException();
+                }
+
+                db.VideoStyles.Add(row);
             }
 
-            db.VideoStyles.Add(row);
-        }
-
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        await db.VideoStyles.Where(s => s.Id == id).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+        await database.WriteAsync(async db =>
+        {
+            await db.VideoStyles.Where(s => s.Id == id).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>The template of a row: its JSON, with the id and name of the columns (the columns are the truth).</summary>

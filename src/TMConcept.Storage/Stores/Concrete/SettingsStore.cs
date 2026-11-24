@@ -13,9 +13,11 @@ public sealed class SettingsStore(ConceptDatabase database) : ISettingsStore
     /// <inheritdoc />
     public async Task<AppSettings> GetAsync(CancellationToken cancellationToken)
     {
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        var row = await db.Settings.FirstOrDefaultAsync(s => s.Key == Key, cancellationToken).ConfigureAwait(false);
-        return row is null ? new AppSettings() : JsonSerializer.Deserialize(row.Value, StorageJsonContext.Default.AppSettings) ?? new AppSettings();
+        return await database.ReadAsync<AppSettings>(async db =>
+        {
+            var row = await db.Settings.FirstOrDefaultAsync(s => s.Key == Key, cancellationToken).ConfigureAwait(false);
+            return row is null ? new AppSettings() : JsonSerializer.Deserialize(row.Value, StorageJsonContext.Default.AppSettings) ?? new AppSettings();
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -23,7 +25,9 @@ public sealed class SettingsStore(ConceptDatabase database) : ISettingsStore
     {
         ArgumentNullException.ThrowIfNull(settings);
         var value = JsonSerializer.Serialize(settings, StorageJsonContext.Default.AppSettings);
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        await db.UpsertAsync(new SettingRow { Key = Key, Value = value }, s => s.Key == Key, cancellationToken).ConfigureAwait(false);
+        await database.WriteAsync(async db =>
+        {
+            await db.UpsertAsync(new SettingRow { Key = Key, Value = value }, s => s.Key == Key, cancellationToken).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 }

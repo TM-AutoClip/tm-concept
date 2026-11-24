@@ -10,23 +10,29 @@ public sealed class PronunciationStore(ConceptDatabase database) : IPronunciatio
     /// <inheritdoc />
     public async Task<IReadOnlyList<PronunciationEntry>> ListAsync(string language, CancellationToken cancellationToken)
     {
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        return await db.Pronunciations.Where(p => p.Language == language).OrderBy(p => p.AddedAtUtc).ToListAsync(cancellationToken).ConfigureAwait(false);
+        return await database.ReadAsync<IReadOnlyList<PronunciationEntry>>(async db =>
+        {
+            return await db.Pronunciations.Where(p => p.Language == language).OrderBy(p => p.AddedAtUtc).ToListAsync(cancellationToken).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task SaveAsync(PronunciationEntry entry, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(entry);
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        var id = entry.Id;
-        await db.UpsertAsync(entry, p => p.Id == id, cancellationToken).ConfigureAwait(false);
+        await database.WriteAsync(async db =>
+        {
+            var id = entry.Id;
+            await db.UpsertAsync(entry, p => p.Id == id, cancellationToken).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        await db.Pronunciations.Where(p => p.Id == id).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+        await database.WriteAsync(async db =>
+        {
+            await db.Pronunciations.Where(p => p.Id == id).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 }

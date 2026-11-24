@@ -10,9 +10,11 @@ public sealed class TopicSuggestionStore(ConceptDatabase database) : ITopicSugge
     /// <inheritdoc />
     public async Task<IReadOnlyList<TopicSuggestion>> ListAsync(Guid profileId, int max, CancellationToken cancellationToken)
     {
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        return await db.TopicSuggestions.Where(t => t.ProfileId == profileId).OrderByDescending(t => t.CreatedAtUtc).Take(max)
-            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        return await database.ReadAsync<IReadOnlyList<TopicSuggestion>>(async db =>
+        {
+            return await db.TopicSuggestions.Where(t => t.ProfileId == profileId).OrderByDescending(t => t.CreatedAtUtc).Take(max)
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -24,9 +26,11 @@ public sealed class TopicSuggestionStore(ConceptDatabase database) : ITopicSugge
             return;
         }
 
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        db.TopicSuggestions.AddRange(suggestions);
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await database.WriteAsync(async db =>
+        {
+            db.TopicSuggestions.AddRange(suggestions);
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -39,8 +43,10 @@ public sealed class TopicSuggestionStore(ConceptDatabase database) : ITopicSugge
         }
 
         var list = ids.ToList();
-        await using var db = await database.OpenAsync(cancellationToken).ConfigureAwait(false);
-        await db.TopicSuggestions.Where(t => list.Contains(t.Id))
-            .ExecuteUpdateAsync(u => u.SetProperty(t => t.Outcome, TopicOutcome.Picked), cancellationToken).ConfigureAwait(false);
+        await database.WriteAsync(async db =>
+        {
+            await db.TopicSuggestions.Where(t => list.Contains(t.Id))
+                .ExecuteUpdateAsync(u => u.SetProperty(t => t.Outcome, TopicOutcome.Picked), cancellationToken).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 }
