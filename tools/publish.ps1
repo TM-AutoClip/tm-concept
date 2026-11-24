@@ -1,6 +1,7 @@
 # Builds every file of a release into artifacts/release-<version>, ready for upload. Usage:
 #   tools/publish.ps1 [-Rids win-x64,linux-x64,linux-arm64] [-ReleaseDir artifacts/release-0.1.26] [-PublishDir artifacts/publish-0.1.26]
 #                     [-PreviousReleaseDir artifacts/release-0.1.25] [-NoDelta] [-NoInstaller] [-NoAppImage]
+#                     [-NoCompression] [-ReadyToRun]
 # -ReleaseDir / -PublishDir (relative to the repository, or absolute) default to artifacts/release-<version> and artifacts/publish-<version>.
 #
 # Two editions (0.1.26), the same features and the same data folder:
@@ -20,6 +21,9 @@
 #   without a delta package.
 # - Linux AppImage (vpk [linux] pack, built on this Windows machine with vpk's own tools): TMConcept-linux-<arch>.AppImage, its full package
 #   and releases.linux-<arch>.json. Not tried on Linux yet, so the README does not offer it; -NoAppImage skips it.
+# -NoCompression and -ReadyToRun are for start-up measurements only (0.1.40): -NoCompression leaves the single file uncompressed
+# (EnableCompressionInSingleFile=false), -ReadyToRun precompiles the trimmed assemblies (PublishReadyToRun=true, after trimming). Without
+# them the build is the one every release has used (compressed single file, no ReadyToRun); a release is built without them.
 # The end prints the SHA-256 lines of every file for the release notes' "## SHA-256" block (the app checks its downloads against them).
 #
 # A release is built only from a clean working tree (commit the version bump first): the binaries carry the commit they were built from
@@ -32,7 +36,9 @@ param(
     [string]$PreviousReleaseDir = '',
     [switch]$NoDelta,
     [switch]$NoInstaller,
-    [switch]$NoAppImage
+    [switch]$NoAppImage,
+    [switch]$NoCompression,
+    [switch]$ReadyToRun
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
@@ -76,10 +82,14 @@ function Publish-Program([string]$rid, [bool]$singleFile, [string]$out) {
     $single = if ($singleFile) { 'true' } else { 'false' }
     # Compressed inside the single file on every system (0.1.3, measured: since the trimmed build the compressed and the uncompressed
     # file use the same memory within 2-5 MB, and the compressed one is half the size on disk). The folder build has nothing to compress.
-    Invoke-Checked "publish $rid (single file: $single)" {
+    # -NoCompression / -ReadyToRun (measurements only) change just these two properties.
+    $compress = if ($singleFile -and -not $NoCompression) { 'true' } else { 'false' }
+    # Without -ReadyToRun the property is not passed at all, so the default build's command line is the one releases have always used.
+    $r2r = @(if ($ReadyToRun) { '-p:PublishReadyToRun=true' })
+    Invoke-Checked "publish $rid (single file: $single, compressed: $compress, ReadyToRun: $([bool]$ReadyToRun))" {
         & dotnet publish $project -c Release -r $rid --self-contained true `
-            -p:PublishSingleFile=$single -p:IncludeNativeLibrariesForSelfExtract=$single -p:EnableCompressionInSingleFile=$single `
-            -p:DebugType=none -p:DebugSymbols=false -p:SourceRevisionId=$commit -m:1 -nodeReuse:false -o $out
+            -p:PublishSingleFile=$single -p:IncludeNativeLibrariesForSelfExtract=$single -p:EnableCompressionInSingleFile=$compress `
+            @r2r -p:DebugType=none -p:DebugSymbols=false -p:SourceRevisionId=$commit -m:1 -nodeReuse:false -o $out
     }
 }
 
