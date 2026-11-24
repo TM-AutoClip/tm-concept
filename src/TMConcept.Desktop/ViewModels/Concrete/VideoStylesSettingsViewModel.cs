@@ -20,7 +20,7 @@ namespace TMConcept.Desktop.ViewModels;
 public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store, IVideoPaletteStore palettes, Localizer text, IConfirmDialog confirm,
     IActivityLog activity, Startup.FileDialogs dialogs, Core.Music.IMusicLibrary musicLibrary, Core.Music.IMusicSearch musicSearch,
     Components.ComponentInstallFlow installs, Core.Music.IMusicGenerators musicModels, Core.Hardware.IGpuInfo gpu,
-    ILogger<VideoStylesSettingsViewModel> logger) : SettingsSectionBase
+    Core.Subtitles.IWordRecognizer wordRecognizer, ILogger<VideoStylesSettingsViewModel> logger) : SettingsSectionBase
 {
     private bool _loading;
     private Core.Music.LocalMusicCard? _card;
@@ -64,8 +64,52 @@ public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store,
     [ObservableProperty]
     public partial bool Empty { get; set; }
 
+    /// <summary>
+    /// The subtitles' word times (0.1.48, F5): "heard" when whisper.cpp and its model are installed, "estimated" with an install button
+    /// otherwise, a yellow line when this computer has no whisper.cpp build. Applies to every template (not saved with one).
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(WordTimesText), nameof(WordTimesCanInstall))]
+    public partial bool WordTimesReady { get; set; }
+
+    /// <summary>Whether this computer has a whisper.cpp build (false: the subtitles always keep their estimated times).</summary>
+    public bool WordTimesSupported => wordRecognizer.Supported;
+
+    /// <summary>This computer has no whisper.cpp build (the yellow line).</summary>
+    public bool WordTimesUnsupported => !WordTimesSupported;
+
+    /// <summary>The install button shows.</summary>
+    public bool WordTimesCanInstall => WordTimesSupported && !WordTimesReady;
+
+    /// <summary>The line next to the subtitles: heard or estimated word times.</summary>
+    public string WordTimesText => text[WordTimesReady ? "styles.word_times.heard" : "styles.word_times.estimated"];
+
     /// <inheritdoc />
-    public override Task ActivateAsync() => LoadSafeAsync(SelectedStyle?.Id ?? (Editor is { IsNew: false } open ? open.Id : null));
+    public override async Task ActivateAsync()
+    {
+        await LoadSafeAsync(SelectedStyle?.Id ?? (Editor is { IsNew: false } open ? open.Id : null)).ConfigureAwait(true);
+
+        // Two files are looked at; off the window's thread all the same.
+        WordTimesReady = await Task.Run(() => wordRecognizer.Supported && wordRecognizer.Ready).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Installs whisper.cpp and its multilingual model (0.1.48, rule 18): the app's install flow lists both downloads with their sizes and
+    /// asks once; nothing is downloaded without the yes.
+    /// </summary>
+    [RelayCommand]
+    private async Task InstallWordTimesAsync()
+    {
+        var outcome = await installs.EnsureAsync([Core.Components.ComponentCodes.RecognizerModel], "install.purpose.word_times", null, CancellationToken.None)
+            .ConfigureAwait(true);
+        if (!outcome.Ready && outcome.Reason.Length > 0)
+        {
+            logger.LogInformation("whisper.cpp was not installed: {Reason}", outcome.Reason);
+            Status = outcome.Reason;
+        }
+
+        WordTimesReady = await Task.Run(() => wordRecognizer.Ready).ConfigureAwait(true);
+    }
 
     /// <summary>Opens a form for a new template (refused at the limit).</summary>
     [RelayCommand]

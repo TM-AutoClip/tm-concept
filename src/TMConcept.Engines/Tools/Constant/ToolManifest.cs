@@ -22,8 +22,13 @@ namespace TMConcept.Engines.Tools;
 /// zips carry no HIP runtime (hipblas, rocblas must come from AMD's SDK on the PATH, otherwise sd-cli ends with 0xC0000135 and prints
 /// nothing). uv (Astral, MIT or Apache-2.0): the 0.13.6 release (26 Oct 2026), hashes from the release's asset digests,
 /// checked on 2026-11-16 by downloading the Windows zip (flat: uv.exe at its top) and listing the Linux archive (one folder); it installs the
-/// Python of the Python voices and their packages into the tools folder, and is never taken from the system. Updating a version = new rows
-/// here with new hashes (and the sd-cli options checked again).
+/// Python of the Python voices and their packages into the tools folder, and is never taken from the system. whisper.cpp (MIT, ggml-org;
+/// 0.1.48, the subtitles' word times): the processor build whisper-bin-x64.zip of the nightly release b5454, which is the build of the
+/// tagged release v1.9.5 (6 Oct 2026, commit d1be6fde; the tagged release itself carries no files); hash and size are the GitHub release
+/// asset digest read on 2026-11-24, and its file list was read from the zip's central directory (Release/whisper-cli.exe with whisper.dll and
+/// the ggml libraries that pick the processor's best variant). Windows x64 only: the Linux tarballs of that release were not checked, so
+/// Linux has no build for now (the subtitles keep their estimated times there). Updating a version = new rows here with new hashes (and
+/// the sd-cli options checked again).
 /// </summary>
 public static class ToolManifest
 {
@@ -45,6 +50,12 @@ public static class ToolManifest
     /// <summary>stable-diffusion.cpp release of the Linux builds (the last one built on Ubuntu 24.04).</summary>
     public const string SdCppLinuxTag = "master-1043-3be2378";
 
+    /// <summary>whisper.cpp nightly release whose files are the build of <see cref="WhisperVersion"/>.</summary>
+    public const string WhisperTag = "b5454";
+
+    /// <summary>whisper.cpp version of <see cref="WhisperTag"/>.</summary>
+    public const string WhisperVersion = "1.9.5";
+
     /// <summary>uv release (installs the Python voices' Python and packages).</summary>
     public const string UvVersion = "0.13.6";
 
@@ -56,7 +67,8 @@ public static class ToolManifest
 
     /// <summary>Tools that are libraries, not programs: never looked for on the system PATH.</summary>
     public static readonly IReadOnlyList<ToolKind> Libraries = [ToolKind.SpeechRuntime, ToolKind.ImageRuntime, ToolKind.ImageRuntimeCuda, ToolKind.ImageRuntimeVulkan,
-        ToolKind.ImageRuntimeCpu, ToolKind.ImageWeights, ToolKind.EmbeddingWeights, ToolKind.Uv, ToolKind.PythonVoiceWeights, ToolKind.OcrWeights, ToolKind.MusicCode, ToolKind.MusicWeights];
+        ToolKind.ImageRuntimeCpu, ToolKind.ImageWeights, ToolKind.EmbeddingWeights, ToolKind.Uv, ToolKind.PythonVoiceWeights, ToolKind.OcrWeights, ToolKind.MusicCode, ToolKind.MusicWeights,
+        ToolKind.SpeechRecognizer, ToolKind.RecognizerWeights];
 
     /// <summary>Tools that may come from the system PATH when their pinned download is gone (404) or does not match its hash.</summary>
     public static readonly IReadOnlyList<ToolKind> FallbackToSystem = [ToolKind.Ffmpeg];
@@ -134,5 +146,8 @@ public static class ToolManifest
             "f29c3e94ffabd7e6f3ba521dba169a9b7ec12100bf3257087f0f24f6123f3645", "uv-x86_64-unknown-linux-gnu", "uv", 16_799_024),
         new(ToolKind.Uv, UvVersion, "linux-arm64", new Uri($"https://github.com/astral-sh/uv/releases/download/{UvVersion}/uv-aarch64-unknown-linux-gnu.tar.gz"),
             "229e194255c7958d86d56e8790d969a6f74736592133f0dfd0076f754c642c1d", "uv-aarch64-unknown-linux-gnu", "uv", 15_794_886),
+        new(ToolKind.SpeechRecognizer, WhisperVersion, "win-x64",
+            new Uri($"https://github.com/ggml-org/whisper.cpp/releases/download/{WhisperTag}/whisper-bin-x64.zip"),
+            "6ba69e3482d7826214f90a6a9c84ca07782aec1e1d0c6a7c30c994fd5d816ccb", "Release", "whisper-cli.exe", 8_928_640),
     ];
 }

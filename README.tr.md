@@ -508,7 +508,11 @@ Bir şablonla (Ayarlar → Şablonlar) üretilen video, modelin iyi niyetine kal
   Müzik en güçlü temiz girişinden bir ölçü başında başlar, sahne geçişleri küçük bir payla vuruşa kayar, kısa parça vuruşa hizalı ve
   çapraz geçişli döngüyle uzar; parçanın istediği atıf video sayfasında gösterilir.
 - **Kelime kelime vurgu (0.1.34, isteğe bağlı):** o an söylenen kelime vurgu renginde görünür; çizim tarzına göre parlar, büyür ya da
-  yalnız rengi değişir.
+  yalnız rengi değişir; satır büyüyen kelimeye yer bırakır (0.1.48).
+- **Gerçek kelime zamanları (0.1.48, isteğe bağlı):** whisper.cpp ile (MIT, yaklaşık 9 MB, ve çok dilli base modeli, yaklaşık 148 MB;
+  yalnız evet deyince iner, şimdilik Windows) her videonun seslendirmesi bu bilgisayarda bir kez dinlenir, altyazıdaki her kelime
+  söylendiği zamanı alır ve altyazı sesin nefes aldığı yerde bölünür. Metin seslendirme metni kalır; az duyulan cümle "kulakla kontrol et"
+  diye listelenir. Kurulu değilse zamanlar eskisi gibi uzunluğa göre tahmin edilir.
 - **Çizim tarzı:** görseli olmayan sahneler şablonun tarzında çizilir, üretilen görseller de aynı tarzda istenir. Düzenleyicide her
   biri açıklamalı on dört seçenek: *Yapay zekâ seçsin* (yeni şablonun varsayılanı: her videoda konuya uyan görünüşü model seçer), düz
   şekiller, çöp adam anlatıcı, çizgi çizim, kâğıt kesme, infografik, neon, kara kalem, animasyon (çizgi film), teknik çizim (blueprint),

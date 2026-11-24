@@ -14,4 +14,10 @@ public sealed record SpeechClip(string File, long DurationMs, int Characters, de
     /// pause; empty for a clip spoken in one go (its text fills the whole clip).
     /// </summary>
     public IReadOnlyList<SpeechSpan> Spans { get; init; } = [];
+
+    /// <summary>
+    /// The words with their times in the clip, when the voice engine gives them itself (0.1.48: then the clip is not heard again by
+    /// whisper.cpp); empty for every engine today.
+    /// </summary>
+    public IReadOnlyList<Subtitles.RecognizedWord> Words { get; init; } = [];
 }

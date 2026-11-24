@@ -266,4 +266,29 @@ public sealed class StyleSettingsTests
             needed.Where(k => !keys.Contains(k)).ShouldBeEmpty(language);
         }
     }
+
+    [AvaloniaFact]
+    public async Task WithoutWhisperCppTheWordTimesAreEstimatedAndOfferedForInstall()
+    {
+        using var h = new DesktopHarness(s => s.AddSingleton<TMConcept.Core.Subtitles.IWordRecognizer>(new TMConcept.Tests.Core.FakeWordRecognizer(true, false)));
+        await FirstRunTests.CreateAsync(h);
+        var text = h.Get<Localizer>();
+        var section = (await h.Get<SettingsViewModel>().ShowAsync<VideoStylesSettingsViewModel>()).ShouldNotBeNull();
+        section.WordTimesReady.ShouldBeFalse("0.1.48: nothing is installed by itself");
+        section.WordTimesText.ShouldBe(text["styles.word_times.estimated"]);
+        section.WordTimesCanInstall.ShouldBeTrue();
+        section.WordTimesUnsupported.ShouldBeFalse();
+
+        using var ready = new DesktopHarness(s => s.AddSingleton<TMConcept.Core.Subtitles.IWordRecognizer>(new TMConcept.Tests.Core.FakeWordRecognizer(true, true)));
+        await FirstRunTests.CreateAsync(ready);
+        var installed = (await ready.Get<SettingsViewModel>().ShowAsync<VideoStylesSettingsViewModel>()).ShouldNotBeNull();
+        installed.WordTimesText.ShouldBe(ready.Get<Localizer>()["styles.word_times.heard"]);
+        installed.WordTimesCanInstall.ShouldBeFalse();
+
+        using var none = new DesktopHarness(s => s.AddSingleton<TMConcept.Core.Subtitles.IWordRecognizer>(new TMConcept.Tests.Core.FakeWordRecognizer(false, false)));
+        await FirstRunTests.CreateAsync(none);
+        var unsupported = (await none.Get<SettingsViewModel>().ShowAsync<VideoStylesSettingsViewModel>()).ShouldNotBeNull();
+        unsupported.WordTimesUnsupported.ShouldBeTrue("a yellow line where there is no build");
+        unsupported.WordTimesCanInstall.ShouldBeFalse();
+    }
 }

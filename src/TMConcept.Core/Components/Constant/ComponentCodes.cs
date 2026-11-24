@@ -60,6 +60,18 @@ public static class ComponentCodes
     /// <summary>The weights of ACE-Step 1.5 with its Qwen3-Embedding text encoder (0.1.46, C5; about 6 GB, each file pinned by its SHA-256).</summary>
     public const string MusicModel = MusicModelPrefix + "ace-step-1.5";
 
+    /// <summary>
+    /// whisper.cpp (0.1.48, S3): the program that hears the narration and gives each subtitle word its real time. A component of its own,
+    /// apart from its model (rule 18); never downloaded without the user's yes.
+    /// </summary>
+    public const string SpeechRecognizer = "whisper-cpp";
+
+    /// <summary>Prefix of a whisper.cpp model component ("whisper-model.base").</summary>
+    public const string RecognizerModelPrefix = "whisper-model.";
+
+    /// <summary>The multilingual base model of whisper.cpp (about 148 MB; the default, a small multilingual model would be "whisper-model.small").</summary>
+    public const string RecognizerModel = RecognizerModelPrefix + "base";
+
     /// <summary>The start of the code of the text recognition's model and runtime (kept like a model by the clean-ups).</summary>
     public const string OcrPrefix = "ocr.";
 }

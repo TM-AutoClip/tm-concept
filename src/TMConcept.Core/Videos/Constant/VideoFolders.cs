@@ -42,6 +42,12 @@ public static class VideoFolders
     public const string Checks = "checks";
 
     /// <summary>
+    /// Inside <see cref="Checks"/> (0.1.48): the subtitle sentences that matched the narration poorly when the words were heard, with their
+    /// times and match share (written only when there is one; <see cref="VideoWarnings.SubtitleListen"/>).
+    /// </summary>
+    public const string SubtitleCheckFile = "subtitle-check.txt";
+
+    /// <summary>
     /// The background music of the version (0.1.44): the track as it was mixed in, copied here so a later version (a new voice, another
     /// engine) uses the same music without asking for it again.
     /// </summary>

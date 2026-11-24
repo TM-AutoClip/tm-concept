@@ -32,11 +32,14 @@ public static class SubtitleBuilder
 
     /// <summary>
     /// Characters per line that fit between the side margins at <see cref="FontSize"/> (1080×1920: 26; 1920×1080: 42), between
-    /// <see cref="LineMin"/> and <see cref="LineMax"/>.
+    /// <see cref="LineMin"/> and <see cref="LineMax"/>. <paramref name="growPercent"/> (0.1.48, F6's overflow margin): how much the widest
+    /// word of a line may grow on screen (<see cref="Styles.WordHighlight.GrowPercent"/>, 112 for a growing highlight); the width is divided
+    /// by it, so a line whose highlighted word grows still fits (1080×1920 at 112 %: 23).
     /// </summary>
-    public static int LineLength(int width, int height)
+    public static int LineLength(int width, int height, int growPercent = 100)
     {
-        var usable = width - (2 * SideMargin(width));
+        ArgumentOutOfRangeException.ThrowIfLessThan(growPercent, 100);
+        var usable = (width - (2 * SideMargin(width))) * 100.0 / growPercent;
         var fits = (int)Math.Floor(usable / (FontSize(width, height) * CharWidth));
         return Math.Clamp(fits, LineMin, LineMax);
     }

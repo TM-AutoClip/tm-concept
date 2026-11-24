@@ -97,6 +97,13 @@ public static class DesktopServices
         services.AddSingleton<Core.Music.IMusicGenerator, Providers.Music.ElevenLabsMusicGenerator>();
         services.AddSingleton<Core.Music.IMusicGenerators, Core.Music.MusicGenerators>();
         services.AddSingleton<Core.Videos.VideoMusicStep>();
+        // 0.1.48 (F5, S3): the subtitles' word times heard by whisper.cpp (program and model are components, installed only after a yes);
+        // without them the subtitles keep their estimated times.
+        services.AddSingleton(s => new Engines.Recognition.RecognizerModelStore(s.GetRequiredService<Core.Paths.IAppPaths>(),
+            s.GetRequiredService<Engines.Tools.ResumingDownloader>(), s.GetRequiredService<ILogger<Engines.Recognition.RecognizerModelStore>>()));
+        services.AddSingleton<Core.Components.IComponentSource, Engines.Recognition.RecognizerComponentSource>();
+        services.AddSingleton<Core.Subtitles.IWordRecognizer, Engines.Recognition.WhisperCppRecognizer>();
+        services.AddSingleton<Core.Videos.SubtitleTimingStep>();
         services.AddSingleton<Core.Videos.VideoAssembler>();
         services.AddSingleton<Core.Videos.VideoPipeline>();
         // 0.1.28: deleting something deletes everything it generated, for good (files first, the record after).

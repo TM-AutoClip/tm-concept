@@ -42,6 +42,17 @@
                                 Content="{DynamicResource styles.word_highlight}" ToolTip.Tip="{DynamicResource styles.word_highlight.tip}" />
                       <views:HelpTip Text="{DynamicResource styles.subtitles.tip}" />
                     </StackPanel>
+                    <!-- 0.1.48 (F5): the words' times heard by whisper.cpp, or estimated; one setting of the computer, not of the template. -->
+                    <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding Subtitles}">
+                      <TextBlock Name="StyleWordTimes" Classes="small muted" VerticalAlignment="Center" TextWrapping="Wrap"
+                                 Text="{Binding $parent[views:VideoStylesSettingsView].((vm:VideoStylesSettingsViewModel)DataContext).WordTimesText}" />
+                      <Button Name="StyleWordTimesInstall" Content="{DynamicResource styles.word_times.install}"
+                              Command="{Binding $parent[views:VideoStylesSettingsView].((vm:VideoStylesSettingsViewModel)DataContext).InstallWordTimesCommand}"
+                              IsVisible="{Binding $parent[views:VideoStylesSettingsView].((vm:VideoStylesSettingsViewModel)DataContext).WordTimesCanInstall}" />
+                      <views:HelpTip Text="{DynamicResource styles.word_times.tip}" />
+                    </StackPanel>
+                    <TextBlock Name="StyleWordTimesUnsupported" Classes="small warning" TextWrapping="Wrap" Text="{DynamicResource styles.word_times.unsupported}"
+                               IsVisible="{Binding $parent[views:VideoStylesSettingsView].((vm:VideoStylesSettingsViewModel)DataContext).WordTimesUnsupported}" />
                     <StackPanel Orientation="Horizontal">
                       <CheckBox Name="StyleReadable" IsChecked="{Binding ReadableText}" Content="{DynamicResource styles.readable}" />
                       <views:HelpTip Text="{DynamicResource styles.readable.tip}" />

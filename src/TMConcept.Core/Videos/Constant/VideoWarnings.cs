@@ -61,6 +61,19 @@ public static class VideoWarnings
     public static readonly IReadOnlyList<string> Motion = [MotionCut, MotionFreeze, MotionBlack, MotionFlash, MotionEndBlack, MotionFade];
 
     /// <summary>
+    /// The subtitles' words were heard (whisper.cpp, 0.1.48) and some sentence matched the narration text by less than
+    /// <see cref="Subtitles.CaptionTiming.MatchThreshold"/>: listen to it before publishing (yellow; the list with times is the version's
+    /// <see cref="VideoFolders.Checks"/>/<see cref="VideoFolders.SubtitleCheckFile"/>).
+    /// </summary>
+    public const string SubtitleListen = "subtitle_listen";
+
+    /// <summary>whisper.cpp is installed but could not hear a part: those subtitles kept their estimated word times (yellow).</summary>
+    public const string SubtitleEstimated = "subtitle_estimated";
+
+    /// <summary>Every code of the subtitles' timing (made again for every version, never carried over).</summary>
+    public static readonly IReadOnlyList<string> Subtitles = [SubtitleListen, SubtitleEstimated];
+
+    /// <summary>
     /// The sample images were chosen but the profile had none: the video was made without images. Written until 0.1.28 (sample images were
     /// removed in 0.1.29); read, never written.
     /// </summary>

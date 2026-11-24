@@ -518,7 +518,11 @@ A video made with a template (Settings → Templates) follows it without relying
   without words, looped when shorter than the video, counted in the estimate and the cost details, and kept with the video: a new
   version does not make it again.
 - **Word-by-word highlight (0.1.34, optional):** the word being said shows in the accent colour, glowing, growing or only recoloured
-  as the drawing style suits.
+  as the drawing style suits; a line leaves room for a growing word (0.1.48).
+- **Real word times (0.1.48, optional):** with whisper.cpp (MIT, about 9 MB, and its multilingual base model, about 148 MB; installed
+  only after a yes, Windows for now) each video's narration is heard once on this computer, every subtitle word gets the time it is
+  said and the subtitles break where the voice breathes. The text stays the narration's; a sentence heard poorly is listed with
+  "check by ear". Without it the times are estimated by length, as before.
 - **Drawing style:** scenes without an image are drawn in the template's style, and generated images are asked for in the same style.
   Fourteen choices, each described in the editor: *Let the AI choose* (the default of a new template: the model picks the look that fits
   each video), flat shapes, stick-figure narrator, line art, paper cut-out, infographic, neon, pencil sketch, animation (cartoon),

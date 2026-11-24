@@ -230,6 +230,7 @@ public sealed class ToolInstaller(IAppPaths paths, IToolPlatform platform, ToolD
         ToolKind.ImageRuntimeCuda => "sd-cpp-cuda",
         ToolKind.ImageRuntimeVulkan => "sd-cpp-vulkan",
         ToolKind.ImageRuntimeCpu => "sd-cpp-cpu",
+        ToolKind.SpeechRecognizer => "whisper-cpp",
         _ => tool.ToString().ToLowerInvariant(),
     };
 

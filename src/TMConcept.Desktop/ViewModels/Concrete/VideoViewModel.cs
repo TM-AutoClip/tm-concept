@@ -1041,6 +1041,9 @@ public sealed partial class VideoViewModel : PageViewModelBase
 
         // The motion check of the finished video (0.1.41): yellow, the video is kept; the times are in the log, the strips in checks/.
         .. VideoWarnings.Motion.Select(code => (code, "video." + code, ActivityLevel.Warning, "video.noted." + code)),
+
+        // The subtitles' word times (0.1.48): a sentence heard poorly, or a part that kept estimated times; yellow, the video is kept.
+        .. VideoWarnings.Subtitles.Select(code => (code, "video." + code, ActivityLevel.Warning, "video.noted." + code)),
     ];
 
     /// <summary>The warnings of a failed run as activity lines (Warning); returns their texts for the notification.</summary>

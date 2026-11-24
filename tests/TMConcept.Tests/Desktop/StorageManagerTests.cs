@@ -36,9 +36,11 @@ public sealed class StorageManagerTests
         var usage = await h.Get<IComponentUsage>().ComputeAsync(None);
 
         usage.Uses.Keys.Order(StringComparer.Ordinal).ShouldBe(
-            ["engine.remotion", "ffmpeg", "image.z-image-turbo", "music-library", "music.ace-step-1.5", "node", "sd-cpp", "sherpa-onnx", "voice.kokoro"]);
+            ["engine.remotion", "ffmpeg", "image.z-image-turbo", "music-library", "music.ace-step-1.5", "node", "sd-cpp", "sherpa-onnx", "voice.kokoro",
+                "whisper-cpp", "whisper-model.base"]);
         usage.For("music-library").ShouldBe([new DiskUse(string.Empty, string.Empty)], "templates choose the music library, so the app keeps it (0.1.45)");
         usage.For("music.ace-step-1.5").ShouldBe([new DiskUse(string.Empty, string.Empty)], "templates choose the local music model too (0.1.46)");
+        usage.For("whisper-model.base").ShouldBe([new DiskUse(string.Empty, string.Empty)], "every video's subtitles use whisper.cpp once installed (0.1.48)");
         usage.For("voice.kokoro").ShouldBe([new DiskUse("Ottoman", PipelineSteps.Speech)]);
         usage.For("sherpa-onnx").ShouldBe([new DiskUse("Ottoman", PipelineSteps.Speech)], "a dependency is used by whoever uses the voice");
         usage.For("sd-cpp").ShouldBe([new DiskUse("Byzantium", PipelineSteps.Images)]);

@@ -22,7 +22,8 @@ namespace TMConcept.Core.Videos;
 /// the pipeline unchanged, so a version is made exactly as the first video was.
 /// </summary>
 public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator costs, IMediaTools media, IVideoStore videos, IRunStore runs, IAppPaths paths,
-    TimeProvider clock, Plans.ScenePlanner planner, IMotionFrames motion, VideoMusicStep musicStep, ILogger<VideoAssembler> logger)
+    TimeProvider clock, Plans.ScenePlanner planner, IMotionFrames motion, VideoMusicStep musicStep, SubtitleTimingStep subtitleTiming,
+    ILogger<VideoAssembler> logger)
 {
     /// <summary>The background music step (0.1.44 C3, 0.1.45 C4 + F7 + F8).</summary>
     public VideoMusicStep Music => musicStep;
@@ -447,7 +448,10 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         var clips = save.Clips;
         var cueSources = input.Scenes.Select(s => new SubtitleSource((long)Math.Round(s.StartSeconds * 1000),
             clips.ElementAtOrDefault(s.Number - 1)?.DurationMs ?? (long)Math.Round(s.DurationSeconds * 1000), s.Caption)).ToList();
-        var cues = SubtitleBuilder.Build(SubtitleSources(input, clips), SubtitleBuilder.LineLength(input.Width, input.Height));
+        // 0.1.48: the line leaves room for a growing highlighted word (F6), and the words are timed by the voice when whisper.cpp is there (F5).
+        var timing = await subtitleTiming.BuildAsync(input, clips, save.Profile.ContentLanguage,
+            SubtitleBuilder.LineLength(input.Width, input.Height, WordHighlight.GrowPercent(save.Options.Style)), cancellationToken).ConfigureAwait(false);
+        var cues = timing.Cues;
         var overlay = await OverlayAsync(save, cues, cancellationToken).ConfigureAwait(false);
         if (save.Music is { } music)
         {
@@ -493,6 +497,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         File.Move(muxed, output, overwrite: true);
         steps.Finish(VideoSteps.Mux);
         var moved = await MotionAsync(output, input, folder, save.Work, cancellationToken).ConfigureAwait(false);
+        await KeepSubtitleCheckAsync(timing, folder, cancellationToken).ConfigureAwait(false);
 
         var thumbnail = await media.ThumbnailAsync(output, Path.Combine(folder, VideoFolders.ThumbnailFile), cancellationToken).ConfigureAwait(false);
         var record = new VideoRecord
@@ -519,7 +524,8 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
             CostExact = save.Spent.All(c => c.Exact),
             ElapsedMs = save.Watch.ElapsedMilliseconds,
             // No frame that is not black for the thumbnail: a yellow warning (until 0.1.29 only a log line, and an empty video was "ready").
-            Warnings = string.Join(',', save.Warnings.Where(w => !VideoWarnings.Motion.Contains(w)).Concat(moved)
+            Warnings = string.Join(',', save.Warnings.Where(w => !VideoWarnings.Motion.Contains(w) && !VideoWarnings.Subtitles.Contains(w)).Concat(moved)
+                .Concat(timing.Warnings)
                 .Concat(thumbnail ? [] : [VideoWarnings.NoThumbnail]).Distinct()),
             CreatedAtUtc = clock.GetUtcNow(),
         };
@@ -659,21 +665,41 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
     {
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(clips);
-        var sources = new List<SubtitleSource>();
-        foreach (var scene in input.Scenes)
-        {
-            var start = (long)Math.Round(scene.StartSeconds * 1000);
-            var clip = clips.ElementAtOrDefault(scene.Number - 1);
-            if (clip is { Spans.Count: > 0 })
-            {
-                sources.AddRange(clip.Spans.Select(s => new SubtitleSource(start + s.StartMs, s.DurationMs, s.Text)));
-                continue;
-            }
+        return input.Scenes.SelectMany(scene => SceneSources(scene, clips.ElementAtOrDefault(scene.Number - 1))).ToList();
+    }
 
-            sources.Add(new SubtitleSource(start, clip?.DurationMs ?? (long)Math.Round(scene.DurationSeconds * 1000), scene.Caption));
+    /// <summary>What the subtitles of one scene show and when (<see cref="SubtitleSources"/>; <paramref name="clip"/> is the scene's own).</summary>
+    public static IReadOnlyList<SubtitleSource> SceneSources(RenderScene scene, SpeechClip? clip)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        var start = (long)Math.Round(scene.StartSeconds * 1000);
+        return clip is { Spans.Count: > 0 }
+            ? clip.Spans.Select(s => new SubtitleSource(start + s.StartMs, s.DurationMs, s.Text)).ToList()
+            : [new SubtitleSource(start, clip?.DurationMs ?? (long)Math.Round(scene.DurationSeconds * 1000), scene.Caption)];
+    }
+
+    /// <summary>
+    /// Writes the sentences to listen to (<see cref="SubtitleTimingStep.CheckText"/>) into the version's checks folder when there is one
+    /// (after the motion check, which starts that folder afresh). A file that cannot be written is logged; the video is kept.
+    /// </summary>
+    private async Task KeepSubtitleCheckAsync(SubtitleTimingResult timing, string folder, CancellationToken cancellationToken)
+    {
+        var text = SubtitleTimingStep.CheckText(timing.Sentences);
+        if (text.Length == 0)
+        {
+            return;
         }
 
-        return sources;
+        try
+        {
+            var checks = Path.Combine(folder, VideoFolders.Checks);
+            Directory.CreateDirectory(checks);
+            await File.WriteAllTextAsync(Path.Combine(checks, VideoFolders.SubtitleCheckFile), text, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarning(ex, "The subtitle check list was not written");
+        }
     }
 
     /// <summary>The starts of the scenes that begin with a soft transition (ffmpeg fades through black there at the mux).</summary>

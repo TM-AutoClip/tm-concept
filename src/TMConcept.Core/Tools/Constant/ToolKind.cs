@@ -87,6 +87,15 @@ public enum ToolKind
     /// <summary>One weight file of the local music model (0.1.46: ACE-Step 1.5 and Qwen3-Embedding from Hugging Face, pinned by SHA-256).</summary>
     MusicWeights = 22,
 
+    /// <summary>
+    /// whisper.cpp (0.1.48, MIT, ggml-org): whisper-cli of the official processor build, which hears the narration and gives each word its
+    /// time (S3); only the subtitles' timing uses it, never the text.
+    /// </summary>
+    SpeechRecognizer = 23,
+
+    /// <summary>The multilingual ggml model file of whisper.cpp (0.1.48; one file from Hugging Face, pinned by commit and SHA-256).</summary>
+    RecognizerWeights = 24,
+
     /// <summary>A new version of the app itself (a release asset; its SHA-256 comes from the release notes). Not a component.</summary>
     AppUpdate = 100,
 }
