@@ -60,6 +60,7 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         Motions = Choices<MotionIntensity>("style.motion.");
         Tempos = Choices<NarrationTempo>("style.tempo.");
         Drawers = Choices<SceneDrawer>("style.drawer.");
+        Qualities = Choices<QualityMode>("style.quality.");
         Placements = Choices<ClosingPlacement>("style.closing.");
         Platforms = Choices<ClosingPlatform>("style.platform.");
 
@@ -105,6 +106,7 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         Motion = Pick(Motions, (int)_source.Motion);
         Tempo = Pick(Tempos, (int)_source.Tempo);
         Drawer = Pick(Drawers, (int)_source.Drawer);
+        Quality = Pick(Qualities, (int)_source.Quality);
         Closing = Pick(Placements, (int)_source.Closing);
         Platform = Pick(Platforms, (int)_source.ClosingPlatform);
         Phrases = PhraseChoices((ClosingPlatform)Platform.Value);
@@ -210,6 +212,9 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
 
     /// <summary>Who draws the HyperFrames videos (0.1.33): the app from the scene plan, or the model's free code.</summary>
     public IReadOnlyList<NumberChoice> Drawers { get; }
+
+    /// <summary>The quality modes (F11, 0.1.50): Fast (the default), Standard, Careful.</summary>
+    public IReadOnlyList<NumberChoice> Qualities { get; }
 
     /// <summary>Where the closing goes (off, voice, screen, both).</summary>
     public IReadOnlyList<NumberChoice> Placements { get; }
@@ -328,6 +333,10 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
     /// <summary>Who draws the video (0.1.33).</summary>
     [ObservableProperty]
     public partial NumberChoice Drawer { get; set; }
+
+    /// <summary>The quality mode (F11, 0.1.50).</summary>
+    [ObservableProperty]
+    public partial NumberChoice Quality { get; set; }
 
     /// <summary>Closing placement.</summary>
     [ObservableProperty]
@@ -576,6 +585,7 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         style.Motion = (MotionIntensity)Motion.Value;
         style.Tempo = (NarrationTempo)Tempo.Value;
         style.Drawer = (SceneDrawer)Drawer.Value;
+        style.Quality = (QualityMode)(Quality?.Value ?? 0);
         style.WordHighlight = WordHighlight;
         style.Finish = Finish;
         style.PlanReview = PlanReview;

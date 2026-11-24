@@ -57,6 +57,22 @@ public static class PipelineSteps
     /// </summary>
     public const string Music = "music";
 
+    /// <summary>
+    /// The quality check (optional, F11, 0.1.50): a model that reads images (online, or a local one such as Gemma 3 4B) reviews the rendered
+    /// frames and the final critic scores the video when the template's quality mode is Standard or Careful; it can differ from the model that
+    /// writes the plan. Off: the quality mode does nothing (a yellow warning). Its calls are this cost line.
+    /// </summary>
+    public const string QualityCheck = "quality-check";
+
+    /// <summary>Cost label of the final critic's call (0.1.50; the quality check step's model makes it).</summary>
+    public const string QualityCriticCost = "quality-critic";
+
+    /// <summary>Cost label of the careful mode's repaired scene plans (0.1.50; the video code model writes them, one small call per scene).</summary>
+    public const string QualityRepairCost = "quality-repair";
+
+    /// <summary>Cost label of the careful mode's character sheet (F14, 0.1.50; one more picture of the image model).</summary>
+    public const string CharacterSheetCost = "character-sheet";
+
     /// <summary>Every step in display order.</summary>
     public static readonly IReadOnlyList<PipelineStep> All =
     [
@@ -68,6 +84,7 @@ public static class PipelineSteps
         new(Topics, ModelCapability.Chat, ["anthropic/claude-haiku-5-5", "zai/glm-5.3-flash", "deepseek/deepseek-flash"], Optional: true),
         new(DocumentText, ModelCapability.Vision, ["anthropic/claude-haiku-5-5"], Optional: true),
         new(ImagePoints, ModelCapability.Vision, ["app-ollama/gemma3:4b", "anthropic/claude-haiku-5-5"], Optional: true),
+        new(QualityCheck, ModelCapability.Vision, ["app-ollama/gemma3:4b", "anthropic/claude-haiku-5-5"], Optional: true),
     ];
 
     /// <summary>The steps chosen on the Generate concepts page.</summary>
@@ -75,8 +92,8 @@ public static class PipelineSteps
 
     /// <summary>
     /// The steps chosen on the Concept → video page: the video's own (code with its engine, images, the image points of
-    /// a video drawn by the app, narration) and the concept step, which the AI edit of an approved concept uses there (production names the
+    /// a video drawn by the app, the quality check (0.1.50), narration) and the concept step, which the AI edit of an approved concept uses there (production names the
     /// video's own itself).
     /// </summary>
-    public static readonly IReadOnlyList<string> VideoPage = [VideoCode, Images, ImagePoints, Speech, Concepts];
+    public static readonly IReadOnlyList<string> VideoPage = [VideoCode, Images, ImagePoints, QualityCheck, Speech, Concepts];
 }

@@ -38,7 +38,7 @@ public static partial class ImagePromptBuilder
     /// The user text. With a template, its drawing style is the one illustration style of every image (<paramref name="style"/>), so the
     /// images match what the video code draws in scenes without one.
     /// </summary>
-    public static string User(string channel, IReadOnlyList<string> visuals, Styles.DrawStyle? style = null)
+    public static string User(string channel, IReadOnlyList<string> visuals, Styles.DrawStyle? style = null, bool character = false)
     {
         ArgumentNullException.ThrowIfNull(visuals);
         var text = new StringBuilder("Channel: «").Append(Clean(channel)).Append("»\n");
@@ -55,6 +55,14 @@ public static partial class ImagePromptBuilder
             text.Append("Illustration style of every image: ").Append(Videos.VideoStylePrompt.ImageStyle(drawn)).Append(".\n");
         }
 
+        if (character)
+        {
+            // F14 (0.1.50, Standard and Careful): a recurring character is described once; the app adds the same words to every prompt.
+            text.Append("If the same character appears in more than one scene (a narrator, a recurring person, animal or creature), describe them ")
+                .Append("ONCE in \"character\" in at most ").Append(Videos.QualityLimits.CharacterMax.ToString(CultureInfo.InvariantCulture))
+                .Append(" characters (build, face, clothing, colours, drawing style) and only name them in the prompts; otherwise leave \"character\" empty.\n");
+        }
+
         text.Append("Scenes:\n");
         for (var i = 0; i < visuals.Count; i++)
         {
@@ -67,10 +75,10 @@ public static partial class ImagePromptBuilder
     /// <summary>
     /// The one repair request: the same scenes, what the first answer got wrong (<see cref="Check"/>'s findings) and the format again.
     /// </summary>
-    public static string Repair(string channel, IReadOnlyList<string> visuals, Styles.DrawStyle? style, IReadOnlyList<string> problems)
+    public static string Repair(string channel, IReadOnlyList<string> visuals, Styles.DrawStyle? style, IReadOnlyList<string> problems, bool character = false)
     {
         ArgumentNullException.ThrowIfNull(problems);
-        return User(channel, visuals, style) + "\nYour previous answer did not fit the scenes: " + string.Join("; ", problems)
+        return User(channel, visuals, style, character) + "\nYour previous answer did not fit the scenes: " + string.Join("; ", problems)
             + ". Write it again: exactly one item per scene, \"scene\" numbered 1 to " + visuals.Count.ToString(CultureInfo.InvariantCulture)
             + ", every prompt filled.";
     }
@@ -79,16 +87,59 @@ public static partial class ImagePromptBuilder
     /// The answer schema (no minItems: the count is in the prompt and checked in code); <paramref name="chooseStyle"/> (a template without a
     /// style, 0.1.32) adds the required "style" the model chose.
     /// </summary>
-    public static JsonObject Schema(bool chooseStyle = false)
+    public static JsonObject Schema(bool chooseStyle = false, bool character = false)
     {
         var schema = PromptSchema();
+        if (!chooseStyle && !character)
+        {
+            return schema;
+        }
+
+        var required = new JsonArray("prompts");
         if (chooseStyle)
         {
             ((JsonObject)schema["properties"]!)["style"] = new JsonObject { ["type"] = "string" };
-            schema["required"] = new JsonArray("prompts", "style");
+            required.Add((JsonNode)JsonValue.Create("style"));
         }
 
+        if (character)
+        {
+            ((JsonObject)schema["properties"]!)["character"] = new JsonObject { ["type"] = "string" };
+            required.Add((JsonNode)JsonValue.Create("character"));
+        }
+
+        schema["required"] = required;
         return schema;
+    }
+
+    /// <summary>
+    /// The recurring character an answer described (F14, 0.1.50; <see cref="Schema"/> with a character): one line of at most
+    /// <see cref="Videos.QualityLimits.CharacterMax"/> characters; empty when there is none.
+    /// </summary>
+    public static string ReadCharacter(string? answer)
+    {
+        var value = ModelJson.TryParseObject(answer)?["character"] is JsonValue node && node.TryGetValue<string>(out var text) ? text : string.Empty;
+        return Text.TextClean.OneLine(value, Videos.QualityLimits.CharacterMax);
+    }
+
+    /// <summary>The words that bring the character's description into a prompt (F14).</summary>
+    public const string CharacterLead = " Recurring character, whenever shown: ";
+
+    /// <summary>
+    /// Every prompt with the same character description (F14, 0.1.50): added once at its end (a prompt that already carries it is left as it
+    /// is, so a kept prompt is never given it twice); no description = the prompts as they are.
+    /// </summary>
+    public static IReadOnlyList<string> WithCharacter(IReadOnlyList<string> prompts, string character)
+    {
+        ArgumentNullException.ThrowIfNull(prompts);
+        var words = Text.TextClean.OneLine(character, Videos.QualityLimits.CharacterMax).TrimEnd('.');
+        if (words.Length == 0)
+        {
+            return prompts;
+        }
+
+        var tail = CharacterLead + words + ".";
+        return prompts.Select(p => p.Contains(tail, StringComparison.Ordinal) ? p : p.TrimEnd() + tail).ToList();
     }
 
     /// <summary>

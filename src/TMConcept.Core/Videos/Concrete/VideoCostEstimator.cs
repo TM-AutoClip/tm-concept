@@ -3,6 +3,7 @@ using TMConcept.Core.Costs;
 using TMConcept.Core.Engines;
 using TMConcept.Core.Images;
 using TMConcept.Core.Models;
+using TMConcept.Core.Pipeline;
 using TMConcept.Core.Profiles;
 using TMConcept.Core.Render;
 using TMConcept.Core.Scenes;
@@ -15,7 +16,9 @@ namespace TMConcept.Core.Videos;
 /// <see cref="VideoCodeBudget.For"/>, and one repair may double it: the high end counts it), the image prompts and one image per scene when an image model is chosen, and the narration's
 /// characters for an online voice, and (0.1.46, C5) a template's generated music: one piece per video at the music model's price
 /// (<see cref="Music.MusicPricing"/>; a shorter piece is looped, never a second one made). Local models cost nothing. The exact cost of a made
-/// video is its own record. <paramref name="catalog"/> finds a template's music model (none = its music is not counted).
+/// video is its own record. <paramref name="catalog"/> finds a template's music model (none = its music is not counted). 0.1.50 (F11 + F14):
+/// a template's quality mode adds the reviewer's calls (<see cref="Quality"/>: the review and the final critic; the careful mode's further
+/// rounds, repaired plans and character sheet at the high end only, the worst case).
 /// </summary>
 public sealed class VideoCostEstimator(ICostCalculator costs, IModelCatalog? catalog = null)
 {
@@ -31,7 +34,126 @@ public sealed class VideoCostEstimator(ICostCalculator costs, IModelCatalog? cat
     /// its sentence to the narration and its drawing style goes into the image prompt.
     /// </summary>
     public CostEstimate Estimate(IReadOnlyList<Concept> concepts, Profile profile, IVideoEngine? engine, CatalogModel? code, CatalogModel? image,
-        CatalogModel? speech, bool subtitles, Styles.VideoStyle? style = null)
+        CatalogModel? speech, bool subtitles, Styles.VideoStyle? style = null, CatalogModel? reviewer = null)
+    {
+        ArgumentNullException.ThrowIfNull(concepts);
+        return QualityLines(concepts, profile, engine, code, image, reviewer, subtitles, style).Aggregate(
+            Base(concepts, profile, engine, code, image, speech, subtitles, style), (sum, line) => sum.Plus(line.Cost));
+    }
+
+    /// <summary>
+    /// The quality mode's lines of the given concepts (F11 + F14, 0.1.50), one per cost label, added up over the concepts; empty in Fast mode or
+    /// without a reviewer (the check is then skipped with a warning, nothing is paid).
+    /// </summary>
+    public IReadOnlyList<QualityCostLine> QualityLines(IReadOnlyList<Concept> concepts, Profile profile, IVideoEngine? engine, CatalogModel? code,
+        CatalogModel? image, CatalogModel? reviewer, bool subtitles, Styles.VideoStyle? style)
+    {
+        ArgumentNullException.ThrowIfNull(concepts);
+        ArgumentNullException.ThrowIfNull(profile);
+        if (!QualityRules.Reviews(style) || reviewer is null)
+        {
+            return [];
+        }
+
+        var lines = new List<QualityCostLine>();
+        foreach (var input in concepts.Select(c => Input(c, profile, style)).OfType<RenderInput>())
+        {
+            foreach (var line in Quality(input, profile.ContentLanguage, engine, code, image, reviewer, subtitles, style))
+            {
+                var at = lines.FindIndex(l => l.Step == line.Step);
+                if (at < 0)
+                {
+                    lines.Add(line);
+                }
+                else
+                {
+                    lines[at] = lines[at] with { Cost = lines[at].Cost.Plus(line.Cost) };
+                }
+            }
+        }
+
+        return lines;
+    }
+
+    /// <summary>
+    /// The quality mode's lines of one video (F11 + F14, 0.1.50): Standard = one frame review (the sheet as one picture) and one final critic.
+    /// Careful = the same at the low end; at the high end <see cref="QualityLimits.MaxRounds"/> reviews, every scene's plan asked again after
+    /// each review but the last (the app's drawer only; the free code is not repaired), and with an image model the character sheet (one
+    /// picture) and its comparison (one call with every scene picture). A local reviewer, code or image model costs nothing.
+    /// </summary>
+    public IReadOnlyList<QualityCostLine> Quality(RenderInput input, string language, IVideoEngine? engine, CatalogModel? code, CatalogModel? image,
+        CatalogModel? reviewer, bool subtitles, Styles.VideoStyle? style)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        if (!QualityRules.Reviews(style) || reviewer is null)
+        {
+            return [];
+        }
+
+        subtitles = style?.Subtitles ?? subtitles;
+        var frames = QualityRules.Moments(input);
+        var text = costs.Tokens(QualityPrompt.FramesUser(input, frames, subtitles), language);
+        var review = costs.EstimateChat(reviewer, costs.Tokens(QualityPrompt.FramesSystem, ContentLanguages.English) + text + QualityLimits.ImageTokens, 0,
+            ReviewOutputMin, QualityLimits.ReviewOutputTokens);
+        var critic = costs.EstimateChat(reviewer, costs.Tokens(QualityPrompt.CriticSystem, ContentLanguages.English) + text + QualityLimits.ImageTokens, 0,
+            ReviewOutputMin, QualityLimits.CriticOutputTokens);
+        var lines = new List<QualityCostLine>();
+        if (!QualityRules.Repairs(style))
+        {
+            lines.Add(new QualityCostLine(PipelineSteps.QualityCheck, review));
+            lines.Add(new QualityCostLine(PipelineSteps.QualityCriticCost, critic));
+            return lines;
+        }
+
+        var scenes = input.Scenes.Count;
+        var check = review with { MaxUsd = review.MaxUsd * QualityLimits.MaxRounds };
+        if (image is not null)
+        {
+            // F14: the comparison sees the sheet and every scene picture (only when a recurring character is described: the high end).
+            var compare = costs.EstimateChat(reviewer, costs.Tokens(QualityPrompt.CharacterSystem, ContentLanguages.English) + (QualityLimits.ImageTokens * (scenes + 1)),
+                0, 0, QualityLimits.ReviewOutputTokens);
+            check = check with { MaxUsd = check.MaxUsd + compare.MaxUsd };
+            var sheet = image.Provider == ModelProviders.Local ? 0 : image.ImageUsd;
+            lines.Add(new QualityCostLine(PipelineSteps.CharacterSheetCost, new CostEstimate(0, sheet, 0, 0, 0)));
+        }
+
+        lines.Add(new QualityCostLine(PipelineSteps.QualityCheck, check));
+        if (code is not null && engine is not null && Plans.PlanDrawer.Draws(engine.Kind, style))
+        {
+            var motion = style?.Motion ?? Styles.MotionIntensity.Normal;
+            var tempo = style?.Tempo ?? Core.Speech.NarrationTempos.Default;
+            var system = costs.Tokens(Plans.PlanPromptBuilder.System(motion, tempo), ContentLanguages.English);
+            var one = costs.EstimateChat(code, system + QualityLimits.RepairPromptTokens, 0, 0, QualityLimits.RepairOutputTokens);
+            lines.Add(new QualityCostLine(PipelineSteps.QualityRepairCost, new CostEstimate(0, one.MaxUsd * scenes * (QualityLimits.MaxRounds - 1), 0, 0, 0)));
+        }
+
+        lines.Add(new QualityCostLine(PipelineSteps.QualityCriticCost, critic));
+        return lines;
+    }
+
+    /// <summary>Fewest output tokens of a review or critic answer (an empty list, a short score list).</summary>
+    public const long ReviewOutputMin = 150;
+
+    /// <summary>The timed input of a concept as the estimate sees it (its spoken closing added); null when it has no scenes.</summary>
+    private static RenderInput? Input(Concept concept, Profile profile, Styles.VideoStyle? style)
+    {
+        var scenes = SceneSplitter.Split(concept.Content).Scenes;
+        if (scenes.Count == 0)
+        {
+            return null;
+        }
+
+        var (width, height) = RenderInputBuilder.Size(profile.Format);
+        var closing = Styles.VideoStyleRules.Closing(style, profile.ContentLanguage);
+        var spoken = closing is { Voice: true } ? Styles.ClosingNarration.Append(scenes, closing.Sentence) : scenes;
+        return RenderInputBuilder.Build(concept.Title, profile.ContentLanguage, spoken.Select(s => new RenderSceneSource(s.Visual, s.Narration,
+            string.Empty, VideoRemaker.SilentMs(s.Script, profile.ContentLanguage), s.Transition)).ToList(), width, height, 30,
+            endHoldMs: Styles.VideoStyleRules.EndHoldMs(style, profile.ContentLanguage));
+    }
+
+    /// <summary>The estimate without the quality mode (the video as it was made before 0.1.50).</summary>
+    private CostEstimate Base(IReadOnlyList<Concept> concepts, Profile profile, IVideoEngine? engine, CatalogModel? code, CatalogModel? image,
+        CatalogModel? speech, bool subtitles, Styles.VideoStyle? style)
     {
         ArgumentNullException.ThrowIfNull(concepts);
         ArgumentNullException.ThrowIfNull(profile);
@@ -63,7 +185,8 @@ public sealed class VideoCostEstimator(ICostCalculator costs, IModelCatalog? cat
                 if (image is not null)
                 {
                     var visuals = scenes.Select(s => s.Visual.Length > 0 ? s.Visual : s.Narration).ToList();
-                    var prompt = costs.Tokens(ImagePromptBuilder.System + ImagePromptBuilder.User(profile.Name, visuals, style?.DrawStyle), profile.ContentLanguage);
+                    var prompt = costs.Tokens(ImagePromptBuilder.System + ImagePromptBuilder.User(profile.Name, visuals, style?.DrawStyle,
+                        QualityRules.Reviews(style)), profile.ContentLanguage);
                     total = total.Plus(costs.EstimateChat(code, prompt, 0, PromptTokensPerScene * scenes.Count / 2, PromptTokensPerScene * scenes.Count));
                 }
             }

@@ -112,6 +112,13 @@ public sealed class VideoStyle
     public bool FirstSceneReview { get; set; }
 
     /// <summary>
+    /// The quality mode (F11, 0.1.50, <see cref="QualityMode"/>): Fast (the default, and what a template saved before reads as) makes the video
+    /// as before; Standard reviews the rendered frames and scores the video (a report only); Careful also repairs in rounds. The reviewer is the
+    /// video page's "quality check" step; its calls are in the estimate.
+    /// </summary>
+    public QualityMode Quality { get; set; } = QualityMode.Fast;
+
+    /// <summary>
     /// Background music (0.1.44, C3): its source, level, ducking under the narration and fade-out. A template saved before has none in its
     /// JSON and reads as off, so its videos sound as they did.
     /// </summary>

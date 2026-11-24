@@ -25,4 +25,10 @@ public sealed record VersionSave(Guid Id, Profile Profile, Guid? ConceptId, stri
     /// under the narration and copied into the version folder with its line in the asset record.
     /// </summary>
     public PreparedMusic? Music { get; init; }
+
+    /// <summary>
+    /// What the template's quality mode found (F11 + F14, 0.1.50); null = it did not review (Fast, or no reviewer). Written into the version's
+    /// <see cref="VideoFolders.Quality"/> folder with its sheets.
+    /// </summary>
+    public QualityReport? Quality { get; init; }
 }

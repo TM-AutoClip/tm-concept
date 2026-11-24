@@ -24,6 +24,12 @@ public static class VideoSteps
     /// <summary>The engine renders the silent video.</summary>
     public const string Render = "render";
 
+    /// <summary>
+    /// The quality check of the rendered video (F11, 0.1.50; only when the template's quality mode is not Fast and a reviewer is chosen): the
+    /// frame review, the repair rounds of the careful mode and the final critic.
+    /// </summary>
+    public const string Quality = "quality";
+
     /// <summary>ffmpeg joins the video, the narration and the subtitles.</summary>
     public const string Mux = "mux";
 
@@ -31,5 +37,5 @@ public static class VideoSteps
     public const string Save = "save";
 
     /// <summary>Every step in the order of the work.</summary>
-    public static readonly IReadOnlyList<string> All = [Prepare, Speech, Images, Timing, Code, Render, Mux, Save];
+    public static readonly IReadOnlyList<string> All = [Prepare, Speech, Images, Timing, Code, Render, Quality, Mux, Save];
 }

@@ -74,6 +74,27 @@ public static class VideoWarnings
     public static readonly IReadOnlyList<string> Subtitles = [SubtitleListen, SubtitleEstimated];
 
     /// <summary>
+    /// The quality check (F11, 0.1.50) left a blocker in the last review (seen at normal speed), or a picture that does not match the
+    /// character sheet (yellow; the findings are in the version's quality report).
+    /// </summary>
+    public const string QualityBlocker = "quality_blocker";
+
+    /// <summary>The quality check left only polish findings (seen when a frame is enlarged; yellow).</summary>
+    public const string QualityPolish = "quality_polish";
+
+    /// <summary>A heading of the final critic scored below <see cref="QualityLimits.CriticPass"/> ("does not pass"; yellow, a report only).</summary>
+    public const string QualityFails = "quality_fails";
+
+    /// <summary>The careful mode found faults in a video in the model's free code: they are reported, never repaired (yellow).</summary>
+    public const string QualityNotRepaired = "quality_not_repaired";
+
+    /// <summary>The template asks for a quality check but no reviewer is chosen (or it is not ready): the video was made without the check (yellow).</summary>
+    public const string QualityNoReviewer = "quality_no_reviewer";
+
+    /// <summary>Every code of the quality check (made again for every video, never carried over).</summary>
+    public static readonly IReadOnlyList<string> Quality = [QualityBlocker, QualityPolish, QualityFails, QualityNotRepaired, QualityNoReviewer];
+
+    /// <summary>
     /// The sample images were chosen but the profile had none: the video was made without images. Written until 0.1.28 (sample images were
     /// removed in 0.1.29); read, never written.
     /// </summary>

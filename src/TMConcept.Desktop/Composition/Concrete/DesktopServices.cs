@@ -106,6 +106,8 @@ public static class DesktopServices
         services.AddSingleton<Core.Subtitles.IWordRecognizer, Engines.Recognition.WhisperCppRecognizer>();
         services.AddSingleton<Core.Videos.SubtitleTimingStep>();
         services.AddSingleton<Core.Videos.VideoAssembler>();
+        services.AddSingleton<Core.Videos.IQualityReviewer, Core.Videos.QualityReviewer>();
+        services.AddSingleton<Core.Videos.QualityStep>();
         services.AddSingleton<Core.Videos.VideoPipeline>();
         // 0.1.28: deleting something deletes everything it generated, for good (files first, the record after).
         services.AddSingleton<Core.Deletion.VideoDeletion>();

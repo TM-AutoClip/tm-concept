@@ -23,4 +23,10 @@ public static class ProductionGaps
 
     /// <summary>The pronunciation dictionary of the video's language is empty (a suggestion; optional).</summary>
     public const string Pronunciation = "pronunciation";
+
+    /// <summary>
+    /// The template's quality mode reviews but no quality check model is chosen (F11, 0.1.50; optional: skipped = the video is made without the
+    /// check, with a yellow warning).
+    /// </summary>
+    public const string QualityReviewer = "quality-reviewer";
 }

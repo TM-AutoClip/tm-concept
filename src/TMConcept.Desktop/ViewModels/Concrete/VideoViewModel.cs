@@ -669,7 +669,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
         {
             var style = SelectedStyle;
             var language = _session.Profile?.ContentLanguage ?? ContentLanguages.English;
-            var chosen = new[] { PipelineSteps.VideoCode, PipelineSteps.Images, PipelineSteps.ImagePoints, PipelineSteps.Speech }
+            var chosen = new[] { PipelineSteps.VideoCode, PipelineSteps.Images, PipelineSteps.ImagePoints, PipelineSteps.QualityCheck, PipelineSteps.Speech }
                 .Select(s => Picker.Model(s)).OfType<CatalogModel>().ToList();
             var withoutKey = await _resolver.ProvidersWithoutKeyAsync(chosen, CancellationToken.None).ConfigureAwait(true);
             var ownMusic = style?.Music is { Source: MusicSource.OwnFile };
@@ -707,6 +707,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
                 MusicExists = exists,
                 MusicReadable = readable,
                 PronunciationEmpty = dictionaryEmpty,
+                QualityWithoutReviewer = QualityRules.Reviews(style) && Picker.Model(PipelineSteps.QualityCheck) is null,
             }));
         }
         catch (Exception ex) when (ex is not OperationCanceledException and not OutOfMemoryException)
@@ -718,7 +719,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
     /// <summary>The page's part of fixing a gap: the model cards open for a model or the voice; then the list is checked again.</summary>
     private async Task FixGapAsync(GapRowViewModel row)
     {
-        if (row.Gap.Code is ProductionGaps.CodeModel or ProductionGaps.Voice)
+        if (row.Gap.Code is ProductionGaps.CodeModel or ProductionGaps.Voice or ProductionGaps.QualityReviewer)
         {
             ModelsOpen = true;
         }
@@ -871,6 +872,11 @@ public sealed partial class VideoViewModel : PageViewModelBase
 
         var needed = new List<string> { PipelineSteps.VideoCode };
         needed.AddRange(new[] { PipelineSteps.Images, PipelineSteps.ImagePoints, PipelineSteps.Speech }.Where(s => Picker.Model(s) is not null));
+        if (QualityRules.Reviews(SelectedStyle) && Picker.Model(PipelineSteps.QualityCheck) is not null)
+        {
+            // F11 (0.1.50): the quality check model only when the chosen template reviews (a Fast template never loads it).
+            needed.Add(PipelineSteps.QualityCheck);
+        }
         bool ready;
         try
         {
@@ -1244,10 +1250,19 @@ public sealed partial class VideoViewModel : PageViewModelBase
         }
 
         var engine = _engines.FirstOrDefault(e => e.Kind == Picker.Row(PipelineSteps.VideoCode)?.Engine?.Kind);
+        var reviewer = Picker.Model(PipelineSteps.QualityCheck);
         var estimate = _estimator.Estimate(queued, profile, engine, code, Picker.Model(PipelineSteps.Images), Picker.Model(PipelineSteps.Speech),
-            SelectedStyle?.Subtitles ?? true, SelectedStyle);
+            SelectedStyle?.Subtitles ?? true, SelectedStyle, reviewer);
         QueueEstimate = _text.Format("concepts.estimate.tiny", _text.Usd(estimate.MinUsd), _text.Usd(estimate.MaxUsd));
         QueueEstimateTip = _text.Format("video.estimate", queued.Count, _text.Usd(estimate.MinUsd), _text.Usd(estimate.MaxUsd));
+
+        // F11 + F14 (0.1.50): the quality mode's own lines (the reviewer, the critic, the worst case of the careful mode's repairs).
+        foreach (var line in _estimator.QualityLines(queued, profile, engine, code, Picker.Model(PipelineSteps.Images), reviewer, SelectedStyle?.Subtitles ?? true,
+            SelectedStyle))
+        {
+            QueueEstimateTip += "\n" + _text.Format("video.estimate.quality_line", _text["produced.cost." + line.Step], _text.Usd(line.Cost.MinUsd),
+                _text.Usd(line.Cost.MaxUsd));
+        }
     }
 
     /// <summary>

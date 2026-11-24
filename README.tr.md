@@ -519,6 +519,12 @@ Bir şablonla (Ayarlar → Şablonlar) üretilen video, modelin iyi niyetine kal
 - **Bitmiş videoya notlar (0.1.49):** oynarken yaz (video durur; not o ana ve sahneye bağlanır), sonra **Düzelt**: tek istek, yalnız not
   düşülen sahnelerin değiştiği yeni bir sürüm. Video sayfası üretimden önce eksikleri adlarıyla sayar (şablon, model, anahtar kırmızı;
   seslendirme, müzik dosyası, telaffuz sarı, atlanabilir).
+- **Kalite modu (0.1.50):** *Hızlı* (varsayılan) videoyu eskisi gibi yapar. *Standart*: görsel okuyabilen bir model (video sayfasındaki
+  isteğe bağlı *Kalite denetimi* adımı, yerel ve ücretsiz ya da çevrimiçi) render edilen karelerin tek sayfasını tek istekle inceler
+  (engel / rötuş), son eleştirmen sabit başlıkları 1–5 puanlar (bir istek daha); yalnız rapor. *Özenli*: aynısı, artı onarım turları
+  (program çizerken yalnız kusurlu sahnenin planı yeniden istenir; en çok 3 inceleme, 2.'den sonra yalnız engeller, liste küçülmezse
+  durur), tekrar eden karakterin sayfasıyla resimlerin karşılaştırılması ve yerel denetçinin kusurlu bulduğu yerel resimlerin yeniden
+  yapılması. Her istek tahmine girer. Tekrar eden karakter bir kez tarif edilip her resim istemine eklenir (Standart ve Özenli).
 - **Çizim tarzı:** görseli olmayan sahneler şablonun tarzında çizilir, üretilen görseller de aynı tarzda istenir. Düzenleyicide her
   biri açıklamalı on dört seçenek: *Yapay zekâ seçsin* (yeni şablonun varsayılanı: her videoda konuya uyan görünüşü model seçer), düz
   şekiller, çöp adam anlatıcı, çizgi çizim, kâğıt kesme, infografik, neon, kara kalem, animasyon (çizgi film), teknik çizim (blueprint),

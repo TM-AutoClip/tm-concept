@@ -65,6 +65,15 @@ public static class VideoFolders
     /// </summary>
     public const string NotesFile = "notes.json";
 
+    /// <summary>
+    /// The quality check's folder of the version (F11 + F14, 0.1.50): its report (<see cref="QualityReportFile"/>), the last review sheet and
+    /// the character sheet. Written only when the template's quality mode reviewed the video.
+    /// </summary>
+    public const string Quality = "quality";
+
+    /// <summary>Inside <see cref="Quality"/>: the report (<see cref="QualityReport"/>, JSON).</summary>
+    public const string QualityReportFile = "report.json";
+
     /// <summary>The thumbnail (the Produced videos page makes it again when it is missing).</summary>
     public const string ThumbnailFile = "thumbnail.jpg";
 

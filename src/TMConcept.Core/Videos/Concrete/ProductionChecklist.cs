@@ -4,7 +4,7 @@ namespace TMConcept.Core.Videos;
 /// The list of what is missing before production (F16, 0.1.49; ReelMimic's "every input is given or skipped on purpose", our rules): a
 /// template and a video code model must be chosen and every chosen online model's provider must have a key (required: "Produce" is off until
 /// they are); the narration being off, the template's own music file missing or unreadable, and an empty pronunciation dictionary are named
-/// and can be fixed or skipped (optional). A skipped music gap makes the video without its music; the others change nothing. With the
+/// and can be fixed or skipped (optional), as is a template whose quality mode reviews without a quality check model (0.1.50). A skipped music gap makes the video without its music; the others change nothing. With the
 /// defaults (a template, a code model with a key, a voice) only the pronunciation suggestion may show, and nothing is turned off.
 /// </summary>
 public static class ProductionChecklist
@@ -42,6 +42,11 @@ public static class ProductionChecklist
         if (facts.Voice && facts.PronunciationEmpty)
         {
             gaps.Add(new ProductionGap(ProductionGaps.Pronunciation, GapKind.Optional));
+        }
+
+        if (facts.QualityWithoutReviewer)
+        {
+            gaps.Add(new ProductionGap(ProductionGaps.QualityReviewer, GapKind.Optional));
         }
 
         return gaps;

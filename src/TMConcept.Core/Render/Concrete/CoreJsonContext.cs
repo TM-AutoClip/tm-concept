@@ -18,4 +18,5 @@ namespace TMConcept.Core.Render;
 [JsonSerializable(typeof(List<Videos.AssetEntry>))]
 [JsonSerializable(typeof(List<Videos.TimeNote>))]
 [JsonSerializable(typeof(Music.MusicCatalogFile))]
+[JsonSerializable(typeof(Videos.QualityReport))]
 public sealed partial class CoreJsonContext : JsonSerializerContext;

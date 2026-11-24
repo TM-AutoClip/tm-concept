@@ -529,6 +529,12 @@ A video made with a template (Settings → Templates) follows it without relying
 - **Notes on a finished video (0.1.49):** write while it plays (the video stops; the note belongs to that moment and scene), then
   **Fix**: one request, a new version where only the noted scenes change. The video page names what is missing before production
   (template, model, key in red; narration, music file, pronunciation in yellow, skippable).
+- **Quality mode (0.1.50):** *Fast* (default) makes the video as before. *Standard*: a model that reads images (the video page's optional
+  *Quality check* step, local and free or online) reviews one sheet of the rendered frames in one request (blocker / polish) and a final
+  critic scores fixed headings 1–5 in one more; a report only. *Careful*: the same plus repair rounds (only the faulty scene's plan is
+  asked again when the app draws; at most 3 reviews, only blockers after the 2nd, stops when the list does not shrink), a recurring
+  character's sheet compared with the pictures, and local pictures made again when a local reviewer finds them faulty. Every request is in
+  the estimate. A recurring character is described once and added to every picture prompt (Standard and Careful).
 - **Drawing style:** scenes without an image are drawn in the template's style, and generated images are asked for in the same style.
   Fourteen choices, each described in the editor: *Let the AI choose* (the default of a new template: the model picks the look that fits
   each video), flat shapes, stick-figure narrator, line art, paper cut-out, infographic, neon, pencil sketch, animation (cartoon),

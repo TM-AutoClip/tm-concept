@@ -573,6 +573,7 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         steps.Finish(VideoSteps.Mux);
         var moved = await MotionAsync(output, input, folder, save.Work, cancellationToken).ConfigureAwait(false);
         await KeepSubtitleCheckAsync(timing, folder, cancellationToken).ConfigureAwait(false);
+        await KeepQualityAsync(save.Quality, folder, cancellationToken).ConfigureAwait(false);
 
         var thumbnail = await media.ThumbnailAsync(output, Path.Combine(folder, VideoFolders.ThumbnailFile), cancellationToken).ConfigureAwait(false);
         var record = new VideoRecord
@@ -774,6 +775,58 @@ public sealed class VideoAssembler(IChatClientFactory chats, ICostCalculator cos
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             logger.LogWarning(ex, "The subtitle check list was not written");
+        }
+    }
+
+    /// <summary>
+    /// Writes the quality report (F11 + F14, 0.1.50) and its sheets into the version's <see cref="VideoFolders.Quality"/> folder (a folder left by
+    /// an earlier run of the same version is replaced). Nothing without a report. A file that cannot be written is logged; the video is kept.
+    /// </summary>
+    private async Task KeepQualityAsync(QualityReport? report, string folder, CancellationToken cancellationToken)
+    {
+        var target = Path.Combine(folder, VideoFolders.Quality);
+        TryDelete(target);
+        if (report is null)
+        {
+            return;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(target);
+            foreach (var file in report.Files.Where(File.Exists))
+            {
+                File.Copy(file, Path.Combine(target, Path.GetFileName(file)), overwrite: true);
+            }
+
+            await File.WriteAllTextAsync(Path.Combine(target, VideoFolders.QualityReportFile), JsonSerializer.Serialize(report, CoreJsonContext.Default.QualityReport),
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarning(ex, "The quality report was not written");
+        }
+    }
+
+    /// <summary>
+    /// The quality report of a version folder (F11, 0.1.50); null when it has none or it cannot be read.
+    /// </summary>
+    public static async Task<QualityReport?> ReadQualityAsync(string versionFolder, CancellationToken cancellationToken)
+    {
+        var file = Path.Combine(versionFolder, VideoFolders.Quality, VideoFolders.QualityReportFile);
+        if (!File.Exists(file))
+        {
+            return null;
+        }
+
+        try
+        {
+            await using var stream = File.OpenRead(file);
+            return await JsonSerializer.DeserializeAsync(stream, CoreJsonContext.Default.QualityReport, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return null;
         }
     }
 

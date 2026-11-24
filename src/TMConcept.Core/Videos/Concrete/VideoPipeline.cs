@@ -41,7 +41,7 @@ namespace TMConcept.Core.Videos;
 /// </summary>
 public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechService speech, SceneNarrator narrator, IEnumerable<IImageEngine> images, StepModelResolver resolver,
     IChatClientFactory chats, ICostCalculator costs, VideoAssembler assembler, IConceptStore concepts, IRunStore runs,
-    IAppPaths paths, IGpuCoordinator gpu, TimeProvider clock, ILogger<VideoPipeline> logger)
+    IAppPaths paths, IGpuCoordinator gpu, TimeProvider clock, QualityStep quality, ILogger<VideoPipeline> logger)
 {
     /// <summary>Work folders of runs older than this are removed by <see cref="CleanWork"/>.</summary>
     public static readonly TimeSpan WorkKeep = TimeSpan.FromDays(7);
@@ -50,7 +50,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
     private static readonly (string Step, double Weight)[] Weights =
     [
         (VideoSteps.Prepare, 2), (VideoSteps.Speech, 20), (VideoSteps.Images, 15), (VideoSteps.Timing, 1), (VideoSteps.Code, 15), (VideoSteps.Render, 40),
-        (VideoSteps.Mux, 5), (VideoSteps.Save, 2),
+        (VideoSteps.Quality, 6), (VideoSteps.Mux, 5), (VideoSteps.Save, 2),
     ];
 
     /// <summary>Makes the video.</summary>
@@ -81,18 +81,25 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         var imageChoice = options.Images == ImageSources.Model ? await resolver.ChoiceAsync(PipelineSteps.Images, profile.Id, cancellationToken).ConfigureAwait(false) : null;
         var speechOn = !StepModelResolver.IsOff(speechChoice);
         var imagesOn = !StepModelResolver.IsOff(imageChoice);
+
+        // F11 (0.1.50): the quality check step's model, only when the template's quality mode reviews (Fast: not even read).
+        var reviewerChoice = QualityRules.Reviews(options.Style)
+            ? await resolver.ChoiceAsync(PipelineSteps.QualityCheck, profile.Id, cancellationToken).ConfigureAwait(false)
+            : null;
+        var qualityOn = !StepModelResolver.IsOff(reviewerChoice);
         logger.LogInformation("Video {Id} started: concept {Concept}, {Engine}, code model {Provider}/{Model}, voice {Voice}, images {Images}", id, job.Concept.Id,
             engine.Name, job.CodeModel.Model.Provider, job.CodeModel.Model.Id, speechOn ? speechChoice!.Provider + "/" + speechChoice.Model : "off",
             imagesOn ? imageChoice!.Provider + "/" + imageChoice.Model : "off");
         var work = assembler.WorkFolder(id);
         var target = new VersionTarget();
         var steps = new VideoStepProgress(
-            Weights.Where(w => (w.Step != VideoSteps.Speech || speechOn) && (w.Step != VideoSteps.Images || imagesOn)).ToList(), progress);
+            Weights.Where(w => (w.Step != VideoSteps.Speech || speechOn) && (w.Step != VideoSteps.Images || imagesOn) && (w.Step != VideoSteps.Quality || qualityOn))
+                .ToList(), progress);
 
         try
         {
             return await assembler.GuardAsync(profile.Id, job.CodeModel, work, target, steps, watch, () => MakeAsync(job, engine, speechChoice, imageChoice,
-                imagesOn, id, warnings, work, target, steps, watch, cancellationToken)).ConfigureAwait(false);
+                imagesOn, reviewerChoice, id, warnings, work, target, steps, watch, cancellationToken)).ConfigureAwait(false);
         }
         catch (VideoException ex) when (warnings.Count > 0)
         {
@@ -102,10 +109,17 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
     }
 
     private async Task<VideoRecord> MakeAsync(VideoJob job, IVideoEngine engine, StepModelChoice? speechChoice, StepModelChoice? imageChoice, bool imagesOn,
-        Guid id, List<string> warnings, string work, VersionTarget target, VideoStepProgress steps, Stopwatch watch, CancellationToken cancellationToken)
+        StepModelChoice? reviewerChoice, Guid id, List<string> warnings, string work, VersionTarget target, VideoStepProgress steps, Stopwatch watch,
+        CancellationToken cancellationToken)
     {
         var profile = job.Profile;
         var options = job.Options;
+        var reviewer = await ReviewerAsync(options, reviewerChoice, warnings, cancellationToken).ConfigureAwait(false);
+        var report = new QualityReport
+        {
+            Mode = QualityRules.Mode(options.Style),
+            Reviewer = reviewer is null ? string.Empty : reviewer.Model.Provider + "/" + reviewer.Model.Id,
+        };
 
         // A. prepare: the chosen voice and image model are made ready first (inside the run, so its Prepare row shows the failure).
         steps.Report(VideoSteps.Prepare, 0);
@@ -239,7 +253,8 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
             }
             else
             {
-                (sceneImages, imagePrompts) = await ImagesAsync(job, imageModel, split.Scenes, work, steps, id, width, height, cancellationToken).ConfigureAwait(false);
+                (sceneImages, imagePrompts, imageSet) = await ImagesAsync(job, imageModel, split.Scenes, work, steps, id, width, height, cancellationToken)
+                    .ConfigureAwait(false);
             }
 
             if (sceneImages.Count < split.Scenes.Count)
@@ -254,6 +269,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
 
             if (!reviewing)
             {
+                await PictureQualityAsync(job, imageModel, imageSet, reviewer, report, work, steps, id, width, height, cancellationToken).ConfigureAwait(false);
                 steps.Finish(VideoSteps.Images);
             }
         }
@@ -286,6 +302,11 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         {
             await ReviewAsync(job, engine, input, work, id, steps, context, imageModel, imageSet, width, height, cancellationToken).ConfigureAwait(false);
             context = context with { Planned = true };
+            if (imageSet is not null && imageModel is not null)
+            {
+                await PictureQualityAsync(job, imageModel, imageSet, reviewer, report, work, steps, id, width, height, cancellationToken).ConfigureAwait(false);
+                steps.Finish(VideoSteps.Images);
+            }
         }
 
         // E + F. code (+ one repair after a rejected check), render (+ one repair with the error text)
@@ -297,8 +318,17 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
                     : null,
             })
             .ConfigureAwait(false);
+
+        // F11 (0.1.50): the template's quality mode reviews the rendered video (Careful: repairs it in rounds); Fast does nothing.
+        rendered = await quality.AfterRenderAsync(new RenderQualityJob(reviewer, job.CodeModel, engine, options, rendered, work, context.Spans,
+            context.ImagePrompts, steps, id, report), cancellationToken).ConfigureAwait(false);
         music = rendered.Music ?? music;
         warnings.AddRange(rendered.Warnings());
+        var reviewed = reviewer is not null && QualityRules.Reviews(options.Style);
+        if (reviewed)
+        {
+            warnings.AddRange(QualityRules.Warnings(report));
+        }
 
         // H + I. mux into the work folder, then the version folder gets only finished files; the record.
         var folder = Path.Combine(LibraryFolder(profile, job.Concept), VideoFolders.FirstVersion);
@@ -311,6 +341,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
             // Each scene's text with its placeholders and the transition into it: a new version is edited from this.
             Script = scenes.Select(s => VideoRemaker.WithTransition(s.Transition, s.Script, profile.ContentLanguage)).ToList(),
             Music = music,
+            Quality = reviewed ? report : null,
         }, steps,
             cancellationToken).ConfigureAwait(false);
         await concepts.SetStatusAsync([job.Concept.Id], ConceptStatus.Produced, CancellationToken.None).ConfigureAwait(false);
@@ -449,18 +480,19 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
     /// <summary>
     /// The scene images of the chosen model. Any failure stops the video (<see cref="VideoException"/> "images").
     /// </summary>
-    private Task<(List<string> Names, IReadOnlyList<string> Prompts)> ImagesAsync(VideoJob job, ResolvedModel? imageModel, IReadOnlyList<Scene> scenes,
-        string work, VideoStepProgress steps, Guid id, int width, int height, CancellationToken cancellationToken) =>
+    private Task<(List<string> Names, IReadOnlyList<string> Prompts, (IImageEngine Engine, string Cache, IReadOnlyList<string> Prompts)? Set)> ImagesAsync(
+        VideoJob job, ResolvedModel? imageModel, IReadOnlyList<Scene> scenes, string work, VideoStepProgress steps, Guid id, int width, int height,
+        CancellationToken cancellationToken) =>
         GuardImagesAsync(async () =>
         {
             if (imageModel is null)
             {
-                return (new List<string>(), (IReadOnlyList<string>)[]);
+                return (new List<string>(), (IReadOnlyList<string>)[], ((IImageEngine Engine, string Cache, IReadOnlyList<string> Prompts)?)null);
             }
 
             var set = await ImagePlanAsync(job, imageModel, scenes, steps, id, width, height, cancellationToken).ConfigureAwait(false);
             var names = await DrawImagesAsync(set, imageModel, work, steps, id, width, height, set.Prompts.Count, cancellationToken).ConfigureAwait(false);
-            return (names, set.Prompts);
+            return (names, set.Prompts, ((IImageEngine Engine, string Cache, IReadOnlyList<string> Prompts)?)set);
         });
 
     /// <summary>
@@ -494,7 +526,8 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
 
         // Prompts and images of this concept are kept until its video is made: a retry after a later failure reuses them.
         var drawStyle = job.Options.Style?.DrawStyle;
-        var cache = Path.Combine(SceneImageRoot(job.Concept.Id), CacheKey(job.Profile.Name, imageModel.Model, width, height, visuals, drawStyle));
+        var character = QualityRules.Reviews(job.Options.Style);
+        var cache = Path.Combine(SceneImageRoot(job.Concept.Id), CacheKey(job.Profile.Name, imageModel.Model, width, height, visuals, drawStyle, character));
         Directory.CreateDirectory(cache);
         var promptFile = Path.Combine(cache, "prompts.txt");
         var styleFile = Path.Combine(cache, "style.txt");
@@ -510,8 +543,15 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         }
         else
         {
-            var (made, chosen) = await ImagePromptsAsync(job, visuals, drawStyle, steps, id, cancellationToken).ConfigureAwait(false);
-            prompts = made;
+            var (made, chosen, described) = await ImagePromptsAsync(job, visuals, drawStyle, character, steps, id, cancellationToken).ConfigureAwait(false);
+
+            // F14 (0.1.50): the recurring character, described once, goes into every prompt the same way (and is kept for the character sheet).
+            prompts = ImagePromptBuilder.WithCharacter(made, described);
+            if (character)
+            {
+                await File.WriteAllTextAsync(Path.Combine(cache, CharacterFile), described, cancellationToken).ConfigureAwait(false);
+            }
+
             await File.WriteAllLinesAsync(promptFile, prompts.Select(p => p.ReplaceLineEndings(" ")), cancellationToken).ConfigureAwait(false);
             if (drawStyle is Styles.DrawStyle.Auto)
             {
@@ -645,7 +685,6 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         }
 
         await GuardImagesAsync(() => DrawImagesAsync(set, imageModel, work, steps, id, width, height, set.Prompts.Count, cancellationToken)).ConfigureAwait(false);
-        steps.Finish(VideoSteps.Images);
     }
 
     /// <summary>"One scene first": the first scene drawn (with its real image when there is one) is shown and the video waits once more.</summary>
@@ -665,6 +704,116 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
             logger.LogWarning(LogEvents.OnScreen, "The first scene was rejected; the video is stopped before the other images");
             throw new VideoException("The first scene was not approved.") { Code = "rejected" };
         }
+    }
+
+    /// <summary>The recurring character's description in a concept's image cache (F14, 0.1.50; empty file: none).</summary>
+    private const string CharacterFile = "character.txt";
+
+    /// <summary>The character sheet in a concept's image cache (F14, 0.1.50; careful mode).</summary>
+    private const string CharacterSheetFile = "character-sheet.png";
+
+    /// <summary>
+    /// The quality check step's model (F11, 0.1.50) when the template's quality mode reviews: null in Fast mode; null with a yellow warning when
+    /// the step is off or its model cannot be made ready (the video is made without the check: a review never stops a video).
+    /// </summary>
+    private async Task<ResolvedModel?> ReviewerAsync(VideoOptions options, StepModelChoice? choice, List<string> warnings, CancellationToken cancellationToken)
+    {
+        if (!QualityRules.Reviews(options.Style))
+        {
+            return null;
+        }
+
+        if (!StepModelResolver.IsOff(choice))
+        {
+            try
+            {
+                return await resolver.ResolveAsync(PipelineSteps.QualityCheck, choice, cancellationToken).ConfigureAwait(false);
+            }
+            catch (ModelNotReadyException ex)
+            {
+                logger.LogWarning(LogEvents.OnScreen, "The quality check model is not ready (no {Missing}); the video is made without the check", ex.Missing);
+            }
+        }
+        else
+        {
+            logger.LogWarning(LogEvents.OnScreen, "The template asks for a quality check but no quality check model is chosen; the video is made without it");
+        }
+
+        warnings.Add(VideoWarnings.QualityNoReviewer);
+        return null;
+    }
+
+    /// <summary>
+    /// The careful mode's look at the scene pictures (F11 + F14, 0.1.50; <see cref="QualityStep.PicturesAsync"/>): the character sheet (one more
+    /// picture of the image model, kept in the concept's image cache) and its comparison, and, when the image model and the reviewer both run on
+    /// this computer, the faulty pictures made again in rounds. Nothing in the other modes, without a reviewer or without pictures.
+    /// </summary>
+    private async Task PictureQualityAsync(VideoJob job, ResolvedModel? imageModel, (IImageEngine Engine, string Cache, IReadOnlyList<string> Prompts)? imageSet,
+        ResolvedModel? reviewer, QualityReport report, string work, VideoStepProgress steps, Guid id, int width, int height, CancellationToken cancellationToken)
+    {
+        if (report.Mode == Styles.QualityMode.Fast || imageModel is null || imageSet is not { } set)
+        {
+            return;
+        }
+
+        // The described character goes into the report of both reviewing modes; only the careful one looks at the pictures.
+        var characterFile = Path.Combine(set.Cache, CharacterFile);
+        var character = File.Exists(characterFile)
+            ? Text.TextClean.OneLine(await File.ReadAllTextAsync(characterFile, cancellationToken).ConfigureAwait(false), QualityLimits.CharacterMax)
+            : string.Empty;
+        report.Character = character;
+        if (report.Mode != Styles.QualityMode.Careful || reviewer is null)
+        {
+            return;
+        }
+
+        var pictures = set.Prompts.Select((p, i) => new QualityPicture(i + 1, Path.Combine(set.Cache, SceneImageName(i + 1)), p)).Where(p => File.Exists(p.File)).ToList();
+        var loop = VideoAssembler.IsLocal(imageModel.Model) && VideoAssembler.IsLocal(reviewer.Model);
+
+        async Task<string?> SheetAsync(CancellationToken token)
+        {
+            var file = Path.Combine(set.Cache, CharacterSheetFile);
+            if (File.Exists(file))
+            {
+                return file;
+            }
+
+            try
+            {
+                var lease = await gpu.AcquireAsync(imageModel.Model, token).ConfigureAwait(false);
+                await using var leaseScope = lease.ConfigureAwait(false);
+                var result = await set.Engine.GenerateAsync(new ImageRequest(QualityPrompt.CharacterSheet(character), width, height, file, imageModel), token)
+                    .ConfigureAwait(false);
+                steps.Spend(new VideoCost { VideoId = id, Step = PipelineSteps.CharacterSheetCost, Usd = result.CostUsd, Exact = result.CostUsd == 0 });
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException and not OutOfMemoryException)
+            {
+                logger.LogWarning(LogEvents.OnScreen, "The character sheet could not be drawn ({Error}); the pictures are not compared with it", ex.Message);
+                return null;
+            }
+
+            return File.Exists(file) ? file : null;
+        }
+
+        async Task<IReadOnlyList<int>> RedrawAsync(IReadOnlyList<QualityFinding> findings, CancellationToken token)
+        {
+            // The faulty pictures are made again from their prompt and what was wrong with them; the others stay in the cache.
+            var scenes = QualityRules.Scenes(findings).Where(s => s >= 1 && s <= set.Prompts.Count).ToList();
+            var prompts = set.Prompts.ToList();
+            foreach (var scene in scenes)
+            {
+                File.Delete(Path.Combine(set.Cache, SceneImageName(scene)));
+                prompts[scene - 1] = prompts[scene - 1].TrimEnd() + " Avoid: " + string.Join("; ", findings.Where(f => f.Scene == scene).Select(f => f.Problem));
+            }
+
+            await GuardImagesAsync(() => DrawImagesAsync(set with { Prompts = prompts }, imageModel, work, steps, id, width, height, prompts.Count, token))
+                .ConfigureAwait(false);
+            logger.LogInformation(LogEvents.OnScreen, "Quality check: the pictures of scenes {Scenes} were made again", string.Join(", ", scenes));
+            return scenes;
+        }
+
+        await quality.PicturesAsync(new PictureQualityJob(reviewer, loop, pictures, set.Prompts.Count, character, character.Length > 0 ? SheetAsync : null,
+            RedrawAsync, steps, id, report), cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -699,8 +848,8 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
     /// (<see cref="Styles.DrawStyle.Auto"/>) lets this call choose one; the second value is the chosen preset's key or the model's own words
     /// (empty otherwise; a repair answer that names one replaces the first).
     /// </summary>
-    private async Task<(IReadOnlyList<string> Prompts, string Style)> ImagePromptsAsync(VideoJob job, IReadOnlyList<string> visuals, Styles.DrawStyle? drawStyle,
-        VideoStepProgress steps, Guid id, CancellationToken cancellationToken)
+    private async Task<(IReadOnlyList<string> Prompts, string Style, string Character)> ImagePromptsAsync(VideoJob job, IReadOnlyList<string> visuals,
+        Styles.DrawStyle? drawStyle, bool character, VideoStepProgress steps, Guid id, CancellationToken cancellationToken)
     {
         var promptModel = job.CodeModel;
         var choose = drawStyle is Styles.DrawStyle.Auto;
@@ -709,7 +858,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
         {
             try
             {
-                var answer = await chat.SendAsync(new ChatRequest(ImagePromptBuilder.System, user, Schema: ImagePromptBuilder.Schema(choose), MaxOutputTokens: 4000,
+                var answer = await chat.SendAsync(new ChatRequest(ImagePromptBuilder.System, user, Schema: ImagePromptBuilder.Schema(choose, character), MaxOutputTokens: 4000,
                     Effort: promptModel.Effort), token).ConfigureAwait(false);
                 steps.Spend(new VideoCost
                 {
@@ -740,20 +889,26 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
 
         var first = await JsonAnswerRetry.RunAsync("Scene image prompts", async (_, token) =>
         {
-            var text = await AskAsync(ImagePromptBuilder.User(job.Profile.Name, visuals, drawStyle), token).ConfigureAwait(false);
+            var text = await AskAsync(ImagePromptBuilder.User(job.Profile.Name, visuals, drawStyle, character), token).ConfigureAwait(false);
             return ImagePromptBuilder.Read(text).Count > 0 ? new[] { text } : null;
         }, logger, cancellationToken).ConfigureAwait(false);
         var items = ImagePromptBuilder.Read(first[0]);
         var style = choose ? StyleWords(first[0]) : string.Empty;
+        var described = character ? ImagePromptBuilder.ReadCharacter(first[0]) : string.Empty;
         var problems = ImagePromptBuilder.Check(items, visuals.Count);
         if (problems.Count > 0)
         {
             logger.LogWarning("The image prompts do not fit the {Count} scenes ({Problems}); asking for one repair", visuals.Count, string.Join("; ", problems));
-            var repaired = await AskAsync(ImagePromptBuilder.Repair(job.Profile.Name, visuals, drawStyle, problems), cancellationToken).ConfigureAwait(false);
+            var repaired = await AskAsync(ImagePromptBuilder.Repair(job.Profile.Name, visuals, drawStyle, problems, character), cancellationToken).ConfigureAwait(false);
             items = ImagePromptBuilder.Read(repaired);
             if (choose && StyleWords(repaired) is { Length: > 0 } again)
             {
                 style = again;
+            }
+
+            if (character && ImagePromptBuilder.ReadCharacter(repaired) is { Length: > 0 } person)
+            {
+                described = person;
             }
 
             problems = ImagePromptBuilder.Check(items, visuals.Count);
@@ -765,8 +920,9 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
             }
         }
 
-        logger.LogInformation("Scene image prompts: {Count}, one per scene", items.Count);
-        return (ImagePromptBuilder.Prompts(items, visuals.Count), style);
+        logger.LogInformation("Scene image prompts: {Count}, one per scene{Character}", items.Count,
+            described.Length > 0 ? ", with a recurring character" : string.Empty);
+        return (ImagePromptBuilder.Prompts(items, visuals.Count), style, described);
     }
 
     /// <summary>The style an answer chose: a preset's key, or the model's own words.</summary>
@@ -809,13 +965,20 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
     /// The key of a concept's kept image prompts and images: another channel, model, size, scene text, template drawing style or prompt format
     /// (<see cref="ImagePromptBuilder.Version"/>) makes new ones.
     /// </summary>
-    private static string CacheKey(string channel, CatalogModel model, int width, int height, IReadOnlyList<string> visuals, Styles.DrawStyle? drawStyle)
+    private static string CacheKey(string channel, CatalogModel model, int width, int height, IReadOnlyList<string> visuals, Styles.DrawStyle? drawStyle,
+        bool character)
     {
         var parts = new[] { "prompts:" + ImagePromptBuilder.Version, channel, model.Provider, model.Id, width.ToString(CultureInfo.InvariantCulture),
             height.ToString(CultureInfo.InvariantCulture) }.Concat(visuals);
         if (drawStyle is { } style)
         {
             parts = parts.Append("style:" + RenderStyleBuilder.Name(style));
+        }
+
+        if (character)
+        {
+            // F14 (0.1.50): prompts with a character description are other prompts (a Fast template's key is unchanged).
+            parts = parts.Append("character");
         }
 
         var text = string.Join('\n', parts);

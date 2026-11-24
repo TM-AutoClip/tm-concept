@@ -276,6 +276,18 @@
                             </DataTemplate>
                           </ComboBox.ItemTemplate>
                         </ComboBox>
+                        <!-- F11 (0.1.50): the quality mode; Fast by default. -->
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                          <TextBlock Text="{DynamicResource styles.quality}" VerticalAlignment="Center" />
+                          <views:HelpTip Text="{DynamicResource styles.quality.tip}" />
+                        </StackPanel>
+                        <ComboBox Name="StyleQuality" ItemsSource="{Binding Qualities}" SelectedItem="{Binding Quality}" MinWidth="140">
+                          <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:NumberChoice">
+                              <TextBlock Text="{Binding Label}" />
+                            </DataTemplate>
+                          </ComboBox.ItemTemplate>
+                        </ComboBox>
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                           <CheckBox Name="StyleFinish" IsChecked="{Binding Finish}" Content="{DynamicResource styles.finish}" />
                           <views:HelpTip Text="{DynamicResource styles.finish.tip}" />

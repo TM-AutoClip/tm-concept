@@ -437,6 +437,12 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
                 details.Append("• ").Append(text["produced.note." + warning]).Append('\n');
             }
 
+            // F11 + F14 (0.1.50): the quality mode's report of this version, read off the window's thread.
+            if (await Task.Run(() => VideoAssembler.ReadQualityAsync(row.Folder, CancellationToken.None)).ConfigureAwait(true) is { } quality)
+            {
+                details.Append(QualityText(quality));
+            }
+
             details.Append(text.Format("produced.detail.folder", row.Folder));
             var prompt = concept is null
                 ? text["produced.prompt.gone"]
@@ -460,6 +466,54 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
             logger.LogError(ex, "Video details could not be read");
             Status = text.Format("error.generic", ex.Message);
         }
+    }
+
+    /// <summary>
+    /// The quality report's lines (F11 + F14, 0.1.50): the mode and the reviewer, the frame rounds and why they ended with the findings left in the
+    /// last one, the picture rounds, the character and the final critic's headings (below 4 marked "does not pass"). The findings and the critic's
+    /// notes are the reviewer's own words.
+    /// </summary>
+    private string QualityText(QualityReport report)
+    {
+        var lines = new StringBuilder();
+        lines.Append(text.Format("produced.quality.title", text["style.quality." + report.Mode.ToString().ToLowerInvariant()], report.Reviewer)).Append('\n');
+        void Rounds(string key, List<QualityRound> rounds, string stop)
+        {
+            if (rounds.Count == 0 && stop.Length == 0)
+            {
+                return;
+            }
+
+            var repaired = rounds.SelectMany(r => r.Repaired).Distinct().Order().ToList();
+            lines.Append(text.Format(key, rounds.Count, text.Has("produced.quality.stop." + stop) ? text["produced.quality.stop." + stop] : stop,
+                repaired.Count == 0 ? text["produced.quality.none"] : string.Join(", ", repaired))).Append('\n');
+            foreach (var finding in rounds.LastOrDefault()?.Findings ?? [])
+            {
+                lines.Append(text.Format("produced.quality.finding", finding.Scene,
+                    text[finding.Severity == QualitySeverity.Blocker ? "produced.quality.blocker" : "produced.quality.polish"], finding.Problem)).Append('\n');
+            }
+        }
+
+        Rounds("produced.quality.frames", report.Frames, report.FrameStop);
+        Rounds("produced.quality.pictures", report.Pictures, report.PictureStop);
+        if (report.Character.Length > 0)
+        {
+            lines.Append(text.Format("produced.quality.character", report.Character)).Append('\n');
+        }
+
+        if (report.CharacterMismatch.Count > 0)
+        {
+            lines.Append(text.Format("produced.quality.character_mismatch", string.Join(", ", report.CharacterMismatch))).Append('\n');
+        }
+
+        foreach (var score in report.Critic)
+        {
+            var key = "produced.quality.heading." + score.Heading.ToLowerInvariant().Replace(' ', '_');
+            lines.Append(text.Format(score.Fails ? "produced.quality.critic_fails" : "produced.quality.critic", text.Has(key) ? text[key] : score.Heading,
+                score.Score, score.Note)).Append('\n');
+        }
+
+        return lines.ToString();
     }
 
     /// <summary>The total line of the cost details: the video's own cost, with the concept share and the concept's AI edits when they are known.</summary>

@@ -135,7 +135,7 @@ public sealed class SceneFixer(IChatClientFactory chats, ICostCalculator costs, 
             var rendered = await assembler.RenderKeptAsync(source.Engine, source.Code, options, timed, work, steps, cancellationToken).ConfigureAwait(false);
             var warnings = source.Record.Warnings.Split(',', StringSplitOptions.RemoveEmptyEntries)
                 .Where(w => w != VideoWarnings.NoThumbnail && !RenderOutcome.Codes.Contains(w) && !VideoWarnings.Motion.Contains(w)
-                    && !VideoWarnings.Subtitles.Contains(w)).ToList();
+                    && !VideoWarnings.Subtitles.Contains(w) && !VideoWarnings.Quality.Contains(w)).ToList();
             var record = await assembler.SaveAsync(new VersionSave(id, job.Profile, source.Record.ConceptId, source.Record.Title, work, rendered, clips, target,
                 VersionFolders.Next(Path.GetDirectoryName(source.Folder)!), options, source.Engine.Name, source.Record.CodeModel, source.Record.SpeechModel,
                 source.Record.ImageModel, source.Record.PromptVersion, warnings, steps.Spent, [], watch) { Script = texts, Music = music }, steps,
@@ -290,8 +290,11 @@ public sealed class SceneFixer(IChatClientFactory chats, ICostCalculator costs, 
         }
     }
 
-    /// <summary>The noted scenes of a drawn video take the answer's plans: cleaned like every plan, the kept motion, timed from their sentences.</summary>
-    private static void NewPlans(RenderInput timed, IReadOnlyList<PlanItem> items, IReadOnlyList<IReadOnlyList<SpeechSpan>?> spans)
+    /// <summary>
+    /// The noted scenes of a drawn video take the answer's plans: cleaned like every plan, the kept motion, timed from their sentences. Also the
+    /// careful quality mode's repaired scenes (0.1.50, <see cref="QualityStep"/>).
+    /// </summary>
+    public static void NewPlans(RenderInput timed, IReadOnlyList<PlanItem> items, IReadOnlyList<IReadOnlyList<SpeechSpan>?> spans)
     {
         if (items.Count == 0)
         {

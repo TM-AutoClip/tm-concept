@@ -196,7 +196,8 @@ public sealed class VideoPageTests
 
         // One line: code, engine, images, narration and the concept model of the AI edit; the cards are folded away.
         page.ModelsOpen.ShouldBeFalse();
-        page.Picker.Rows.Select(r => r.Step.Code).ShouldBe([PipelineSteps.VideoCode, PipelineSteps.Images, PipelineSteps.ImagePoints, PipelineSteps.Speech, PipelineSteps.Concepts]);
+        page.Picker.Rows.Select(r => r.Step.Code).ShouldBe([PipelineSteps.VideoCode, PipelineSteps.Images, PipelineSteps.ImagePoints, PipelineSteps.QualityCheck,
+            PipelineSteps.Speech, PipelineSteps.Concepts]);
         var line = Find<Avalonia.Controls.TextBlock>(view, "SummaryLine").Text!;
         foreach (var part in new[] { "video-code", "engine", "images", "image-points", "speech", "concepts" })
         {
@@ -600,7 +601,8 @@ public sealed class VideoPageTests
         var video = (await h.Get<IVideoStore>().ListAsync(concept.ProfileId, CancellationToken.None)).Single();
         row.Progress!.SpentUsd.ShouldBe(video.TotalUsd, "the stages show the same money as the record");
         row.Progress.SpentUsd.ShouldBeGreaterThan(spentDuring, "the code call was paid after it");
-        row.Progress.Stages.Where(s => s.Code != VideoSteps.Speech).ShouldAllBe(s => s.State == StageState.Done);
+        row.Progress.Stages.Where(s => s.Code != VideoSteps.Speech && s.Code != VideoSteps.Quality).ShouldAllBe(s => s.State == StageState.Done);
+        At(VideoSteps.Quality).State.ShouldBe(StageState.Skipped, "a template without a quality mode is not reviewed (0.1.50)");
         row.Progress.Stages.Single(s => s.Code == VideoSteps.Code).CostText.ShouldNotBeEmpty();
         page.LastLine.ShouldContain(text.Usd(video.TotalUsd));
     }

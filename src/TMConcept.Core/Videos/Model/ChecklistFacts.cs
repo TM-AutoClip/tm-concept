@@ -26,4 +26,7 @@ public sealed class ChecklistFacts
 
     /// <summary>The user's pronunciation dictionary of the video's language has no word.</summary>
     public bool PronunciationEmpty { get; init; }
+
+    /// <summary>The template's quality mode reviews (Standard or Careful, F11 0.1.50) but the quality check step has no model.</summary>
+    public bool QualityWithoutReviewer { get; init; }
 }
