@@ -11,7 +11,7 @@ namespace TMConcept.Engines.References;
 /// <summary>
 /// <see cref="IReferenceDownloader"/> with yt-dlp (S1, 0.1.52; the app's pinned copy, a component installed only after the user's yes). One
 /// call downloads one video (<see cref="Arguments"/>): the user's configuration files, plugins and cache are ignored, no playlist, no cookies
-/// from a file or a browser, no sign-in; a format at most <see cref="ReferenceLimits.MaxHeight"/> pixels high, preferring the largest one up to
+/// from a file or a browser, no sign-in, never a live stream; a format at most <see cref="ReferenceLimits.MaxHeight"/> pixels high, preferring the largest one up to
 /// <see cref="ReferenceLimits.PreferredHeight"/> (the lowest that is plenty for the measure), only
 /// the first <see cref="ReferenceLimits.MaxSeconds"/> seconds (cut by the app's ffmpeg) and at most <see cref="ReferenceLimits.MaxFileSize"/>.
 /// The file goes into the measure's own folder, which the measure deletes. A below-normal process like every child; the processor only.
@@ -34,6 +34,9 @@ public sealed partial class YtDlpDownloader(ToolInstaller tools, IProcessRunner 
         {
             "--ignore-config", "--no-plugin-dirs", "--no-cache-dir",
             "--no-playlist", "--no-cookies", "--no-cookies-from-browser",
+
+            // A live stream is never downloaded (it would be recorded in real time); yt-dlp skips it and leaves no file.
+            "--match-filters", "!is_live",
             "--no-mtime", "--no-write-info-json", "--no-write-thumbnail", "--no-write-subs",
             "--newline", "--progress", "--no-simulate", "--print", "after_move:filepath",
             "--socket-timeout", ReferenceLimits.SocketTimeoutSeconds.ToString(c), "--retries", "3",

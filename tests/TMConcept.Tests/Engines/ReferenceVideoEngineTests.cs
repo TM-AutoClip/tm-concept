@@ -27,6 +27,7 @@ public sealed class ReferenceVideoEngineTests
         arguments.ShouldContain("--no-playlist");
         arguments.ShouldContain("--no-cookies");
         arguments.ShouldContain("--no-cookies-from-browser");
+        Value(arguments, "--match-filters").ShouldBe("!is_live", "a live stream is never recorded");
         arguments.ShouldNotContain("--cookies");
         arguments.ShouldNotContain("--username");
         arguments.ShouldNotContain("--netrc");

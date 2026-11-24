@@ -100,6 +100,31 @@ public sealed class ReferenceVideoPageTests
         reference.Profile!.Source.ShouldBe("clip.mp4");
     }
 
+    /// <summary>Review of 0.1.52: an editor closed while its measure waits (the install's confirmation) cancels it quietly, never a false error.</summary>
+    [AvaloniaFact]
+    public async Task AClosedEditorCancelsItsMeasureWithoutAnError()
+    {
+        using var h = new DesktopHarness();
+        var text = h.Get<Localizer>();
+        var measurer = new FakeMeasurer { Result = Fast };
+        var activity = new Lines();
+        var install = new TaskCompletionSource<bool>();
+        var editor = new VideoStyleEditorViewModel(new VideoStyle { Name = "A" }, true, text,
+            referenceServices: new ReferenceVideoServices(measurer, () => Task.FromResult<string?>("C:/videos/clip.mp4"), _ => install.Task, activity));
+        var reference = editor.ReferenceVideo.ShouldNotBeNull();
+
+        var running = reference.MeasureFileCommand.ExecuteAsync(null);
+        reference.Busy.ShouldBeTrue();
+        reference.Dispose();
+        install.SetResult(true);
+        await running;
+
+        reference.Status.ShouldBe(text["styles.reference.cancelled"]);
+        reference.Busy.ShouldBeFalse();
+        reference.HasProfile.ShouldBeFalse();
+        activity.Entries.ShouldNotContain(e => e.Level == ActivityLevel.Error);
+    }
+
     [AvaloniaFact]
     public async Task AnAddressIsNotMeasuredWhenTheInstallIsDeclined()
     {

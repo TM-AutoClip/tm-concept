@@ -178,9 +178,10 @@ public sealed partial class ReferenceVideoViewModel : ObservableObject, IDisposa
     /// <inheritdoc />
     public void Dispose()
     {
+        // Only cancelled here: the running measure still reads its token (Task.Run, the cancel check) and disposes it in its own finally.
+        // Disposing it here made a measure stopped by a closed editor fail with ObjectDisposedException (an InvalidOperationException)
+        // and write a false error into the activity panel.
         _work?.Cancel();
-        _work?.Dispose();
-        _work = null;
     }
 
     /// <inheritdoc />
