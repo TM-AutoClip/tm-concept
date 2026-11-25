@@ -13,10 +13,10 @@ using TMConcept.Desktop.ViewModels;
 namespace TMConcept.Tests.Desktop;
 
 /// <summary>
-/// The reference video of a template in Settings → Templates (S1, 0.1.52): a measured file sets the tempo to the nearest preset and is kept
-/// in the template, its colours become the own palette only on "Use the colours", "Remove" takes it out, a failure is said on the form and in
-/// the activity panel, Cancel keeps nothing, and an address is not measured when the install of ffmpeg and yt-dlp is declined. A fake measure
-/// only: nothing is downloaded or run.
+/// The reference video of the video page's model choice (S1, 0.1.52; 0.1.54: moved there from Settings → Templates, kept per profile): a
+/// measured file is kept and a starting video takes it with the tempo it suggests (the template itself is never changed), "Remove" takes it
+/// out, a failure is said on the form and in the activity panel, Cancel keeps nothing, and an address is not measured when the install of
+/// ffmpeg and yt-dlp is declined. A fake measure only: nothing is downloaded or run.
 /// </summary>
 public sealed class ReferenceVideoPageTests
 {
@@ -28,15 +28,14 @@ public sealed class ReferenceVideoPageTests
     };
 
     [AvaloniaFact]
-    public async Task AMeasuredFileSetsTheTempoAndIsKeptInTheTemplate()
+    public async Task AMeasuredFileIsKeptForTheProfileAndAVideoTakesItsTempo()
     {
         using var h = new DesktopHarness();
         var text = h.Get<Localizer>();
         var measurer = new FakeMeasurer { Result = Fast };
         var activity = new Lines();
-        var editor = new VideoStyleEditorViewModel(new VideoStyle { Name = "A", Tempo = NarrationTempo.Relaxed }, true, text,
-            referenceServices: new ReferenceVideoServices(measurer, () => Task.FromResult<string?>("C:/videos/clip.mp4"), _ => Task.FromResult(true), activity));
-        var reference = editor.ReferenceVideo.ShouldNotBeNull();
+        var reference = new ReferenceVideoViewModel(new ReferenceVideoServices(measurer, () => Task.FromResult<string?>("C:/videos/clip.mp4"),
+            _ => Task.FromResult(true), activity), text, null, (_, _) => { });
         reference.HasProfile.ShouldBeFalse();
         reference.RemoveCommand.CanExecute(null).ShouldBeFalse();
 
@@ -44,25 +43,22 @@ public sealed class ReferenceVideoPageTests
 
         measurer.Files.ShouldBe(["C:/videos/clip.mp4"]);
         reference.HasProfile.ShouldBeTrue();
-        editor.Tempo.Value.ShouldBe((int)NarrationTempo.Tight, "6.3 cuts every 10 s is nearest to tight");
         reference.Status.ShouldBe(text.Format("styles.reference.measured", text["style.tempo.tight"]));
         reference.TempoText.ShouldContain(text["styles.reference.direction.left"]);
         reference.SoundText.ShouldContain("128");
-        reference.Swatches.Count.ShouldBe(3);
         activity.Entries.ShouldContain(e => e.Level == ActivityLevel.Info);
-        var style = editor.ToStyle();
-        style.Reference.ShouldNotBeNull().CutsPer10Seconds.ShouldBe(6.3);
-        style.Tempo.ShouldBe(NarrationTempo.Tight);
-        style.PaletteId.ShouldNotBe(VideoPalettes.CustomId, "the colours are only a suggestion until taken");
 
-        reference.UseColorsCommand.Execute(null);
-        var taken = editor.ToStyle();
-        taken.PaletteId.ShouldBe(VideoPalettes.CustomId);
-        taken.CustomPalette.ShouldBe(ReferenceTempoMapper.Suggest(Fast).Palette! with { Id = VideoPalettes.CustomId });
+        // A starting video: the template with the profile's reference; the reference's tempo wins, the template is not changed.
+        var template = new VideoStyle { Name = "A", Tempo = NarrationTempo.Relaxed };
+        var video = VideoStyleRules.WithMedia(template, new VideoMedia { Reference = reference.Profile });
+        video.Reference.ShouldNotBeNull().CutsPer10Seconds.ShouldBe(6.3);
+        video.Tempo.ShouldBe(NarrationTempo.Tight, "6.3 cuts every 10 s is nearest to tight");
+        video.PaletteId.ShouldNotBe(VideoPalettes.CustomId, "the colours are the template's");
+        template.Tempo.ShouldBe(NarrationTempo.Relaxed);
+        template.Reference.ShouldBeNull();
 
         reference.RemoveCommand.Execute(null);
-        editor.ToStyle().Reference.ShouldBeNull();
-        editor.ToStyle().Tempo.ShouldBe(NarrationTempo.Tight, "the tempo stays as it is");
+        VideoStyleRules.WithMedia(template, new VideoMedia { Reference = reference.Profile }).Tempo.ShouldBe(NarrationTempo.Relaxed, "the template's own tempo");
     }
 
     [AvaloniaFact]
@@ -72,11 +68,9 @@ public sealed class ReferenceVideoPageTests
         var text = h.Get<Localizer>();
         var measurer = new FakeMeasurer { Error = new ReferenceMeasureException("x") { Code = "download", Detail = "HTTP Error 403" } };
         var activity = new Lines();
-        var source = new VideoStyle { Name = "A", Reference = Fast };
-        var editor = new VideoStyleEditorViewModel(source, false, text,
-            referenceServices: new ReferenceVideoServices(measurer, () => Task.FromResult<string?>(null), _ => Task.FromResult(true), activity));
-        var reference = editor.ReferenceVideo.ShouldNotBeNull();
-        reference.HasProfile.ShouldBeTrue("the template's reference is shown");
+        var reference = new ReferenceVideoViewModel(new ReferenceVideoServices(measurer, () => Task.FromResult<string?>(null), _ => Task.FromResult(true), activity),
+            text, Fast, (_, _) => { });
+        reference.HasProfile.ShouldBeTrue("the profile's reference is shown");
 
         reference.Address = "not an address";
         await reference.MeasureAddressCommand.ExecuteAsync(null);
@@ -87,7 +81,7 @@ public sealed class ReferenceVideoPageTests
         await reference.MeasureAddressCommand.ExecuteAsync(null);
         reference.Status.ShouldBe(text["styles.reference.error.download"] + " (HTTP Error 403)");
         activity.Entries.ShouldContain(e => e.Level == ActivityLevel.Error && e.Text.Contains("HTTP Error 403", StringComparison.Ordinal));
-        editor.ToStyle().Reference.ShouldBeSameAs(reference.Profile, "a failed measure keeps the reference the template had");
+        reference.Profile.ShouldBeSameAs(Fast, "a failed measure keeps the reference the profile had");
 
         measurer.Error = null;
         measurer.Wait = true;
@@ -100,18 +94,17 @@ public sealed class ReferenceVideoPageTests
         reference.Profile!.Source.ShouldBe("clip.mp4");
     }
 
-    /// <summary>Review of 0.1.52: an editor closed while its measure waits (the install's confirmation) cancels it quietly, never a false error.</summary>
+    /// <summary>Review of 0.1.52: a form closed while its measure waits (the install's confirmation) cancels it quietly, never a false error.</summary>
     [AvaloniaFact]
-    public async Task AClosedEditorCancelsItsMeasureWithoutAnError()
+    public async Task AClosedFormCancelsItsMeasureWithoutAnError()
     {
         using var h = new DesktopHarness();
         var text = h.Get<Localizer>();
         var measurer = new FakeMeasurer { Result = Fast };
         var activity = new Lines();
         var install = new TaskCompletionSource<bool>();
-        var editor = new VideoStyleEditorViewModel(new VideoStyle { Name = "A" }, true, text,
-            referenceServices: new ReferenceVideoServices(measurer, () => Task.FromResult<string?>("C:/videos/clip.mp4"), _ => install.Task, activity));
-        var reference = editor.ReferenceVideo.ShouldNotBeNull();
+        var reference = new ReferenceVideoViewModel(new ReferenceVideoServices(measurer, () => Task.FromResult<string?>("C:/videos/clip.mp4"),
+            _ => install.Task, activity), text, null, (_, _) => { });
 
         var running = reference.MeasureFileCommand.ExecuteAsync(null);
         reference.Busy.ShouldBeTrue();
@@ -138,9 +131,9 @@ public sealed class ReferenceVideoPageTests
         });
         await FirstRunTests.CreateAsync(h);
         var text = h.Get<Localizer>();
-        var section = (await h.Get<SettingsViewModel>().ShowAsync<VideoStylesSettingsViewModel>()).ShouldNotBeNull();
-        section.Add();
-        var reference = section.Editor.ShouldNotBeNull().ReferenceVideo.ShouldNotBeNull();
+        var media = h.Get<VideoMediaViewModel>();
+        await media.LoadAsync(new VideoMedia());
+        var reference = media.ReferenceVideo.ShouldNotBeNull();
 
         reference.Address = "https://example.com/v";
         await reference.MeasureAddressCommand.ExecuteAsync(null);

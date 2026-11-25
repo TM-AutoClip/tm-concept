@@ -361,6 +361,10 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
             session.PendingMessage = null;
         }
 
+        // 0.1.54: the look for a newer version starts now, in the background (every start, a conditional request), so a long components
+        // update below never holds it up; its window is shown only after that question.
+        var updateCheck = StartUpdateCheck();
+
         // Another app version ran before: what to do with the installed components (update / reinstall / later). Only here, after the
         // first run or the unlock, in the main window; a failure is logged and shown, it never keeps the app from starting.
         try
@@ -378,7 +382,7 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
         // 0.1.37: what a cut-short "Reinstall from scratch" left next to the components folder and the engines' leftover tmp folders, in the
         // background (gigabytes take a while; the window never waits). After the version check, so the reinstall it may start has ended.
         var sweeper = services.GetRequiredService<DiskSpace.ILeftoverSweeper>();
-        _ = Task.Run(async () =>
+        var swept = Task.Run(async () =>
         {
             try
             {
@@ -393,11 +397,15 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
             }
         });
 
+        // 0.1.54: then the unused model files (old versions, unfinished downloads, files no model uses): listed with their sizes and deleted
+        // for good only on the user's yes; at most once a day, from 500 MB on.
+        _ = OfferOrphanCleanupAsync(swept);
+
         // What changed since the version whose notes a start recorded last (once, from the notes built into the app); never holds the start up.
         _ = ShowWhatsNewAsync();
 
-        // A newer version of the app (at most once a day, when it is not turned off): offered in a window, installed only on confirmation.
-        _ = OfferUpdateAsync();
+        // A newer version of the app (looked for at every start unless turned off): offered in a window, installed only on confirmation.
+        _ = OfferUpdateAsync(updateCheck);
 
         try
         {
@@ -445,13 +453,33 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
         }
     }
 
-    /// <summary>Looks for a newer version in the background and offers it; a failure is only logged (the start is never held up).</summary>
-    private async Task OfferUpdateAsync()
+    /// <summary>After the start-up sweep: asks about the unused model files (a failure is only logged; the start is never held up).</summary>
+    private async Task OfferOrphanCleanupAsync(Task swept)
     {
         try
         {
-            var updater = services.GetRequiredService<Updates.AppUpdater>();
-            var offer = await Task.Run(() => updater.CheckAtStartAsync(CancellationToken.None)).ConfigureAwait(true);
+            await swept.ConfigureAwait(true);
+            await services.GetRequiredService<DiskSpace.IOrphanFileCheck>().RunAsync(CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            logger.LogWarning(ex, "The look for unused model files failed; it is tried again at the next start");
+        }
+    }
+
+    /// <summary>Starts the start's look for a newer version off the window's thread (its failure is seen by <see cref="OfferUpdateAsync"/>).</summary>
+    private Task<Updates.UpdateOffer?> StartUpdateCheck()
+    {
+        var updater = services.GetRequiredService<Updates.AppUpdater>();
+        return Task.Run(() => updater.CheckAtStartAsync(CancellationToken.None));
+    }
+
+    /// <summary>Offers what the start's look found; a failure is only logged (the start is never held up).</summary>
+    private async Task OfferUpdateAsync(Task<Updates.UpdateOffer?> check)
+    {
+        try
+        {
+            var offer = await check.ConfigureAwait(true);
             if (offer is not null)
             {
                 await services.GetRequiredService<Dialogs.IAppUpdateDialog>().ShowAsync(offer).ConfigureAwait(true);

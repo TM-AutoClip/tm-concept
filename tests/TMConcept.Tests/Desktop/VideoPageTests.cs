@@ -40,7 +40,8 @@ public sealed class VideoPageTests
     /// A profile with a key, its video code choice and one approved concept; the page is open (nothing queued) with a default template chosen
     /// (0.1.19: nothing is produced without one), unless <paramref name="chooseStyle"/> is false.
     /// </summary>
-    private static async Task<(VideoViewModel Page, Concept Concept)> OpenAsync(DesktopHarness h, bool chooseStyle = true, Action<VideoStyle>? template = null)
+    private static async Task<(VideoViewModel Page, Concept Concept)> OpenAsync(DesktopHarness h, bool chooseStyle = true, Action<VideoStyle>? template = null,
+        VideoMedia? media = null)
     {
         await FirstRunTests.CreateAsync(h);
         var profile = new Profile { Name = "Byzantium", ContentLanguage = ContentLanguages.English, ConceptText = "x" };
@@ -56,6 +57,12 @@ public sealed class VideoPageTests
             Provider = "anthropic",
             Model = "claude-sonnet-5-5",
         }, CancellationToken.None);
+        if (media is not null)
+        {
+            // 0.1.54: the music and the reference video are the profile's (the video page's model choice).
+            await h.Get<IVideoMediaStore>().SaveAsync(profile.Id, media, CancellationToken.None);
+        }
+
         var style = new VideoStyle { Name = "Default" };
         template?.Invoke(style);
         await h.Get<IVideoStyleStore>().SaveAsync(style, CancellationToken.None);
@@ -204,7 +211,7 @@ public sealed class VideoPageTests
             line.ShouldContain(text["steps.short." + part] + ":");
         }
 
-        Find<TMConcept.Desktop.Views.StepPickerView>(view, "ModelPickers").IsEffectivelyVisible.ShouldBeFalse();
+        Find<Avalonia.Controls.Border>(view, "ModelsPanel").IsVisible.ShouldBeFalse();
         Find<Avalonia.Controls.Primitives.ToggleButton>(view, "Header").IsChecked = true;
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
         page.ModelsOpen.ShouldBeTrue();
@@ -1376,7 +1383,8 @@ public sealed class VideoPageTests
 
     private static T Find<T>(Avalonia.Visual root, string name)
         where T : Avalonia.Controls.Control =>
-        Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(root).OfType<T>().First(c => c.Name == name);
+        Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(root).OfType<T>().FirstOrDefault(c => c.Name == name)
+        ?? Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants((Avalonia.LogicalTree.ILogical)root).OfType<T>().First(c => c.Name == name);
 
     private static async Task Until(Func<bool> condition)
     {
@@ -1626,7 +1634,7 @@ public sealed class VideoPageTests
         var file = Path.Combine(h.Get<IAppPaths>().DataDirectory, "user-music", "song.mp3");
         Directory.CreateDirectory(Path.GetDirectoryName(file)!);
         await File.WriteAllBytesAsync(file, [0x49, 0x44, 0x33, 0x04, 0x00]);
-        var (page, _) = await OpenAsync(h, template: s => s.Music = new VideoMusic { Source = MusicSource.OwnFile, File = file, Attribution = attribution });
+        var (page, _) = await OpenAsync(h, media: new VideoMedia { Music = new VideoMusic { Source = MusicSource.OwnFile, File = file, Attribution = attribution } });
         await page.EnqueueAsync(page.Approved.Single());
 
         await page.ProduceAllAsync();

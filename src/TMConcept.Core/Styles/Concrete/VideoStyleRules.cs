@@ -205,6 +205,12 @@ public static class VideoStyleRules
             problems.Add(VideoStyleProblem.MusicFileMissing);
         }
 
+        // 0.1.54: a track of the user's collection needs its file.
+        if (style.Music is { Source: MusicSource.MyMusic } mine && (mine.Track is null || string.IsNullOrWhiteSpace(mine.Track.File)))
+        {
+            problems.Add(VideoStyleProblem.MusicFileMissing);
+        }
+
         // 0.1.46: generated music needs its model.
         if (style.Music is { Source: MusicSource.GenerateLocal or MusicSource.GenerateOnline } generated && string.IsNullOrWhiteSpace(generated.Generator))
         {
@@ -239,6 +245,47 @@ public static class VideoStyleRules
         ArgumentNullException.ThrowIfNull(style);
         options.Style = Copy(style);
         options.Subtitles = style.Subtitles;
+    }
+
+    /// <summary>
+    /// Takes the template and the profile's background music and reference video (0.1.54, <see cref="VideoMedia"/>) into the options of a video
+    /// that is starting (<see cref="WithMedia"/>).
+    /// </summary>
+    public static void Snapshot(VideoOptions options, VideoStyle style, VideoMedia? media)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(style);
+        options.Style = WithMedia(style, media);
+        options.Subtitles = style.Subtitles;
+    }
+
+    /// <summary>
+    /// A copy of the template with the profile's music and reference (0.1.54: they are no longer the template's; a template's own old values
+    /// are replaced, an empty choice = no music and no reference). A reference sets the narration tempo it suggests, as measuring it in the
+    /// template did before.
+    /// </summary>
+    public static VideoStyle WithMedia(VideoStyle style, VideoMedia? media)
+    {
+        ArgumentNullException.ThrowIfNull(style);
+        var copy = Copy(style);
+        var chosen = media is null
+            ? new VideoMedia()
+            : JsonSerializer.Deserialize(JsonSerializer.Serialize(media, CoreJsonContext.Default.VideoMedia), CoreJsonContext.Default.VideoMedia) ?? new VideoMedia();
+        copy.Music = chosen.Music ?? new VideoMusic();
+        copy.Reference = chosen.Reference;
+        if (copy.Reference is { } reference)
+        {
+            copy.Tempo = References.ReferenceTempoMapper.Suggest(reference).Tempo;
+        }
+
+        return copy;
+    }
+
+    /// <summary>The problems of a profile's music choice (0.1.54; the same music rules as a template's, <see cref="Problems"/>).</summary>
+    public static IReadOnlyList<VideoStyleProblem> MediaProblems(VideoMedia media)
+    {
+        ArgumentNullException.ThrowIfNull(media);
+        return Problems(new VideoStyle { Name = "media", Music = media.Music ?? new VideoMusic() });
     }
 
     /// <summary>Subtitles are on for this video: the snapshot decides; a video without one keeps its old field.</summary>

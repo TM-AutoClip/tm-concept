@@ -270,7 +270,7 @@ public sealed class MusicLibraryTests
     [Fact]
     public void ALibrarySourceIsOfferedAndAPickedOpenverseTrackNeedsItsFile()
     {
-        MusicSources.Available.ShouldBe([MusicSource.Off, MusicSource.Library, MusicSource.GenerateLocal, MusicSource.GenerateOnline, MusicSource.OwnFile]);
+        MusicSources.Available.ShouldBe([MusicSource.Off, MusicSource.MyMusic, MusicSource.Library, MusicSource.GenerateLocal, MusicSource.GenerateOnline, MusicSource.OwnFile]);
         var style = new VideoStyle { Name = "Müzik", Music = new VideoMusic { Source = MusicSource.Library } };
         VideoStyleRules.Problems(style).ShouldBeEmpty("chosen by the concept");
 

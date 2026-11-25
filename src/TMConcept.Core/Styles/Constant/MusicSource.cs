@@ -21,4 +21,10 @@ public enum MusicSource
 
     /// <summary>A file the user chose ("Kendi dosyam"); its licence is the user's responsibility.</summary>
     OwnFile = 4,
+
+    /// <summary>
+    /// A track of the user's own music collection ("Müziklerim", 0.1.54): pieces made on the "Müzik üret" page and files the user added there
+    /// (<see cref="Music.IMyMusic"/>).
+    /// </summary>
+    MyMusic = 5,
 }

@@ -72,6 +72,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
     private readonly WindowHost _host;
     private readonly Dictionary<Guid, Concept> _queued = [];
     private readonly Core.Pronunciation.IPronunciationStore _pronunciations;
+    private readonly IVideoMediaStore _mediaStore;
     private int _check;
     private CancellationTokenSource? _cancel;
     private Guid? _running;
@@ -86,7 +87,8 @@ public sealed partial class VideoViewModel : PageViewModelBase
         ConceptDetailViewModel detail, ConceptActions actions, VideoRows rows, VideoFiles files, PlayerViewModel player,
         Func<ProductionProgressViewModel> progress, ConceptEvents events, INotifier notifier, IVideoQueueRunner runner, IActivityLog activity, Localizer text,
         Paths.UiPreferencesFile preferences, IVideoStyleStore styles, Core.Paths.IAppPaths paths, WindowHost host, PlanReviewViewModel review,
-        ProductionChecklistViewModel checklist, Core.Pronunciation.IPronunciationStore pronunciations, ILogger<VideoViewModel> logger)
+        ProductionChecklistViewModel checklist, Core.Pronunciation.IPronunciationStore pronunciations, VideoMediaViewModel videoMedia,
+        IVideoMediaStore mediaStore, ILogger<VideoViewModel> logger)
     {
         _session = session;
         _concepts = concepts;
@@ -115,6 +117,8 @@ public sealed partial class VideoViewModel : PageViewModelBase
         Player = player;
         Detail = detail;
         _pronunciations = pronunciations;
+        _mediaStore = mediaStore;
+        Media = videoMedia;
         Review = review;
         Review.Attach(() => NightMode);
         Checklist = checklist;
@@ -144,6 +148,15 @@ public sealed partial class VideoViewModel : PageViewModelBase
 
     /// <summary>The page's models (the profile's last choices).</summary>
     public StepPickerViewModel Picker { get; }
+
+    /// <summary>
+    /// The profile's reference video and background music (0.1.54: under the models; they left the template, which rarely changes). Every
+    /// change is saved for the profile; each video takes them when it starts.
+    /// </summary>
+    public VideoMediaViewModel Media { get; }
+
+    /// <summary>The chosen template with the profile's music and reference, as a starting video would take it (null without a template).</summary>
+    public VideoStyle? EffectiveStyle => SelectedStyle is { } style ? VideoStyleRules.WithMedia(style, Media.ToMedia()) : null;
 
     /// <summary>Whether the model cards are unfolded (folded when the page opens).</summary>
     [ObservableProperty]
@@ -318,6 +331,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
                     await SafeAsync(ReloadAsync).ConfigureAwait(true);
                 }
             };
+            Media.Changed += async (_, _) => await SafeAsync(SaveMediaAsync).ConfigureAwait(true);
             Picker.Changed += async (_, _) =>
             {
                 if (!_loading)
@@ -336,6 +350,10 @@ public sealed partial class VideoViewModel : PageViewModelBase
         if (!Busy)
         {
             await LoadModelsAsync().ConfigureAwait(true);
+        }
+        else
+        {
+            await Media.RefreshMineAsync().ConfigureAwait(true);
         }
 
         await ReloadAsync().ConfigureAwait(true);
@@ -667,7 +685,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
         var mine = ++_check;
         try
         {
-            var style = SelectedStyle;
+            var style = EffectiveStyle;
             var language = _session.Profile?.ContentLanguage ?? ContentLanguages.English;
             var chosen = new[] { PipelineSteps.VideoCode, PipelineSteps.Images, PipelineSteps.ImagePoints, PipelineSteps.QualityCheck, PipelineSteps.Speech }
                 .Select(s => Picker.Model(s)).OfType<CatalogModel>().ToList();
@@ -843,6 +861,21 @@ public sealed partial class VideoViewModel : PageViewModelBase
         }
     }
 
+    /// <summary>Saves the profile's music and reference (0.1.54), then the estimate and the checklist follow it.</summary>
+    private async Task SaveMediaAsync()
+    {
+        if (_loading || _session.Profile is not { } profile)
+        {
+            return;
+        }
+
+        var media = Media.ToMedia();
+        await _mediaStore.SaveAsync(profile.Id, media, CancellationToken.None).ConfigureAwait(true);
+        _logger.LogInformation("Profile music saved: {Source}{Reference}", media.Music.Source, media.Reference is null ? string.Empty : ", with a reference video");
+        await EstimateAsync().ConfigureAwait(true);
+        await CheckAsync().ConfigureAwait(true);
+    }
+
     private async Task LoadModelsAsync()
     {
         _loading = true;
@@ -851,6 +884,8 @@ public sealed partial class VideoViewModel : PageViewModelBase
             var profile = _session.Profile;
             var language = profile?.ContentLanguage ?? (_text.Language == "tr" ? ContentLanguages.Turkish : ContentLanguages.English);
             await Picker.LoadAsync(profile?.Id, language, PipelineSteps.VideoPage).ConfigureAwait(true);
+            var media = profile is null ? new VideoMedia() : await _mediaStore.GetAsync(profile.Id, CancellationToken.None).ConfigureAwait(true);
+            await Media.LoadAsync(media).ConfigureAwait(true);
         }
         finally
         {
@@ -984,7 +1019,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
             }
 
             var options = new VideoOptions();
-            VideoStyleRules.Snapshot(options, style);
+            VideoStyleRules.Snapshot(options, style, await _mediaStore.GetAsync(profile.Id, CancellationToken.None).ConfigureAwait(true));
             if (ProductionChecklist.WithoutMusic(options.Style, Checklist.Gaps, Checklist.Skipped))
             {
                 _logger.LogInformation("The template's music file was skipped on purpose; this video is made without music");
@@ -1252,13 +1287,13 @@ public sealed partial class VideoViewModel : PageViewModelBase
         var engine = _engines.FirstOrDefault(e => e.Kind == Picker.Row(PipelineSteps.VideoCode)?.Engine?.Kind);
         var reviewer = Picker.Model(PipelineSteps.QualityCheck);
         var estimate = _estimator.Estimate(queued, profile, engine, code, Picker.Model(PipelineSteps.Images), Picker.Model(PipelineSteps.Speech),
-            SelectedStyle?.Subtitles ?? true, SelectedStyle, reviewer);
+            SelectedStyle?.Subtitles ?? true, EffectiveStyle, reviewer);
         QueueEstimate = _text.Format("concepts.estimate.tiny", _text.Usd(estimate.MinUsd), _text.Usd(estimate.MaxUsd));
         QueueEstimateTip = _text.Format("video.estimate", queued.Count, _text.Usd(estimate.MinUsd), _text.Usd(estimate.MaxUsd));
 
         // F11 + F14 (0.1.50): the quality mode's own lines (the reviewer, the critic, the worst case of the careful mode's repairs).
         foreach (var line in _estimator.QualityLines(queued, profile, engine, code, Picker.Model(PipelineSteps.Images), reviewer, SelectedStyle?.Subtitles ?? true,
-            SelectedStyle))
+            EffectiveStyle))
         {
             QueueEstimateTip += "\n" + _text.Format("video.estimate.quality_line", _text["produced.cost." + line.Step], _text.Usd(line.Cost.MinUsd),
                 _text.Usd(line.Cost.MaxUsd));

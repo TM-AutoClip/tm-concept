@@ -18,14 +18,17 @@ namespace TMConcept.Desktop.Components;
 /// for a minute after the last scene), renames the whole components folder (<c>&lt;data&gt;/tools</c>) aside in one step (a file in use makes
 /// the rename fail and nothing changes), installs again what was there into a new, empty folder, and only when that ended ready deletes the
 /// old folder for good (0.1.28: no recycle bin, which frees nothing for a folder of gigabytes; the confirmation said so with the size; a
-/// failure is shown with where the folder stays). A declined, cancelled or failed install puts the old folder back in its place (0.1.16 removed it first, so a declined
-/// download left nothing installed and the next start did not ask again).</item>
+/// failure is shown with where the folder stays). A declined or cancelled install that installed nothing puts the old folder back in its place (0.1.16 removed it first, so a declined
+/// download left nothing installed and the next start did not ask again). 0.1.54: an install that installed some components and failed
+/// others (25 Nov 2026: 13 of 14 installed, the yazgı-tts packages failed) keeps the new folder; only the failed components' folders are
+/// carried over from the old one, and the old folder is deleted for good: before, the old folder was to go back, the move was refused (the
+/// app's Ollama ran from the new folder) and both folders stayed (19 GB twice). The app's own Ollama is stopped before any move.</item>
 /// </list>
 /// The database, the profiles, the concepts and the videos are outside that folder and never touched.
 /// </summary>
 public sealed class ComponentReinstaller(ComponentPlanner planner, ComponentInstallFlow flow, Core.DiskSpace.IFolderDiscard discard, AppPaths paths,
     Speech.Speech.SpeechWorkerClient speech, Speech.Python.PythonWorkerClient python, IActivityLog activity, Localizer text, TimeProvider clock, IComponentWorkGate gate,
-    ILogger<ComponentReinstaller> logger)
+    ILogger<ComponentReinstaller> logger, Core.AppOllama.IAppOllamaServer? ollama = null)
 {
     /// <summary>The text of what an install confirmation says a cancel means here.</summary>
     public const string PurposeKey = "install.purpose.update";
@@ -110,6 +113,7 @@ public sealed class ComponentReinstaller(ComponentPlanner planner, ComponentInst
         var aside = Path.TrimEndingDirectorySeparator(tools) + AsidePrefix + Stamp();
         try
         {
+            await StopOllamaAsync().ConfigureAwait(true);
             Directory.Move(tools, aside);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -136,13 +140,101 @@ public sealed class ComponentReinstaller(ComponentPlanner planner, ComponentInst
 
         if (!outcome.Ready)
         {
-            return await PutBackAsync(tools, aside, outcome).ConfigureAwait(true);
+            await StopOllamaAsync().ConfigureAwait(true);
+            var installed = await Task.Run(async () =>
+            {
+                await planner.RefreshAllAsync(CancellationToken.None).ConfigureAwait(false);
+                return codes.Where(c => planner.Find(c) is { Ready: true }).ToList();
+            }, CancellationToken.None).ConfigureAwait(true);
+            if (installed.Count == 0)
+            {
+                return await PutBackAsync(tools, aside, outcome).ConfigureAwait(true);
+            }
+
+            return await KeepNewAsync(tools, aside, codes.Except(installed, StringComparer.Ordinal).ToList(), installed, outcome).ConfigureAwait(true);
         }
 
         activity.Add(ActivityLevel.Info, text["components.reinstall.done"]);
         await RemoveOldAsync(aside).ConfigureAwait(true);
         return outcome;
     }
+
+    /// <summary>
+    /// The new install ended with some components installed and some not (0.1.54): the new folder stays; the folders of each failed component
+    /// are carried over from the old one (what it had there, ready or not, so nothing is lost that the new install could not get again), unless
+    /// an installed component owns that folder too; then the old folder is deleted for good. The components update asks again at the next start.
+    /// </summary>
+    private async Task<InstallOutcome> KeepNewAsync(string tools, string aside, IReadOnlyList<string> failed, IReadOnlyList<string> installed,
+        InstallOutcome outcome)
+    {
+        var owned = installed.Select(planner.Find).OfType<IComponent>().SelectMany(c => c.Folders()).Select(Full).ToList();
+        var carried = 0;
+        foreach (var component in failed.Select(planner.Find).OfType<IComponent>())
+        {
+            foreach (var folder in component.Folders().Select(Full))
+            {
+                var relative = Path.GetRelativePath(Full(tools), folder);
+                if (relative.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relative) || relative == "."
+                    || owned.Any(o => Same(o, folder) || DiskSpace.FolderDiscardBase.Inside(o, folder) || DiskSpace.FolderDiscardBase.Inside(folder, o)))
+                {
+                    continue;
+                }
+
+                var old = Path.Combine(aside, relative);
+                if (!Directory.Exists(old))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    if (Directory.Exists(folder))
+                    {
+                        await discard.DiscardAsync(folder, CancellationToken.None).ConfigureAwait(true);
+                    }
+
+                    Directory.CreateDirectory(Path.GetDirectoryName(folder)!);
+                    Directory.Move(old, folder);
+                    carried++;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+                {
+                    logger.LogWarning(ex, "Components reinstall: the old files of {Component} could not be carried over", component.Code);
+                }
+            }
+        }
+
+        logger.LogInformation("Components reinstall: {Installed} installed, {Failed} not ({Codes}); the new folder stays, {Carried} folder(s) of the failed "
+            + "ones carried over from the old one", installed.Count, failed.Count, string.Join(", ", failed), carried);
+        var line = text.Format("components.reinstall.partial", installed.Count, string.Join(", ", failed.Select(c => planner.Find(c)?.Name ?? c)));
+        activity.Add(ActivityLevel.Warning, line);
+        await RemoveOldAsync(aside).ConfigureAwait(true);
+        return new InstallOutcome(false, Join(outcome.Reason, line));
+    }
+
+    /// <summary>Ends the app's own Ollama (it runs from the components folder; a running server keeps the folder from being moved).</summary>
+    private async Task StopOllamaAsync()
+    {
+        if (ollama is not { Running: true })
+        {
+            return;
+        }
+
+        try
+        {
+            await ollama.StopAsync(CancellationToken.None).ConfigureAwait(true);
+            logger.LogInformation("Components reinstall: the app's Ollama was stopped before the components folder is moved");
+        }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            logger.LogWarning(ex, "Components reinstall: the app's Ollama could not be stopped");
+        }
+    }
+
+    private static string Full(string path) => Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+
+    private static bool Same(string a, string b) =>
+        string.Equals(a, b, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 
     /// <summary>
     /// The new install ended ready: the old folder is deleted for good (0.1.28: no recycle bin; an old components folder is gigabytes, the

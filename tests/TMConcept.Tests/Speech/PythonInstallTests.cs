@@ -40,11 +40,11 @@ public sealed class PythonInstallTests
         PythonInstaller.PythonFindArguments().ShouldContain("--no-python-downloads");
         PythonInstaller.VenvArguments("env", "py.exe").ShouldBe(["venv", "env", "--python", "py.exe", "--no-python-downloads", "--clear", "--no-config"]);
 
-        var sync = PythonInstaller.SyncArguments("lock.txt", "python.exe", "cu128");
+        var sync = PythonInstaller.SyncArguments("lock.txt", "python.exe", "cu128", "2026-11-20T00:00:00Z");
         sync.Take(3).ShouldBe(["pip", "sync", "lock.txt"], "sync: exactly the lock, nothing else stays in the environment");
         sync.ShouldContain("--torch-backend");
         sync[sync.ToList().IndexOf("--torch-backend") + 1].ShouldBe("cu128");
-        sync[sync.ToList().IndexOf("--exclude-newer") + 1].ShouldBe(PythonPins.ExcludeNewer);
+        sync[sync.ToList().IndexOf("--exclude-newer") + 1].ShouldBe("2026-11-20T00:00:00Z", "the lock's own moment");
         sync[sync.ToList().IndexOf("--default-index") + 1].ShouldBe("https://pypi.org/simple");
         sync.ShouldContain("--no-config", "a user's uv.toml must not change what is installed");
     }
@@ -70,6 +70,39 @@ public sealed class PythonInstallTests
         PythonFiles.HasLock(PythonEnvironments.Mms, "cu128").ShouldBeFalse();
         PythonFiles.Lock(PythonEnvironments.VoxCpm, "cpu").ShouldContain("trnorm @ https://github.com/ozguradmin/ahenk-turkish-tts/archive/8981df9354a6dc95a3a2b4730b7fbff196dda219.zip");
         PythonInstaller.Fingerprint(PythonEnvironments.Xtts, "cu128").ShouldNotBe(PythonInstaller.Fingerprint(PythonEnvironments.Xtts, "cpu"));
+    }
+
+    [Fact]
+    public void EveryLockIsInstalledWithTheMomentItWasMadeAgainst()
+    {
+        // 0.1.54: yazgı-tts's lock was made against 20 Nov 2026 (filelock 4.2.12 of 18 Nov), but every install was given 1 Nov 2026 and uv
+        // found no solution. The install now gives each lock the moment its own header names.
+        foreach (var environment in PythonEnvironments.All)
+        {
+            string[] backends = environment.ProcessorOnly ? ["cpu"] : ["cu128", "cpu"];
+            foreach (var backend in backends)
+            {
+                var text = PythonFiles.Lock(environment, backend);
+                var header = text.Split('\n').First(l => l.Contains("--exclude-newer", StringComparison.Ordinal));
+                var named = header[(header.IndexOf("--exclude-newer", StringComparison.Ordinal) + "--exclude-newer".Length)..].Trim().Split(' ')[0];
+                PythonFiles.ExcludeNewer(environment, backend).ShouldBe(named, environment.Key + " " + backend);
+            }
+        }
+
+        PythonFiles.ExcludeNewer(PythonEnvironments.Yazgi, "cpu").ShouldBe("2026-11-20T00:00:00Z");
+        PythonFiles.ExcludeNewer(PythonEnvironments.Xtts, "cpu").ShouldBe(PythonPins.ExcludeNewer);
+        PythonFiles.ExcludeNewerOf("filelock==1.0\n").ShouldBe(PythonPins.ExcludeNewer, "a lock without a header falls back");
+        PythonFiles.ExcludeNewerOf("# x\n#   --exclude-newer 2026-12-01T00:00:00Z --no-header\na==1\n").ShouldBe("2026-12-01T00:00:00Z");
+    }
+
+    [Fact]
+    public void AFailedUvRunLogsItsCauseAndHint()
+    {
+        const string Output = "Resolved 18 packages\nerror: No solution found when resolving dependencies\n  cause: Because there is no version of filelock==4.2.12 "
+            + "and you require filelock==4.2.12, we can conclude that your requirements are unsatisfiable.\n\nhint: `filelock` was filtered by `exclude-newer`";
+        ChildOutput.Summary(Output).ShouldContain("filelock==4.2.12");
+        ChildOutput.Detail(Output).ShouldContain("hint: `filelock` was filtered by `exclude-newer`");
+        ChildOutput.Detail(Output).ShouldStartWith("Resolved 18 packages");
     }
 
     [Fact]

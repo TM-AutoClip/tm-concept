@@ -9,8 +9,9 @@ namespace TMConcept.Desktop.Updates;
 
 /// <summary>
 /// The project's published releases on GitHub (<see cref="UpdateRules.Releases"/>, every page up to <see cref="UpdateRules.MaxPages"/>), read
-/// without a token and kept in <c>update-check.json</c>: the start looks at most once a day (<see cref="UpdateRules.CheckEvery"/>); a look
-/// sends GitHub's last ETag of the first page, so an unchanged list costs nothing of the hourly limit; a rate-limit answer (403 / 429 with no
+/// without a token and kept in <c>update-check.json</c>: every start looks (0.1.54; before, at most once a day, so a release made after an
+/// install stayed unseen for a day), in the background; a look sends GitHub's last ETag of the first page, so an unchanged list is a 304 that
+/// costs nothing of the hourly limit; a rate-limit answer (403 / 429 with no
 /// requests left, or Retry-After) is respected until the time GitHub names, also by "Check now". Offline or refused: the last known list is
 /// used and the reason is logged. Drafts and pre-releases are never kept.
 /// </summary>
@@ -55,22 +56,23 @@ public sealed class ReleaseFeed : IDisposable
         (await ReleasesAsync(force, cancellationToken).ConfigureAwait(false)).FirstOrDefault();
 
     /// <summary>
-    /// The published releases, newest version first: the kept list when the last look is younger than a day (unless <paramref name="force"/>)
-    /// or GitHub asked to wait, otherwise GitHub's answer. Empty when none is known. Network problems are logged and leave the kept list.
+    /// The published releases, newest version first: GitHub's answer (a conditional request; 304 = the kept list), or the kept list while
+    /// GitHub asked to wait (a rate limit; logged, nothing shown). Empty when none is known. Network problems are logged and leave the kept
+    /// list. <paramref name="force"/> ("Check now") is kept for the callers; since 0.1.54 every look asks GitHub.
     /// </summary>
     public async Task<IReadOnlyList<GitHubRelease>> ReleasesAsync(bool force, CancellationToken cancellationToken)
     {
         var state = State();
         var now = _clock.GetUtcNow();
         var kept = state.Releases ?? [];
+        if (force)
+        {
+            _logger.LogInformation("Update check: asked for now");
+        }
+
         if (state.NotBeforeUtc is { } notBefore && now < notBefore)
         {
             _logger.LogInformation("Update check: GitHub asked to wait until {Time:u}; the last known releases are used", notBefore);
-            return kept;
-        }
-
-        if (!force && state.Releases is not null && state.CheckedAtUtc is { } last && now - last < UpdateRules.CheckEvery && now >= last)
-        {
             return kept;
         }
 

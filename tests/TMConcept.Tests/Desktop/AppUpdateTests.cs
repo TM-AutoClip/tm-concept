@@ -19,7 +19,7 @@ using TMConcept.Tests.Engines;
 namespace TMConcept.Tests.Desktop;
 
 /// <summary>
-/// The app's own update (the developer, 16 Nov 2026): GitHub's latest release is read at most once a day (ETag, rate limit respected),
+/// The app's own update (the developer, 16 Nov 2026): GitHub's latest release is read at every start (0.1.54; ETag, rate limit respected),
 /// compared by semantic version, offered with its notes, and installed only after a confirmation with the SHA-256 from the release notes
 /// (missing or different = refused); the running program is replaced and started again. A fake GitHub and a fake download server: no test
 /// reads GitHub.
@@ -78,26 +78,28 @@ public sealed class AppUpdateTests
     }
 
     [Fact]
-    public async Task GitHubIsAskedAtMostOnceADayWithItsETagAndAForcedLookCostsNothingWhenUnchanged()
+    public async Task EveryStartAsksGitHubWithItsETagSoARecentReleaseIsSeenAtOnce()
     {
         var github = new FakeGitHub(Release("v0.1.18", "notes"));
         using var h = Harness(github, out _, out var clock);
         var feed = h.Get<ReleaseFeed>();
 
         (await feed.LatestAsync(false, CancellationToken.None))!.Tag.ShouldBe("v0.1.18");
-        (await feed.LatestAsync(false, CancellationToken.None))!.Tag.ShouldBe("v0.1.18");
-        github.Requests.Count.ShouldBe(1, "the second look within a day is the kept answer");
         github.Requests[0].Headers.UserAgent.ToString().ShouldBe(UpdateRules.UserAgent);
         github.Requests[0].Headers.Authorization.ShouldBeNull("no token");
         github.Requests[0].RequestUri.ShouldBe(UpdateRules.Releases);
 
-        (await feed.LatestAsync(true, CancellationToken.None))!.Tag.ShouldBe("v0.1.18");
-        github.Requests.Count.ShouldBe(2);
-        github.Requests[1].Headers.IfNoneMatch.ToString().ShouldBe("\"r1\"", "an unchanged release costs nothing of the hourly limit (304)");
+        // 0.1.54: the next start a minute later asks again, conditionally (an unchanged list is a 304 that costs nothing of the hourly limit).
+        clock.Advance(TimeSpan.FromMinutes(1));
+        (await feed.LatestAsync(false, CancellationToken.None))!.Tag.ShouldBe("v0.1.18");
+        github.Requests.Count.ShouldBe(2, "every start looks");
+        github.Requests[1].Headers.IfNoneMatch.ToString().ShouldBe("\"r1\"");
 
-        clock.Advance(TimeSpan.FromDays(1.1));
+        // A release made after the install is seen at the next start, not a day later.
+        clock.Advance(TimeSpan.FromMinutes(5));
         github.Releases = [Release("v0.1.19", "newer"), Release("v0.1.18", "notes")];
         (await feed.LatestAsync(false, CancellationToken.None))!.Tag.ShouldBe("v0.1.19");
+        (await feed.LatestAsync(true, CancellationToken.None))!.Tag.ShouldBe("v0.1.19", "Check now stays");
     }
 
     [Fact]
@@ -331,10 +333,10 @@ public sealed class AppUpdateTests
         github.Requests.Count.ShouldBe(4);
         github.Requests[3].Headers.IfNoneMatch.ToString().ShouldBe("\"r-v0.1.22\"");
 
-        // Within a day the kept list is used without asking.
+        // 0.1.54: every start asks too (a 304 again: one request, nothing of the hourly limit).
         (await feed.ReleasesAsync(false, CancellationToken.None)).Count.ShouldBe(5);
-        github.Requests.Count.ShouldBe(4);
-        clock.Advance(TimeSpan.FromDays(1.1));
+        github.Requests.Count.ShouldBe(5);
+        clock.Advance(TimeSpan.FromMinutes(2));
         github.Releases.Insert(0, Release("v0.1.23", "f"));
         (await feed.ReleasesAsync(false, CancellationToken.None))[0].Tag.ShouldBe("v0.1.23");
     }

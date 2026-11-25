@@ -1,0 +1,91 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:TMConcept.Desktop.ViewModels"
+             xmlns:views="using:TMConcept.Desktop.Views"
+             x:Class="TMConcept.Desktop.Views.MusicView"
+             x:DataType="vm:MusicViewModel">
+  <!-- 0.1.54: "Müzik üret": a piece from the user's own words (and a reference sound's tempo) into "Müziklerim"; own files can be added too. -->
+  <Grid ColumnDefinitions="*,*" ColumnSpacing="16" Margin="0,8">
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+      <StackPanel Spacing="10" MaxWidth="640" HorizontalAlignment="Left">
+        <StackPanel Orientation="Horizontal">
+          <TextBlock Text="{DynamicResource music.make}" FontWeight="SemiBold" VerticalAlignment="Center" />
+          <views:HelpTip Text="{DynamicResource music.make.tip}" />
+        </StackPanel>
+        <TextBox Name="MusicPrompt" Text="{Binding Prompt}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" MaxLength="600"
+                 PlaceholderText="{DynamicResource music.prompt.hint}" IsEnabled="{Binding Idle}" />
+        <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="10" ColumnSpacing="12">
+          <TextBlock Text="{DynamicResource music.model}" VerticalAlignment="Center" />
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+            <ComboBox Name="MusicModel" ItemsSource="{Binding Models}" SelectedItem="{Binding Model}" MinWidth="320" IsEnabled="{Binding Idle}">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:MusicModelChoice">
+                  <TextBlock Text="{Binding Label}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <views:HelpTip Text="{DynamicResource styles.music.generate.model.tip}" />
+          </StackPanel>
+          <TextBlock Grid.Row="1" Text="{DynamicResource music.seconds}" VerticalAlignment="Center" />
+          <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+            <NumericUpDown Name="MusicSeconds" Value="{Binding Seconds}" Minimum="10" Maximum="120" Increment="10" FormatString="0" Width="140"
+                           IsEnabled="{Binding Idle}" />
+            <CheckBox Name="MusicInstrumental" IsChecked="{Binding Instrumental}" Content="{DynamicResource music.instrumental}" IsEnabled="{Binding Idle}" />
+          </StackPanel>
+          <TextBlock Grid.Row="2" Text="{DynamicResource music.reference}" VerticalAlignment="Center" />
+          <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+            <Button Name="MusicReferencePick" Classes="small" Content="{DynamicResource music.reference.pick}" Command="{Binding PickReferenceCommand}"
+                    IsEnabled="{Binding Idle}" />
+            <TextBlock Name="MusicReferenceName" Text="{Binding ReferenceName}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="260" />
+            <Button Classes="small" Content="{DynamicResource music.reference.clear}" Command="{Binding ClearReferenceCommand}" IsVisible="{Binding HasReference}"
+                    IsEnabled="{Binding Idle}" />
+            <views:HelpTip Text="{DynamicResource music.reference.tip}" />
+          </StackPanel>
+          <TextBlock Grid.Row="3" Text="{DynamicResource music.title}" VerticalAlignment="Center" />
+          <TextBox Name="MusicTitle" Grid.Row="3" Grid.Column="1" Text="{Binding PieceTitle}" MaxLength="80" MaxWidth="360" HorizontalAlignment="Left" MinWidth="260"
+                   PlaceholderText="{DynamicResource music.title.hint}" IsEnabled="{Binding Idle}" />
+        </Grid>
+        <TextBlock Name="MusicCardWarning" Text="{Binding CardWarning}" Classes="small warning" TextWrapping="Wrap"
+                   IsVisible="{Binding CardWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+        <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding NeedsLocalInstall}">
+          <TextBlock Text="{Binding LocalInstallText}" Classes="small muted" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="420" />
+          <Button Name="MusicLocalInstall" Classes="small" Content="{DynamicResource styles.music.generate.local.install}" Command="{Binding InstallLocalCommand}" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <Button Name="MusicGenerate" Classes="accent" Content="{DynamicResource music.generate}" Command="{Binding GenerateCommand}" />
+          <Button Name="MusicCancel" Content="{DynamicResource common.cancel}" Command="{Binding CancelCommand}" IsVisible="{Binding Busy}" />
+          <TextBlock Name="MusicEstimate" Text="{Binding EstimateText}" Classes="small muted" VerticalAlignment="Center" />
+        </StackPanel>
+        <ProgressBar IsIndeterminate="True" IsVisible="{Binding Busy}" />
+        <SelectableTextBlock Name="MusicStatus" Text="{Binding Status}" TextWrapping="Wrap" />
+      </StackPanel>
+    </ScrollViewer>
+
+    <DockPanel Grid.Column="1">
+      <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
+        <TextBlock Text="{DynamicResource music.mine}" FontWeight="SemiBold" VerticalAlignment="Center" />
+        <views:HelpTip Text="{DynamicResource music.mine.tip}" />
+        <Button Name="MusicAddFile" Classes="small" Content="{DynamicResource music.add_file}" Command="{Binding AddFileCommand}" />
+      </StackPanel>
+      <TextBlock DockPanel.Dock="Top" Text="{DynamicResource music.mine.none}" Classes="muted" TextWrapping="Wrap" IsVisible="{Binding Empty}" />
+      <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+        <ItemsControl Name="MusicPieces" ItemsSource="{Binding Pieces}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:MyMusicRow">
+              <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8" Margin="0,4">
+                <StackPanel VerticalAlignment="Center">
+                  <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Text="{Binding Detail}" Classes="tiny muted" TextWrapping="Wrap" />
+                </StackPanel>
+                <Button Grid.Column="1" Classes="small" Content="{DynamicResource music.play}" VerticalAlignment="Center"
+                        Command="{Binding $parent[ItemsControl].((vm:MusicViewModel)DataContext).PlayCommand}" CommandParameter="{Binding}" />
+                <Button Grid.Column="2" Classes="small danger" Content="{DynamicResource common.delete}" VerticalAlignment="Center"
+                        Command="{Binding $parent[ItemsControl].((vm:MusicViewModel)DataContext).RemoveCommand}" CommandParameter="{Binding}" />
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+    </DockPanel>
+  </Grid>
+</UserControl>

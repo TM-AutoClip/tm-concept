@@ -13,10 +13,10 @@ using TMConcept.Desktop.ViewModels;
 namespace TMConcept.Tests.Desktop;
 
 /// <summary>
-/// Generated music in Settings → Templates (0.1.46, C5) with fake hardware and fake models: "Üret (yerel)" is greyed out and refused while the
+/// Generated music in the video page's music choice (0.1.46, C5; 0.1.54: moved there from Settings → Templates) with fake hardware and fake models: "Üret (yerel)" is greyed out and refused while the
 /// local model is not installed; on a card that is not NVIDIA it says "(yalnız NVIDIA)" and, once chosen, shows the yellow "this card is not
 /// supported" note without blocking the choice; on an NVIDIA card neither shows; the online models list with their prices and the chosen one
-/// is the template's music model. Nothing is installed, nothing reaches the network.
+/// is the profile's music model. Nothing is installed, nothing reaches the network.
 /// </summary>
 public sealed class MusicGeneratePageTests
 {
@@ -26,7 +26,7 @@ public sealed class MusicGeneratePageTests
 
     private static readonly GpuReport Nvidia = new([new GpuAdapter(GpuVendor.Nvidia, "RTX", 8 * GiB)], true, true);
 
-    private static async Task<(DesktopHarness H, VideoStyleEditorViewModel Editor)> EditorAsync(GpuReport card, bool localInstalled)
+    private static async Task<(DesktopHarness H, VideoMediaViewModel Editor)> EditorAsync(GpuReport card, bool localInstalled)
     {
         var h = new DesktopHarness(s =>
         {
@@ -38,9 +38,9 @@ public sealed class MusicGeneratePageTests
                 sp.GetRequiredService<StepModelResolver>()), localInstalled));
         });
         await FirstRunTests.CreateAsync(h);
-        var section = (await h.Get<SettingsViewModel>().ShowAsync<VideoStylesSettingsViewModel>()).ShouldNotBeNull();
-        section.Add();
-        return (h, section.Editor.ShouldNotBeNull());
+        var media = h.Get<VideoMediaViewModel>();
+        await media.LoadAsync(new VideoMedia());
+        return (h, media);
     }
 
     [AvaloniaFact]
@@ -81,7 +81,7 @@ public sealed class MusicGeneratePageTests
 
         editor.MusicSource.Value.ShouldBe((int)MusicSource.GenerateLocal);
         editor.MusicCardWarning.ShouldContain(text["styles.music.generate.nvidia_warning"]);
-        var style = editor.ToStyle();
+        var style = editor.ToMedia();
         style.Music.Source.ShouldBe(MusicSource.GenerateLocal);
         style.Music.Generator.ShouldBe("local/ace-step-1.5");
         style.Music.Instrumental.ShouldBeTrue();
@@ -117,8 +117,8 @@ public sealed class MusicGeneratePageTests
 
         editor.OnlineMusicModel = editor.OnlineMusicModels.Single(o => o.Key == "elevenlabs/music_v1");
 
-        editor.ToStyle().Music.Generator.ShouldBe("elevenlabs/music_v1");
-        VideoStyleRules.Problems(editor.ToStyle()).ShouldNotContain(VideoStyleProblem.MusicModelMissing);
+        editor.ToMedia().Music.Generator.ShouldBe("elevenlabs/music_v1");
+        VideoStyleRules.MediaProblems(editor.ToMedia()).ShouldNotContain(VideoStyleProblem.MusicModelMissing);
     }
 
     /// <summary>The catalog's music models; the local one counts as installed or not.</summary>

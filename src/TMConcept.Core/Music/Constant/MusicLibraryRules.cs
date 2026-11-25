@@ -14,6 +14,15 @@ public static class MusicLibraryRules
     /// <summary>The id start of a track picked from an Openverse search.</summary>
     public const string OpenversePrefix = "openverse:";
 
+    /// <summary>The id start of a track of the user's own collection (0.1.54, "Müziklerim").</summary>
+    public const string MinePrefix = "mine:";
+
+    /// <summary>The folder of the user's own collection under the data folder (0.1.54).</summary>
+    public const string MineFolder = "my-music";
+
+    /// <summary>The list of the user's own collection inside <see cref="MineFolder"/>.</summary>
+    public const string MineIndex = "my-music.json";
+
     /// <summary>The catalog format this app reads.</summary>
     public const int CatalogSchema = 1;
 

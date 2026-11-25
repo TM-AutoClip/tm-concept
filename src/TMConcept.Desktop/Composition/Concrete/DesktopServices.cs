@@ -97,6 +97,10 @@ public static class DesktopServices
         services.AddSingleton<Core.Music.IMusicGenerator, Providers.Music.LyriaMusicGenerator>();
         services.AddSingleton<Core.Music.IMusicGenerator, Providers.Music.ElevenLabsMusicGenerator>();
         services.AddSingleton<Core.Music.IMusicGenerators, Core.Music.MusicGenerators>();
+        // 0.1.54: "Müziklerim" (made on the Müzik üret page or added there) and the page's maker.
+        services.AddSingleton<Core.Music.MyMusicStore>();
+        services.AddSingleton<Core.Music.IMyMusic>(s => s.GetRequiredService<Core.Music.MyMusicStore>());
+        services.AddSingleton<Core.Music.IMusicMaker, Core.Music.MusicMaker>();
         services.AddSingleton<Core.Videos.VideoMusicStep>();
         // 0.1.48 (F5, S3): the subtitles' word times heard by whisper.cpp (program and model are components, installed only after a yes);
         // without them the subtitles keep their estimated times.
@@ -331,6 +335,7 @@ public static class DesktopServices
         services.AddSingleton<IVideoRatingStore, VideoRatingStore>();
         services.AddSingleton<IVideoRater, VideoRater>();
         services.AddSingleton<Core.Styles.IVideoStyleStore, VideoStyleStore>();
+        services.AddSingleton<Core.Styles.IVideoMediaStore, Core.Styles.VideoMediaStore>();
         services.AddSingleton<Core.Styles.IVideoPaletteStore, VideoPaletteStore>();
         services.AddSingleton<IApiKeyStore, ApiKeyStore>();
         services.AddSingleton<IStepModelStore, StepModelStore>();
@@ -379,6 +384,8 @@ public static class DesktopServices
         services.AddTransient<TimeNotesViewModel>();
         services.AddTransient<PlanReviewViewModel>();
         services.AddTransient<ProductionChecklistViewModel>();
+        services.AddSingleton<VideoMediaServices>();
+        services.AddTransient<VideoMediaViewModel>();
 
         // The concept page's parts: the page (a singleton) gets its own bar, runner, sections and detail panel; the status changes are one
         // service for every page.
@@ -433,6 +440,7 @@ public static class DesktopServices
         services.AddSingleton<Core.DiskSpace.ILeftoverSweep, Core.DiskSpace.LeftoverSweep>();
         services.AddSingleton<DiskSpace.ILeftoverSweeper, DiskSpace.LeftoverSweeper>();
         services.AddSingleton<DiskSpace.IDiskCleaner, DiskSpace.DiskCleaner>();
+        services.AddSingleton<DiskSpace.IOrphanFileCheck, DiskSpace.OrphanFileCheck>();
         services.AddSingleton<VersionCheck>();
         services.AddSingleton<WhatsNewCheck>();
 
@@ -457,6 +465,7 @@ public static class DesktopServices
         services.AddSingleton<Func<ProductionProgressViewModel>>(s => () => s.GetRequiredService<ProductionProgressViewModel>());
         AddPage<ConceptsViewModel, ConceptsView>(services);
         AddPage<VideoViewModel, VideoView>(services);
+        AddPage<MusicViewModel, MusicView>(services);
         AddPage<ProducedViewModel, ProducedView>(services);
         AddPage<TrashViewModel, TrashView>(services);
         AddPage<ProfileViewModel, ProfileView>(services);

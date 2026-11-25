@@ -499,7 +499,8 @@ Bir şablonla (Ayarlar → Şablonlar) üretilen video, modelin iyi niyetine kal
   tuzaklarını da sahne planı isteğine yazar. Yapay zekâya ek istek yok.
 - **Arka plan müziği (0.1.44, varsayılan kapalı):** *Kendi dosyam* videonun tamamının altına kendi parçanı koyar. Anlatım konuşurken
   kısılır, sahne aralarında yükselir (cümleler arasındaki kısa nefeslerde yükselmez); kısa parça döner, uzun parça kesilir, sonda kararır.
-  Düzey, kısma miktarı ve kararma şablonda ayarlanır. Dosya her videonun sürüm klasörüne (`music/`) kopyalanır, yeni sürüm aynı parçayı
+  Düzey, kısma miktarı ve kararma müzikle birlikte ayarlanır (0.1.54: Konseptten video sayfasında modellerin altında, profil başına;
+  artık şablonda değil). Dosya her videonun sürüm klasörüne (`music/`) kopyalanır, yeni sürüm aynı parçayı
   kullanır. Lisansı senin sorumluluğunda; isteğe bağlı atıf, video bitince video sayfasında açıklamaya kopyalanmak üzere gösterilir
   (videoya yazılmaz). Her sürüm klasöründe videonun kullandığı dış dosyaları listeleyen bir `assets.json` var.
 - **Müzik üretimi (0.1.46):** *Üret (yerel)* müziği rakkase üzerinden ACE-Step 1.5 ile üretir (MIT; NVIDIA kartlar için, 16 GB RAM,
@@ -507,6 +508,10 @@ Bir şablonla (Ayarlar → Şablonlar) üretilen video, modelin iyi niyetine kal
   *Üret (çevrimiçi)* Gemini anahtarınla Google Lyria 3 Clip (30 sn'lik parça $0,04) ya da Lyria 3.5 (şarkı başı $0,08), ElevenLabs
   anahtarınla Eleven Music (dakikası $0,15) kullanır. Parça seslendirmeden sonra sahne planının müzik ipuçlarıyla, sözsüz üretilir; videodan
   kısaysa döngüyle uzar, tahminde ve ücret ayrıntılarında sayılır ve videoyla saklanır: yeni sürüm onu yeniden üretmez.
+- **Müzik üret sayfası (0.1.54):** ne istediğini kendi sözlerinle yaz ("antik Mısır'da disko"), istersen bir referans ses seç (program
+  temposunu ölçer ve o tempoyu ister; modellerin hiçbiri sesi doğrudan almaz), yerel ya da çevrimiçi müzik modelini seç (yukarıdakilerin
+  aynısı, fiyatlarıyla) ve parçayı üret. Parça **Müziklerim**'e eklenir; kendi ses dosyalarını da oraya ekleyebilirsin. Videonun müzik
+  seçimi *Müziklerim* kaynağıyla oradan seçer. Toplu üretimde videoya özel model seçimi şimdilik yok.
 - **Hazır müzik kütüphanesi (0.1.45):** *Kütüphaneden seç*, Kevin MacLeod'un parçalarından elle seçilmiş, duygu, tarz ve tempo
   etiketli küçük bir paket kullanır (incompetech.com, CC BY 4.0); yalnız onayladıktan sonra iner (yaklaşık 114 MB). Parçayı her videonun
   konsepti seçebilir: sahne planı aynı istekte her sahneye bir müzik ipucu yazar, en yakın parça kullanılır (istenen tarzda parça yoksa
@@ -545,9 +550,9 @@ Bir şablonla (Ayarlar → Şablonlar) üretilen video, modelin iyi niyetine kal
 - **Referans video (0.1.52, isteğe bağlı):** "bu videonun temposunda yap". Bir video dosyası seç ya da tek bir videonun adresini yapıştır
   (yt-dlp ile iner, yalnız onaylayınca kurulur: tek video, oynatma listesi yok, çerez ya da giriş yok, düşük çözünürlük, ilk 10 dakika,
   ölçümden hemen sonra silinir). Program 10 saniyedeki kesme sayısını, kamera hareketlerini ve yönünü, renklerini, vuruşunu ve en güçlü
-  anlarını ölçer ve şablonda yalnız bu sayıları saklar. Tempo en yakın ön ayara getirilir; her videonun sahne planından aynı sıklıkta
-  değişiklik, kameralı oran ve yumuşatma ile aynı yerlerde vurgu istenir, plan denetimi planı bunlara uydurur. Renkleri yalnız sen alırsan
-  şablonun kendi paleti olur.
+  anlarını ölçer ve profil için yalnız bu sayıları saklar (0.1.54: Konseptten video sayfasında modellerin altında seçilir, artık şablonda
+  değil). Her videonun anlatım temposu en yakın ön ayara göre seçilir; sahne planından aynı sıklıkta değişiklik, kameralı oran ve
+  yumuşatma ile aynı yerlerde vurgu istenir, plan denetimi planı bunlara uydurur.
 - Saklanan koddan yapılan yeni bir sürüm, videonun üretildiği şablonu korur.
 
 ## Güncelleme

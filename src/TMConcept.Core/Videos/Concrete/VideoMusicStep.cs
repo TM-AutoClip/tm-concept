@@ -44,7 +44,7 @@ public sealed class VideoMusicStep(IMediaTools media, IMusicLibrary library, IMu
         }
 
         var music = style!.Music;
-        if (music.Source is not (MusicSource.OwnFile or MusicSource.Library or MusicSource.GenerateLocal or MusicSource.GenerateOnline))
+        if (music.Source is not (MusicSource.OwnFile or MusicSource.Library or MusicSource.GenerateLocal or MusicSource.GenerateOnline or MusicSource.MyMusic))
         {
             logger.LogError(Activity.LogEvents.OnScreen, "The template's music source {Source} cannot be made by this version; the video is stopped", music.Source);
             throw new VideoException($"The music source {music.Source} is not available in this version.") { Code = "music" };
@@ -64,6 +64,18 @@ public sealed class VideoMusicStep(IMediaTools media, IMusicLibrary library, IMu
         if (music.Source is MusicSource.GenerateLocal or MusicSource.GenerateOnline)
         {
             return await GeneratorAsync(music, cancellationToken).ConfigureAwait(false);
+        }
+
+        // 0.1.54: a piece of the user's own collection ("Müziklerim": made on the music page or added there).
+        if (music.Source == MusicSource.MyMusic)
+        {
+            if (music.Track is not { } mine)
+            {
+                logger.LogError(Activity.LogEvents.OnScreen, "No piece of My music is chosen; the video is stopped");
+                throw new VideoException("No piece of My music is chosen.") { Code = "music" };
+            }
+
+            return await CopyAsync(mine.File, TrackEntry(mine, mine.File), "my music", work, cancellationToken).ConfigureAwait(false);
         }
 
         if (music.Track is { } picked)

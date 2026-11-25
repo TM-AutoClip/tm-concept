@@ -256,12 +256,22 @@
     <Border Name="ModelsBackdrop" Grid.Row="1" Margin="-12,-10,-12,-10" Background="{DynamicResource tm-scrim}" IsVisible="{Binding ModelsOpen}"
             PointerPressed="OnBackdropPressed" />
     <Border Name="ModelsPanel" Grid.Row="1" Classes="card" Padding="12,8" VerticalAlignment="Top" BoxShadow="{DynamicResource tm-shadow}"
-            IsVisible="{Binding ModelsOpen}">
-      <StackPanel Spacing="6">
-        <Button Name="CloseModelsButton" Classes="small" Content="{DynamicResource common.close}" Command="{Binding CloseModelsCommand}"
-                HorizontalAlignment="Right" />
-        <views:StepPickerView Name="ModelPickers" DataContext="{Binding Picker}" />
-      </StackPanel>
+            IsVisible="{Binding ModelsOpen}" MaxHeight="{Binding $parent[Grid].Bounds.Height}">
+      <DockPanel>
+        <Button Name="CloseModelsButton" DockPanel.Dock="Top" Classes="small" Content="{DynamicResource common.close}" Command="{Binding CloseModelsCommand}"
+                HorizontalAlignment="Right" Margin="0,0,0,6" />
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+          <StackPanel Spacing="6">
+            <views:StepPickerView Name="ModelPickers" DataContext="{Binding Picker}" />
+            <!-- 0.1.54: the profile's reference video and background music (they left the template). -->
+            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+              <TextBlock Text="{DynamicResource media.title}" FontWeight="SemiBold" VerticalAlignment="Center" />
+              <views:HelpTip Text="{DynamicResource media.tip}" />
+            </StackPanel>
+            <views:VideoMediaView Name="MediaChoice" DataContext="{Binding Media}" />
+          </StackPanel>
+        </ScrollViewer>
+      </DockPanel>
     </Border>
   </Grid>
 </UserControl>

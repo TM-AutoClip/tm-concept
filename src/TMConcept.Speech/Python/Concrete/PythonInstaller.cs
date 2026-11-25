@@ -116,7 +116,7 @@ public sealed class PythonInstaller(PythonLayout layout, IToolLocator tools, IPr
 
     /// <summary>The fingerprint of an environment: Python version, PyTorch build, the lock's date and its whole text.</summary>
     public static string Fingerprint(PythonEnvironment environment, string backend) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(
-        string.Join('\n', PythonPins.PythonVersion, backend, PythonPins.ExcludeNewer, PythonFiles.Lock(environment, backend)))));
+        string.Join('\n', PythonPins.PythonVersion, backend, PythonFiles.ExcludeNewer(environment, backend), PythonFiles.Lock(environment, backend)))));
 
     /// <summary>
     /// The variables every uv run gets: where Python, the cache and the downloads go; no settings files, no progress bars; the user's own index,
@@ -152,10 +152,13 @@ public sealed class PythonInstaller(PythonLayout layout, IToolLocator tools, IPr
     public static IReadOnlyList<string> VenvArguments(string folder, string interpreter) =>
         ["venv", folder, "--python", interpreter, "--no-python-downloads", "--clear", "--no-config"];
 
-    /// <summary><c>uv pip sync</c> of a lock file into an environment: exactly its packages, PyTorch from its own index for <paramref name="backend"/>.</summary>
-    public static IReadOnlyList<string> SyncArguments(string lockFile, string python, string backend) =>
+    /// <summary>
+    /// <c>uv pip sync</c> of a lock file into an environment: exactly its packages, PyTorch from its own index for <paramref name="backend"/>,
+    /// nothing uploaded after <paramref name="excludeNewer"/> (the lock's own moment, <see cref="PythonFiles.ExcludeNewer"/>).
+    /// </summary>
+    public static IReadOnlyList<string> SyncArguments(string lockFile, string python, string backend, string excludeNewer) =>
     [
-        "pip", "sync", lockFile, "--python", python, "--torch-backend", backend, "--exclude-newer", PythonPins.ExcludeNewer, "--default-index",
+        "pip", "sync", lockFile, "--python", python, "--torch-backend", backend, "--exclude-newer", excludeNewer, "--default-index",
         PythonPins.PackageIndex, "--no-config", "--no-python-downloads",
     ];
 
@@ -199,7 +202,8 @@ public sealed class PythonInstaller(PythonLayout layout, IToolLocator tools, IPr
         logger.LogInformation("Installing the Python environment {Environment} (PyTorch {Backend})", environment.Key, backend);
         progress?.Report(new ToolProgress(0.02, environment.Name));
         await RunAsync(uv, VenvArguments(folder, interpreter), progress, 0.02, cancellationToken).ConfigureAwait(false);
-        await RunAsync(uv, SyncArguments(lockFile, layout.EnvironmentPython(environment.Key), backend), progress, 0.1, cancellationToken).ConfigureAwait(false);
+        await RunAsync(uv, SyncArguments(lockFile, layout.EnvironmentPython(environment.Key), backend, PythonFiles.ExcludeNewer(environment, backend)), progress, 0.1,
+            cancellationToken).ConfigureAwait(false);
         await File.WriteAllTextAsync(marker, Fingerprint(environment, backend), cancellationToken).ConfigureAwait(false);
         logger.LogInformation("The Python environment {Environment} is installed (PyTorch {Backend})", environment.Key, backend);
         await PruneCacheAsync(uv, cancellationToken).ConfigureAwait(false);
@@ -268,7 +272,8 @@ public sealed class PythonInstaller(PythonLayout layout, IToolLocator tools, IPr
                 continue;
             }
 
-            logger.LogError("uv failed (exit code {Code}): {Output}", result.ExitCode, ChildOutput.Summary(result.LastLines));
+            // 0.1.54: the whole tail of uv's answer goes into the log (its "cause:" and "hint:" lines name the package and why).
+            logger.LogError("uv failed (exit code {Code}): {Output}", result.ExitCode, ChildOutput.Detail(result.LastLines));
             throw new ToolInstallException("uv failed: " + ChildOutput.Summary(result.LastLines)) { Code = "install" };
         }
     }

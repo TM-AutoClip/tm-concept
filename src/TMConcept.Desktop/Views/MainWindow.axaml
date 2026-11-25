@@ -18,11 +18,12 @@
     <Style Selector="Window.narrow TextBlock#SettingsTitle">
       <Setter Property="IsVisible" Value="False" />
     </Style>
+    <!-- 0.1.54: one tab more (Müzik üret): a little less room for the profile and the tabs' sides. -->
     <Style Selector="Window.narrow ComboBox#ProfilePicker">
-      <Setter Property="MaxWidth" Value="150" />
+      <Setter Property="MaxWidth" Value="130" />
     </Style>
     <Style Selector="Window.narrow Button.tab">
-      <Setter Property="Padding" Value="9,10" />
+      <Setter Property="Padding" Value="5,10" />
     </Style>
   </Window.Styles>
   <!-- 0.1.13: the app bar on top (spending pill, page tabs, profile, report, settings), the page, the folded activity log at the bottom. -->

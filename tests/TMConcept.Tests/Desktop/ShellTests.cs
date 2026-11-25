@@ -42,13 +42,13 @@ public sealed class ShellTests
         shell.Current.ShouldBeOfType<ConceptsViewModel>("the first tab opens");
 
         // Five main tabs in order; Settings is a page drawn apart on the right, not a second list.
-        shell.Tabs.Select(t => t.Page.GetType()).ShouldBe([typeof(ConceptsViewModel), typeof(VideoViewModel), typeof(ProducedViewModel),
+        shell.Tabs.Select(t => t.Page.GetType()).ShouldBe([typeof(ConceptsViewModel), typeof(VideoViewModel), typeof(MusicViewModel), typeof(ProducedViewModel),
             typeof(TrashViewModel), typeof(ProfileViewModel)]);
         var strip = window.FindControl<ItemsControl>("TabStrip")!;
         var tabs = strip.GetVisualDescendants().OfType<Button>().ToList();
-        tabs.Count.ShouldBe(5);
+        tabs.Count.ShouldBe(6);
         tabs.Select(b => b.GetVisualDescendants().OfType<TextBlock>().First().Text)
-            .ShouldBe(new[] { "nav.concepts", "nav.video", "nav.produced", "nav.trash", "nav.profile" }.Select(k => text[k]));
+            .ShouldBe(new[] { "nav.concepts", "nav.video", "nav.music", "nav.produced", "nav.trash", "nav.profile" }.Select(k => text[k]));
         tabs[0].Classes.ShouldContain("selected");
         var settings = window.FindControl<Button>("SettingsTab")!;
         settings.IsEffectivelyVisible.ShouldBeTrue();
@@ -128,7 +128,7 @@ public sealed class ShellTests
             Dispatcher.UIThread.RunJobs();
             window.Classes.Contains("narrow").ShouldBe(narrow);
             window.FindControl<TextBlock>("AppTitle")!.IsVisible.ShouldBe(!narrow);
-            window.FindControl<ComboBox>("ProfilePicker")!.MaxWidth.ShouldBe(narrow ? 150 : 200);
+            window.FindControl<ComboBox>("ProfilePicker")!.MaxWidth.ShouldBe(narrow ? 130 : 200);
             var last = window.FindControl<ItemsControl>("TabStrip")!.GetVisualDescendants().OfType<Button>().Last();
             var right = last.TranslatePoint(new Point(last.Bounds.Width, 0), window)!.Value.X;
             var picker = window.FindControl<ComboBox>("ProfilePicker")!;

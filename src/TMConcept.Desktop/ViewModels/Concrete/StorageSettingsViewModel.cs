@@ -79,6 +79,13 @@ public sealed partial class StorageSettingsViewModel(IDiskCleaner cleaner, Local
     [RelayCommand]
     public Task CleanUnusedAsync() => RemoveAsync(DiskSelection.Unused(Items.Select(r => r.Item)), "storage.clean.title", "storage.clean.message");
 
+    /// <summary>
+    /// "Kullanılmayan model dosyalarını temizle" (0.1.54): the files no component owns (old versions, unfinished downloads, old components
+    /// folders, Ollama files no model uses), listed with their sizes, deleted for good after a confirmation.
+    /// </summary>
+    [RelayCommand]
+    public Task CleanOrphansAsync() => RemoveAsync(DiskSelection.Orphans(Items.Select(r => r.Item)), "storage.orphans.title", "storage.orphans.message");
+
     /// <summary>Removes every component and cache after a confirmation that says what stays.</summary>
     [RelayCommand]
     public Task FullDeleteAsync() => RemoveAsync(DiskSelection.Full(Items.Select(r => r.Item)), "storage.full.title", "storage.full.message");

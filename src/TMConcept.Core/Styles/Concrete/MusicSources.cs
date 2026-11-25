@@ -7,7 +7,8 @@ namespace TMConcept.Core.Styles;
 public static class MusicSources
 {
     /// <summary>The sources shown in the template editor, in their order (the library and the local model only usable once installed).</summary>
-    public static IReadOnlyList<MusicSource> Available { get; } = [MusicSource.Off, MusicSource.Library, MusicSource.GenerateLocal, MusicSource.GenerateOnline, MusicSource.OwnFile];
+    public static IReadOnlyList<MusicSource> Available { get; } =
+        [MusicSource.Off, MusicSource.MyMusic, MusicSource.Library, MusicSource.GenerateLocal, MusicSource.GenerateOnline, MusicSource.OwnFile];
 
     /// <summary>The audio file kinds the user can choose as own music (ffmpeg reads them all).</summary>
     public static IReadOnlyList<string> FilePatterns { get; } = ["*.mp3", "*.wav", "*.ogg", "*.opus", "*.m4a", "*.aac", "*.flac"];

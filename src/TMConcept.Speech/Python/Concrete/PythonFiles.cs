@@ -39,6 +39,36 @@ public static class PythonFiles
         return System.Text.Encoding.UTF8.GetString(Read("Locks." + environment.Key + "-" + backend + ".txt"));
     }
 
+    /// <summary>
+    /// The moment the lock file of <paramref name="environment"/> for <paramref name="backend"/> was made against: the <c>--exclude-newer</c> of
+    /// its header (0.1.54). The install gives uv the same moment, so a lock made later than another one (yazgı-tts: 20 Nov 2026) is never cut
+    /// off by an older date (0.1.35–0.1.53 gave every lock 1 Nov 2026, and uv found no filelock 4.2.12 uploaded on 18 Nov). A lock without
+    /// one falls back to <see cref="PythonPins.ExcludeNewer"/>.
+    /// </summary>
+    public static string ExcludeNewer(PythonEnvironment environment, string backend) => ExcludeNewerOf(Lock(environment, backend));
+
+    /// <summary>The <c>--exclude-newer</c> moment named in a lock file's header comments; <see cref="PythonPins.ExcludeNewer"/> when none is.</summary>
+    public static string ExcludeNewerOf(string lockText)
+    {
+        ArgumentNullException.ThrowIfNull(lockText);
+        foreach (var line in lockText.Split('\n').Select(l => l.Trim()).TakeWhile(l => l.Length == 0 || l.StartsWith('#')))
+        {
+            var at = line.IndexOf("--exclude-newer", StringComparison.Ordinal);
+            if (at < 0)
+            {
+                continue;
+            }
+
+            var value = line[(at + "--exclude-newer".Length)..].Trim().Split(' ', 2)[0].Trim();
+            if (DateTimeOffset.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out _))
+            {
+                return value;
+            }
+        }
+
+        return PythonPins.ExcludeNewer;
+    }
+
     /// <summary>Whether the app has a lock file of <paramref name="environment"/> for <paramref name="backend"/>.</summary>
     public static bool HasLock(PythonEnvironment environment, string backend)
     {

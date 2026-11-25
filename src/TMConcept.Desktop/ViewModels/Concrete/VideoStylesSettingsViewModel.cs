@@ -18,13 +18,11 @@ namespace TMConcept.Desktop.ViewModels;
 /// before they are dropped. A database error is logged and shown, never left to the dispatcher.
 /// </summary>
 public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store, IVideoPaletteStore palettes, Localizer text, IConfirmDialog confirm,
-    IActivityLog activity, Startup.FileDialogs dialogs, Core.Music.IMusicLibrary musicLibrary, Core.Music.IMusicSearch musicSearch,
-    Components.ComponentInstallFlow installs, Core.Music.IMusicGenerators musicModels, Core.Hardware.IGpuInfo gpu,
-    Core.Subtitles.IWordRecognizer wordRecognizer, Core.References.IReferenceMeasurer referenceMeasurer, ILogger<VideoStylesSettingsViewModel> logger)
+    IActivityLog activity, Components.ComponentInstallFlow installs, Core.Subtitles.IWordRecognizer wordRecognizer,
+    ILogger<VideoStylesSettingsViewModel> logger)
     : SettingsSectionBase
 {
     private bool _loading;
-    private Core.Music.LocalMusicCard? _card;
     private IReadOnlyList<SavedPalette> _saved = [];
     private bool _fontsLogged;
     private int _load;
@@ -218,16 +216,6 @@ public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store,
     /// <summary>The last switch to another template in the list (its question may still be open); awaited by tests.</summary>
     public Task Switching { get; private set; } = Task.CompletedTask;
 
-    /// <summary>A closed or replaced form stops its running Openverse search or download (0.1.45 review).</summary>
-    partial void OnEditorChanged(VideoStyleEditorViewModel? oldValue, VideoStyleEditorViewModel? newValue)
-    {
-        if (oldValue is not null && !ReferenceEquals(oldValue, newValue))
-        {
-            oldValue.MusicPicker?.Dispose();
-            oldValue.ReferenceVideo?.Dispose();
-        }
-    }
-
     partial void OnSelectedStyleChanged(VideoStyle? oldValue, VideoStyle? newValue)
     {
         if (_loading || newValue is null)
@@ -304,8 +292,6 @@ public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store,
         // The fonts installed on this computer are read once, off the interface thread (the editor lists them after the shipped ones).
         var installed = await Task.Run(() => SystemFonts.Installed).ConfigureAwait(true);
 
-        // 0.1.46: how the local music model fits this computer's card, read once off the interface thread.
-        _card ??= await Task.Run(() => Core.Music.LocalMusicSupport.Of(gpu.Detect(), OperatingSystem.IsLinux())).ConfigureAwait(true);
         if (!_fontsLogged)
         {
             _fontsLogged = true;
@@ -439,66 +425,7 @@ public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store,
         Status = text.Format("styles.own.deleted", palette.Name);
     }
 
-    private VideoStyleEditorViewModel NewEditor(VideoStyle style, bool isNew) => new(style, isNew, text, _saved,
-        () => dialogs.OpenAsync("styles.music.pick", "styles.music.filter", MusicSources.FilePatterns),
-        new MusicPickerServices(musicLibrary, musicSearch, InstallLibraryAsync, activity),
-        new MusicGeneratorServices(musicModels.Models, musicModels.Ready, _card ?? new Core.Music.LocalMusicCard(true, OperatingSystem.IsLinux()),
-            InstallLocalMusicAsync),
-        new ReferenceVideoServices(referenceMeasurer, () => dialogs.OpenAsync("styles.reference.pick", "styles.reference.filter", ReferenceVideoFiles),
-            EnsureReferenceAsync, activity));
-
-    /// <summary>The video files a reference may be (S1, 0.1.52; ffmpeg reads them).</summary>
-    private static readonly IReadOnlyList<string> ReferenceVideoFiles = ["*.mp4", "*.mov", "*.mkv", "*.webm", "*.avi", "*.m4v"];
-
-    /// <summary>
-    /// Installs what a reference measure needs (S1, 0.1.52): ffmpeg, and yt-dlp for an address, in the app's install flow (one confirmation;
-    /// nothing is downloaded without the yes). True when it is ready afterwards.
-    /// </summary>
-    private async Task<bool> EnsureReferenceAsync(bool address)
-    {
-        string[] codes = address ? [Core.Components.ComponentCodes.Ffmpeg, Core.Components.ComponentCodes.VideoDownloader] : [Core.Components.ComponentCodes.Ffmpeg];
-        var outcome = await installs.EnsureAsync(codes, "install.purpose.reference", null, CancellationToken.None).ConfigureAwait(true);
-        if (!outcome.Ready && outcome.Reason.Length > 0)
-        {
-            logger.LogInformation("The reference measure's tools were not installed: {Reason}", outcome.Reason);
-        }
-
-        return outcome.Ready;
-    }
-
-    /// <summary>
-    /// Installs the local music model (0.1.46, C5): its environment and its weights, listed with their sizes in the app's install flow with the
-    /// note of its whole size and memory need; nothing is downloaded without the yes (rule 18). True when it is ready afterwards.
-    /// </summary>
-    private async Task<bool> InstallLocalMusicAsync()
-    {
-        var outcome = await installs.EnsureAsync([Core.Components.ComponentCodes.MusicModel], "install.purpose.music_model", null, CancellationToken.None)
-            .ConfigureAwait(true);
-        if (!outcome.Ready && outcome.Reason.Length > 0)
-        {
-            logger.LogInformation("The local music model was not installed: {Reason}", outcome.Reason);
-            Status = outcome.Reason;
-        }
-
-        return outcome.Ready;
-    }
-
-    /// <summary>
-    /// Installs the ready music library (0.1.45): the app's install flow lists every track with its size and asks once; nothing is downloaded
-    /// without the yes. True when the library is ready afterwards.
-    /// </summary>
-    private async Task<bool> InstallLibraryAsync()
-    {
-        var outcome = await installs.EnsureAsync([Core.Components.ComponentCodes.MusicLibrary], "install.purpose.music", null, CancellationToken.None)
-            .ConfigureAwait(true);
-        if (!outcome.Ready && outcome.Reason.Length > 0)
-        {
-            logger.LogInformation("The music library was not installed: {Reason}", outcome.Reason);
-            Status = outcome.Reason;
-        }
-
-        return musicLibrary.Ready;
-    }
+    private VideoStyleEditorViewModel NewEditor(VideoStyle style, bool isNew) => new(style, isNew, text, _saved);
 
     private string NewName()
     {

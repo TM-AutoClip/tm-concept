@@ -31,6 +31,18 @@ public static partial class ChildOutput
         return (space >= characters / 2 ? text[..space] : text[..characters]) + "…";
     }
 
+    /// <summary>
+    /// The last lines of <paramref name="output"/> for the log file (0.1.54, a failed install): at most <paramref name="lines"/> non-empty lines
+    /// and <paramref name="characters"/> characters, joined with " | ", the home folder as <c>~</c>. Unlike <see cref="Summary"/> it keeps the
+    /// lines around the error (uv's "cause:" and "hint:" lines name the package and the reason).
+    /// </summary>
+    public static string Detail(string? output, int lines = 12, int characters = 2000)
+    {
+        var all = Home(output ?? string.Empty).Split('\n').Select(l => l.Trim().TrimEnd('\r')).Where(l => l.Length > 0).TakeLast(lines).ToList();
+        var text = string.Join(" | ", all);
+        return text.Length <= characters ? text : text[^characters..];
+    }
+
     /// <summary>The text with the signed-in user's home folder (either slash) written as <c>~</c>.</summary>
     private static string Home(string text)
     {
@@ -40,6 +52,6 @@ public static partial class ChildOutput
             : text.Replace(home, "~", StringComparison.OrdinalIgnoreCase).Replace(home.Replace('\\', '/'), "~", StringComparison.OrdinalIgnoreCase);
     }
 
-    [GeneratedRegex(@"error|fail|exception|fatal|cannot|can't|could not|unable|not found|no such|denied|invalid|ERR!|panic|abort", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"error|fail|exception|cause:|hint:|because|fatal|cannot|can't|could not|unable|not found|no such|denied|invalid|ERR!|panic|abort", RegexOptions.IgnoreCase)]
     private static partial Regex ErrorLike();
 }

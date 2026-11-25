@@ -116,7 +116,7 @@ public sealed class RakkaseInstaller(RakkaseLayout layout, PythonInstaller pytho
         }, cancellationToken).ConfigureAwait(false);
         if (result.ExitCode != 0 || !File.Exists(layout.Python))
         {
-            logger.LogError("uv sync of ACE-Step failed (exit code {Code}): {Output}", result.ExitCode, ChildOutput.Summary(result.LastLines));
+            logger.LogError("uv sync of ACE-Step failed (exit code {Code}): {Output}", result.ExitCode, ChildOutput.Detail(result.LastLines));
             throw new ToolInstallException("uv failed: " + ChildOutput.Summary(result.LastLines)) { Code = "install" };
         }
 

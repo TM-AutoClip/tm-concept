@@ -27,6 +27,18 @@ public static class DiskSelection
         return items.Where(i => i.Removable && i.InFullDelete && !Kept(i)).ToList();
     }
 
+    /// <summary>
+    /// "Kullanılmayan model dosyalarını temizle" (0.1.54): the files of the components and models folders that no component owns (unfinished
+    /// downloads, an older pinned version's folder, an old components folder left by "Reinstall from scratch", the app's Ollama files no model
+    /// uses, the Python helpers). Never a component, a model, a work cache or a library row.
+    /// </summary>
+    public static IReadOnlyList<IDiskItem> Orphans(IEnumerable<IDiskItem> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        return items.Where(i => i.Removable && i.InCleanup && i.State == DiskItemState.Leftover && i.Area is DiskArea.Tools or DiskArea.Models
+            && i.Bytes > 0 && !Kept(i)).ToList();
+    }
+
     /// <summary>Whether a row goes only when it is ticked (a model, a library row).</summary>
     public static bool Kept(IDiskItem item)
     {

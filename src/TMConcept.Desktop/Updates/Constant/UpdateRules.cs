@@ -2,8 +2,8 @@ namespace TMConcept.Desktop.Updates;
 
 /// <summary>
 /// Where and how often the app looks for a new version of itself: the project's release list on GitHub, read without a token
-/// (GitHub allows 60 such reads an hour per address), at most once a day, with a plain program name as its User-Agent (nothing about the
-/// user or the computer is sent).
+/// (GitHub allows 60 such reads an hour per address), at every start and on "Check now", as a conditional request (an unchanged list is a
+/// 304 that does not count), with a plain program name as its User-Agent (nothing about the user or the computer is sent).
 /// </summary>
 public static class UpdateRules
 {
@@ -31,8 +31,11 @@ public static class UpdateRules
     /// <summary>The API version header value.</summary>
     public const string ApiVersion = "2022-11-28";
 
-    /// <summary>How often the start looks (the "Check now" button always looks).</summary>
-    public static readonly TimeSpan CheckEvery = TimeSpan.FromDays(1);
+    /// <summary>
+    /// How long the start does not offer again a version the user answered "Later" to (0.1.54: the start always looks; only the window waits).
+    /// "Check now" always shows it.
+    /// </summary>
+    public static readonly TimeSpan OfferAgainAfter = TimeSpan.FromDays(1);
 
     /// <summary>The longest wait for GitHub's answer.</summary>
     public static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(20);

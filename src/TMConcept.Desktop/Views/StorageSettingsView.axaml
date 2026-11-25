@@ -28,15 +28,22 @@
           </DataTemplate>
         </ItemsControl.ItemTemplate>
       </ItemsControl>
-      <StackPanel Orientation="Horizontal" Spacing="8">
+      <WrapPanel>
+        <WrapPanel.Styles>
+          <Style Selector="WrapPanel > Button">
+            <Setter Property="Margin" Value="0,0,8,8" />
+          </Style>
+        </WrapPanel.Styles>
         <Button Name="RemoveSelectedButton" Classes="danger" Content="{DynamicResource storage.remove_selected}" Command="{Binding RemoveSelectedCommand}"
                 IsEnabled="{Binding Idle}" />
         <Button Name="CleanUnusedButton" Content="{DynamicResource storage.clean}" Command="{Binding CleanUnusedCommand}" IsEnabled="{Binding Idle}"
                 ToolTip.Tip="{DynamicResource storage.clean.tip}" />
+        <Button Name="CleanOrphansButton" Content="{DynamicResource storage.orphans}" Command="{Binding CleanOrphansCommand}" IsEnabled="{Binding Idle}"
+                ToolTip.Tip="{DynamicResource storage.orphans.tip}" />
         <Button Name="FullDeleteButton" Classes="danger" Content="{DynamicResource storage.full}" Command="{Binding FullDeleteCommand}"
                 IsEnabled="{Binding Idle}" ToolTip.Tip="{DynamicResource storage.full.tip}" />
         <Button Content="{DynamicResource storage.refresh}" Command="{Binding RefreshCommand}" IsEnabled="{Binding Idle}" />
-      </StackPanel>
+      </WrapPanel>
       <ProgressBar IsIndeterminate="True" IsVisible="{Binding Busy}" />
       <SelectableTextBlock Name="StorageStatus" Text="{Binding Status}" TextWrapping="Wrap" />
       <TextBlock Text="{DynamicResource storage.empty}" Classes="muted" IsVisible="{Binding Empty}" />

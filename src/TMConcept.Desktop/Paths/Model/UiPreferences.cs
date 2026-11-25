@@ -57,4 +57,7 @@ public sealed class UiPreferences
 
     /// <summary>When <see cref="UpdateOfferedVersion"/> was offered (UTC).</summary>
     public DateTimeOffset? UpdateOfferedAtUtc { get; set; }
+
+    /// <summary>When the start last offered to delete the unused model files (0.1.54; asked at most once a day).</summary>
+    public DateTimeOffset? OrphansAskedAtUtc { get; set; }
 }

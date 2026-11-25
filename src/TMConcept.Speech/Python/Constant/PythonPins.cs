@@ -10,7 +10,10 @@ public static class PythonPins
     /// <summary>The Python version (uv: <c>cpython-3.11.18</c>).</summary>
     public const string PythonVersion = "3.11.18";
 
-    /// <summary>The lock files hold only packages uploaded before this moment.</summary>
+    /// <summary>
+    /// The moment a lock file is made against when its header names none (every lock names its own since 0.1.54; see
+    /// <see cref="PythonFiles.ExcludeNewer"/>).
+    /// </summary>
     public const string ExcludeNewer = "2026-11-01T00:00:00Z";
 
     /// <summary>PyTorch with CUDA 12.8 (NVIDIA cards of compute capability 7.0 or higher, GTX 16 / RTX 20 to RTX 50: PyTorch 2.8 dropped Maxwell and Pascal from this build; needs an NVIDIA driver of 570 or newer; see SpeechDevices).</summary>

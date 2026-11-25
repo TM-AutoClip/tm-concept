@@ -73,6 +73,12 @@ public static class PipelineSteps
     /// <summary>Cost label of the careful mode's character sheet (F14, 0.1.50; one more picture of the image model).</summary>
     public const string CharacterSheetCost = "character-sheet";
 
+    /// <summary>
+    /// Not a model step (0.1.54): the name the profile's background music and reference video are kept under among its step choices
+    /// (<see cref="Styles.VideoMediaStore"/>).
+    /// </summary>
+    public const string VideoMedia = "video-media";
+
     /// <summary>Every step in display order.</summary>
     public static readonly IReadOnlyList<PipelineStep> All =
     [

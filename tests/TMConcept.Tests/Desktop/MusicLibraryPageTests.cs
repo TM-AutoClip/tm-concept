@@ -12,14 +12,14 @@ using TMConcept.Desktop.ViewModels;
 namespace TMConcept.Tests.Desktop;
 
 /// <summary>
-/// The library music of a template in Settings → Templates (0.1.45, C4 + S6): "Kütüphaneden seç" is greyed out and refused until the library
+/// The library music of the video page's music choice (0.1.45, C4 + S6; 0.1.54: moved there from Settings → Templates): "Kütüphaneden seç" is greyed out and refused until the library
 /// is installed (only after the user's yes); the Openverse search lists what the fake search found, a failed search reaches the activity
 /// panel, and a picked track is downloaded (fake) into the app's music folder, becomes the template's track with its file, and shows the
 /// credit note of its CC BY licence. Nothing reaches the network.
 /// </summary>
 public sealed class MusicLibraryPageTests
 {
-    private static async Task<(DesktopHarness H, VideoStyleEditorViewModel Editor)> EditorAsync(FakeSearch search)
+    private static async Task<(DesktopHarness H, VideoMediaViewModel Editor)> EditorAsync(FakeSearch search)
     {
         var h = new DesktopHarness(s =>
         {
@@ -28,9 +28,9 @@ public sealed class MusicLibraryPageTests
             s.AddSingleton<IMusicSearch>(search);
         });
         await FirstRunTests.CreateAsync(h);
-        var section = (await h.Get<SettingsViewModel>().ShowAsync<VideoStylesSettingsViewModel>()).ShouldNotBeNull();
-        section.Add();
-        return (h, section.Editor.ShouldNotBeNull());
+        var media = h.Get<VideoMediaViewModel>();
+        await media.LoadAsync(new VideoMedia());
+        return (h, media);
     }
 
     [AvaloniaFact]
@@ -53,7 +53,7 @@ public sealed class MusicLibraryPageTests
         editor.MusicSource.Value.ShouldBe((int)MusicSource.Off, "refused");
         editor.MusicLibrary.ShouldBeFalse();
         editor.MusicNote.ShouldBe(text["styles.music.library.not_ready"]);
-        editor.ToStyle().Music.Source.ShouldBe(MusicSource.Off);
+        editor.ToMedia().Music.Source.ShouldBe(MusicSource.Off);
     }
 
     [AvaloniaFact]
@@ -86,7 +86,7 @@ public sealed class MusicLibraryPageTests
         picker.AttributionNote.ShouldBe(text.Format("styles.music.credit.track", "CC BY 4.0"));
 
         // The template keeps the pick (the library itself is not needed for it) once the source is the library.
-        var style = editor.ToStyle();
+        var style = editor.ToMedia();
         style.Music.Track.ShouldBeNull("the source is still off");
     }
 

@@ -194,6 +194,42 @@ public sealed class VersionChangeTests
         }
     }
 
+    /// <summary>
+    /// 0.1.54 (25 Nov 2026: 13 of 14 components installed, the yazgı-tts packages failed, the old folder could not go back and both copies
+    /// stayed, 19 GB twice): a reinstall that installed some components keeps the new folder, carries only the failed one's old folder over,
+    /// and deletes the old folder for good. No second copy stays.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task APartlyFailedReinstallKeepsTheNewFolderCarriesTheFailedOnesOldFilesAndLeavesNoSecondCopy()
+    {
+        var (h, used, other, _, discard, _) = Setup(UpdateChoice.Reinstall);
+        using (h)
+        {
+            other.Folder = Path.Combine(h.Paths.ToolsDirectory, "speech-py", "env-yazgi");
+            Directory.CreateDirectory(other.Folder);
+            File.WriteAllText(Path.Combine(other.Folder, "pyvenv.cfg"), "old");
+            other.Fail = true;
+            used.OnInstall = () =>
+            {
+                Directory.CreateDirectory(used.Folder!);
+                File.WriteAllText(Path.Combine(used.Folder!, "sd-cli.exe"), "new");
+            };
+
+            var outcome = await h.Get<TMConcept.Desktop.Components.ComponentReinstaller>().ReinstallAsync(CancellationToken.None);
+
+            outcome.Ready.ShouldBeFalse("one component is still missing");
+            outcome.Reason.ShouldContain(other.Name);
+            File.ReadAllText(Path.Combine(used.Folder!, "sd-cli.exe")).ShouldBe("new", "the new install stays");
+            File.ReadAllText(Path.Combine(other.Folder, "pyvenv.cfg")).ShouldBe("old", "the failed one's old files were carried over");
+            Directory.GetDirectories(h.Paths.DataDirectory).Select(Path.GetFileName).Where(n => n!.StartsWith("tools.", StringComparison.Ordinal))
+                .ShouldBeEmpty("no old or failed components folder stays next to tools");
+            discard.Discarded.ShouldContain(d => Path.GetFileName(d).StartsWith("tools" + TMConcept.Desktop.Components.ComponentReinstaller.AsidePrefix,
+                StringComparison.Ordinal));
+            h.Get<TMConcept.Core.Activity.IActivityFeed>().Recent().ShouldContain(e => e.Level == TMConcept.Core.Activity.ActivityLevel.Warning
+                && e.Text.Contains(other.Name, StringComparison.Ordinal));
+        }
+    }
+
     [AvaloniaFact]
     public async Task WhenTheOldFolderCannotBeDeletedTheNewComponentsStayAndTheFailureIsShown()
     {

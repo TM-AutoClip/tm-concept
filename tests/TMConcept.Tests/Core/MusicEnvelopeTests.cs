@@ -169,7 +169,7 @@ public sealed class MusicEnvelopeTests : IDisposable
 
     [Fact]
     public void OffTheLibraryGeneratedMusicAndOwnFileAreOfferedNow() =>
-        MusicSources.Available.ShouldBe([MusicSource.Off, MusicSource.Library, MusicSource.GenerateLocal, MusicSource.GenerateOnline, MusicSource.OwnFile]);
+        MusicSources.Available.ShouldBe([MusicSource.Off, MusicSource.MyMusic, MusicSource.Library, MusicSource.GenerateLocal, MusicSource.GenerateOnline, MusicSource.OwnFile]);
 
     [Fact]
     public void TheSpokenPartsOfAClipAreItsLoudRuns()

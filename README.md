@@ -507,7 +507,8 @@ A video made with a template (Settings → Templates) follows it without relying
   its known pitfalls in the scene plan request. No extra AI request.
 - **Background music (0.1.44, off by default):** *My own file* puts a track of your own under the whole video. It is quieter while
   the narration speaks and comes back up between scenes (short breaths between sentences do not lift it); a short track loops, a long
-  one is cut, and it fades out at the end. Level, ducking and fade-out are set in the template. The file is copied into each video's
+  one is cut, and it fades out at the end. Level, ducking and fade-out are set with the music (0.1.54: per profile on the Concept to video
+  page, under the models; no longer in the template). The file is copied into each video's
   version folder (`music/`), so a new version uses the same track. Its licence is your responsibility; an optional attribution is shown
   on the video page after the video, ready to copy into the description (never drawn into the video). Every version folder has an
   `assets.json` listing the outside files the video uses.
@@ -523,6 +524,10 @@ A video made with a template (Settings → Templates) follows it without relying
   or Eleven Music ($0.15 a minute) with your ElevenLabs key. The piece is made after the narration from the scene plan's music hints,
   without words, looped when shorter than the video, counted in the estimate and the cost details, and kept with the video: a new
   version does not make it again.
+- **Make music page (0.1.54):** write what you want in your own words ("disco in ancient Egypt"), optionally choose a reference sound (the
+  app measures its tempo and asks for it; no model takes a sound directly), pick the local or an online music model (the same ones as
+  above, with their prices) and make a piece. It goes into **My music**, which also takes your own audio files; the video's music choice
+  picks from it with the *My music* source. Choosing a model per video in a batch is not offered yet.
 - **Word-by-word highlight (0.1.34, optional):** the word being said shows in the accent colour, glowing, growing or only recoloured
   as the drawing style suits; a line leaves room for a growing word (0.1.48).
 - **Real word times (0.1.48, optional):** with whisper.cpp (MIT, about 9 MB, and its multilingual base model, about 148 MB; installed
@@ -555,9 +560,9 @@ A video made with a template (Settings → Templates) follows it without relying
 - **Reference video (0.1.52, optional):** "make it at the tempo of this video". Choose a video file or paste the address of one video
   (downloaded by yt-dlp, installed only after a yes: one video, no playlist, no cookies or sign-in, low resolution, the first 10 minutes,
   deleted right after the measure). The app measures its cuts every 10 seconds, its camera moves and their way, its colours, its beat and
-  its strongest moments, and keeps only these numbers in the template. The tempo is set to the nearest preset; every video's scene plan is
-  asked for the same changes, camera share and eases and for emphasis at the same places, and the plan check holds it to them. Its colours
-  become the template's own palette only when you take them.
+  its strongest moments, and keeps only these numbers for the profile (0.1.54: chosen on the Concept to video page under the models, no
+  longer in the template). Each video's narration tempo follows the nearest preset; every video's scene plan is asked for the same
+  changes, camera share and eases and for emphasis at the same places, and the plan check holds it to them.
 - A new version made from the kept code keeps the template the video was made with.
 
 ## Update

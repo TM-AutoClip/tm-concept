@@ -98,7 +98,7 @@ public sealed class AppUpdater(ReleaseFeed feed, SelfReplacer replacer, Engines.
         }
 
         var now = clock.GetUtcNow();
-        if (settings.UpdateOfferedVersion == offer.Version.ToString() && settings.UpdateOfferedAtUtc is { } at && now - at < UpdateRules.CheckEvery && now >= at)
+        if (settings.UpdateOfferedVersion == offer.Version.ToString() && settings.UpdateOfferedAtUtc is { } at && now - at < UpdateRules.OfferAgainAfter && now >= at)
         {
             return null;
         }
