@@ -65,7 +65,7 @@ public sealed class LeftoverSweeper(AppPaths paths, ILeftoverSweep sweep, ICompo
 
         if (freed > 0)
         {
-            activity.Add(ActivityLevel.Info, text.Format("storage.sweep.done", ViewModels.StorageSettingsViewModel.Size(freed, text.Culture)));
+            activity.Add(ActivityLevel.Info, text.Format("storage.sweep.done", Localization.ByteSizeText.Of(freed, text.Culture)));
         }
 
         return freed;

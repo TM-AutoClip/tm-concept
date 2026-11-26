@@ -27,21 +27,27 @@ public static class RakkasePins
     /// <summary>The host of the weights (its file servers under <c>.hf.co</c> are allowed redirect targets).</summary>
     public const string WeightsHost = "huggingface.co";
 
+    /// <summary>The size of rakkase's source archive (bytes).</summary>
+    public const long RakkaseArchiveBytes = 6_646_725;
+
+    /// <summary>The size of ACE-Step 1.5's source archive (bytes).</summary>
+    public const long AceArchiveBytes = 9_148_700;
+
     /// <summary>rakkase's source archive.</summary>
-    public static ToolArchive Rakkase { get; } = new(ToolKind.MusicCode, RakkaseCommit[..12], "any",
+    public static readonly ToolArchive Rakkase = new(ToolKind.MusicCode, RakkaseCommit[..12], "any",
         new Uri("https://codeload.github.com/alexturkey/rakkase/zip/" + RakkaseCommit),
-        "e2a8d36afb9b67d675d90b6752b3c43d98a94a0f6bac9cd56d4098f2f1fbb2cd", "rakkase-" + RakkaseCommit, "rakkase.py", 6_646_725);
+        "e2a8d36afb9b67d675d90b6752b3c43d98a94a0f6bac9cd56d4098f2f1fbb2cd", "rakkase-" + RakkaseCommit, "rakkase.py", RakkaseArchiveBytes);
 
     /// <summary>ACE-Step 1.5's source archive (its <c>pyproject.toml</c> and <c>uv.lock</c> pin every package, PyTorch for CUDA 12.8 included).</summary>
-    public static ToolArchive Ace { get; } = new(ToolKind.MusicCode, AceCommit[..12], "any",
+    public static readonly ToolArchive Ace = new(ToolKind.MusicCode, AceCommit[..12], "any",
         new Uri("https://codeload.github.com/ACE-Step/ACE-Step-1.5/zip/" + AceCommit),
-        "108e45dffc7eb62af98d781c4159aa63a2b7a241186734e3e065279da7fc198d", "ACE-Step-1.5-" + AceCommit, "pyproject.toml", 9_148_700);
+        "108e45dffc7eb62af98d781c4159aa63a2b7a241186734e3e065279da7fc198d", "ACE-Step-1.5-" + AceCommit, "pyproject.toml", AceArchiveBytes);
 
     /// <summary>
     /// About what ACE-Step's packages take (PyTorch 2.7.1 for CUDA 12.8 and the rest, with uv's cache): rakkase's whole install less the weights
     /// and the two source archives.
     /// </summary>
-    public const long PackageBytes = Core.Music.MusicGenerationRules.LocalInstallBytes - Core.Music.MusicGenerationRules.LocalWeightBytes - 6_646_725 - 9_148_700;
+    public const long PackageBytes = Core.Music.MusicGenerationRules.LocalInstallBytes - Core.Music.MusicGenerationRules.LocalWeightBytes - RakkaseArchiveBytes - AceArchiveBytes;
 
     /// <summary>The name of a run in rakkase's plan (its output folder).</summary>
     public const string RunName = "tmc";

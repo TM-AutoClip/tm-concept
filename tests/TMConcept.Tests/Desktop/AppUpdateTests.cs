@@ -84,22 +84,22 @@ public sealed class AppUpdateTests
         using var h = Harness(github, out _, out var clock);
         var feed = h.Get<ReleaseFeed>();
 
-        (await feed.LatestAsync(false, CancellationToken.None))!.Tag.ShouldBe("v0.1.18");
+        (await feed.LatestAsync(CancellationToken.None))!.Tag.ShouldBe("v0.1.18");
         github.Requests[0].Headers.UserAgent.ToString().ShouldBe(UpdateRules.UserAgent);
         github.Requests[0].Headers.Authorization.ShouldBeNull("no token");
         github.Requests[0].RequestUri.ShouldBe(UpdateRules.Releases);
 
         // 0.1.54: the next start a minute later asks again, conditionally (an unchanged list is a 304 that costs nothing of the hourly limit).
         clock.Advance(TimeSpan.FromMinutes(1));
-        (await feed.LatestAsync(false, CancellationToken.None))!.Tag.ShouldBe("v0.1.18");
+        (await feed.LatestAsync(CancellationToken.None))!.Tag.ShouldBe("v0.1.18");
         github.Requests.Count.ShouldBe(2, "every start looks");
         github.Requests[1].Headers.IfNoneMatch.ToString().ShouldBe("\"r1\"");
 
         // A release made after the install is seen at the next start, not a day later.
         clock.Advance(TimeSpan.FromMinutes(5));
         github.Releases = [Release("v0.1.19", "newer"), Release("v0.1.18", "notes")];
-        (await feed.LatestAsync(false, CancellationToken.None))!.Tag.ShouldBe("v0.1.19");
-        (await feed.LatestAsync(true, CancellationToken.None))!.Tag.ShouldBe("v0.1.19", "Check now stays");
+        (await feed.LatestAsync(CancellationToken.None))!.Tag.ShouldBe("v0.1.19");
+        (await feed.LatestAsync(CancellationToken.None))!.Tag.ShouldBe("v0.1.19", "Check now stays");
     }
 
     [Fact]
@@ -110,13 +110,13 @@ public sealed class AppUpdateTests
         var feed = h.Get<ReleaseFeed>();
         github.Limited = clock.GetUtcNow().AddMinutes(30);
 
-        (await feed.LatestAsync(true, CancellationToken.None)).ShouldBeNull();
-        (await feed.LatestAsync(true, CancellationToken.None)).ShouldBeNull();
+        (await feed.LatestAsync(CancellationToken.None)).ShouldBeNull();
+        (await feed.LatestAsync(CancellationToken.None)).ShouldBeNull();
         github.Requests.Count.ShouldBe(1, "not even Check now asks before the reset time");
 
         clock.Advance(TimeSpan.FromMinutes(31));
         github.Limited = null;
-        (await feed.LatestAsync(true, CancellationToken.None))!.Tag.ShouldBe("v0.1.18");
+        (await feed.LatestAsync(CancellationToken.None))!.Tag.ShouldBe("v0.1.18");
     }
 
     [Fact]
@@ -124,8 +124,8 @@ public sealed class AppUpdateTests
     {
         using var h = new DesktopHarness();
 
-        (await h.Get<ReleaseFeed>().LatestAsync(true, CancellationToken.None)).ShouldBeNull();
-        (await h.Get<AppUpdater>().CheckAsync(true, CancellationToken.None)).ShouldBeNull();
+        (await h.Get<ReleaseFeed>().LatestAsync(CancellationToken.None)).ShouldBeNull();
+        (await h.Get<AppUpdater>().CheckAsync(CancellationToken.None)).ShouldBeNull();
     }
 
     [Fact]
@@ -133,7 +133,7 @@ public sealed class AppUpdateTests
     {
         using var h = Harness(new FakeGitHub(Release("v0.1.18", Notes(NewProgram))), out _, out _);
 
-        var offer = (await Updater(h).CheckAsync(false, CancellationToken.None)).ShouldNotBeNull();
+        var offer = (await Updater(h).CheckAsync(CancellationToken.None)).ShouldNotBeNull();
 
         offer.Version.ToString().ShouldBe("0.1.18");
         offer.Current.ShouldBe("0.1.17");
@@ -148,14 +148,14 @@ public sealed class AppUpdateTests
     {
         using var h = Harness(new FakeGitHub(Release("v0.1.17", Notes(NewProgram))), out _, out _);
 
-        (await Updater(h).CheckAsync(true, CancellationToken.None)).ShouldBeNull();
+        (await Updater(h).CheckAsync(CancellationToken.None)).ShouldBeNull();
     }
 
     [Fact]
     public async Task WithoutASha256InTheNotesOrWithADifferentGitHubDigestTheReleaseIsNotInstallable()
     {
         using var h = Harness(new FakeGitHub(Release("v0.1.18", "Only text, no checksums.")), out _, out _);
-        var offer = (await Updater(h).CheckAsync(true, CancellationToken.None)).ShouldNotBeNull();
+        var offer = (await Updater(h).CheckAsync(CancellationToken.None)).ShouldNotBeNull();
         offer.Problem.ShouldBe("no_hash");
         offer.CanInstall.ShouldBeFalse();
         await Should.ThrowAsync<AppUpdateException>(() => Updater(h).InstallAsync(offer, null, CancellationToken.None));
@@ -163,7 +163,7 @@ public sealed class AppUpdateTests
         var release = Release("v0.1.18", Notes(NewProgram));
         release.Assets[0].Digest = "sha256:" + new string('0', 64);
         using var other = Harness(new FakeGitHub(release), out _, out _);
-        (await Updater(other).CheckAsync(true, CancellationToken.None))!.Problem.ShouldBe("no_hash");
+        (await Updater(other).CheckAsync(CancellationToken.None))!.Problem.ShouldBe("no_hash");
     }
 
     [Fact]
@@ -172,7 +172,7 @@ public sealed class AppUpdateTests
         using var h = Harness(new FakeGitHub(Release("v0.1.18", Notes(NewProgram))), out var program, out _);
         File.WriteAllText(Path.Combine(Path.GetDirectoryName(program)!, "TMConcept.dll"), "a build from source has its assembly next to it");
 
-        (await Updater(h).CheckAsync(true, CancellationToken.None))!.Problem.ShouldBe("not_packaged");
+        (await Updater(h).CheckAsync(CancellationToken.None))!.Problem.ShouldBe("not_packaged");
     }
 
     [Fact]
@@ -181,7 +181,7 @@ public sealed class AppUpdateTests
         var restarter = new FakeRestarter();
         using var h = Harness(new FakeGitHub(Release("v0.1.18", Notes(NewProgram))), out var program, out _, restarter, new FlakyServer(NewProgram));
         var updater = Updater(h);
-        var offer = (await updater.CheckAsync(true, CancellationToken.None))!;
+        var offer = (await updater.CheckAsync(CancellationToken.None))!;
 
         await updater.InstallAsync(offer, null, CancellationToken.None);
 
@@ -207,7 +207,7 @@ public sealed class AppUpdateTests
         var tampered = Encoding.UTF8.GetBytes("something else");
         using var h = Harness(new FakeGitHub(Release("v0.1.18", Notes(NewProgram))), out var program, out _, restarter, new FlakyServer(tampered));
         var updater = Updater(h);
-        var offer = (await updater.CheckAsync(true, CancellationToken.None))!;
+        var offer = (await updater.CheckAsync(CancellationToken.None))!;
 
         var error = await Should.ThrowAsync<ToolInstallException>(() => updater.InstallAsync(offer, null, CancellationToken.None));
 
@@ -222,7 +222,7 @@ public sealed class AppUpdateTests
         var restarter = new FakeRestarter { Fail = true };
         using var h = Harness(new FakeGitHub(Release("v0.1.18", Notes(NewProgram))), out var program, out _, restarter, new FlakyServer(NewProgram));
         var updater = Updater(h);
-        var offer = (await updater.CheckAsync(true, CancellationToken.None))!;
+        var offer = (await updater.CheckAsync(CancellationToken.None))!;
 
         var error = await Should.ThrowAsync<AppUpdateException>(() => updater.InstallAsync(offer, null, CancellationToken.None));
 
@@ -241,7 +241,7 @@ public sealed class AppUpdateTests
         using var h = Harness(new FakeGitHub(Release("v0.1.18", Notes(NewProgram))), out var program, out _, restarter, new FlakyServer(NewProgram));
         h.Get<TMConcept.Desktop.Startup.AppSession>().WorkRunning = true;
         var updater = Updater(h);
-        var offer = (await updater.CheckAsync(true, CancellationToken.None))!;
+        var offer = (await updater.CheckAsync(CancellationToken.None))!;
 
         (await Should.ThrowAsync<AppUpdateException>(() => updater.InstallAsync(offer, null, CancellationToken.None))).Code.ShouldBe("busy");
         File.ReadAllText(program).ShouldBe("the old program");
@@ -305,7 +305,7 @@ public sealed class AppUpdateTests
             Release("v0.1.17", "running"), Release("v0.1.16", "older"));
         using var h = Harness(github, out _, out _);
 
-        var offer = (await Updater(h).CheckAsync(true, CancellationToken.None)).ShouldNotBeNull();
+        var offer = (await Updater(h).CheckAsync(CancellationToken.None)).ShouldNotBeNull();
 
         offer.Version.ToString().ShouldBe("0.1.20", "drafts and pre-releases are never offered");
         offer.Versions.Select(v => v.Version.ToString()).ShouldBe(["0.1.18", "0.1.19", "0.1.20"], "every version since the running one, oldest first");
@@ -324,21 +324,21 @@ public sealed class AppUpdateTests
         using var h = Harness(github, out _, out var clock);
         var feed = h.Get<ReleaseFeed>();
 
-        (await feed.ReleasesAsync(true, CancellationToken.None)).Select(r => r.Tag).ShouldBe(["v0.1.22", "v0.1.21", "v0.1.20", "v0.1.19", "v0.1.18"]);
+        (await feed.ReleasesAsync(CancellationToken.None)).Select(r => r.Tag).ShouldBe(["v0.1.22", "v0.1.21", "v0.1.20", "v0.1.19", "v0.1.18"]);
         github.Requests.Count.ShouldBe(3, "five releases in pages of two");
         github.Requests[1].RequestUri!.Query.ShouldContain("page=2", Case.Sensitive, "the Link header's next page is followed");
 
         // The next look sends the first page's ETag; unchanged, it is one request and the kept list.
-        (await feed.ReleasesAsync(true, CancellationToken.None)).Count.ShouldBe(5);
+        (await feed.ReleasesAsync(CancellationToken.None)).Count.ShouldBe(5);
         github.Requests.Count.ShouldBe(4);
         github.Requests[3].Headers.IfNoneMatch.ToString().ShouldBe("\"r-v0.1.22\"");
 
         // 0.1.54: every start asks too (a 304 again: one request, nothing of the hourly limit).
-        (await feed.ReleasesAsync(false, CancellationToken.None)).Count.ShouldBe(5);
+        (await feed.ReleasesAsync(CancellationToken.None)).Count.ShouldBe(5);
         github.Requests.Count.ShouldBe(5);
         clock.Advance(TimeSpan.FromMinutes(2));
         github.Releases.Insert(0, Release("v0.1.23", "f"));
-        (await feed.ReleasesAsync(false, CancellationToken.None))[0].Tag.ShouldBe("v0.1.23");
+        (await feed.ReleasesAsync(CancellationToken.None))[0].Tag.ShouldBe("v0.1.23");
     }
 
     [Fact]
@@ -350,14 +350,14 @@ public sealed class AppUpdateTests
         github.Limited = clock.GetUtcNow().AddMinutes(30);
         github.LimitedFromPage = 2;
 
-        (await feed.ReleasesAsync(true, CancellationToken.None)).Select(r => r.Tag).ShouldBe(["v0.1.20", "v0.1.19"], "the pages read so far are used");
+        (await feed.ReleasesAsync(CancellationToken.None)).Select(r => r.Tag).ShouldBe(["v0.1.20", "v0.1.19"], "the pages read so far are used");
         feed.State().ETag.ShouldBeNull("a partial list is never confirmed by a 304");
-        (await feed.ReleasesAsync(true, CancellationToken.None)).Count.ShouldBe(2);
+        (await feed.ReleasesAsync(CancellationToken.None)).Count.ShouldBe(2);
         github.Requests.Count.ShouldBe(2, "not asked again before GitHub's reset time");
 
         clock.Advance(TimeSpan.FromMinutes(31));
         github.Limited = null;
-        (await feed.ReleasesAsync(true, CancellationToken.None)).Count.ShouldBe(3);
+        (await feed.ReleasesAsync(CancellationToken.None)).Count.ShouldBe(3);
         github.Requests[2].Headers.IfNoneMatch.ShouldBeEmpty();
     }
 
@@ -369,7 +369,7 @@ public sealed class AppUpdateTests
         var at = clock.GetUtcNow().ToString("O", System.Globalization.CultureInfo.InvariantCulture);
         File.WriteAllText(h.Paths.UpdateCheckFile, "{ \"CheckedAtUtc\": \"" + at + "\", \"ETag\": \"\\\"r1\\\"\", \"Release\": { \"tag_name\": \"v0.1.18\" } }");
 
-        (await h.Get<ReleaseFeed>().ReleasesAsync(false, CancellationToken.None)).Count.ShouldBe(2);
+        (await h.Get<ReleaseFeed>().ReleasesAsync(CancellationToken.None)).Count.ShouldBe(2);
         github.Requests.ShouldHaveSingleItem().Headers.IfNoneMatch.ShouldBeEmpty("the old file has no list to confirm");
     }
 
@@ -506,7 +506,7 @@ public sealed class AppUpdateTests
         });
         var updater = Updater(h);
 
-        var offer = (await updater.CheckAsync(true, CancellationToken.None)).ShouldNotBeNull();
+        var offer = (await updater.CheckAsync(CancellationToken.None)).ShouldNotBeNull();
         offer.CanInstall.ShouldBeTrue();
         offer.Installed.ShouldBe(packages.Update);
         offer.Asset!.Size.ShouldBe(10, "only the delta is downloaded");
@@ -520,7 +520,7 @@ public sealed class AppUpdateTests
 
         // A package whose SHA-256 the notes do not confirm: not installable, nothing downloaded.
         packages.Update = new InstalledUpdate("0.1.18", full with { Sha256 = new string('e', 64) }, []);
-        var refused = (await updater.CheckAsync(true, CancellationToken.None)).ShouldNotBeNull();
+        var refused = (await updater.CheckAsync(CancellationToken.None)).ShouldNotBeNull();
         refused.Problem.ShouldBe("no_hash");
         refused.Installed.ShouldBeNull();
         await Should.ThrowAsync<AppUpdateException>(() => updater.InstallAsync(refused, null, CancellationToken.None));
@@ -528,7 +528,7 @@ public sealed class AppUpdateTests
 
         // Velopack finds no packages for the newest release (a release without its index): the release page instead.
         packages.Update = null;
-        (await updater.CheckAsync(true, CancellationToken.None))!.Problem.ShouldBe("no_asset");
+        (await updater.CheckAsync(CancellationToken.None))!.Problem.ShouldBe("no_asset");
     }
 
     [Fact]

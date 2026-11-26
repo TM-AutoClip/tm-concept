@@ -20,6 +20,6 @@ public sealed class MusicGenerationException : Exception
     {
     }
 
-    /// <summary>A short code for the log ("process", "empty", "missing").</summary>
-    public string Code { get; init; } = "music";
+    /// <summary>What kind of failure it is.</summary>
+    public MusicFailure Code { get; init; } = MusicFailure.Music;
 }

@@ -15,7 +15,7 @@ public sealed class UpdateDialog(WindowHost host, Localizer text) : IUpdateDialo
             return UpdateChoice.Later;
         }
 
-        var model = new UpdateViewModel(Title(text, from, to), text.Format("update.message", toolsFolder, ViewModels.StorageSettingsViewModel.Size(toolsBytes, text.Culture)));
+        var model = new UpdateViewModel(Title(text, from, to), text.Format("update.message", toolsFolder, Localization.ByteSizeText.Of(toolsBytes, text.Culture)));
         await new UpdateWindow { DataContext = model }.ShowDialog(owner).ConfigureAwait(true);
         return model.Choice;
     }

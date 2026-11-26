@@ -150,7 +150,7 @@ public sealed partial class LibraryOrphanSource(AppPaths paths, IVideoStore vide
 
     /// <summary>Whether no record's folder is <paramref name="folder"/> or lies inside it.</summary>
     private static bool Unreferenced(string folder, HashSet<string> records) =>
-        !records.Contains(folder) && !records.Any(r => FolderDiscardBase.Inside(r, folder));
+        !records.Contains(folder) && !records.Any(r => LibraryPaths.Inside(r, folder));
 
     /// <summary>Whether <paramref name="folder"/> holds something and only the names the app writes into a video's folder.</summary>
     private static bool OnlyOwn(string folder)

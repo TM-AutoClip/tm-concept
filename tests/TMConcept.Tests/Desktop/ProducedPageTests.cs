@@ -78,7 +78,7 @@ public sealed class ProducedPageTests
         page.Player.DurationMs.ShouldBe(video.DurationMs);
         await page.DeleteAsync();
 
-        confirm.Messages.ShouldHaveSingleItem().ShouldBe(text.Format("produced.delete.message", "Greek fire", StorageSettingsViewModel.Size(16, text.Culture)));
+        confirm.Messages.ShouldHaveSingleItem().ShouldBe(text.Format("produced.delete.message", "Greek fire", TMConcept.Desktop.Localization.ByteSizeText.Of(16, text.Culture)));
         discard.Discarded.Single().ShouldBe(folder);
         Directory.Exists(folder).ShouldBeFalse("0.1.28: the files always go with the record");
         page.Items.ShouldBeEmpty();

@@ -102,6 +102,12 @@ public enum ToolKind
     /// </summary>
     VideoDownloader = 25,
 
+    /// <summary>
+    /// The SoundFont of the composed music (0.1.55, MuseScore General 0.2, MIT; one file from the MuseScore mirror at ftp.osuosl.org, pinned by
+    /// its SHA-256; not an archive).
+    /// </summary>
+    SoundFont = 26,
+
     /// <summary>A new version of the app itself (a release asset; its SHA-256 comes from the release notes). Not a component.</summary>
     AppUpdate = 100,
 }

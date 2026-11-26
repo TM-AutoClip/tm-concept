@@ -82,7 +82,7 @@ public sealed partial class UnlockViewModel(Vault vault, UiMasterPassword master
         Busy = true;
         try
         {
-            var offer = await Task.Run(() => updater.CheckAsync(force: true, CancellationToken.None)).ConfigureAwait(true);
+            var offer = await Task.Run(() => updater.CheckAsync(CancellationToken.None)).ConfigureAwait(true);
             if (offer is null)
             {
                 Error = text["database.update_none"];

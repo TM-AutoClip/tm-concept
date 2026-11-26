@@ -16,6 +16,8 @@
     <EmbeddedResource Include="Packages/hyperframes/*" LogicalName="TMConcept.Packages.hyperframes.%(Filename)%(Extension)" />
     <EmbeddedResource Include="Packages/remotion/*" LogicalName="TMConcept.Packages.remotion.%(Filename)%(Extension)" />
     <EmbeddedResource Include="Packages/revideo/*" LogicalName="TMConcept.Packages.revideo.%(Filename)%(Extension)" />
+    <!-- The composed music's synthesizer (0.1.55): spessasynth_core, pinned, with the app's render script. -->
+    <EmbeddedResource Include="Packages/music-synth/*" LogicalName="TMConcept.Packages.music-synth.%(Filename)%(Extension)" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="TMConcept.Tests" />

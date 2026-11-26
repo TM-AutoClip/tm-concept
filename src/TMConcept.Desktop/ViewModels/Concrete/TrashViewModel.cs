@@ -111,7 +111,7 @@ public sealed partial class TrashViewModel(AppSession session, IConceptStore con
             return;
         }
 
-        var size = StorageSettingsViewModel.Size(plan.Bytes, text.Culture);
+        var size = Localization.ByteSizeText.Of(plan.Bytes, text.Culture);
         var message = plan.Videos > 0
             ? text.Format("trash.delete.message", plan.Concepts, plan.Videos, size)
             : text.Format("trash.delete.message_no_videos", plan.Concepts, size);
@@ -140,7 +140,7 @@ public sealed partial class TrashViewModel(AppSession session, IConceptStore con
         {
             var result = await deletion.DeleteAsync(ids, CancellationToken.None).ConfigureAwait(true);
             logger.LogInformation("{Count} concepts deleted permanently", result.Deleted);
-            activity.Add(ActivityLevel.Info, text.Format("trash.deleted", result.Deleted, StorageSettingsViewModel.Size(result.Freed, text.Culture)));
+            activity.Add(ActivityLevel.Info, text.Format("trash.deleted", result.Deleted, Localization.ByteSizeText.Of(result.Freed, text.Culture)));
             if (!result.Complete)
             {
                 Status = text.Format("trash.delete_failed", result.Failed[0].Reason);

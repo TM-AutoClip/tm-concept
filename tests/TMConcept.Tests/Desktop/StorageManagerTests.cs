@@ -6,6 +6,7 @@ using TMConcept.Core.Components;
 using TMConcept.Core.DiskSpace;
 using TMConcept.Core.Engines;
 using TMConcept.Core.Models;
+using TMConcept.Core.Paths;
 using TMConcept.Core.Pipeline;
 using TMConcept.Core.Profiles;
 using TMConcept.Desktop.Dialogs;
@@ -36,10 +37,11 @@ public sealed class StorageManagerTests
         var usage = await h.Get<IComponentUsage>().ComputeAsync(None);
 
         usage.Uses.Keys.Order(StringComparer.Ordinal).ShouldBe(
-            ["engine.remotion", "ffmpeg", "image.z-image-turbo", "music-library", "music.ace-step-1.5", "node", "sd-cpp", "sherpa-onnx", "voice.kokoro",
-                "whisper-cpp", "whisper-model.base", "yt-dlp"]);
+            ["engine.remotion", "ffmpeg", "image.z-image-turbo", "music-library", "music-synth", "music.ace-step-1.5", "node", "sd-cpp", "sherpa-onnx",
+                "soundfont.musescore-general", "voice.kokoro", "whisper-cpp", "whisper-model.base", "yt-dlp"]);
         usage.For("music-library").ShouldBe([new DiskUse(string.Empty, string.Empty)], "templates choose the music library, so the app keeps it (0.1.45)");
         usage.For("music.ace-step-1.5").ShouldBe([new DiskUse(string.Empty, string.Empty)], "templates choose the local music model too (0.1.46)");
+        usage.For("soundfont.musescore-general").ShouldBe([new DiskUse(string.Empty, string.Empty)], "templates choose the composed music too (0.1.55)");
         usage.For("whisper-model.base").ShouldBe([new DiskUse(string.Empty, string.Empty)], "every video's subtitles use whisper.cpp once installed (0.1.48)");
         usage.For("voice.kokoro").ShouldBe([new DiskUse("Ottoman", PipelineSteps.Speech)]);
         usage.For("sherpa-onnx").ShouldBe([new DiskUse("Ottoman", PipelineSteps.Speech)], "a dependency is used by whoever uses the voice");
@@ -311,8 +313,8 @@ public sealed class StorageManagerTests
             await Should.ThrowAsync<InvalidOperationException>(() => h.Get<PermanentDiscard>().DiscardAsync(outside, None));
             await Should.ThrowAsync<InvalidOperationException>(() => h.Get<PermanentDiscard>().DiscardAsync(h.Paths.DataDirectory, None));
             Directory.Exists(outside).ShouldBeTrue();
-            FolderDiscardBase.Inside(Path.Combine(h.Paths.DataDirectory, "tools", "x"), h.Paths.DataDirectory).ShouldBeTrue();
-            FolderDiscardBase.Inside(h.Paths.DataDirectory + "-other", h.Paths.DataDirectory).ShouldBeFalse("a name that only starts the same");
+            LibraryPaths.Inside(Path.Combine(h.Paths.DataDirectory, "tools", "x"), h.Paths.DataDirectory).ShouldBeTrue();
+            LibraryPaths.Inside(h.Paths.DataDirectory + "-other", h.Paths.DataDirectory).ShouldBeFalse("a name that only starts the same");
         }
         finally
         {

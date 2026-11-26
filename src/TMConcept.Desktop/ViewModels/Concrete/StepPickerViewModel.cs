@@ -36,7 +36,7 @@ namespace TMConcept.Desktop.ViewModels;
 /// Anything declined, missing, unavailable or failed stops the process before anything is paid for, with the reason on the page and in the log.
 /// </summary>
 public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepModelStore steps, StepModelResolver resolver, IEnumerable<IVideoEngine> engines,
-    SpeechService speech, VoiceSampleLibrary voiceSamples, ComponentInstallFlow installs, AppSession session, IConfirmDialog confirm, IApiKeyDialog keyDialog, Engines.Images.ImageBackendSelector backends, IGpuInfo gpu, IAppPaths paths,
+    SpeechService speech, VoiceSampleLibrary voiceSamples, ComponentInstallFlow installs, IModelStartGate gate, AppSession session, IConfirmDialog confirm, IApiKeyDialog keyDialog, Engines.Images.ImageBackendSelector backends, IGpuInfo gpu, IAppPaths paths,
     ShellLauncher shell, Localizer text, ILogger<StepPickerViewModel> logger, LocalServerSync localServers, AccountVoiceLibrary accountVoices) : ObservableObject
 {
     /// <summary>The "saved" mark of a row whose saved choice is not offered any more: never equal to a row's key, so it is saved again.</summary>
@@ -445,7 +445,7 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
             if (codes.Count > 0)
             {
                 Percent = 0;
-                var outcome = await installs.EnsureAsync(codes, purposeKey, InstallProgress(), cancellationToken).ConfigureAwait(true);
+                var outcome = await gate.InstallAsync(codes, purposeKey, InstallProgress(), cancellationToken).ConfigureAwait(true);
                 Progress = string.Empty;
                 foreach (var row in rows)
                 {
@@ -455,7 +455,7 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
                 if (!outcome.Ready)
                 {
                     logger.LogWarning("Process not started: what the chosen models need is not installed");
-                    Status = text.Format("picker.not_started.install", outcome.Reason);
+                    Status = outcome.Reason;
                     return false;
                 }
             }
@@ -575,7 +575,7 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
             }
 
             Percent = 0;
-            var outcome = await installs.EnsureAsync(Requirements(row), purposeKey, InstallProgress(), CancellationToken.None).ConfigureAwait(true);
+            var outcome = await gate.InstallAsync(Requirements(row), purposeKey, InstallProgress(), CancellationToken.None).ConfigureAwait(true);
             if (!outcome.Ready)
             {
                 logger.LogInformation("Listen not started: the local voice is not installed");
@@ -595,40 +595,37 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
     }
 
     /// <summary>
-    /// The key gate: every online provider of the rows needs a working API key (a saved key that fails its free test does not count). A
-    /// missing one is asked for in a dialog (tested there; only a key that works is saved); declined = the process does not start.
+    /// The key gate (<see cref="IModelStartGate.KeysAsync"/>): every online provider of the rows needs a working API key (a saved key that
+    /// fails its free test does not count). A missing one is asked for in a dialog (tested there; only a key that works is saved); declined =
+    /// the process does not start. The rows say what happened.
     /// </summary>
     private async Task<bool> KeysAsync(IReadOnlyList<StepModelRowViewModel> rows, CancellationToken cancellationToken)
     {
         var models = rows.Select(r => r.Selected?.Model).OfType<CatalogModel>().ToList();
-        foreach (var provider in await resolver.ProvidersWithoutWorkingKeyAsync(models, cancellationToken).ConfigureAwait(true))
+        var outcome = await gate.KeysAsync(models, cancellationToken).ConfigureAwait(true);
+        foreach (var provider in outcome.Untested)
         {
-            logger.LogWarning("The provider {Provider} has no working API key; one is asked for before the process starts", provider);
-            if (!await keyDialog.AddKeyAsync(provider).ConfigureAwait(true))
+            // No free test exists (fal): the key was saved untested; it is checked at its first use, and the page says so.
+            foreach (var row in rows.Where(r => r.Selected?.Model?.Provider == provider))
             {
-                logger.LogWarning("Process not started: no API key was added for {Provider}", provider);
-                Status = text.Format("picker.not_started.key", ProviderName(provider));
-                foreach (var row in rows.Where(r => r.Selected?.Model?.Provider == provider))
-                {
-                    row.Note = text.Format("picker.no_key", ProviderName(provider));
-                    row.NoteIsWarning = true;
-                }
-
-                return false;
-            }
-
-            if (!resolver.CanTest(provider))
-            {
-                // No free test exists (fal): the key was saved untested; it is checked at its first use, and the page says so.
-                foreach (var row in rows.Where(r => r.Selected?.Model?.Provider == provider))
-                {
-                    row.Note = text["keys.test.untested"];
-                    row.NoteIsWarning = true;
-                }
+                row.Note = text["keys.test.untested"];
+                row.NoteIsWarning = true;
             }
         }
 
-        return true;
+        if (outcome.MissingProvider is not { } missing)
+        {
+            return true;
+        }
+
+        Status = text.Format("picker.not_started.key", ProviderName(missing));
+        foreach (var row in rows.Where(r => r.Selected?.Model?.Provider == missing))
+        {
+            row.Note = text.Format("picker.no_key", ProviderName(missing));
+            row.NoteIsWarning = true;
+        }
+
+        return false;
     }
 
     private string ProviderName(string provider) => keyDialog.ProviderName(provider);
@@ -1176,24 +1173,10 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
             logger.LogInformation("Setting changed: the Remotion license was accepted");
         }
 
-        var key = model.Provider + "/" + model.Id;
-        if (model.LicenseUse != LicenseUse.Commercial && !settings.AcceptedModelLicenses.Contains(key))
+        // A non-commercial or conditional licence: asked once per model, the same way on every page.
+        if (!await gate.AcceptLicenseAsync(model).ConfigureAwait(true))
         {
-            // Asked once per model, before its first download (0.1.17: non-commercial and conditional licenses are offered with a clear warning).
-            var message = text.Format(model.LicenseUse == LicenseUse.NonCommercial ? "models.license.message.noncommercial" : "models.license.message.limited",
-                model.Name, LicenseName(model.License), text["license." + model.License + ".terms"], model.LicenseUrl);
-            // Not a danger question (0.1.18): the license limits the use, the model runs; red is only for "cannot run on this card".
-            var license = await confirm.AskAsync(text.Format("models.license.title", model.Name), message, text["engines.license.accept"], danger: false)
-                .ConfigureAwait(true);
-            if (!license.Confirmed)
-            {
-                logger.LogInformation("The license of {Model} ({License}) was declined", key, model.License);
-                return false;
-            }
-
-            settings.AcceptedModelLicenses.Add(key);
-            await session.SaveAsync(settings, CancellationToken.None).ConfigureAwait(true);
-            logger.LogInformation("Setting changed: the license of {Model} ({License}) was accepted", key, model.License);
+            return false;
         }
 
         if (model.Provider == ModelProviders.Local && model.Id == SpeechEngines.Supertonic && !settings.SupertonicLicenseAccepted)

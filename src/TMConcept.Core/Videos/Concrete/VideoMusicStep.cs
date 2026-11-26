@@ -25,7 +25,7 @@ namespace TMConcept.Core.Videos;
 /// never made again for another voice or engine (rule 12).
 /// </summary>
 public sealed class VideoMusicStep(IMediaTools media, IMusicLibrary library, IMusicAudio audio, ILogger<VideoMusicStep> logger,
-    IMusicGenerators? generators = null, IGpuCoordinator? gpu = null)
+    IMusicGenerators generators, IMusicPieceRunner pieces)
 {
     /// <summary>The laid-out track's name in the work folder's music folder.</summary>
     public const string BedName = "bed.flac";
@@ -186,7 +186,7 @@ public sealed class VideoMusicStep(IMediaTools media, IMusicLibrary library, IMu
     /// </summary>
     private async Task<PreparedMusic> GeneratorAsync(VideoMusic music, CancellationToken cancellationToken)
     {
-        if (generators?.Find(music.Generator) is not { } model)
+        if (generators.Find(music.Generator) is not { } model)
         {
             logger.LogError(Activity.LogEvents.OnScreen, "The template's music model {Model} is not known; the video is stopped",
                 music.Generator.Length > 0 ? music.Generator : "(none)");
@@ -228,8 +228,9 @@ public sealed class VideoMusicStep(IMediaTools media, IMusicLibrary library, IMu
     private async Task<PreparedMusic> GenerateAsync(ResolvedModel model, VideoMusic settings, IReadOnlyList<MusicHint?> hints, NarrationTempo tempo,
         double videoSeconds, string work, Action<decimal, bool>? spend, CancellationToken cancellationToken)
     {
-        var generator = generators?.For(model.Model)
-            ?? throw new VideoException("The music model is not installed: " + model.Model.Name) { Code = "music" };
+        var generator = generators.For(model.Model) is { } found
+            ? found
+            : throw new VideoException("The music model is not installed: " + model.Model.Name) { Code = "music" };
         var seconds = MusicPricing.Seconds(model.Model, videoSeconds);
         var (_, _, pace) = MusicPromptBuilder.Choose(hints, tempo);
         var prompt = MusicPromptBuilder.Build(hints, tempo, settings.Instrumental, seconds);
@@ -242,22 +243,14 @@ public sealed class VideoMusicStep(IMediaTools media, IMusicLibrary library, IMu
         GeneratedMusic made;
         try
         {
-            if (model.Model.Provider == ModelProviders.Local && gpu is not null)
-            {
-                // The graphics card's one local model at a time (rule 18): the narration's worker has ended, an image model is unloaded first.
-                await using var lease = await gpu.AcquireAsync(model.Model, cancellationToken).ConfigureAwait(false);
-                made = await generator.GenerateAsync(request, cancellationToken).ConfigureAwait(false);
-            }
-            else
-            {
-                made = await generator.GenerateAsync(request, cancellationToken).ConfigureAwait(false);
-            }
+            // The shared runner: the graphics card's lock for a local model (the narration's worker has ended, an image model is unloaded first).
+            made = await pieces.RunAsync(generator, request, cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException and not VideoException)
+        catch (MusicGenerationException ex)
         {
-            // Rule 17: an unexpected failure stops the video (shown, logged in red); in night mode the queue goes on with the next one.
+            // Rule 17: a failure stops the video (shown, logged in red); in night mode the queue goes on with the next one.
             logger.LogError(Activity.LogEvents.OnScreen, ex, "The music could not be made by {Model}; the video is stopped", model.Model.Name);
-            throw new VideoException("The music could not be made: " + ex.Message, ex) { Code = ex is MemoryShortfallException ? "memory" : "music" };
+            throw new VideoException("The music could not be made: " + ex.Message, ex) { Code = ex.Code == MusicFailure.Memory ? "memory" : "music" };
         }
 
         if (made.Usd > 0)
@@ -404,9 +397,7 @@ public sealed class VideoMusicStep(IMediaTools media, IMusicLibrary library, IMu
         var copy = Path.Combine(folder, name);
         try
         {
-            await using var source = new FileStream(from, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
-            await using var target = new FileStream(copy, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
-            await source.CopyToAsync(target, cancellationToken).ConfigureAwait(false);
+            await LibraryPaths.CopyAsync(from, copy, FileMode.Create, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

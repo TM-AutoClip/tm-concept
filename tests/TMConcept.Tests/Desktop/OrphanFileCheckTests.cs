@@ -53,7 +53,7 @@ public sealed class OrphanFileCheckTests
         confirm.Asked.ShouldBe([text["storage.orphans.start.title"]]);
         var message = confirm.Messages.ShouldHaveSingleItem();
         message.ShouldContain("tools.old-20261125-134716");
-        message.ShouldContain(StorageSettingsViewModel.Size(8192, text.Culture));
+        message.ShouldContain(TMConcept.Desktop.Localization.ByteSizeText.Of(8192, text.Culture));
         confirm.Dangers.ShouldBe([true]);
         freed.ShouldBeGreaterThanOrEqualTo(4096 + 2048 + 8192);
         File.Exists(Path.Combine(h.Paths.ToolsDirectory, "downloads", "model.part")).ShouldBeFalse();
@@ -75,7 +75,7 @@ public sealed class OrphanFileCheckTests
         using var _ = h;
         await FirstRunTests.CreateAsync(h);
 
-        (await Check(h, from: OrphanFileCheck.DefaultAskFromBytes).RunAsync(CancellationToken.None)).ShouldBe(0);
+        (await Check(h, from: OrphanFileRules.DefaultAskFromBytes).RunAsync(CancellationToken.None)).ShouldBe(0);
         confirm.Asked.ShouldBeEmpty("14 KB is far below 500 MB");
 
         confirm.Answer = false;

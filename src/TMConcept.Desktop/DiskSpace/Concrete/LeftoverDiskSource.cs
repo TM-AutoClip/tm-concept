@@ -1,6 +1,7 @@
 using TMConcept.Core.AppOllama;
 using TMConcept.Core.Components;
 using TMConcept.Core.DiskSpace;
+using TMConcept.Core.Paths;
 using TMConcept.Desktop.Localization;
 using TMConcept.Desktop.Paths;
 using TMConcept.Speech.Python;
@@ -68,7 +69,7 @@ public sealed class LeftoverDiskSource(AppPaths paths, PythonLayout python, Comp
         // refused (newer minApp, newer stable-diffusion.cpp, a damaged kept copy) installed it, and it is gigabytes to download again. It is
         // listed on its own and goes only with the full delete, never with the one-click clean-up.
         var imageRoot = Full(Path.Combine(tools, "images"));
-        var unknownImages = unowned.Where(f => Same(f, imageRoot) || FolderDiscardBase.Inside(f, imageRoot)).ToList();
+        var unknownImages = unowned.Where(f => Same(f, imageRoot) || LibraryPaths.Inside(f, imageRoot)).ToList();
         yield return Folder("tools:unowned", "storage.item.unowned", DiskArea.Tools, unowned.Except(unknownImages).ToList(), true);
         yield return Folder("tools:unknown-image-models", "storage.item.unknown_image_models", DiskArea.Models, unknownImages, false);
 
@@ -147,12 +148,12 @@ public sealed class LeftoverDiskSource(AppPaths paths, PythonLayout python, Comp
 
             foreach (var child in children.Order(StringComparer.Ordinal))
             {
-                if (owned.Any(o => Same(o, child) || FolderDiscardBase.Inside(child, o)))
+                if (owned.Any(o => Same(o, child) || LibraryPaths.Inside(child, o)))
                 {
                     continue;
                 }
 
-                if (owned.Any(o => FolderDiscardBase.Inside(o, child)))
+                if (owned.Any(o => LibraryPaths.Inside(o, child)))
                 {
                     pending.Push(child);
                     continue;

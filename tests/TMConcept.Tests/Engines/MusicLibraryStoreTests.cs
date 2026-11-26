@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using TMConcept.Core.Components;
 using TMConcept.Core.Media;
+using TMConcept.Core.Models;
 using TMConcept.Core.Music;
 using TMConcept.Core.Render;
 using TMConcept.Core.Speech;
@@ -113,7 +114,8 @@ public sealed class MusicLibraryStoreTests : IDisposable
         var store = Store(new FakeDownloader());
         await store.InstallAsync(null, CancellationToken.None);
         var audio = new ClickAudio(120, 0.25, 60);
-        var step = new VideoMusicStep(new LengthOnlyMedia(), store, audio, NullLogger<VideoMusicStep>.Instance);
+        var step = new VideoMusicStep(new LengthOnlyMedia(), store, audio, NullLogger<VideoMusicStep>.Instance, new NoMusicModels(),
+            new MusicPieceRunner(new ImageBackendTests.FakeCoordinator(), NullLogger<MusicPieceRunner>.Instance));
         var style = new VideoStyle { Name = "M", Tempo = NarrationTempo.Natural, Music = new VideoMusic { Source = MusicSource.Library, Track = store.Tracks[0] } };
         var work = Work();
         var prepared = (await step.PrepareAsync(style, null, work, CancellationToken.None)).ShouldNotBeNull();
@@ -147,9 +149,25 @@ public sealed class MusicLibraryStoreTests : IDisposable
         return work;
     }
 
-    private static VideoMusicStep Step(MusicLibraryStore store) => new(new LengthOnlyMedia(), store, new SilentAudio(), NullLogger<VideoMusicStep>.Instance);
+    private static VideoMusicStep Step(MusicLibraryStore store) => new(new LengthOnlyMedia(), store, new SilentAudio(), NullLogger<VideoMusicStep>.Instance,
+        new NoMusicModels(), new MusicPieceRunner(new ImageBackendTests.FakeCoordinator(), NullLogger<MusicPieceRunner>.Instance));
 
     /// <summary>Writes a file of the pinned size (no network).</summary>
+    /// <summary>No music model at all: these tests use the library's tracks only.</summary>
+    private sealed class NoMusicModels : IMusicGenerators
+    {
+        public IReadOnlyList<CatalogModel> Models => [];
+
+        public CatalogModel? Find(string generator) => null;
+
+        public bool Ready(CatalogModel model) => false;
+
+        public Task<ResolvedModel> ResolveAsync(CatalogModel model, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("No music model in these tests.");
+
+        public IMusicGenerator? For(CatalogModel model) => null;
+    }
+
     private sealed class FakeDownloader : IArchiveDownloader
     {
         public List<ToolArchive> Asked { get; } = [];

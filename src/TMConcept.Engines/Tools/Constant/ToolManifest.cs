@@ -95,6 +95,10 @@ public static class ToolManifest
 
         // The local music model (0.1.46): GitHub's source archives of rakkase and ACE-Step 1.5 at pinned commits, each pinned by its SHA-256.
         "codeload.github.com",
+
+        // The composed music's SoundFont (0.1.55): MuseScore General from the official MuseScore mirror, served directly (no redirect); pinned
+        // by its SHA-256.
+        "ftp.osuosl.org",
     ];
 
     /// <summary>Host suffixes a download may be redirected to: Hugging Face's own file servers (us.aws.cdn.hf.co, cas-bridge.xethub.hf.co …).</summary>

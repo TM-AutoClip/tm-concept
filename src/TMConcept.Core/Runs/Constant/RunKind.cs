@@ -50,4 +50,7 @@ public enum RunKind
 
     /// <summary>"Kanaldan esinlen" on the profile page: one chat call that writes a channel content draft (0.1.53; no profile yet).</summary>
     ChannelInspiration = 13,
+
+    /// <summary>A piece made by an online music model on the "Müzik üret" page (0.1.55; a video's music is in the video's own cost lines).</summary>
+    Music = 14,
 }

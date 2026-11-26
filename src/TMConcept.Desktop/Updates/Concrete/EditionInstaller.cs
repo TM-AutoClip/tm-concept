@@ -51,7 +51,7 @@ public sealed class EditionInstaller(ReleaseFeed feed, Engines.Tools.ToolDownloa
             throw new AppUpdateException("Work is running.") { Code = "busy" };
         }
 
-        var releases = await feed.ReleasesAsync(force: true, cancellationToken).ConfigureAwait(false);
+        var releases = await feed.ReleasesAsync(cancellationToken).ConfigureAwait(false);
         var release = releases.FirstOrDefault(r => AppVersion.TryParse(r.Tag, out var v) && AppVersion.TryParse(Current, out var c) && v == c)
             ?? throw new AppUpdateException("The release of " + Current + " was not found.") { Code = "no_release" };
         var setup = ReleaseNotes.SetupFor(release, Rid);

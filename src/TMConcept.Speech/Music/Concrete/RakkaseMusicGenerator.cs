@@ -9,11 +9,13 @@ namespace TMConcept.Speech.Music;
 
 /// <summary>
 /// The local music model (0.1.46, C5): ACE-Step 1.5 through rakkase. A piece is one rakkase run (its README, read on 24 Nov 2026): a plan file
-/// with one part (<c>caption</c> = the prompt, <c>sure</c> = seconds 10–600, <c>bpm</c>, <c>tohum</c> = seed; no <c>lyrics</c> = without
-/// words), then <c>python -X utf8 rakkase.py uret --plan P --cikti O --ad tmc --panel-yok</c> with ACE-Step's own environment, in rakkase's
+/// with one part (<c>ad</c> = the run's name, <c>caption</c> = the prompt, <c>sure</c> = seconds 10–600, <c>tohum</c> = seed, <c>bpm</c>
+/// 30–300, <c>ton</c> = the key, empty = the model's choice, <c>olcu</c> = "4" as a string; all seven are required, see
+/// <see cref="RakkasePlanRules"/>; no <c>lyrics</c> = without words), then <c>python -X utf8 rakkase.py uret --plan P --cikti O --ad tmc --panel-yok</c> with ACE-Step's own environment, in rakkase's
 /// folder. The WAV it writes under <c>O</c> is the piece; rakkase's own archive copy is removed afterwards. Made for NVIDIA cards (measured on
 /// a 4 GB GTX 1050 Ti, about 2.6 GB at its peak; 16 GB main memory); the caller holds the graphics card's lock. Never tried on Linux.
-/// Words (lyrics) are not offered yet: the piece is always instrumental.
+/// Words (lyrics) are not offered yet: the piece is always instrumental. A failed run writes its last lines to the log and its plan check's
+/// findings into the error (<see cref="RakkaseOutput"/>).
 /// </summary>
 public sealed class RakkaseMusicGenerator(RakkaseInstaller installer, RakkaseLayout layout, IProcessRunner runner, ILogger<RakkaseMusicGenerator> logger)
     : IMusicGenerator
@@ -31,23 +33,48 @@ public sealed class RakkaseMusicGenerator(RakkaseInstaller installer, RakkaseLay
     /// <inheritdoc />
     public bool Ready(CatalogModel model) => Handles(model) && installer.EnvironmentReady && installer.WeightsReady;
 
-    /// <summary>The plan of one piece (rakkase's plan file).</summary>
+    /// <summary>
+    /// The plan of one piece (rakkase's plan file). Every field rakkase's check requires is written: a request without a tempo (the music page
+    /// without a reference sound) asks for the medium tempo of the video's prompts.
+    /// </summary>
     public static string Plan(MusicGenerationRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
         var part = new JsonObject
         {
             ["ad"] = RakkasePins.RunName,
-            ["caption"] = request.Prompt,
-            ["sure"] = Math.Clamp(request.Seconds, MusicGenerationRules.MinSeconds, 600),
+            ["caption"] = Caption(request.Prompt),
+            ["sure"] = Math.Clamp(request.Seconds, MusicGenerationRules.MinSeconds, RakkasePlanRules.MaxSeconds),
             ["tohum"] = request.Seed,
+            ["bpm"] = Math.Clamp(request.Bpm ?? MusicPromptBuilder.Bpm(MusicTags.Medium), RakkasePlanRules.MinBpm, RakkasePlanRules.MaxBpm),
+            ["ton"] = RakkasePlanRules.AnyKey,
+            ["olcu"] = RakkasePlanRules.Meter,
         };
-        if (request.Bpm is { } bpm)
+        return new JsonObject { ["not"] = "TM Concept", ["parcalar"] = new JsonArray(part) }.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    /// <summary>
+    /// The prompt as a plan's <c>caption</c>: at most <see cref="RakkasePlanRules.MaxCaptionCharacters"/>, cut at the last space before the
+    /// limit (and without a trailing comma), so rakkase's 256-token check never stops a long Turkish prompt. The plan has no <c>lyrics</c>, so a
+    /// cut-off "instrumental only" note changes nothing: the piece is without words anyway.
+    /// </summary>
+    public static string Caption(string prompt)
+    {
+        ArgumentNullException.ThrowIfNull(prompt);
+        var text = prompt.Trim();
+        if (text.Length <= RakkasePlanRules.MaxCaptionCharacters)
         {
-            part["bpm"] = bpm;
+            return text;
         }
 
-        return new JsonObject { ["not"] = "TM Concept", ["parcalar"] = new JsonArray(part) }.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+        var cut = text[..RakkasePlanRules.MaxCaptionCharacters];
+        var space = cut.LastIndexOf(' ');
+        if (space >= RakkasePlanRules.MaxCaptionCharacters * RakkasePlanRules.WordCutShare)
+        {
+            cut = cut[..space];
+        }
+
+        return cut.TrimEnd(' ', ',', ';', '.');
     }
 
     /// <summary>The run's arguments.</summary>
@@ -60,7 +87,7 @@ public sealed class RakkaseMusicGenerator(RakkaseInstaller installer, RakkaseLay
         ArgumentNullException.ThrowIfNull(request);
         if (!installer.EnvironmentReady || !installer.WeightsReady)
         {
-            throw new MusicGenerationException("The local music model is not installed.") { Code = "missing" };
+            throw new MusicGenerationException("The local music model is not installed.") { Code = MusicFailure.Missing };
         }
 
         Directory.CreateDirectory(request.OutputFolder);
@@ -86,13 +113,16 @@ public sealed class RakkaseMusicGenerator(RakkaseInstaller installer, RakkaseLay
         {
             if (result.ExitCode != 0)
             {
-                throw new MusicGenerationException($"rakkase ended with {result.ExitCode}: {ChildOutput.Summary(result.LastLines)}") { Code = "process" };
+                // The whole tail goes to the log (the plan check's lines say what was wrong); the error names the findings themselves.
+                logger.LogWarning("rakkase ended with {ExitCode}; its output: {Lines}", result.ExitCode,
+                    ChildOutput.Detail(result.LastLines, RakkasePlanRules.LogLines, RakkasePlanRules.LogCharacters));
+                throw new MusicGenerationException($"rakkase ended with {result.ExitCode}: {RakkaseOutput.Reason(result.LastLines)}") { Code = MusicFailure.Process };
             }
 
             var wav = Directory.Exists(output)
                 ? Directory.EnumerateFiles(output, "*.wav", SearchOption.AllDirectories).OrderByDescending(File.GetLastWriteTimeUtc).FirstOrDefault()
                 : null;
-            return wav is not null ? new GeneratedMusic(wav, 0, true) : throw new MusicGenerationException("rakkase wrote no piece.") { Code = "missing" };
+            return wav is not null ? new GeneratedMusic(wav, 0, true) : throw new MusicGenerationException("rakkase wrote no piece.") { Code = MusicFailure.Missing };
         }
         finally
         {

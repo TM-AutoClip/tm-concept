@@ -1,0 +1,11 @@
+{
+  "name": "tm-concept-music-synth",
+  "version": "1.0.0",
+  "description": "TM Concept: the synthesizer of the app's own composed music (MIDI + SoundFont to WAV). Versions are pinned; installed with npm ci --ignore-scripts.",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "spessasynth_core": "4.4.10"
+  }
+}

@@ -37,6 +37,12 @@ public static class UpdateRules
     /// </summary>
     public static readonly TimeSpan OfferAgainAfter = TimeSpan.FromDays(1);
 
+    /// <summary>
+    /// The longest the start waits for its look before the components question of a version change (0.1.55): a newer version is offered
+    /// first; no internet or a slow answer never holds the start up longer than this (the answer is then offered after the question).
+    /// </summary>
+    public static readonly TimeSpan StartWait = TimeSpan.FromSeconds(4);
+
     /// <summary>The longest wait for GitHub's answer.</summary>
     public static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(20);
 

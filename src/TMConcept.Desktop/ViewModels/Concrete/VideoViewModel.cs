@@ -73,6 +73,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
     private readonly Dictionary<Guid, Concept> _queued = [];
     private readonly Core.Pronunciation.IPronunciationStore _pronunciations;
     private readonly IVideoMediaStore _mediaStore;
+    private readonly Components.IModelStartGate _gate;
     private int _check;
     private CancellationTokenSource? _cancel;
     private Guid? _running;
@@ -88,7 +89,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
         Func<ProductionProgressViewModel> progress, ConceptEvents events, INotifier notifier, IVideoQueueRunner runner, IActivityLog activity, Localizer text,
         Paths.UiPreferencesFile preferences, IVideoStyleStore styles, Core.Paths.IAppPaths paths, WindowHost host, PlanReviewViewModel review,
         ProductionChecklistViewModel checklist, Core.Pronunciation.IPronunciationStore pronunciations, VideoMediaViewModel videoMedia,
-        IVideoMediaStore mediaStore, ILogger<VideoViewModel> logger)
+        IVideoMediaStore mediaStore, Components.IModelStartGate gate, ILogger<VideoViewModel> logger)
     {
         _session = session;
         _concepts = concepts;
@@ -118,6 +119,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
         Detail = detail;
         _pronunciations = pronunciations;
         _mediaStore = mediaStore;
+        _gate = gate;
         Media = videoMedia;
         Review = review;
         Review.Attach(() => NightMode);
@@ -913,9 +915,21 @@ public sealed partial class VideoViewModel : PageViewModelBase
             needed.Add(PipelineSteps.QualityCheck);
         }
         bool ready;
+        string? musicReason = null;
         try
         {
-            ready = await Picker.PrepareAsync(needed, "install.purpose.video", cancellationToken, _media.RequiredComponents).ConfigureAwait(true);
+            var components = new List<string>(_media.RequiredComponents);
+            if (Media.GeneratedModel is { } music)
+            {
+                // The profile's music model (0.1.55) is made ready like the step models: its licence and an online model's key are asked
+                // here, its downloads go into the same one confirmation as the others (0.1.54 had an install button of its own).
+                var allowed = await _gate.AllowAsync([music], cancellationToken).ConfigureAwait(true);
+                musicReason = allowed.Ready ? null : allowed.Reason;
+                components.AddRange(music.Requires);
+            }
+
+            ready = musicReason is null
+                && await Picker.PrepareAsync(needed, "install.purpose.video", cancellationToken, components).ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
@@ -929,7 +943,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
             return true;
         }
 
-        var reason = Picker.Status.Length > 0 ? Picker.Status : _text["install.cancelled"];
+        var reason = musicReason ?? (Picker.Status.Length > 0 ? Picker.Status : _text["install.cancelled"]);
         _logger.LogWarning("Videos not started: the chosen models are not ready");
         foreach (var row in Queue.Where(r => items.Any(i => i.Id == r.Item.Id)))
         {

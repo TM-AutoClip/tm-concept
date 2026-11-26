@@ -52,24 +52,19 @@ public sealed class ReleaseFeed : IDisposable
     }
 
     /// <summary>The newest published release (by version), or null when none is known (<see cref="ReleasesAsync"/>).</summary>
-    public async Task<GitHubRelease?> LatestAsync(bool force, CancellationToken cancellationToken) =>
-        (await ReleasesAsync(force, cancellationToken).ConfigureAwait(false)).FirstOrDefault();
+    public async Task<GitHubRelease?> LatestAsync(CancellationToken cancellationToken) =>
+        (await ReleasesAsync(cancellationToken).ConfigureAwait(false)).FirstOrDefault();
 
     /// <summary>
     /// The published releases, newest version first: GitHub's answer (a conditional request; 304 = the kept list), or the kept list while
     /// GitHub asked to wait (a rate limit; logged, nothing shown). Empty when none is known. Network problems are logged and leave the kept
-    /// list. <paramref name="force"/> ("Check now") is kept for the callers; since 0.1.54 every look asks GitHub.
+    /// list. Since 0.1.54 every look asks GitHub (the start and "Check now" alike).
     /// </summary>
-    public async Task<IReadOnlyList<GitHubRelease>> ReleasesAsync(bool force, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<GitHubRelease>> ReleasesAsync(CancellationToken cancellationToken)
     {
         var state = State();
         var now = _clock.GetUtcNow();
         var kept = state.Releases ?? [];
-        if (force)
-        {
-            _logger.LogInformation("Update check: asked for now");
-        }
-
         if (state.NotBeforeUtc is { } notBefore && now < notBefore)
         {
             _logger.LogInformation("Update check: GitHub asked to wait until {Time:u}; the last known releases are used", notBefore);

@@ -21,9 +21,6 @@ public static class MusicGenerationRules
     /// <summary>The local model's weights (22 files, their sizes added up from rakkase's pinned list).</summary>
     public const long LocalWeightBytes = 6_381_794_138;
 
-    /// <summary>The main memory the local model needs (GB; rakkase's setup).</summary>
-    public const int LocalMemoryGb = 16;
-
     /// <summary>The most characters of a prompt (rakkase's caption limit is 256 tokens; the online models take this easily).</summary>
     public const int MaxPromptCharacters = 600;
 
@@ -32,4 +29,16 @@ public static class MusicGenerationRules
 
     /// <summary>The folder of a run's work folder the piece is made in.</summary>
     public const string WorkFolder = "music-generated";
+
+    /// <summary>The work folder of the music page's pieces (under the app's work folder; removed after each piece).</summary>
+    public const string MakeWorkFolder = "music-make";
+
+    /// <summary>The length a piece on the music page starts with (seconds).</summary>
+    public const int DefaultSeconds = 60;
+
+    /// <summary>The most words of a piece's name taken from its prompt.</summary>
+    public const int TitleWords = 8;
+
+    /// <summary>The most characters of a piece's name taken from its prompt.</summary>
+    public const int TitleCharacters = 60;
 }

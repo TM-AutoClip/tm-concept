@@ -139,4 +139,7 @@ public static class ReferenceLimits
 
     /// <summary>The sample rate of the sound measure (the beat grid's, <see cref="Music.MusicLibraryRules.SampleRate"/>).</summary>
     public const int SampleRate = Music.MusicLibraryRules.SampleRate;
+
+    /// <summary>The video files a reference may be (ffmpeg reads them).</summary>
+    public static readonly IReadOnlyList<string> VideoFilePatterns = ["*.mp4", "*.mov", "*.mkv", "*.webm", "*.avi", "*.m4v"];
 }

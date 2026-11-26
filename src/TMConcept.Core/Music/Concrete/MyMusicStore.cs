@@ -62,29 +62,27 @@ public sealed class MyMusicStore(IAppPaths paths, IMediaTools media, IFolderDisc
     }
 
     /// <inheritdoc />
-    public async Task<MyMusicEntry> AddGeneratedAsync(string file, string title, string model, string prompt, string referenceName, decimal usd, int bpm,
-        CancellationToken cancellationToken)
+    public async Task<MyMusicEntry> AddGeneratedAsync(GeneratedPiece piece, CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrEmpty(file);
-        ArgumentNullException.ThrowIfNull(title);
-        ArgumentNullException.ThrowIfNull(model);
+        ArgumentNullException.ThrowIfNull(piece);
+        ArgumentException.ThrowIfNullOrEmpty(piece.File);
         var entry = new MyMusicEntry
         {
             Generated = true,
-            Model = model,
-            Prompt = prompt ?? string.Empty,
-            ReferenceName = referenceName ?? string.Empty,
-            Usd = usd,
+            Model = piece.Model,
+            Prompt = piece.Prompt,
+            ReferenceName = piece.ReferenceName,
+            Usd = piece.Usd,
             Track = new MusicTrack
             {
-                Title = title.Trim().Length > 0 ? title.Trim() : Path.GetFileNameWithoutExtension(file),
-                Artist = model,
-                License = AssetLicenses.GeneratedPrefix + model,
-                Bpm = Math.Max(0, bpm),
+                Title = piece.Title.Trim().Length > 0 ? piece.Title.Trim() : Path.GetFileNameWithoutExtension(piece.File),
+                Artist = piece.Model,
+                License = AssetLicenses.GeneratedPrefix + piece.Model,
+                Bpm = Math.Max(0, piece.Bpm),
             },
         };
-        await StoreAsync(entry, file, move: true, cancellationToken).ConfigureAwait(false);
-        logger.LogInformation("My music: a piece made by {Model} added ({Usd} USD)", model, usd);
+        await StoreAsync(entry, piece.File, move: true, cancellationToken).ConfigureAwait(false);
+        logger.LogInformation("My music: a piece made by {Model} added ({Usd} USD)", piece.Model, piece.Usd);
         return entry;
     }
 
@@ -102,7 +100,7 @@ public sealed class MyMusicStore(IAppPaths paths, IMediaTools media, IFolderDisc
                 return;
             }
 
-            if (File.Exists(entry.Track.File) && Inside(entry.Track.File))
+            if (File.Exists(entry.Track.File) && LibraryPaths.Inside(entry.Track.File, Folder))
             {
                 await discard.DiscardAsync(entry.Track.File, cancellationToken).ConfigureAwait(false);
             }
@@ -131,9 +129,7 @@ public sealed class MyMusicStore(IAppPaths paths, IMediaTools media, IFolderDisc
         }
         else
         {
-            await using var source = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
-            await using var copy = new FileStream(target, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, useAsync: true);
-            await source.CopyToAsync(copy, cancellationToken).ConfigureAwait(false);
+            await LibraryPaths.CopyAsync(file, target, FileMode.CreateNew, cancellationToken).ConfigureAwait(false);
         }
 
         entry.Track.Id = MusicLibraryRules.MinePrefix + id;
@@ -193,11 +189,5 @@ public sealed class MyMusicStore(IAppPaths paths, IMediaTools media, IFolderDisc
         var temporary = Index + ".tmp";
         await File.WriteAllTextAsync(temporary, JsonSerializer.Serialize(all, CoreJsonContext.Default.ListMyMusicEntry), cancellationToken).ConfigureAwait(false);
         File.Move(temporary, Index, overwrite: true);
-    }
-
-    private bool Inside(string file)
-    {
-        var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(Folder)) + Path.DirectorySeparatorChar;
-        return Path.GetFullPath(file).StartsWith(root, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
     }
 }

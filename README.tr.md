@@ -512,6 +512,11 @@ Bir şablonla (Ayarlar → Şablonlar) üretilen video, modelin iyi niyetine kal
   temposunu ölçer ve o tempoyu ister; modellerin hiçbiri sesi doğrudan almaz), yerel ya da çevrimiçi müzik modelini seç (yukarıdakilerin
   aynısı, fiyatlarıyla) ve parçayı üret. Parça **Müziklerim**'e eklenir; kendi ses dosyalarını da oraya ekleyebilirsin. Videonun müzik
   seçimi *Müziklerim* kaynağıyla oradan seçer. Toplu üretimde videoya özel model seçimi şimdilik yok.
+- **Program besteler (0.1.55, koddan müzik):** model de ekran kartı da istemeyen ikinci yerel seçenek. Notaları program istemdeki
+  kelimelerden kendisi yazar (sakin, epik, hüzünlü, gergin, gizemli gibi ruh hâlleri; orkestra, elektronik, ambiyans, akustik, pop, etnik,
+  ortaçağ gibi tarzlar, Türkçe ya da İngilizce; referans sesin ya da videonun temposu), MIDI dosyası olarak; spessasynth_core (Apache-2.0)
+  bunu MuseScore General SoundFont'uyla (MIT, yaklaşık 40 MB) programın Node.js'iyle işlemcide çalar: her bilgisayarda, ücretsiz,
+  çevrimdışı, saniyeler içinde; aynı kelimeler ve tohum aynı parçayı verir. İki parça da yalnız onayladıktan sonra iner.
 - **Hazır müzik kütüphanesi (0.1.45):** *Kütüphaneden seç*, Kevin MacLeod'un parçalarından elle seçilmiş, duygu, tarz ve tempo
   etiketli küçük bir paket kullanır (incompetech.com, CC BY 4.0); yalnız onayladıktan sonra iner (yaklaşık 114 MB). Parçayı her videonun
   konsepti seçebilir: sahne planı aynı istekte her sahneye bir müzik ipucu yazar, en yakın parça kullanılır (istenen tarzda parça yoksa
@@ -557,7 +562,7 @@ Bir şablonla (Ayarlar → Şablonlar) üretilen video, modelin iyi niyetine kal
 
 ## Güncelleme
 
-**Programın içinden:** TM Concept açılışta (günde en çok bir kez) projenin GitHub'daki sürüm listesine bakar (hesap gerekmez, bizim bir
+**Programın içinden:** TM Concept her açılışta (koşullu istek; "Sonra" dediğin sürüm bir gün sonra yeniden önerilir) projenin GitHub'daki sürüm listesine bakar (hesap gerekmez, bizim bir
 sunucumuz yok, sana dair hiçbir şey gönderilmez) ve daha yeni bir sürüm varsa seninki ile en yenisi arasındaki her sürümün notlarını, eskiden
 yeniye, programın dilinde gösterir. Yalnız en yenisi indirilir: veritabanı yükseltme adımlarının hepsi onda var, aradaki sürümleri atlamak
 güvenlidir. **İndir ve kur**, sistemine uygun dosyayı

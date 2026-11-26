@@ -60,6 +60,9 @@ public sealed partial class AppUpdateViewModel(UpdateOffer offer, AppUpdater upd
     /// <summary>Not busy.</summary>
     public bool Idle => !Busy;
 
+    /// <summary>The new version was installed: the app is closing to start it.</summary>
+    public bool Installed { get; private set; }
+
     /// <summary>Download progress (0–100).</summary>
     [ObservableProperty]
     public partial double Percent { get; set; }
@@ -89,6 +92,7 @@ public sealed partial class AppUpdateViewModel(UpdateOffer offer, AppUpdater upd
                 Status = text.Format("appupdate.progress", Percent);
             });
             await updater.InstallAsync(Offer, progress, cancel.Token).ConfigureAwait(true);
+            Installed = true;
             Status = text["appupdate.restarting"];
         }
         catch (OperationCanceledException) when (cancel.IsCancellationRequested)

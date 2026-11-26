@@ -155,7 +155,7 @@ public sealed class DeletionTests
 
         await page.DeleteAsync();
 
-        confirm.Messages.ShouldHaveSingleItem().ShouldBe(text.Format("profile.delete.message", "Byzantium", 0, 1, 0, StorageSettingsViewModel.Size(20, text.Culture)));
+        confirm.Messages.ShouldHaveSingleItem().ShouldBe(text.Format("profile.delete.message", "Byzantium", 0, 1, 0, TMConcept.Desktop.Localization.ByteSizeText.Of(20, text.Culture)));
         (await h.Get<IProfileStore>().GetAsync(profile.Id, None)).ShouldNotBeNull("nothing becomes an orphan");
         page.Status.ShouldBe(text.Format("profile.delete.in_use", "• v1 (The process cannot access the file because it is being used by another process.)"));
 
@@ -301,8 +301,8 @@ public sealed class DeletionTests
     public async Task TheAppsDeleteNeverLeavesTheTestsOwnFolders()
     {
         using var h = new DesktopHarness();
-        FolderDiscardBase.Inside(h.Paths.DataDirectory, TestFolders.Root).ShouldBeTrue();
-        FolderDiscardBase.Inside(h.Paths.LibraryDirectory, TestFolders.Root).ShouldBeTrue();
+        LibraryPaths.Inside(h.Paths.DataDirectory, TestFolders.Root).ShouldBeTrue();
+        LibraryPaths.Inside(h.Paths.LibraryDirectory, TestFolders.Root).ShouldBeTrue();
         var discard = h.Get<IFolderDiscard>();
         discard.ShouldBeOfType<PermanentDiscard>();
         await Should.ThrowAsync<InvalidOperationException>(() => discard.DiscardAsync(h.Paths.LibraryDirectory, None));

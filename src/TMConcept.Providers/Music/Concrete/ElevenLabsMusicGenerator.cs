@@ -68,7 +68,7 @@ public sealed class ElevenLabsMusicGenerator(ElevenLabsProvider provider, Provid
 
         if (!IsAudio(reply.Body))
         {
-            throw new MusicGenerationException("ElevenLabs returned no audio.") { Code = "empty" };
+            throw new MusicGenerationException("ElevenLabs returned no audio.") { Code = MusicFailure.Empty };
         }
 
         Directory.CreateDirectory(request.OutputFolder);

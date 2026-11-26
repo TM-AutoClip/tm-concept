@@ -94,8 +94,8 @@ public sealed class MusicPageTests
         piece.Entry.Track.File.ShouldStartWith(h.Get<IMyMusic>().Folder);
         page.Status.ShouldBe(text.Format("music.made", "antik Mısır'da disko"));
         page.Working.ShouldBeFalse();
-        Directory.Exists(Path.Combine(h.Paths.WorkDirectory, MusicMaker.WorkFolder)).ShouldBeTrue();
-        Directory.EnumerateDirectories(Path.Combine(h.Paths.WorkDirectory, MusicMaker.WorkFolder)).ShouldBeEmpty("the work folder of the piece is removed");
+        Directory.Exists(Path.Combine(h.Paths.WorkDirectory, MusicGenerationRules.MakeWorkFolder)).ShouldBeTrue();
+        Directory.EnumerateDirectories(Path.Combine(h.Paths.WorkDirectory, MusicGenerationRules.MakeWorkFolder)).ShouldBeEmpty("the work folder of the piece is removed");
 
         // The video page's music choice takes it from "Müziklerim".
         var media = h.Get<VideoMediaViewModel>();
@@ -224,6 +224,8 @@ public sealed class MusicPageTests
 
         public bool Fail { get; init; }
 
+        public decimal Usd { get; init; }
+
         public bool Handles(CatalogModel model) => true;
 
         public bool Ready(CatalogModel model) => true;
@@ -239,7 +241,7 @@ public sealed class MusicPageTests
             Directory.CreateDirectory(request.OutputFolder);
             var file = Path.Combine(request.OutputFolder, "piece.wav");
             await File.WriteAllBytesAsync(file, [0x52, 0x49, 0x46, 0x46], cancellationToken);
-            return new GeneratedMusic(file, 0, true);
+            return new GeneratedMusic(file, Usd, Usd == 0);
         }
     }
 

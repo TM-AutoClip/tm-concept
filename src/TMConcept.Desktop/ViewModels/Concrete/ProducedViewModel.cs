@@ -228,7 +228,7 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
         try
         {
             var plan = await deletion.PlanAsync([row.Video.Id], CancellationToken.None).ConfigureAwait(true);
-            var size = StorageSettingsViewModel.Size(plan.Bytes, text.Culture);
+            var size = Localization.ByteSizeText.Of(plan.Bytes, text.Culture);
             var answer = await confirm.AskAsync(text["produced.delete.title"], text.Format("produced.delete.message", row.Title, size), text["common.delete"],
                 danger: true).ConfigureAwait(true);
             if (!answer.Confirmed || RefuseWhileWorking())
@@ -255,7 +255,7 @@ public sealed partial class ProducedViewModel(AppSession session, IVideoStore vi
 
             // Another version of the same video stays shown (the newest that is left).
             _select = Versions.LastOrDefault(v => !ReferenceEquals(v, row))?.Video.Id;
-            var freed = StorageSettingsViewModel.Size(result.Freed, text.Culture);
+            var freed = Localization.ByteSizeText.Of(result.Freed, text.Culture);
             activity.Add(ActivityLevel.Info, text.Format("produced.deleted", row.Title, freed), text.Format("produced.deleted", ActivityPlaceholders.Title, freed));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

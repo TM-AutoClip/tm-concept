@@ -101,7 +101,7 @@ public sealed class LyriaMusicGenerator(GoogleProvider provider, ProviderHttp ht
         var audio = Audio(reply.Body);
         if (audio is not { Length: > 0 })
         {
-            throw new MusicGenerationException("Lyria returned no audio.") { Code = "empty" };
+            throw new MusicGenerationException("Lyria returned no audio.") { Code = MusicFailure.Empty };
         }
 
         Directory.CreateDirectory(request.OutputFolder);

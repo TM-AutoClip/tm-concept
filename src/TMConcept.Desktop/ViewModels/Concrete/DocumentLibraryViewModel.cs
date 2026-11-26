@@ -426,7 +426,7 @@ public sealed partial class DocumentLibraryViewModel(AppSession session, Documen
         var file = row.Document.StoredFile.Length > 0 ? library.FileOf(row.Document) : string.Empty;
         var bytes = file.Length > 0 ? await Task.Run(() => Core.DiskSpace.DiskSizes.Of(file)).ConfigureAwait(true) : 0;
         var answer = await confirm.AskAsync(text["documents.delete.title"], text.Format("documents.delete.message", row.Title,
-            StorageSettingsViewModel.Size(bytes, text.Culture)), text["documents.delete"], danger: true).ConfigureAwait(true);
+            Localization.ByteSizeText.Of(bytes, text.Culture)), text["documents.delete"], danger: true).ConfigureAwait(true);
         if (!answer.Confirmed)
         {
             return;

@@ -90,18 +90,6 @@ public sealed partial class StorageSettingsViewModel(IDiskCleaner cleaner, Local
     [RelayCommand]
     public Task FullDeleteAsync() => RemoveAsync(DiskSelection.Full(Items.Select(r => r.Item)), "storage.full.title", "storage.full.message");
 
-    /// <summary>"1.2 GB", "312 MB", "4 KB".</summary>
-    public static string Size(long bytes, CultureInfo culture)
-    {
-        const double Kilo = 1024;
-        return bytes switch
-        {
-            >= 1L << 30 => (bytes / (Kilo * Kilo * Kilo)).ToString("0.0", culture) + " GB",
-            >= 1L << 20 => Math.Round(bytes / (Kilo * Kilo)).ToString("0", culture) + " MB",
-            _ => Math.Ceiling(bytes / Kilo).ToString("0", culture) + " KB",
-        };
-    }
-
     /// <summary>"Used by: Ottoman history / Narration, the app itself".</summary>
     internal string UsedBy(IReadOnlyList<DiskUse> uses)
     {
@@ -123,7 +111,7 @@ public sealed partial class StorageSettingsViewModel(IDiskCleaner cleaner, Local
         Items.Clear();
         foreach (var item in report.Items.OrderBy(i => i.State == DiskItemState.Leftover).ThenBy(i => i.Area).ThenByDescending(i => i.Bytes))
         {
-            Items.Add(new DiskItemRowViewModel(item, StateText(item.State), Size(item.Bytes, text.Culture), UsedBy(item.UsedBy))
+            Items.Add(new DiskItemRowViewModel(item, StateText(item.State), ByteSizeText.Of(item.Bytes, text.Culture), UsedBy(item.UsedBy))
             {
                 IsSelected = selected.Contains(item.Key) && item.Removable,
             });
@@ -132,7 +120,7 @@ public sealed partial class StorageSettingsViewModel(IDiskCleaner cleaner, Local
         Totals.Clear();
         foreach (var total in report.Totals)
         {
-            Totals.Add(new DiskTotalLine(text["storage.area." + total.Area.ToString().ToLowerInvariant()], Size(total.Bytes, text.Culture)));
+            Totals.Add(new DiskTotalLine(text["storage.area." + total.Area.ToString().ToLowerInvariant()], ByteSizeText.Of(total.Bytes, text.Culture)));
         }
 
         Empty = Items.Count == 0;
@@ -153,9 +141,9 @@ public sealed partial class StorageSettingsViewModel(IDiskCleaner cleaner, Local
             return;
         }
 
-        var list = string.Join("\n", items.Take(20).Select(i => "• " + i.Name + " (" + Size(i.Bytes, text.Culture) + ")"))
-            + (items.Count > 20 ? "\n" + text.Format("storage.more", items.Count - 20) : string.Empty);
-        var answer = await confirm.AskAsync(text[titleKey], text.Format(messageKey, list, Size(items.Sum(i => i.Bytes), text.Culture)),
+        var list = string.Join("\n", items.Take(StorageListRules.ListMax).Select(i => "• " + i.Name + " (" + ByteSizeText.Of(i.Bytes, text.Culture) + ")"))
+            + (items.Count > StorageListRules.ListMax ? "\n" + text.Format("storage.more", items.Count - StorageListRules.ListMax) : string.Empty);
+        var answer = await confirm.AskAsync(text[titleKey], text.Format(messageKey, list, ByteSizeText.Of(items.Sum(i => i.Bytes), text.Culture)),
             text["storage.confirm"], danger: true).ConfigureAwait(true);
         if (!answer.Confirmed)
         {
@@ -191,7 +179,7 @@ public sealed partial class StorageSettingsViewModel(IDiskCleaner cleaner, Local
             return text["storage.busy"];
         }
 
-        var lines = new List<string> { text.Format("storage.done", outcome.Removed.Count, Size(outcome.Freed, text.Culture)) };
+        var lines = new List<string> { text.Format("storage.done", outcome.Removed.Count, ByteSizeText.Of(outcome.Freed, text.Culture)) };
         lines.AddRange(outcome.Failed.Select(f => text.Format("storage.item_failed", f.Item.Name, f.Reason)));
         return string.Join(" ", lines);
     }

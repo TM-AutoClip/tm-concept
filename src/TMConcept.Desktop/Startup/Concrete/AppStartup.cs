@@ -361,9 +361,23 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
             session.PendingMessage = null;
         }
 
-        // 0.1.54: the look for a newer version starts now, in the background (every start, a conditional request), so a long components
-        // update below never holds it up; its window is shown only after that question.
+        // A newer version of the app (looked for at every start unless turned off, a conditional request) is offered BEFORE the components
+        // question (0.1.55: 0.1.54 asked first, so the developer installed the components of the old version before he saw the new one). The
+        // start waits for the look a few seconds at most; an answer that comes later is offered after the question. Installed only on the
+        // user's yes; then the app restarts as the new version, which asks the components question itself.
         var updateCheck = StartUpdateCheck();
+        var updates = services.GetRequiredService<IStartUpdateOffer>();
+        StartUpdateOutcome firstOffer;
+        using (timer.Step("startup.update_offer"))
+        {
+            firstOffer = await updates.OfferFirstAsync(updateCheck, Updates.UpdateRules.StartWait).ConfigureAwait(true);
+        }
+
+        if (firstOffer == StartUpdateOutcome.Installed)
+        {
+            logger.LogInformation("A newer version was installed at the start; this one closes without asking more");
+            return;
+        }
 
         // Another app version ran before: what to do with the installed components (update / reinstall / later). Only here, after the
         // first run or the unlock, in the main window; a failure is logged and shown, it never keeps the app from starting.
@@ -404,8 +418,11 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
         // What changed since the version whose notes a start recorded last (once, from the notes built into the app); never holds the start up.
         _ = ShowWhatsNewAsync();
 
-        // A newer version of the app (looked for at every start unless turned off): offered in a window, installed only on confirmation.
-        _ = OfferUpdateAsync(updateCheck);
+        // The look answered only after the start's wait: what it found is offered now.
+        if (firstOffer == StartUpdateOutcome.Pending)
+        {
+            _ = updates.OfferAsync(updateCheck);
+        }
 
         try
         {
@@ -467,28 +484,11 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
         }
     }
 
-    /// <summary>Starts the start's look for a newer version off the window's thread (its failure is seen by <see cref="OfferUpdateAsync"/>).</summary>
+    /// <summary>Starts the start's look for a newer version off the window's thread (its failure is seen by <see cref="IStartUpdateOffer"/>).</summary>
     private Task<Updates.UpdateOffer?> StartUpdateCheck()
     {
         var updater = services.GetRequiredService<Updates.AppUpdater>();
         return Task.Run(() => updater.CheckAtStartAsync(CancellationToken.None));
-    }
-
-    /// <summary>Offers what the start's look found; a failure is only logged (the start is never held up).</summary>
-    private async Task OfferUpdateAsync(Task<Updates.UpdateOffer?> check)
-    {
-        try
-        {
-            var offer = await check.ConfigureAwait(true);
-            if (offer is not null)
-            {
-                await services.GetRequiredService<Dialogs.IAppUpdateDialog>().ShowAsync(offer).ConfigureAwait(true);
-            }
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or HttpRequestException)
-        {
-            logger.LogWarning(ex, "The check for a newer version failed");
-        }
     }
 
     /// <summary>While work runs: asks, stops the work (waits at most 20 s for it to end its processes), then closes.</summary>

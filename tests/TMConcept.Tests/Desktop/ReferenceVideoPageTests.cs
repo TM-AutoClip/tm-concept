@@ -35,7 +35,7 @@ public sealed class ReferenceVideoPageTests
         var measurer = new FakeMeasurer { Result = Fast };
         var activity = new Lines();
         var reference = new ReferenceVideoViewModel(new ReferenceVideoServices(measurer, () => Task.FromResult<string?>("C:/videos/clip.mp4"),
-            _ => Task.FromResult(true), activity), text, null, (_, _) => { });
+            _ => Task.FromResult(true), activity), text, null);
         reference.HasProfile.ShouldBeFalse();
         reference.RemoveCommand.CanExecute(null).ShouldBeFalse();
 
@@ -69,7 +69,7 @@ public sealed class ReferenceVideoPageTests
         var measurer = new FakeMeasurer { Error = new ReferenceMeasureException("x") { Code = "download", Detail = "HTTP Error 403" } };
         var activity = new Lines();
         var reference = new ReferenceVideoViewModel(new ReferenceVideoServices(measurer, () => Task.FromResult<string?>(null), _ => Task.FromResult(true), activity),
-            text, Fast, (_, _) => { });
+            text, Fast);
         reference.HasProfile.ShouldBeTrue("the profile's reference is shown");
 
         reference.Address = "not an address";
@@ -104,7 +104,7 @@ public sealed class ReferenceVideoPageTests
         var activity = new Lines();
         var install = new TaskCompletionSource<bool>();
         var reference = new ReferenceVideoViewModel(new ReferenceVideoServices(measurer, () => Task.FromResult<string?>("C:/videos/clip.mp4"),
-            _ => install.Task, activity), text, null, (_, _) => { });
+            _ => install.Task, activity), text, null);
 
         var running = reference.MeasureFileCommand.ExecuteAsync(null);
         reference.Busy.ShouldBeTrue();

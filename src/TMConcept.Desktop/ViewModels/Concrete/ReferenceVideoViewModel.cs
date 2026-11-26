@@ -9,38 +9,32 @@ using TMConcept.Desktop.Localization;
 namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
-/// The reference video of a template ("bu videonun temposunda yap", S1, 0.1.52), part of the template editor: "Dosya seç" measures a video file,
-/// "Adres yapıştır" + "Ölç" downloads one video with yt-dlp (installed after one confirmation) and measures it. The measure runs off the
-/// window's thread with its stage and a Cancel; only numbers are kept (the download is deleted). A measure sets the template's tempo to the
-/// nearest preset (<paramref name="apply"/> of the editor); the colour suggestion becomes the template's own palette only on "Use the colours".
-/// A failure is shown here and in the activity panel and never touches a video.
+/// The profile's reference video ("bu videonun temposunda yap", S1, 0.1.52; 0.1.54: per profile on the video page's model choice, no longer
+/// in the template): "Dosya seç" measures a video file, "Adres yapıştır" + "Ölç" downloads one video with yt-dlp (installed after one
+/// confirmation) and measures it. The measure runs off the window's thread with its stage and a Cancel; only numbers are kept (the download is
+/// deleted). Each video takes the measured tempo, cut rhythm and colours when it starts. A failure is shown here and in the activity panel
+/// and never touches a video.
 /// </summary>
 public sealed partial class ReferenceVideoViewModel : ObservableObject, IDisposable
 {
     private readonly ReferenceVideoServices _services;
     private readonly Localizer _text;
-    private readonly Action<ReferenceSuggestion, bool> _apply;
     private CancellationTokenSource? _work;
 
-    /// <summary>
-    /// Shows <paramref name="profile"/> (the template's reference, or null); <paramref name="apply"/> takes a suggestion into the form (true: with
-    /// its palette).
-    /// </summary>
-    public ReferenceVideoViewModel(ReferenceVideoServices services, Localizer text, ReferenceTempoProfile? profile, Action<ReferenceSuggestion, bool> apply)
+    /// <summary>Shows <paramref name="profile"/> (the profile's reference, or null).</summary>
+    public ReferenceVideoViewModel(ReferenceVideoServices services, Localizer text, ReferenceTempoProfile? profile)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(text);
-        ArgumentNullException.ThrowIfNull(apply);
         _services = services;
         _text = text;
-        _apply = apply;
         Profile = profile;
     }
 
     /// <summary>The measured reference (null = none).</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasProfile), nameof(SourceText), nameof(TempoText), nameof(ColorText), nameof(SoundText), nameof(HasPalette))]
-    [NotifyCanExecuteChangedFor(nameof(RemoveCommand), nameof(UseColorsCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RemoveCommand))]
     public partial ReferenceTempoProfile? Profile { get; set; }
 
     /// <summary>A reference is measured.</summary>
@@ -110,7 +104,7 @@ public sealed partial class ReferenceVideoViewModel : ObservableObject, IDisposa
 
     /// <summary>A measure is running (Cancel is shown).</summary>
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(MeasureFileCommand), nameof(MeasureAddressCommand), nameof(RemoveCommand), nameof(UseColorsCommand))]
+    [NotifyCanExecuteChangedFor(nameof(MeasureFileCommand), nameof(MeasureAddressCommand), nameof(RemoveCommand))]
     public partial bool Busy { get; set; }
 
     /// <summary>The download's share (0–100) while yt-dlp downloads.</summary>
@@ -155,18 +149,7 @@ public sealed partial class ReferenceVideoViewModel : ObservableObject, IDisposa
     [RelayCommand]
     public void Cancel() => _work?.Cancel();
 
-    /// <summary>Takes the reference's colour suggestion as the template's own palette.</summary>
-    [RelayCommand(CanExecute = nameof(CanUseColors))]
-    public void UseColors()
-    {
-        if (Profile is { } profile && ReferenceTempoMapper.Suggest(profile) is { Palette: not null } suggestion)
-        {
-            _apply(suggestion, true);
-            Status = _text["styles.reference.colors_taken"];
-        }
-    }
-
-    /// <summary>Removes the reference from the template (the tempo and colours stay as they are).</summary>
+    /// <summary>Removes the profile's reference (the next video uses the template's own tempo and colours).</summary>
     [RelayCommand(CanExecute = nameof(CanRemove))]
     public void Remove()
     {
@@ -208,8 +191,6 @@ public sealed partial class ReferenceVideoViewModel : ObservableObject, IDisposa
 
     private bool CanRemove() => !Busy && Profile is not null;
 
-    private bool CanUseColors() => !Busy && Profile is { Palette.Count: > 0 };
-
     private async Task RunAsync(bool address, Func<IProgress<ReferenceProgress>, CancellationToken, Task<ReferenceTempoProfile>> measure)
     {
         _work?.Dispose();
@@ -231,7 +212,6 @@ public sealed partial class ReferenceVideoViewModel : ObservableObject, IDisposa
             var profile = await Task.Run(() => measure(progress, work.Token), work.Token).ConfigureAwait(true);
             Profile = profile;
             var suggestion = ReferenceTempoMapper.Suggest(profile);
-            _apply(suggestion, false);
             Status = _text.Format("styles.reference.measured", _text["style.tempo." + suggestion.Tempo.ToString().ToLowerInvariant()]);
             _services.Activity.Add(ActivityLevel.Info, _text.Format("styles.reference.measured_log", profile.CutsPer10Seconds.ToString("0.#", _text.Culture)));
         }

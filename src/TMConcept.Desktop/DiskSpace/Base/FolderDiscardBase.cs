@@ -33,17 +33,6 @@ public abstract class FolderDiscardBase(IAppPaths paths, ILogger logger) : IFold
         return RootOf(Path.TrimEndingDirectorySeparator(Path.GetFullPath(path))) is not null;
     }
 
-    /// <summary>Whether <paramref name="path"/> lies strictly inside <paramref name="folder"/>.</summary>
-    public static bool Inside(string path, string folder)
-    {
-        ArgumentNullException.ThrowIfNull(path);
-        ArgumentNullException.ThrowIfNull(folder);
-        var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder)) + Path.DirectorySeparatorChar;
-        var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
-        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-        return full.Length > root.Length && full.StartsWith(root, comparison);
-    }
-
     /// <summary>Deletes the existing <paramref name="path"/>; throws when it could not.</summary>
     protected abstract Task TakeAsync(string path, CancellationToken cancellationToken);
 
@@ -55,11 +44,11 @@ public abstract class FolderDiscardBase(IAppPaths paths, ILogger logger) : IFold
     {
         string[] roots = [paths.DataDirectory, paths.LibraryDirectory];
         var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-        if (roots.Any(r => string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(r)), full, comparison) || Inside(r, full)))
+        if (roots.Any(r => string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(r)), full, comparison) || LibraryPaths.Inside(r, full)))
         {
             return null;
         }
 
-        return roots.FirstOrDefault(r => Inside(full, r));
+        return roots.FirstOrDefault(r => LibraryPaths.Inside(full, r));
     }
 }

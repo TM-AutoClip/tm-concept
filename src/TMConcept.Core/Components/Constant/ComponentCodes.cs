@@ -61,6 +61,18 @@ public static class ComponentCodes
     public const string MusicModel = MusicModelPrefix + "ace-step-1.5";
 
     /// <summary>
+    /// The synthesizer of the app's own composed music (0.1.55, "Program composes"): spessasynth_core (Apache-2.0) as pinned npm packages, run
+    /// with the app's Node.js; it plays a MIDI file into a WAV file with a SoundFont, on the processor.
+    /// </summary>
+    public const string MusicSynth = "music-synth";
+
+    /// <summary>Prefix of a SoundFont component ("soundfont.musescore-general").</summary>
+    public const string SoundFontPrefix = "soundfont.";
+
+    /// <summary>The MuseScore General SoundFont (0.1.55; MIT, the General MIDI instruments of the composed music; about 40 MB, pinned by its SHA-256).</summary>
+    public const string MusicSoundFont = SoundFontPrefix + "musescore-general";
+
+    /// <summary>
     /// whisper.cpp (0.1.48, S3): the program that hears the narration and gives each subtitle word its real time. A component of its own,
     /// apart from its model (rule 18); never downloaded without the user's yes.
     /// </summary>

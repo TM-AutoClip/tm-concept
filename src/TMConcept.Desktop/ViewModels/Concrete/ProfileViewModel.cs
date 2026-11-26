@@ -409,7 +409,7 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
         }
 
         var answer = await confirm.AskAsync(text["profile.delete.title"], text.Format("profile.delete.message", name, plan.Concepts, plan.Videos, plan.Documents,
-            StorageSettingsViewModel.Size(plan.Bytes, text.Culture)), text["profile.delete.confirm"], danger: true).ConfigureAwait(true);
+            Localization.ByteSizeText.Of(plan.Bytes, text.Culture)), text["profile.delete.confirm"], danger: true).ConfigureAwait(true);
         if (!answer.Confirmed)
         {
             return;
@@ -442,7 +442,7 @@ public sealed partial class ProfileViewModel(AppSession session, IProfileStore p
                 return;
             }
 
-            var freed = StorageSettingsViewModel.Size(result.Freed, text.Culture);
+            var freed = Localization.ByteSizeText.Of(result.Freed, text.Culture);
             activity.Add(ActivityLevel.Info, text.Format("profile.deleted", name, freed), text.Format("profile.deleted", ActivityPlaceholders.Name, freed));
             _editing = null;
             HasProfile = false;

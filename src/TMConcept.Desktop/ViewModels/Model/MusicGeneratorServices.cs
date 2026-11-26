@@ -1,13 +1,11 @@
 namespace TMConcept.Desktop.ViewModels;
 
 /// <summary>
-/// What the template editor's generated music needs (0.1.46, C5): the music models of the catalog, whether one can be used now (the local
-/// one installed), how the local model fits this computer's card and system, and the install of the local model (one confirmation of the
-/// app's install flow, with its size and memory need; true when it is ready afterwards).
+/// The music models a page offers (0.1.46, C5; 0.1.55: without an install of its own, a model is installed when it starts): the music models
+/// of the catalog, whether one can be used now (a local one installed) and how the local ones fit this computer's card and system.
 /// </summary>
-/// <param name="Models">The music models (local first).</param>
+/// <param name="Models">The music models (local first, those made for this computer first: <see cref="Core.Music.LocalMusicSupport.Ordered"/>).</param>
 /// <param name="Ready">Whether a model can be used now.</param>
-/// <param name="Card">The local model on this computer (NVIDIA only; not verified on Linux).</param>
-/// <param name="InstallLocalAsync">Installs the local model after the user agreed; true when it is ready.</param>
+/// <param name="Card">This computer's card and system for the local models (NVIDIA; not verified on Linux).</param>
 public sealed record MusicGeneratorServices(IReadOnlyList<Core.Models.CatalogModel> Models, Func<Core.Models.CatalogModel, bool> Ready,
-    Core.Music.LocalMusicCard Card, Func<Task<bool>> InstallLocalAsync);
+    Core.Music.LocalMusicCard Card);

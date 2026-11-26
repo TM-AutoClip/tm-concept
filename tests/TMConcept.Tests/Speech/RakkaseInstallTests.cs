@@ -154,10 +154,86 @@ public sealed class RakkaseInstallTests : IDisposable
         plan["caption"]!.GetValue<string>().ShouldBe("calm ambient, no vocals");
         plan["sure"]!.GetValue<int>().ShouldBe(45);
         plan["bpm"]!.GetValue<int>().ShouldBe(72);
+        plan["ton"]!.GetValue<string>().ShouldBe(string.Empty, "the model chooses the key");
+        plan["olcu"]!.GetValue<string>().ShouldBe("4", "rakkase's check wants the time signature as a string");
         plan.AsObject().ContainsKey("lyrics").ShouldBeFalse("no lyrics = instrumental");
         piece.File.ShouldEndWith(".wav");
         piece.Usd.ShouldBe(0);
         Directory.EnumerateDirectories(_layout.Productions).ShouldBeEmpty("rakkase's own copy is removed");
+    }
+
+    [Theory]
+    [InlineData(null, 104)]
+    [InlineData(72, 72)]
+    [InlineData(10, 30)]
+    [InlineData(400, 300)]
+    public void ThePlanAlwaysHasEveryFieldRakkasesCheckRequires(int? bpm, int expected)
+    {
+        var request = Request("out") with { Bpm = bpm, Seconds = 900 };
+
+        var part = JsonNode.Parse(RakkaseMusicGenerator.Plan(request))!["parcalar"]!.AsArray().ShouldHaveSingleItem()!.AsObject();
+
+        // rakkase 51b1375, araclar/denetle.py: a part without one of these stops the run before anything is made (RK-E-PLAN, exit code 2).
+        foreach (var field in new[] { "ad", "caption", "sure", "tohum", "bpm", "ton", "olcu" })
+        {
+            part.ContainsKey(field).ShouldBeTrue(field);
+        }
+
+        part["bpm"]!.GetValueKind().ShouldBe(System.Text.Json.JsonValueKind.Number);
+        part["bpm"]!.GetValue<int>().ShouldBe(expected, "30–300, the medium tempo when the request has none");
+        part["olcu"]!.GetValueKind().ShouldBe(System.Text.Json.JsonValueKind.String);
+        part["olcu"]!.GetValue<string>().ShouldBeOneOf("2", "3", "4", "6");
+        part["ton"]!.GetValueKind().ShouldBe(System.Text.Json.JsonValueKind.String);
+        part["sure"]!.GetValue<int>().ShouldBe(RakkasePlanRules.MaxSeconds);
+    }
+
+    [Fact]
+    public void ALongTurkishPromptIsCutAtAWordBelowRakkasesTokenLimit()
+    {
+        // The music page takes 600 characters; 600 characters of Turkish are about 267 tokens of ACE-Step's text encoder with the template
+        // (rakkase stops above 256), so the caption is cut to 400 characters at a word.
+        const string Sentence = "Antik Mısır tapınaklarında geçen gizemli, yavaş ve derin bir müzik; neyler, uzak davullar ve çöl rüzgârı duyulsun. ";
+        var words = string.Concat(Enumerable.Repeat(Sentence, 8))[..MusicGenerationRules.MaxPromptCharacters];
+        var prompt = MusicMaker.Prompt(words, 90, instrumental: true);
+        var request = Request("out") with { Prompt = prompt };
+
+        var caption = JsonNode.Parse(RakkaseMusicGenerator.Plan(request))!["parcalar"]!.AsArray().ShouldHaveSingleItem()!["caption"]!.GetValue<string>();
+
+        prompt.Length.ShouldBe(MusicGenerationRules.MaxPromptCharacters);
+        caption.Length.ShouldBeLessThanOrEqualTo(RakkasePlanRules.MaxCaptionCharacters);
+        caption.Length.ShouldBeGreaterThan((int)(RakkasePlanRules.MaxCaptionCharacters * RakkasePlanRules.WordCutShare));
+        prompt.ShouldStartWith(caption);
+        " ,;.".ShouldContain(prompt[caption.Length], "cut at a word, not inside one");
+        caption.ShouldNotEndWith(",");
+        RakkaseMusicGenerator.Caption("calm piano, instrumental only").ShouldBe("calm piano, instrumental only", "a short prompt stays as it is");
+    }
+
+    [Fact]
+    public async Task AFailedPlanCheckNamesItsFindingsInTheError()
+    {
+        var runner = new FakeRunner(_layout);
+        var generator = await ReadyGeneratorAsync(runner);
+        runner.Fail = true;
+        runner.FailExitCode = 2;
+        runner.FailOutput = string.Join('\n', "[DENETIM] plan kontrol ediliyor", "  HATA: zorunlu alan yok: ton", "  HATA: zorunlu alan yok: olcu",
+            "DENETIM SONUC: 1 parca, 2 hata, 0 uyari", "[RK-E-PLAN] URETIM BASLAMADI: plan denetiminde HATA var (yukaridaki satirlar)");
+
+        var error = await Should.ThrowAsync<MusicGenerationException>(() => generator.GenerateAsync(Request(Path.Combine(_paths.WorkDirectory, "g")), CancellationToken.None));
+
+        error.Code.ShouldBe(MusicFailure.Process);
+        error.Message.ShouldContain("rakkase ended with 2");
+        error.Message.ShouldContain("HATA: zorunlu alan yok: ton");
+        error.Message.ShouldContain("HATA: zorunlu alan yok: olcu");
+        error.Message.ShouldContain("DENETIM SONUC: 1 parca, 2 hata");
+        error.Message.ShouldContain("RK-E-PLAN");
+        error.Message.ShouldNotContain("plan kontrol ediliyor", Case.Sensitive, "only the findings, not the progress lines");
+    }
+
+    [Fact]
+    public void WithoutPlanCheckLinesTheGeneralSummaryIsUsed()
+    {
+        RakkaseOutput.Reason("loading\nRuntimeError: CUDA error: out of memory").ShouldContain("CUDA error");
+        RakkaseOutput.Reason(null).ShouldBeEmpty();
     }
 
     [Fact]
@@ -169,7 +245,7 @@ public sealed class RakkaseInstallTests : IDisposable
 
         var error = await Should.ThrowAsync<MusicGenerationException>(() => generator.GenerateAsync(Request(Path.Combine(_paths.WorkDirectory, "g")), CancellationToken.None));
 
-        error.Code.ShouldBe("process");
+        error.Code.ShouldBe(MusicFailure.Process);
     }
 
     [Fact]
@@ -281,6 +357,10 @@ public sealed class RakkaseInstallTests : IDisposable
 
         public bool Fail { get; set; }
 
+        public int FailExitCode { get; set; } = 1;
+
+        public string FailOutput { get; set; } = "RK-E-NAN: the piece is broken";
+
         public bool WritesWav { get; init; }
 
         public Task<ProcessResult> RunAsync(ProcessStart start, Action<string>? onLine, CancellationToken cancellationToken)
@@ -288,7 +368,7 @@ public sealed class RakkaseInstallTests : IDisposable
             Runs.Add(start);
             if (Fail)
             {
-                return Task.FromResult(new ProcessResult(1, "RK-E-NAN: the piece is broken"));
+                return Task.FromResult(new ProcessResult(FailExitCode, FailOutput));
             }
 
             if (start.Arguments.FirstOrDefault() == "sync")

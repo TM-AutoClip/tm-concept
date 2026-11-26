@@ -271,7 +271,7 @@ public sealed class DocumentPageTests
         await page.Documents.Library.DeleteAsync(walls);
 
         confirm.Messages.ShouldHaveSingleItem().ShouldContain(h.Get<Localizer>().Format("documents.delete.message", "walls",
-            TMConcept.Desktop.ViewModels.StorageSettingsViewModel.Size(6, h.Get<Localizer>().Culture)));
+            TMConcept.Desktop.Localization.ByteSizeText.Of(6, h.Get<Localizer>().Culture)));
         discard.Discarded.ShouldHaveSingleItem().ShouldBe(library.FileOf(walls.Document));
         File.Exists(library.FileOf(walls.Document)).ShouldBeFalse("deleted for good, not moved anywhere");
         page.Documents.Library.Documents.ShouldHaveSingleItem().Title.ShouldBe("trade");

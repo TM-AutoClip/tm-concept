@@ -94,12 +94,21 @@ public static class DesktopServices
         services.AddSingleton<Core.Components.IComponentSource, Speech.Music.MusicComponentSource>();
         services.AddSingleton<ILocalModelSource, Speech.Music.MusicModelSource>();
         services.AddSingleton<Core.Music.IMusicGenerator, Speech.Music.RakkaseMusicGenerator>();
+
+        // "Program composes" (0.1.55): the app's own composer, played by spessasynth_core with the MuseScore General SoundFont on the processor.
+        services.AddSingleton<Engines.Music.ISoundFontStore, Engines.Music.SoundFontStore>();
+        services.AddSingleton<Engines.Music.SpessaSynthRenderer>();
+        services.AddSingleton<Core.Music.IMidiRenderer>(s => s.GetRequiredService<Engines.Music.SpessaSynthRenderer>());
+        services.AddSingleton<Core.Components.IComponentSource, Engines.Music.MusicSynthComponentSource>();
+        services.AddSingleton<Core.Music.IScoreWriter, Core.Music.ProgramScoreWriter>();
+        services.AddSingleton<Core.Music.IMusicGenerator, Core.Music.ScoreMusicGenerator>();
         services.AddSingleton<Core.Music.IMusicGenerator, Providers.Music.LyriaMusicGenerator>();
         services.AddSingleton<Core.Music.IMusicGenerator, Providers.Music.ElevenLabsMusicGenerator>();
         services.AddSingleton<Core.Music.IMusicGenerators, Core.Music.MusicGenerators>();
         // 0.1.54: "Müziklerim" (made on the Müzik üret page or added there) and the page's maker.
         services.AddSingleton<Core.Music.MyMusicStore>();
         services.AddSingleton<Core.Music.IMyMusic>(s => s.GetRequiredService<Core.Music.MyMusicStore>());
+        services.AddSingleton<Core.Music.IMusicPieceRunner, Core.Music.MusicPieceRunner>();
         services.AddSingleton<Core.Music.IMusicMaker, Core.Music.MusicMaker>();
         services.AddSingleton<Core.Videos.VideoMusicStep>();
         // 0.1.48 (F5, S3): the subtitles' word times heard by whisper.cpp (program and model are components, installed only after a yes);
@@ -231,6 +240,7 @@ public static class DesktopServices
             s.GetRequiredService<TimeProvider>(), s.GetRequiredService<ILogger<Components.InstallRecordFile>>()));
         services.AddSingleton<Core.Components.ComponentPlanner>();
         services.AddSingleton<Components.ComponentInstallFlow>();
+        services.AddSingleton<Components.IModelStartGate, Components.ModelStartGate>();
         services.AddSingleton<Components.IComponentWorkGate, Components.ComponentWorkGate>();
         AddDocuments(services);
         AddDesktop(services);
@@ -384,7 +394,8 @@ public static class DesktopServices
         services.AddTransient<TimeNotesViewModel>();
         services.AddTransient<PlanReviewViewModel>();
         services.AddTransient<ProductionChecklistViewModel>();
-        services.AddSingleton<VideoMediaServices>();
+        services.AddSingleton<IVideoMediaServices, VideoMediaServices>();
+        services.AddSingleton<IMusicChoiceText, MusicChoiceText>();
         services.AddTransient<VideoMediaViewModel>();
 
         // The concept page's parts: the page (a singleton) gets its own bar, runner, sections and detail panel; the status changes are one
@@ -442,6 +453,7 @@ public static class DesktopServices
         services.AddSingleton<DiskSpace.IDiskCleaner, DiskSpace.DiskCleaner>();
         services.AddSingleton<DiskSpace.IOrphanFileCheck, DiskSpace.OrphanFileCheck>();
         services.AddSingleton<VersionCheck>();
+        services.AddSingleton<IStartUpdateOffer, StartUpdateOffer>();
         services.AddSingleton<WhatsNewCheck>();
 
         services.AddSingleton<Reports.SystemReport>();

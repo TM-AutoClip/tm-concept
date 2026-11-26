@@ -3,8 +3,11 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using TMConcept.Core.Activity;
+using TMConcept.Core.Components;
 using TMConcept.Core.Models;
 using TMConcept.Core.Music;
+using TMConcept.Core.Tools;
+using TMConcept.Desktop.Components;
 using TMConcept.Desktop.Dialogs;
 using TMConcept.Desktop.Localization;
 
@@ -13,17 +16,16 @@ namespace TMConcept.Desktop.ViewModels;
 /// <summary>
 /// The "Müzik üret" page (0.1.54, next to Konseptler and Konseptten video): background music made from the user's own words ("Mısır'ın
 /// gizemi" → antik Mısır müziği, "antik Mısır'da disko" → diskoyla karışık; the prompt is free) and, when wanted, the tempo of a reference
-/// sound, with the music models the videos use (the local ACE-Step 1.5 once installed — one confirmation, NVIDIA only — and the online ones
-/// with their prices). Each piece goes into "Müziklerim", which also takes the user's own audio files; the video page's music choice picks
-/// from it. Making a piece is page work (the profile cannot be switched meanwhile, closing asks); Cancel stops it. Choosing a model per video
-/// in a batch is not offered (the developer: not now).
+/// sound, with the music models the videos use (local and online, with their prices). "Üret" works like every other page (0.1.55; 0.1.54 had
+/// its own "download first" button): the chosen model is used when it is installed; otherwise its licence (when not plainly commercial), an
+/// online model's key and ONE confirmation listing its downloads (with ffmpeg for a reference sound) are asked, then it is installed and the
+/// piece is made (<see cref="IModelStartGate"/>). Each piece goes into "Müziklerim", which also takes the user's own audio files; the video
+/// page's music choice picks from it. Making a piece is page work (the profile cannot be switched meanwhile, closing asks); Cancel stops it.
+/// Choosing a model per video in a batch is not offered (the developer: not now).
 /// </summary>
-public sealed partial class MusicViewModel(VideoMediaServices services, IMusicMaker maker, IConfirmDialog confirm, Os.IShellLauncher shell, Localizer text,
-    ILogger<MusicViewModel> logger) : PageViewModelBase
+public sealed partial class MusicViewModel(IVideoMediaServices services, IMusicMaker maker, IMyMusic myMusic, IModelStartGate gate, IMusicChoiceText labels,
+    IActivityLog activity, IConfirmDialog confirm, Os.IShellLauncher shell, Localizer text, ILogger<MusicViewModel> logger) : PageViewModelBase
 {
-    /// <summary>The length a new piece starts with (seconds).</summary>
-    public const int DefaultSeconds = 60;
-
     private CancellationTokenSource? _work;
     private MusicGeneratorServices? _generators;
 
@@ -45,7 +47,16 @@ public sealed partial class MusicViewModel(VideoMediaServices services, IMusicMa
     /// <summary>The length asked for (seconds; a model with a fixed length ignores it).</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(EstimateText))]
-    public partial decimal? Seconds { get; set; } = DefaultSeconds;
+    public partial decimal? Seconds { get; set; } = MusicGenerationRules.DefaultSeconds;
+
+    /// <summary>The shortest length offered (seconds).</summary>
+    public int MinSeconds => MusicGenerationRules.MinSeconds;
+
+    /// <summary>The longest length offered (seconds).</summary>
+    public int MaxSeconds => MusicGenerationRules.MaxSeconds;
+
+    /// <summary>The most characters of a prompt.</summary>
+    public int MaxPromptCharacters => MusicGenerationRules.MaxPromptCharacters;
 
     /// <summary>Without words (the default: it lies under a narration).</summary>
     [ObservableProperty]
@@ -62,27 +73,17 @@ public sealed partial class MusicViewModel(VideoMediaServices services, IMusicMa
     /// <summary>A reference sound is chosen.</summary>
     public bool HasReference => ReferenceFile.Length > 0;
 
-    /// <summary>The music models: the local one (when the catalog has it) and the online ones with their prices.</summary>
+    /// <summary>The music models: the local ones (with their install state) and the online ones with their prices.</summary>
     public ObservableCollection<MusicModelChoice> Models { get; } = [];
 
     /// <summary>The chosen model.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(EstimateText), nameof(NeedsLocalInstall), nameof(CardWarning))]
+    [NotifyPropertyChangedFor(nameof(EstimateText), nameof(CardWarning))]
     [NotifyCanExecuteChangedFor(nameof(GenerateCommand))]
     public partial MusicModelChoice? Model { get; set; }
 
-    /// <summary>The local model is chosen and not installed yet (its install button is shown).</summary>
-    public bool NeedsLocalInstall => Model is { Local: true, Ready: false };
-
-    /// <summary>What the local model's install takes.</summary>
-    public string LocalInstallText => text.Format("styles.music.generate.local.missing",
-        Math.Round(MusicGenerationRules.LocalInstallBytes / 1e9), MusicGenerationRules.LocalMemoryGb);
-
-    /// <summary>The local model's yellow note on this computer (not NVIDIA, Linux); empty otherwise.</summary>
-    public string CardWarning => Model is { Local: true } && _generators is { } g
-        ? string.Join(" ", new[] { g.Card.NvidiaOnly ? text["styles.music.generate.nvidia_warning"] : string.Empty,
-            g.Card.Linux ? text["styles.music.generate.linux"] : string.Empty }.Where(p => p.Length > 0))
-        : string.Empty;
+    /// <summary>The chosen model's yellow note on this computer (a card it is not made for, Linux); empty otherwise. Never a block.</summary>
+    public string CardWarning => _generators is { } g ? labels.CardWarning(Model?.Model, g.Card) : string.Empty;
 
     /// <summary>"About 0.08 $ for 120 s" (the local model: free).</summary>
     public string EstimateText
@@ -94,7 +95,7 @@ public sealed partial class MusicViewModel(VideoMediaServices services, IMusicMa
                 return string.Empty;
             }
 
-            var (usd, seconds) = maker.Estimate(choice.Model, (int)(Seconds ?? DefaultSeconds));
+            var (usd, seconds) = maker.Estimate(choice.Model, (int)(Seconds ?? MusicGenerationRules.DefaultSeconds));
             return usd == 0 ? text.Format("music.estimate.free", seconds) : text.Format("music.estimate", text.Usd(usd), seconds);
         }
     }
@@ -140,17 +141,11 @@ public sealed partial class MusicViewModel(VideoMediaServices services, IMusicMa
     [RelayCommand]
     public void ClearReference() => ReferenceFile = string.Empty;
 
-    /// <summary>Installs the local music model (one confirmation of the app's install flow).</summary>
-    [RelayCommand]
-    public async Task InstallLocalAsync()
-    {
-        if (await services.InstallLocalMusicAsync().ConfigureAwait(true))
-        {
-            LoadModels();
-        }
-    }
-
-    /// <summary>Makes the piece and adds it to "Müziklerim".</summary>
+    /// <summary>
+    /// Makes the piece and adds it to "Müziklerim". First the chosen model is made ready the way every page does it: used as it is when
+    /// installed; otherwise its licence, an online model's key and one confirmation of its downloads (ffmpeg too for a reference sound), then
+    /// the install. Declined or failed: nothing is made, the reason is shown.
+    /// </summary>
     [RelayCommand(CanExecute = nameof(CanGenerate))]
     public async Task GenerateAsync()
     {
@@ -159,32 +154,37 @@ public sealed partial class MusicViewModel(VideoMediaServices services, IMusicMa
             return;
         }
 
-        if (choice is { Local: true, Ready: false })
-        {
-            Status = text["styles.music.generate.local.not_ready"];
-            return;
-        }
-
-        // A reference sound is read with ffmpeg (installed after one confirmation, like everywhere else).
-        if (HasReference && !await services.EnsureFfmpegAsync().ConfigureAwait(true))
-        {
-            Status = text["music.reference.ffmpeg"];
-            return;
-        }
-
         _work?.Dispose();
         _work = new CancellationTokenSource();
         var token = _work.Token;
         Busy = true;
         Working = true;
-        Status = text["music.stage.generate"];
+        Status = string.Empty;
         var progress = new Progress<string>(stage => Status = text["music.stage." + stage]);
         try
         {
-            var request = new MusicMakeRequest(choice.Model, Prompt, (int)(Seconds ?? DefaultSeconds), Instrumental, HasReference ? ReferenceFile : null, PieceTitle);
+            var components = HasReference ? new[] { ComponentCodes.Ffmpeg } : [];
+            var ready = await gate.PrepareAsync([choice.Model], components, "install.purpose.music_make", null, token).ConfigureAwait(true);
+            if (!ready.Ready)
+            {
+                logger.LogInformation("Music not made: {Model} is not ready ({Reason})", ModelBase.KeyOf(choice.Model), ready.Reason);
+                Status = ready.Reason;
+                activity.Add(ActivityLevel.Warning, ready.Reason);
+                return;
+            }
+
+            if (!choice.Ready)
+            {
+                // Installed just now: the list no longer says "not installed".
+                LoadModels();
+            }
+
+            Status = text["music.stage.generate"];
+            var request = new MusicMakeRequest(choice.Model, Prompt, (int)(Seconds ?? MusicGenerationRules.DefaultSeconds), Instrumental,
+                HasReference ? ReferenceFile : null, PieceTitle);
             var entry = await Task.Run(() => maker.MakeAsync(request, progress, token), token).ConfigureAwait(true);
             Status = entry.Usd > 0 ? text.Format("music.made.paid", entry.Track.Title, text.Usd(entry.Usd)) : text.Format("music.made", entry.Track.Title);
-            services.Activity.Add(ActivityLevel.Info, Status);
+            activity.Add(ActivityLevel.Info, Status);
             PieceTitle = string.Empty;
             await LoadPiecesAsync().ConfigureAwait(true);
         }
@@ -192,12 +192,14 @@ public sealed partial class MusicViewModel(VideoMediaServices services, IMusicMa
         {
             Status = text["music.cancelled"];
         }
-        catch (Exception ex) when (ex is MusicGenerationException or IOException or UnauthorizedAccessException or HttpRequestException
-            or InvalidOperationException)
+        catch (Exception ex) when (ex is MusicGenerationException or ToolInstallException or IOException or UnauthorizedAccessException
+            or InvalidOperationException or HttpRequestException or System.ComponentModel.Win32Exception)
         {
+            // Every failure of the model comes as a MusicGenerationException (the shared runner names stray ones). The rest happen around it:
+            // the install (a download, a failed tool), the key test, the reference sound's ffmpeg not starting, the run not saved, the files.
             logger.LogError(Core.Activity.LogEvents.OnScreen, ex, "The music could not be made by {Model}", choice.Model.Name);
             Status = text.Format("music.failed", ex.Message);
-            services.Activity.Add(ActivityLevel.Error, Status);
+            activity.Add(ActivityLevel.Error, Status);
         }
         finally
         {
@@ -221,7 +223,7 @@ public sealed partial class MusicViewModel(VideoMediaServices services, IMusicMa
 
         try
         {
-            var entry = await Task.Run(() => services.MyMusic.AddFileAsync(file, CancellationToken.None)).ConfigureAwait(true);
+            var entry = await Task.Run(() => myMusic.AddFileAsync(file, CancellationToken.None)).ConfigureAwait(true);
             Status = text.Format("music.added", entry.Track.Title);
             await LoadPiecesAsync().ConfigureAwait(true);
         }
@@ -229,7 +231,7 @@ public sealed partial class MusicViewModel(VideoMediaServices services, IMusicMa
         {
             logger.LogError(Core.Activity.LogEvents.OnScreen, ex, "A music file could not be added to My music");
             Status = text.Format("music.add_failed", ex.Message);
-            services.Activity.Add(ActivityLevel.Error, Status);
+            activity.Add(ActivityLevel.Error, Status);
         }
     }
 
@@ -261,7 +263,7 @@ public sealed partial class MusicViewModel(VideoMediaServices services, IMusicMa
 
         try
         {
-            await Task.Run(() => services.MyMusic.RemoveAsync(row.Entry.Track.Id, CancellationToken.None)).ConfigureAwait(true);
+            await Task.Run(() => myMusic.RemoveAsync(row.Entry.Track.Id, CancellationToken.None)).ConfigureAwait(true);
             Status = text.Format("music.removed", row.Title);
             await LoadPiecesAsync().ConfigureAwait(true);
         }
@@ -269,7 +271,7 @@ public sealed partial class MusicViewModel(VideoMediaServices services, IMusicMa
         {
             logger.LogError(Core.Activity.LogEvents.OnScreen, ex, "A piece of My music could not be removed");
             Status = text.Format("music.remove_failed", ex.Message);
-            services.Activity.Add(ActivityLevel.Error, Status);
+            activity.Add(ActivityLevel.Error, Status);
         }
     }
 
@@ -286,20 +288,12 @@ public sealed partial class MusicViewModel(VideoMediaServices services, IMusicMa
         Models.Clear();
         foreach (var model in _generators.Models)
         {
-            var key = ModelBase.KeyOf(model);
-            var local = model.Provider == ModelProviders.Local;
             var ready = _generators.Ready(model);
-            var label = local
-                ? model.Name + (ready ? string.Empty : " " + text["music.model.not_installed"])
-                    + (_generators.Card.NvidiaOnly ? " " + text["style.music.generatelocal.nvidia_only"] : string.Empty)
-                : model.MusicUsdPerPiece > 0
-                    ? text.Format("styles.music.generate.price.piece", model.Name, text.Usd(model.MusicUsdPerPiece))
-                    : text.Format("styles.music.generate.price.minute", model.Name, text.Usd(model.MusicUsdPerMinute));
-            Models.Add(new MusicModelChoice(key, label, model, local, ready));
+            Models.Add(new MusicModelChoice(ModelBase.KeyOf(model), labels.ModelLabel(model, ready, _generators.Card), model,
+                model.Provider == ModelProviders.Local, ready));
         }
 
         Model = Models.FirstOrDefault(m => m.Key == chosen) ?? Models.FirstOrDefault(m => m.Ready) ?? Models.FirstOrDefault();
-        OnPropertyChanged(nameof(NeedsLocalInstall));
         OnPropertyChanged(nameof(CardWarning));
     }
 
@@ -308,7 +302,7 @@ public sealed partial class MusicViewModel(VideoMediaServices services, IMusicMa
         IReadOnlyList<MyMusicEntry> entries;
         try
         {
-            entries = await Task.Run(() => services.MyMusic.ListAsync(CancellationToken.None)).ConfigureAwait(true);
+            entries = await Task.Run(() => myMusic.ListAsync(CancellationToken.None)).ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -319,38 +313,9 @@ public sealed partial class MusicViewModel(VideoMediaServices services, IMusicMa
         Pieces.Clear();
         foreach (var entry in entries)
         {
-            Pieces.Add(new MyMusicRow(entry, Detail(entry)));
+            Pieces.Add(new MyMusicRow(entry, labels.PieceDetail(entry, full: true)));
         }
 
         Empty = Pieces.Count == 0;
-    }
-
-    private string Detail(MyMusicEntry entry)
-    {
-        var parts = new List<string>
-        {
-            entry.Generated ? text.Format("music.mine.generated", entry.Model) : text["music.mine.file"],
-        };
-        if (entry.Track.DurationSeconds > 0)
-        {
-            parts.Add(TimeSpan.FromSeconds(entry.Track.DurationSeconds).ToString(@"m\:ss", text.Culture));
-        }
-
-        if (entry.Track.Bpm > 0)
-        {
-            parts.Add(entry.Track.Bpm.ToString(text.Culture) + " BPM");
-        }
-
-        if (entry.Usd > 0)
-        {
-            parts.Add(text.Usd(entry.Usd));
-        }
-
-        if (entry.Prompt.Length > 0)
-        {
-            parts.Add("“" + entry.Prompt + "”");
-        }
-
-        return string.Join(" · ", parts);
     }
 }

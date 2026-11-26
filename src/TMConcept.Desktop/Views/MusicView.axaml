@@ -12,7 +12,7 @@
           <TextBlock Text="{DynamicResource music.make}" FontWeight="SemiBold" VerticalAlignment="Center" />
           <views:HelpTip Text="{DynamicResource music.make.tip}" />
         </StackPanel>
-        <TextBox Name="MusicPrompt" Text="{Binding Prompt}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" MaxLength="600"
+        <TextBox Name="MusicPrompt" Text="{Binding Prompt}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" MaxLength="{Binding MaxPromptCharacters}"
                  PlaceholderText="{DynamicResource music.prompt.hint}" IsEnabled="{Binding Idle}" />
         <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="10" ColumnSpacing="12">
           <TextBlock Text="{DynamicResource music.model}" VerticalAlignment="Center" />
@@ -24,11 +24,11 @@
                 </DataTemplate>
               </ComboBox.ItemTemplate>
             </ComboBox>
-            <views:HelpTip Text="{DynamicResource styles.music.generate.model.tip}" />
+            <views:HelpTip Text="{DynamicResource music.model.tip}" />
           </StackPanel>
           <TextBlock Grid.Row="1" Text="{DynamicResource music.seconds}" VerticalAlignment="Center" />
           <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="8">
-            <NumericUpDown Name="MusicSeconds" Value="{Binding Seconds}" Minimum="10" Maximum="120" Increment="10" FormatString="0" Width="140"
+            <NumericUpDown Name="MusicSeconds" Value="{Binding Seconds}" Minimum="{Binding MinSeconds}" Maximum="{Binding MaxSeconds}" Increment="10" FormatString="0" Width="140"
                            IsEnabled="{Binding Idle}" />
             <CheckBox Name="MusicInstrumental" IsChecked="{Binding Instrumental}" Content="{DynamicResource music.instrumental}" IsEnabled="{Binding Idle}" />
           </StackPanel>
@@ -47,10 +47,6 @@
         </Grid>
         <TextBlock Name="MusicCardWarning" Text="{Binding CardWarning}" Classes="small warning" TextWrapping="Wrap"
                    IsVisible="{Binding CardWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-        <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding NeedsLocalInstall}">
-          <TextBlock Text="{Binding LocalInstallText}" Classes="small muted" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="420" />
-          <Button Name="MusicLocalInstall" Classes="small" Content="{DynamicResource styles.music.generate.local.install}" Command="{Binding InstallLocalCommand}" />
-        </StackPanel>
         <StackPanel Orientation="Horizontal" Spacing="8">
           <Button Name="MusicGenerate" Classes="accent" Content="{DynamicResource music.generate}" Command="{Binding GenerateCommand}" />
           <Button Name="MusicCancel" Content="{DynamicResource common.cancel}" Command="{Binding CancelCommand}" IsVisible="{Binding Busy}" />

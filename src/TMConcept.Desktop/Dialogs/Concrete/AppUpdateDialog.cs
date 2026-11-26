@@ -11,13 +11,13 @@ namespace TMConcept.Desktop.Dialogs;
 public sealed class AppUpdateDialog(WindowHost host, AppUpdater updater, IShellLauncher shell, Localizer text, ILogger<AppUpdateDialog> logger) : IAppUpdateDialog
 {
     /// <inheritdoc />
-    public async Task ShowAsync(UpdateOffer offer)
+    public async Task<bool> ShowAsync(UpdateOffer offer)
     {
         ArgumentNullException.ThrowIfNull(offer);
         if (host.Active is not { } owner)
         {
             logger.LogInformation("A newer version ({Version}) was found but no window is open to offer it", offer.Version);
-            return;
+            return false;
         }
 
         logger.LogInformation("Offering version {Version} (installable: {Installable})", offer.Version, offer.CanInstall);
@@ -25,5 +25,6 @@ public sealed class AppUpdateDialog(WindowHost host, AppUpdater updater, IShellL
         var window = new AppUpdateWindow { DataContext = model };
         model.CloseRequested += (_, _) => window.Close();
         await window.ShowDialog(owner).ConfigureAwait(true);
+        return model.Installed;
     }
 }

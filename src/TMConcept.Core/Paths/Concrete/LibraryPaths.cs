@@ -8,6 +8,9 @@ namespace TMConcept.Core.Paths;
 /// </summary>
 public static class LibraryPaths
 {
+    /// <summary>The buffer of a file copy.</summary>
+    private const int CopyBufferBytes = 81920;
+
     private const int NameMax = 60;
 
     /// <summary>A folder or file name that is valid on Windows and Linux (invalid characters removed, length limited, never empty).</summary>
@@ -54,4 +57,23 @@ public static class LibraryPaths
     /// <summary>A path relative to the library folder with forward slashes.</summary>
     public static string Relative(string libraryDirectory, string fullPath) =>
         Path.GetRelativePath(libraryDirectory, fullPath).Replace('\\', '/');
+
+    /// <summary>Whether <paramref name="path"/> lies strictly inside <paramref name="folder"/> (the system's case rule for paths).</summary>
+    public static bool Inside(string path, string folder)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        ArgumentNullException.ThrowIfNull(folder);
+        var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder)) + Path.DirectorySeparatorChar;
+        var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        return full.Length > root.Length && full.StartsWith(root, comparison);
+    }
+
+    /// <summary>Copies <paramref name="source"/> to <paramref name="target"/> asynchronously (<paramref name="mode"/>: create anew or overwrite).</summary>
+    public static async Task CopyAsync(string source, string target, FileMode mode, CancellationToken cancellationToken)
+    {
+        await using var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read, CopyBufferBytes, useAsync: true);
+        await using var output = new FileStream(target, mode, FileAccess.Write, FileShare.None, CopyBufferBytes, useAsync: true);
+        await input.CopyToAsync(output, cancellationToken).ConfigureAwait(false);
+    }
 }

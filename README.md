@@ -528,6 +528,12 @@ A video made with a template (Settings → Templates) follows it without relying
   app measures its tempo and asks for it; no model takes a sound directly), pick the local or an online music model (the same ones as
   above, with their prices) and make a piece. It goes into **My music**, which also takes your own audio files; the video's music choice
   picks from it with the *My music* source. Choosing a model per video in a batch is not offered yet.
+- **Program composes (0.1.55, music from code):** a second local choice that needs no model and no graphics card. The app writes the
+  notes itself from the words of the prompt (moods such as calm, epic, sad, tense, mysterious and styles such as orchestral, electronic,
+  ambient, acoustic, pop, world, medieval, in English or Turkish; a reference sound's or the video's tempo), as a MIDI file, and
+  spessasynth_core (Apache-2.0) plays it with the MuseScore General SoundFont (MIT, about 40 MB) on the processor with the app's Node.js:
+  any computer, free, offline, a piece in seconds; the same words and seed give the same piece. Both parts download only after you
+  confirm.
 - **Word-by-word highlight (0.1.34, optional):** the word being said shows in the accent colour, glowing, growing or only recoloured
   as the drawing style suits; a line leaves room for a growing word (0.1.48).
 - **Real word times (0.1.48, optional):** with whisper.cpp (MIT, about 9 MB, and its multilingual base model, about 148 MB; installed
@@ -567,7 +573,7 @@ A video made with a template (Settings → Templates) follows it without relying
 
 ## Update
 
-**From the app:** at start (at most once a day) TM Concept reads the project's release list on GitHub (no account, no server of ours,
+**From the app:** at every start (a conditional request; a version you answered "Later" is offered again a day later) TM Concept reads the project's release list on GitHub (no account, no server of ours,
 nothing about you is sent) and, when there is a newer version, shows the notes of every version between yours and the newest, oldest first,
 in the app's language. Only the newest is downloaded: it carries every database upgrade step, so skipping versions is safe. **Download and
 install** downloads the file for your system,

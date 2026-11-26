@@ -21,10 +21,12 @@ public sealed class ComponentUsage(IProfileStore profiles, IStepModelStore steps
     /// What the app itself needs whatever is chosen: ffmpeg (voice samples, the final video, playback) and the music library once it is there
     /// (0.1.45: templates choose it, and a template is not a profile's step; "Clean up unused" never takes it, it is removed on its own), and
     /// the local music model for the same reason (0.1.46), and whisper.cpp with its model, which every video's subtitles use once installed
-    /// (0.1.48), and yt-dlp, which a template's reference video measure uses (0.1.52).
+    /// (0.1.48), and yt-dlp, which a template's reference video measure uses (0.1.52), and the composed music's synthesizer with its SoundFont,
+    /// for the same reason as the local music model (0.1.55).
     /// </summary>
     public static readonly IReadOnlyList<string> FixedNeeds = [ComponentCodes.Ffmpeg, ComponentCodes.MusicLibrary, ComponentCodes.MusicModel,
-        ComponentCodes.SpeechRecognizer, ComponentCodes.RecognizerModel, ComponentCodes.VideoDownloader];
+        ComponentCodes.SpeechRecognizer, ComponentCodes.RecognizerModel, ComponentCodes.VideoDownloader, ComponentCodes.MusicSynth,
+        ComponentCodes.MusicSoundFont];
 
     /// <inheritdoc />
     public async Task<UsageMap> ComputeAsync(CancellationToken cancellationToken)

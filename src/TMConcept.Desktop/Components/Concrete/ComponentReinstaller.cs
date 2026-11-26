@@ -175,7 +175,7 @@ public sealed class ComponentReinstaller(ComponentPlanner planner, ComponentInst
             {
                 var relative = Path.GetRelativePath(Full(tools), folder);
                 if (relative.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relative) || relative == "."
-                    || owned.Any(o => Same(o, folder) || DiskSpace.FolderDiscardBase.Inside(o, folder) || DiskSpace.FolderDiscardBase.Inside(folder, o)))
+                    || owned.Any(o => Same(o, folder) || Core.Paths.LibraryPaths.Inside(o, folder) || Core.Paths.LibraryPaths.Inside(folder, o)))
                 {
                     continue;
                 }

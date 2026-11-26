@@ -16,9 +16,8 @@ public interface IMyMusic
     /// <summary>Copies the user's audio file into the collection.</summary>
     Task<MyMusicEntry> AddFileAsync(string file, CancellationToken cancellationToken);
 
-    /// <summary>Moves (or copies) a made piece into the collection with its model, prompt, reference and cost.</summary>
-    Task<MyMusicEntry> AddGeneratedAsync(string file, string title, string model, string prompt, string referenceName, decimal usd, int bpm,
-        CancellationToken cancellationToken);
+    /// <summary>Moves a made piece into the collection with its model, prompt, reference and cost.</summary>
+    Task<MyMusicEntry> AddGeneratedAsync(GeneratedPiece piece, CancellationToken cancellationToken);
 
     /// <summary>Removes a piece from the list and deletes its file for good (the caller asked first).</summary>
     Task RemoveAsync(string id, CancellationToken cancellationToken);

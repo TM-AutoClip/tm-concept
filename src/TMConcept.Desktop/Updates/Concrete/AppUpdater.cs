@@ -33,12 +33,12 @@ public sealed class AppUpdater(ReleaseFeed feed, SelfReplacer replacer, Engines.
     public string Rid { get; init; } = ReleaseNotes.CurrentRid();
 
     /// <summary>
-    /// The newer release as an offer, or null when the running version is the newest (or nothing is known). <paramref name="force"/>: ask
-    /// GitHub now (Check now), otherwise at most once a day.
+    /// The newer release as an offer, or null when the running version is the newest (or nothing is known). GitHub is asked every time (a
+    /// conditional request).
     /// </summary>
-    public async Task<UpdateOffer?> CheckAsync(bool force, CancellationToken cancellationToken)
+    public async Task<UpdateOffer?> CheckAsync(CancellationToken cancellationToken)
     {
-        var releases = await feed.ReleasesAsync(force, cancellationToken).ConfigureAwait(false);
+        var releases = await feed.ReleasesAsync(cancellationToken).ConfigureAwait(false);
         var release = releases.FirstOrDefault();
         if (release is null || !AppVersion.TryParse(release.Tag, out var latest))
         {
@@ -91,7 +91,7 @@ public sealed class AppUpdater(ReleaseFeed feed, SelfReplacer replacer, Engines.
             return null;
         }
 
-        var offer = await CheckAsync(force: false, cancellationToken).ConfigureAwait(false);
+        var offer = await CheckAsync(cancellationToken).ConfigureAwait(false);
         if (offer is null)
         {
             return null;

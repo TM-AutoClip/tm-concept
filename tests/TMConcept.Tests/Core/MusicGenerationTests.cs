@@ -116,7 +116,8 @@ public sealed class MusicGenerationTests : IDisposable
         var catalog = new EmbeddedModelCatalog();
         var music = catalog.All.Where(m => m.Capabilities.HasFlag(ModelCapability.Music)).ToDictionary(m => ModelBase.KeyOf(m));
 
-        music.Keys.ShouldBe(["local/ace-step-1.5", "google/lyria-3-clip-preview", "google/lyria-3.5", "elevenlabs/music_v1"], ignoreOrder: true);
+        music.Keys.ShouldBe(["local/ace-step-1.5", "local/program-score", "google/lyria-3-clip-preview", "google/lyria-3.5", "elevenlabs/music_v1"],
+            ignoreOrder: true);
         music["google/lyria-3-clip-preview"].MusicUsdPerPiece.ShouldBe(0.04m);
         music["google/lyria-3-clip-preview"].MusicSeconds.ShouldBe(30);
         music["google/lyria-3.5"].MusicUsdPerPiece.ShouldBe(0.08m);
@@ -319,7 +320,8 @@ public sealed class MusicGenerationTests : IDisposable
     }
 
     private VideoMusicStep Step(FakeGenerator generator, IGpuCoordinator? gpu = null) =>
-        new(new MinuteMedia(), new EmptyLibrary(), new UnreadableAudio(), NullLogger<VideoMusicStep>.Instance, new FakeGenerators(generator), gpu);
+        new(new MinuteMedia(), new EmptyLibrary(), new UnreadableAudio(), NullLogger<VideoMusicStep>.Instance, new FakeGenerators(generator),
+            new MusicPieceRunner(gpu ?? new ImageBackendTests.FakeCoordinator(), NullLogger<MusicPieceRunner>.Instance));
 
     private string Work()
     {
@@ -378,7 +380,7 @@ public sealed class MusicGenerationTests : IDisposable
             Requests.Add(request);
             if (Fail || FailFirst-- > 0)
             {
-                throw new MusicGenerationException("the model ended badly") { Code = "process" };
+                throw new MusicGenerationException("the model ended badly") { Code = MusicFailure.Process };
             }
 
             HeldDuring.Add(Gpu?.Held ?? 0);

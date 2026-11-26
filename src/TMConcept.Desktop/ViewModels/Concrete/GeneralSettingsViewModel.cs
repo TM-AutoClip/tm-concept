@@ -142,7 +142,7 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
         UpdateStatus = text["appupdate.checking"];
         try
         {
-            var offer = await Task.Run(() => updater.CheckAsync(force: true, CancellationToken.None)).ConfigureAwait(true);
+            var offer = await Task.Run(() => updater.CheckAsync(CancellationToken.None)).ConfigureAwait(true);
             if (offer is null)
             {
                 UpdateStatus = text.Format("appupdate.current", updater.Current);
@@ -350,7 +350,7 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
             return;
         }
 
-        var size = StorageSettingsViewModel.Size(await Task.Run(() => Core.DiskSpace.DiskSizes.Of(reinstaller.Folder)).ConfigureAwait(true), text.Culture);
+        var size = Localization.ByteSizeText.Of(await Task.Run(() => Core.DiskSpace.DiskSizes.Of(reinstaller.Folder)).ConfigureAwait(true), text.Culture);
         var answer = await confirm.AskAsync(text["components.reinstall.title"], text.Format("components.reinstall.message", reinstaller.Location(), size),
             text["components.reinstall"], danger: true).ConfigureAwait(true);
         if (!answer.Confirmed)
