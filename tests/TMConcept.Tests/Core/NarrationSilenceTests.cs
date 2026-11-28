@@ -6,7 +6,7 @@ namespace TMConcept.Tests.Core;
 
 /// <summary>
 /// No dead air (0.1.24): a voice's silences before, inside and after its words are cut to short natural pauses, so a video made of the
-/// trimmed clips has no gap above <see cref="NarrationGaps.MaxPauseMs"/> anywhere on its timeline.
+/// trimmed clips has no gap above <see cref="NarrationGaps.MaxPauseMs"/> anywhere on its timeline. 0.1.62: at most 0.25 s, and every cut fades.
 /// </summary>
 public sealed class NarrationSilenceTests : IDisposable
 {
@@ -63,10 +63,42 @@ public sealed class NarrationSilenceTests : IDisposable
     [Fact]
     public void ShortNaturalPausesStay()
     {
-        var file = Clip("b", 1000, -300, 1000);
+        var file = Clip("b", 1000, -200, 1000);
         var before = WaveFile.DurationMs(file);
 
-        NarrationSilence.Trim(file).ShouldBe(before, "a 0.3 s pause and no edges: nothing to cut");
+        NarrationSilence.Trim(file).ShouldBe(before, "a 0.2 s comma pause and no edges: nothing to cut");
+    }
+
+    [Fact]
+    public void AnInnerPauseIsCutToAQuarterSecond()
+    {
+        // 0.1.62: a 0.45 s pause (the old limit) is now too long; it becomes 0.25 s.
+        var file = Clip("b2", 1000, -450, 1000);
+
+        NarrationSilence.Trim(file).ShouldNotBeNull();
+
+        var gaps = NarrationSilence.Gaps(file);
+        gaps.Count.ShouldBe(3);
+        gaps[1].ShouldBeInRange(NarrationGaps.MaxPauseMs - NarrationGaps.WindowMs, NarrationGaps.MaxPauseMs + NarrationGaps.WindowMs);
+    }
+
+    [Fact]
+    public void EveryCutAndBothEndsFadeSoNothingClicks()
+    {
+        // A tone that starts and stops at full loudness on the first and last sample, and a long pause cut in its middle.
+        var file = Clip("f", 500, -1000, 500);
+
+        NarrationSilence.Trim(file).ShouldNotBeNull();
+
+        var (samples, rate) = WaveFile.ReadMonoPcm16(file);
+        var fade = rate * NarrationGaps.FadeMs / 1000;
+        samples[0].ShouldBe(0f);
+        samples[^1].ShouldBe(0f);
+        // Through the fade the loudness only grows from zero: no sample at its start is near the tone's 0.3.
+        samples.Take(fade / 4).Max(v => Math.Abs(v)).ShouldBeLessThan(0.3f * 0.3f);
+        samples.TakeLast(fade / 4).Max(v => Math.Abs(v)).ShouldBeLessThan(0.3f * 0.3f);
+        // Past the fade the tone is untouched.
+        samples.Skip(fade).Take(rate / 100).Max(v => Math.Abs(v)).ShouldBeGreaterThan(0.29f);
     }
 
     [Fact]

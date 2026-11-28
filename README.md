@@ -511,7 +511,8 @@ A video made with a template (Settings → Templates) follows it without relying
   darker corners, a soft glow, a shadow by depth and a slight 12-steps-a-second tremble, all from a fixed seed. Each style also lists
   its known pitfalls in the scene plan request. No extra AI request.
 - **Background music (0.1.44, off by default):** *My own file* puts a track of your own under the whole video. It is quieter while
-  the narration speaks and comes back up between scenes (short breaths between sentences do not lift it); a short track loops, a long
+  the narration speaks and comes back up in a pause of 0.6 s or more (since 0.1.62 the breaths between sentences and scenes are shorter,
+  so it lifts at your own longer pauses and at the end, not at every scene change); a short track loops, a long
   one is cut, and it fades out at the end. Level, ducking and fade-out are set with the music (0.1.54: per profile on the Concept to video
   page, under the models; no longer in the template). The file is copied into each video's
   version folder (`music/`), so a new version uses the same track. Its licence is your responsibility; an optional attribution is shown
@@ -585,7 +586,9 @@ A video made with a template (Settings → Templates) follows it without relying
   adapts the scenes while the video is made (the scene plan and the video code turn every scene into the narrator's actions); concepts
   are written for no style.
 - **Narration tempo:** the narration is spoken sentence by sentence with a pause after every sentence and a longer one between scenes:
-  *Tight*, *Natural* (default) or *Relaxed*. Your own pause placeholders are added on top.
+  *Tight*, *Natural* (default) or *Relaxed*. What you hear (0.1.62), sentence / scene: tight 0.15 s / 0.2 s, natural 0.25 s / 0.3 s,
+  relaxed 0.4 s / 0.5 s. A pause inside a sentence (a comma) is the voice's own, at most 0.25 s; every cut fades in and out over 12 ms, so
+  nothing clicks or stops abruptly. Your own pause placeholders are added on top.
 - **Reference video (0.1.52, optional):** "make it at the tempo of this video". Choose a video file or paste the address of one video
   (downloaded by yt-dlp, installed only after a yes: one video, no playlist, no cookies or sign-in, low resolution, the first 10 minutes,
   deleted right after the measure). The app measures its cuts every 10 seconds, its camera moves and their way, its colours, its beat and

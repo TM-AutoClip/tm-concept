@@ -113,8 +113,10 @@ public sealed class VersionTests
         File.ReadAllText(Path.Combine(v2, VideoFolders.SubtitlesFile)).ShouldContain("The walls held for months.");
         File.ReadAllText(Path.Combine(v2, VideoFolders.ScriptFile)).ShouldContain("[pause 2 s]", Case.Sensitive, "the next edit starts with the markers");
         Directory.GetFiles(Path.Combine(v2, VideoFolders.Audio)).Select(Path.GetFileName).ShouldBe(["1.wav", "2.wav"], ignoreOrder: true);
-        // Two parts of 100 ms, the 2 s pause with the natural tempo's sentence silence on top (300 ms) and its scene silence (650 ms) at the end.
-        WaveFile.DurationMs(Path.Combine(v2, VideoFolders.Audio, "1.wav")).ShouldBe(3150);
+        // Two parts of 100 ms, the 2 s pause with the natural tempo's added sentence silence on top and its scene silence at the end (0.1.62:
+        // 130 + 180 ms; the clips' kept margins make them the heard 0.25 s / 0.3 s).
+        var natural = TMConcept.Core.Speech.NarrationTempos.Of(TMConcept.Core.Speech.NarrationTempo.Natural);
+        WaveFile.DurationMs(Path.Combine(v2, VideoFolders.Audio, "1.wav")).ShouldBe(200 + 2000 + natural.SentenceGapMs + natural.SceneGapMs);
         remaker.Load(second).Texts[0].ShouldContain("[pause 2 s]");
         second.ConceptId.ShouldBe(first.ConceptId);
         second.Warnings.ShouldContain(VideoWarnings.AiVoice);
@@ -137,7 +139,9 @@ public sealed class VersionTests
         voice.Requests[2].Speed.ShouldBe(Math.Clamp(voice.Requests[0].Speed * TMConcept.Core.Markers.MarkerCatalog.SlowSpeed, ProfileLimits.SpeedMin,
             ProfileLimits.SpeedMax), 0.001);
         var v1 = Folder(h, first);
-        WaveFile.DurationMs(Path.Combine(v1, VideoFolders.Audio, "1.wav")).ShouldBe(2150, "two parts of 100 ms, the 1 s pause + 300 ms sentence silence, 650 ms scene silence");
+        var natural = TMConcept.Core.Speech.NarrationTempos.Of(TMConcept.Core.Speech.NarrationTempo.Natural);
+        WaveFile.DurationMs(Path.Combine(v1, VideoFolders.Audio, "1.wav")).ShouldBe(200 + 1000 + natural.SentenceGapMs + natural.SceneGapMs,
+            "two parts of 100 ms, the 1 s pause + the sentence silence, the scene silence");
 
         // The scenes: the pause is in the first scene's length, the second begins with a fade; captions and subtitles have no placeholder.
         var input = RenderInputBuilder.FromJson(File.ReadAllText(Path.Combine(v1, VideoFolders.Source, VideoFolders.InputFile)))!;

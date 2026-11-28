@@ -12,6 +12,18 @@ public sealed record SampleLayout(int Rate, int Channels, int SampleBytes, bool 
     /// <summary>Bytes of one <see cref="NarrationGaps.WindowMs"/> window (whole frames, at least one).</summary>
     public int WindowBytes() => Math.Max(1, Rate * NarrationGaps.WindowMs / 1000) * Channels * SampleBytes;
 
+    /// <summary>Multiplies one sample in place by <paramref name="gain"/> (in [0, 1]; a fade, <see cref="NarrationSilence"/>).</summary>
+    public void Scale(Span<byte> bytes, double gain)
+    {
+        if (Float)
+        {
+            BinaryPrimitives.WriteSingleLittleEndian(bytes, (float)(BinaryPrimitives.ReadSingleLittleEndian(bytes) * gain));
+            return;
+        }
+
+        BinaryPrimitives.WriteInt16LittleEndian(bytes, (short)Math.Round(BinaryPrimitives.ReadInt16LittleEndian(bytes) * gain));
+    }
+
     /// <summary>One sample in [-1, 1].</summary>
     public double Sample(ReadOnlySpan<byte> bytes) =>
         Float ? BinaryPrimitives.ReadSingleLittleEndian(bytes) : BinaryPrimitives.ReadInt16LittleEndian(bytes) / 32768.0;

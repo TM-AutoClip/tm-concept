@@ -5,14 +5,15 @@ namespace TMConcept.Core.Speech;
 /// <summary>
 /// Removes dead air from a spoken clip (<see cref="NarrationGaps"/>): the silence before the first word and after the last one is cut to a
 /// short margin, and a pause inside the clip longer than <see cref="NarrationGaps.MaxPauseMs"/> is shortened to it (the middle of the pause
-/// goes, its edges stay, so no word is touched). Loudness is the RMS of <see cref="NarrationGaps.WindowMs"/> windows over every channel.
+/// goes, its edges stay, so no word is touched). Every cut fades out and in over <see cref="NarrationGaps.FadeMs"/> (0.1.62). Loudness is the RMS of <see cref="NarrationGaps.WindowMs"/> windows over every channel.
 /// Reads 16-bit PCM and 32-bit float WAV files (what the voices write); another format is left as it is (<see cref="Trim"/> says so).
 /// </summary>
 public static class NarrationSilence
 {
     /// <summary>
     /// Trims <paramref name="path"/> in place. Returns the new length in milliseconds, or <c>null</c> when the format is not one this reads (the
-    /// file is unchanged then). A clip that is silence only keeps one <see cref="NarrationGaps.MaxPauseMs"/> of it.
+    /// file is unchanged then). A clip that is silence only keeps one <see cref="NarrationGaps.MaxPauseMs"/> of it. The file is always written
+    /// again: its edges fade in and out even when nothing is cut.
     /// </summary>
     public static long? Trim(string path)
     {
@@ -25,16 +26,14 @@ public static class NarrationSilence
 
         var windows = Windows(data, layout);
         var keep = Keep(windows, layout.WindowBytes(), data.Length);
-        if (keep.Count == 1 && keep[0] == (0, data.Length))
-        {
-            return WaveFile.DurationMs(path);
-        }
-
         var output = new byte[keep.Sum(k => k.Length)];
         var at = 0;
         foreach (var (start, length) in keep)
         {
             data.AsSpan(start, length).CopyTo(output.AsSpan(at));
+            // Every kept range fades in and out (0.1.62): its edges are the cuts, the clip's start and its end, where it meets a pause or the
+            // next clip. Even a clip with nothing to cut gets its edges faded, so no join of the narration clicks.
+            Fade(output.AsSpan(at, length), layout);
             at += length;
         }
 
@@ -167,6 +166,27 @@ public static class NarrationSilence
     }
 
     private static int Count(int milliseconds) => milliseconds / NarrationGaps.WindowMs;
+
+    /// <summary>
+    /// A linear fade in over the first and out over the last <see cref="NarrationGaps.FadeMs"/> of <paramref name="range"/> (whole frames; a
+    /// range shorter than two fades fades over its halves). Applying it again only lowers the already quiet edges a little more.
+    /// </summary>
+    private static void Fade(Span<byte> range, SampleLayout layout)
+    {
+        var frameBytes = layout.Channels * layout.SampleBytes;
+        var frames = range.Length / frameBytes;
+        var fade = Math.Min(Math.Max(1, layout.Rate * NarrationGaps.FadeMs / 1000), frames / 2);
+        for (var f = 0; f < fade; f++)
+        {
+            var gain = (double)f / fade;
+            for (var c = 0; c < layout.Channels; c++)
+            {
+                var offset = c * layout.SampleBytes;
+                layout.Scale(range.Slice((f * frameBytes) + offset, layout.SampleBytes), gain);
+                layout.Scale(range.Slice(((frames - 1 - f) * frameBytes) + offset, layout.SampleBytes), gain);
+            }
+        }
+    }
 
     /// <summary>Whether each window is silent (the last, shorter window is measured too).</summary>
     private static bool[] Windows(byte[] data, SampleLayout layout)

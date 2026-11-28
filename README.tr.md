@@ -502,7 +502,8 @@ Bir şablonla (Ayarlar → Şablonlar) üretilen video, modelin iyi niyetine kal
   köşe gölgesi, yumuşak ışıma, derinliğe göre gölge ve saniyede 12 adımlık hafif titreme, hepsi sabit bir tohumdan. Her tarz bilinen
   tuzaklarını da sahne planı isteğine yazar. Yapay zekâya ek istek yok.
 - **Arka plan müziği (0.1.44, varsayılan kapalı):** *Kendi dosyam* videonun tamamının altına kendi parçanı koyar. Anlatım konuşurken
-  kısılır, sahne aralarında yükselir (cümleler arasındaki kısa nefeslerde yükselmez); kısa parça döner, uzun parça kesilir, sonda kararır.
+  kısılır, 0,6 sn ya da daha uzun bir arada yükselir (0.1.62'den beri cümle ve sahne araları daha kısa, yani her sahne geçişinde değil,
+  kendi uzun duraklamalarında ve sonda yükselir); kısa parça döner, uzun parça kesilir, sonda kararır.
   Düzey, kısma miktarı ve kararma müzikle birlikte ayarlanır (0.1.54: Konseptten video sayfasında modellerin altında, profil başına;
   artık şablonda değil). Dosya her videonun sürüm klasörüne (`music/`) kopyalanır, yeni sürüm aynı parçayı
   kullanır. Lisansı senin sorumluluğunda; isteğe bağlı atıf, video bitince video sayfasında açıklamaya kopyalanmak üzere gösterilir
@@ -574,7 +575,9 @@ Bir şablonla (Ayarlar → Şablonlar) üretilen video, modelin iyi niyetine kal
   anlatıcı** sahneleri video yapılırken uyarlar (sahne planı ve video kodu her sahneyi anlatıcının hareketlerine çevirir); konseptler bir
   tarz için yazılmaz.
 - **Anlatım temposu:** seslendirme cümle cümle okunur; her cümleden sonra bir duraklama, sahneler arasında daha uzun bir ara olur:
-  *Sıkı*, *Doğal* (varsayılan) ya da *Rahat*. Kendi duraklama yer tutucuların bunun üstüne eklenir.
+  *Sıkı*, *Doğal* (varsayılan) ya da *Rahat*. Duyulan ara (0.1.62), cümle / sahne: sıkı 0,15 sn / 0,2 sn, doğal 0,25 sn / 0,3 sn, rahat
+  0,4 sn / 0,5 sn. Cümle içindeki ara (virgül) sesin kendisinindir, en çok 0,25 sn; her kesim 12 ms'lik yumuşak geçişle yapılır, hiçbir yer
+  tık diye ya da birden kesilmez. Kendi duraklama yer tutucuların bunun üstüne eklenir.
 - **Referans video (0.1.52, isteğe bağlı):** "bu videonun temposunda yap". Bir video dosyası seç ya da tek bir videonun adresini yapıştır
   (yt-dlp ile iner, yalnız onaylayınca kurulur: tek video, oynatma listesi yok, çerez ya da giriş yok, düşük çözünürlük, ilk 10 dakika,
   ölçümden hemen sonra silinir). Program 10 saniyedeki kesme sayısını, kamera hareketlerini ve yönünü, renklerini, vuruşunu ve en güçlü

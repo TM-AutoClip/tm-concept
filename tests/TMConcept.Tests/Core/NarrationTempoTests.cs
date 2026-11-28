@@ -66,6 +66,22 @@ public sealed class NarrationTempoTests
         NarrationTempos.Of((NarrationTempo)99).ShouldBe(natural);
     }
 
+    [Theory]
+    [InlineData(NarrationTempo.Tight, 150, 200)]
+    [InlineData(NarrationTempo.Natural, 250, 300)]
+    [InlineData(NarrationTempo.Relaxed, 400, 500)]
+    public void WhatAListenerHearsIsTheTempoTotal(NarrationTempo tempo, int sentenceMs, int sceneMs)
+    {
+        // 0.1.62, the developer: "0.25 s is enough". The added silence plus the margins every trimmed clip keeps (the tail of one clip, the
+        // lead of the next) is exactly the heard total.
+        NarrationTempos.Heard(tempo).ShouldBe(new NarrationPacing(sentenceMs, sceneMs));
+        var added = NarrationTempos.Of(tempo);
+        const int margins = NarrationGaps.TailKeepMs + NarrationGaps.LeadKeepMs;
+        (added.SentenceGapMs + margins).ShouldBe(sentenceMs);
+        (added.SceneGapMs + margins).ShouldBe(sceneMs);
+        sceneMs.ShouldBeLessThanOrEqualTo(500, "no tempo waits more than half a second");
+    }
+
     [Fact]
     public void ATemplateSavedBeforeTheTempoReadsAsNatural()
     {
