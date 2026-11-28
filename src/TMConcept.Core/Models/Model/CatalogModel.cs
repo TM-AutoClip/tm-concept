@@ -61,6 +61,12 @@ public sealed class CatalogModel
     /// </summary>
     public int MusicSeconds { get; set; }
 
+    /// <summary>
+    /// A local music model that sings words the user writes (28 Nov 2026: SongGeneration, YuE): the music page offers a lyrics field for it
+    /// when "Instrumental" is off; without words it makes an instrumental piece.
+    /// </summary>
+    public bool MusicLyrics { get; set; }
+
     /// <summary>Context window in tokens.</summary>
     public long ContextTokens { get; set; }
 

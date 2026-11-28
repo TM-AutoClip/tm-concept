@@ -6,7 +6,11 @@ namespace TMConcept.Core.Music;
 /// </summary>
 /// <param name="Nvidia">An NVIDIA card is there.</param>
 /// <param name="Linux">The computer runs Linux (the model is not verified there).</param>
-public sealed record LocalMusicCard(bool Nvidia, bool Linux)
+/// <param name="Tier">
+/// The memory class of the largest NVIDIA card (28 Nov 2026, more local music models with card classes of their own:
+/// <see cref="LocalMusicSupport.TooBig"/>); <see cref="Hardware.VramTier.None"/> without one or when its memory is unknown.
+/// </param>
+public sealed record LocalMusicCard(bool Nvidia, bool Linux, Hardware.VramTier Tier = Hardware.VramTier.None)
 {
     /// <summary>The option carries "(NVIDIA only)" and, once chosen, the yellow "this card is not supported" warning.</summary>
     public bool NvidiaOnly => !Nvidia;

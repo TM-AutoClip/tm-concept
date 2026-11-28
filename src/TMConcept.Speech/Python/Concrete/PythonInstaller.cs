@@ -24,7 +24,7 @@ public sealed class PythonInstaller(PythonLayout layout, IToolLocator tools, IPr
     private static readonly TimeSpan[] LockRetries = [TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(10)];
     private static readonly string[] FileLockMarkers = ["os error 5)", "os error 32)", "Access is denied", "being used by another process"];
 
-    /// <summary>The PyTorch build for <paramref name="environment"/> on this computer (<see cref="PythonPins.CudaBackend"/> or <see cref="PythonPins.CpuBackend"/>).</summary>
+    /// <summary>The PyTorch build for <paramref name="environment"/> on this computer (its <see cref="PythonEnvironment.CudaBackend"/> or <see cref="PythonPins.CpuBackend"/>).</summary>
     public string Backend(PythonEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(environment);
@@ -35,9 +35,16 @@ public sealed class PythonInstaller(PythonLayout layout, IToolLocator tools, IPr
     public static string Backend(PythonEnvironment environment, GpuReport report)
     {
         ArgumentNullException.ThrowIfNull(environment);
-        return !environment.ProcessorOnly && SpeechDevices.CudaCard(report) is not null && PythonFiles.HasLock(environment, PythonPins.CudaBackend)
-            ? PythonPins.CudaBackend
+        return !environment.ProcessorOnly && SpeechDevices.CudaCard(report) is not null && PythonFiles.HasLock(environment, environment.CudaBackend)
+            ? environment.CudaBackend
             : PythonPins.CpuBackend;
+    }
+
+    /// <summary>The CUDA version of a CUDA build's name ("cu128" → "12.8", "cu121" → "12.1"), for the install window.</summary>
+    public static string CudaVersion(string backend)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(backend);
+        return backend.StartsWith("cu", StringComparison.Ordinal) && backend.Length > 3 ? backend[2..^1] + "." + backend[^1] : backend;
     }
 
     /// <summary>The installed interpreter (from the marker); null when the Python is not installed.</summary>
@@ -80,8 +87,8 @@ public sealed class PythonInstaller(PythonLayout layout, IToolLocator tools, IPr
             var recorded = File.ReadAllText(marker).Trim();
             var backend = Backend(environment);
             return recorded == Fingerprint(environment, backend)
-                || (backend == PythonPins.CpuBackend && PythonFiles.HasLock(environment, PythonPins.CudaBackend)
-                    && recorded == Fingerprint(environment, PythonPins.CudaBackend));
+                || (backend == PythonPins.CpuBackend && PythonFiles.HasLock(environment, environment.CudaBackend)
+                    && recorded == Fingerprint(environment, environment.CudaBackend));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -189,6 +196,12 @@ public sealed class PythonInstaller(PythonLayout layout, IToolLocator tools, IPr
         var uv = Uv();
         var interpreter = Interpreter ?? throw new ToolInstallException("Python for the Python voices is not installed.") { Code = "missing" };
         var backend = Backend(environment);
+        if (!PythonFiles.HasLock(environment, backend))
+        {
+            // A card-only environment (the local music models) without a usable NVIDIA card: nothing to install for the processor.
+            throw new ToolInstallException(environment.Name + " needs an NVIDIA graphics card (CUDA); there is no processor build of it.") { Code = "unsupported" };
+        }
+
         var folder = layout.EnvironmentFolder(environment.Key);
         var marker = layout.EnvironmentMarker(environment.Key);
         if (File.Exists(marker))

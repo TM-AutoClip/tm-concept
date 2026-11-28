@@ -112,6 +112,32 @@ public sealed class MusicGeneratePageTests
     }
 
     [AvaloniaFact]
+    public async Task AModelAboveTheCardsClassIsRedAndANonCommercialOneCarriesTheOrangeBadge()
+    {
+        // 28 Nov 2026: the developer's 6 GB card; MusicGen Small fits (4 GB class), MusicGen Large does not (12 GB class); both non-commercial.
+        using var h = new DesktopHarness();
+        var labels = h.Get<IMusicChoiceText>();
+        var text = h.Get<Localizer>();
+        var catalog = h.Get<IModelCatalog>();
+        var card = new LocalMusicCard(Nvidia: true, Linux: false, VramTier.Gb6);
+        var small = catalog.Find(ModelProviders.Local, "musicgen-small")!;
+        var large = catalog.Find(ModelProviders.Local, "musicgen-large")!;
+
+        var smallLabel = labels.ModelLabel(small, ready: false, card);
+        smallLabel.ShouldContain(text.Format("models.tier", 4));
+        smallLabel.ShouldContain(text["models.license.badge.noncommercial"]);
+        smallLabel.ShouldNotContain(text["models.tier.too_big"]);
+        labels.CardWarning(small, card).ShouldBeEmpty();
+        var largeLabel = labels.ModelLabel(large, ready: false, card);
+        largeLabel.ShouldContain(text.Format("models.tier", 12));
+        largeLabel.ShouldContain(text["models.tier.too_big"]);
+        labels.CardWarning(large, card).ShouldBe(text.Format("styles.music.generate.too_big", 12, 6), "said, never a block (rule 19)");
+        labels.ModelLabel(catalog.Find(ModelProviders.Local, "ace-step-1.5")!, ready: true, card).ShouldNotContain(text["models.license.badge.noncommercial"]);
+        LocalMusicSupport.Ordered([large, small], card).ShouldBe([small, large], "the ones this card holds first");
+        await Task.CompletedTask;
+    }
+
+    [AvaloniaFact]
     public async Task AProcessorModelNeverCarriesTheCardNote()
     {
         using var h = new DesktopHarness();

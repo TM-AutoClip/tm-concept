@@ -111,6 +111,37 @@ public sealed class MusicPageTests
     }
 
     [AvaloniaFact]
+    public async Task TheLyricsFieldIsOnlyForAModelThatSingsWithInstrumentalOff()
+    {
+        // 28 Nov 2026: SongGeneration and YuE sing the user's words; every other model gets none.
+        var generator = new FakeGenerator();
+        using var h = Harness(generator);
+        await FirstRunTests.CreateAsync(h);
+        var page = h.Get<MusicViewModel>();
+        await page.ActivateAsync();
+        page.Prompt = "upbeat pop";
+        page.Model = page.Models.Single(m => m.Model.Id == "yue-v1-exl2");
+
+        page.ShowLyrics.ShouldBeFalse("instrumental is the default");
+        page.Instrumental = false;
+        page.ShowLyrics.ShouldBeTrue();
+        page.MaxLyricsCharacters.ShouldBe(MusicGenerationRules.MaxLyricsCharacters);
+        page.Lyrics = "[verse]\nla la la";
+        await page.GenerateCommand.ExecuteAsync(null);
+        generator.Requests.ShouldHaveSingleItem().Lyrics.ShouldBe("[verse]\nla la la");
+
+        page.Model = page.Models.Single(m => m.Model.Id == "diffrhythm-1.2-base");
+        page.ShowLyrics.ShouldBeFalse("DiffRhythm makes instrumental pieces only");
+        page.Model = page.Models.Single(m => m.Model.Id == "yue-v1-exl2");
+        page.Instrumental = true;
+        page.ShowLyrics.ShouldBeFalse();
+        await page.GenerateCommand.ExecuteAsync(null);
+        generator.Requests[^1].Lyrics.ShouldBeEmpty("an instrumental piece gets no words");
+        MusicMaker.Lyrics(new MusicMakeRequest(page.Models.Single(m => m.Model.Id == "musicgen-small").Model, "x", 30, false, null, string.Empty, "la"))
+            .ShouldBeEmpty("a model that does not sing gets no words");
+    }
+
+    [AvaloniaFact]
     public async Task AFailedPieceIsShownAndAddsNothing()
     {
         var generator = new FakeGenerator { Fail = true };

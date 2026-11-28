@@ -524,6 +524,17 @@ A video made with a template (Settings → Templates) follows it without relying
   or Eleven Music ($0.15 a minute) with your ElevenLabs key. The piece is made after the narration from the scene plan's music hints,
   without words, looped when shorter than the video, counted in the estimate and the cost details, and kept with the video: a new
   version does not make it again.
+- **More local music models (28 Nov 2026):** MusicGen (10 checkpoints, up to 30 s), MAGNeT (4 music and 2 sound-effect checkpoints, 10 or
+  30 s) and AudioLDM 2 (3 checkpoints, up to 30 s), all for NVIDIA cards (the small ones and AudioLDM 2 from 4 to 6 GB, MusicGen medium
+  and melody 8 GB, MusicGen large 12 GB, MAGNeT medium 16 GB). Their weights are **non-commercial** (CC BY-NC 4.0, AudioLDM 2
+  CC BY-NC-SA 4.0): each carries the orange badge and asks once before its first use. Each shows its graphics card class; one above your
+  card's class is red ("this card cannot run it") but can still be tried. Each family installs its own Python environment and each model
+  its own weights, only after you confirm.
+- **Local models that make whole songs (28 Nov 2026):** DiffRhythm 1.2 and 1.0 (instrumental only, 95 s or longer pieces; 8 GB cards,
+  12 GB for the full models; non-commercial because of its MuQ-MuLan text encoder), SongGeneration / LeVo (6 models; Tencent's
+  non-commercial licence; 10 to 22 GB cards), YuE2 3B (non-commercial; 24 GB, or 8 GB in its low-memory mode) and YuE 1 (Apache-2.0: the
+  7B model for 24 GB cards, its exllamav2 quantisation for 6 GB cards, and the 0.5B model for 8 GB cards). A piece is at most 2 minutes. SongGeneration and YuE sing your own words: the music page shows a lyrics
+  field for them when "Instrumental" is off. All for NVIDIA cards, installed only after you confirm.
 - **Make music page (0.1.54):** write what you want in your own words ("disco in ancient Egypt"), optionally choose a reference sound (the
   app measures its tempo and asks for it; no model takes a sound directly), pick the local or an online music model (the same ones as
   above, with their prices) and make a piece. It goes into **My music**, which also takes your own audio files; the video's music choice
@@ -667,6 +678,11 @@ refuses to start if Setup was pointed at the data folder.
   **FLUX.2 klein 9B and Qwen-Image 2.1 (Qwen Research License) are non-commercial**; FLUX.3 Image Klein (FLUX Kommunity License), Stable Diffusion 3.5 Medium (Stability AI Community
   License) and SDXL Lightning (OpenRAIL++) have conditions; stable-diffusion.cpp is MIT. They are downloaded from Hugging Face / GitHub only
   after you confirm (and accept the license where it has conditions).
+- **Local music models**: ACE-Step 1.5 (MIT) and **YuE 1** (Apache-2.0) allow commercial use. **MusicGen and MAGNeT** (CC BY-NC 4.0),
+  **AudioLDM 2** (CC BY-NC-SA 4.0), **DiffRhythm** (its own weights Apache-2.0, but it runs through MuQ-MuLan, CC BY-NC 4.0),
+  **SongGeneration / LeVo** (Tencent's License Terms of SongGeneration: academic, research and education use only) and **YuE2** (CC BY-NC
+  4.0; M-A-P lets individual creators earn from their songs, companies need a licence) are **non-commercial**: each carries the orange
+  badge and asks once. DiffRhythm's VAE is under the Stability AI Community License: credit "Powered by Stability AI" when you publish.
 
 Details: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 

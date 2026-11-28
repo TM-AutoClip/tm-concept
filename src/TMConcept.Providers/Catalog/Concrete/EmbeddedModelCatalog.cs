@@ -146,6 +146,7 @@ public sealed class EmbeddedModelCatalog : IModelCatalog
         MusicUsdPerPiece = m.MusicUsdPerPiece,
         MusicUsdPerMinute = m.MusicUsdPerMinute,
         MusicSeconds = m.MusicSeconds,
+        MusicLyrics = m.MusicLyrics,
         ContextTokens = m.ContextTokens,
         MaxOutputTokens = m.MaxOutputTokens,
         Efforts = [.. m.Efforts],

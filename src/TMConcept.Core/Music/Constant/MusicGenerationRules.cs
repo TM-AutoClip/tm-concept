@@ -24,6 +24,9 @@ public static class MusicGenerationRules
     /// <summary>The most characters of a prompt (rakkase's caption limit is 256 tokens; the online models take this easily).</summary>
     public const int MaxPromptCharacters = 600;
 
+    /// <summary>The most characters of a song's words (28 Nov 2026, the models that sing them: SongGeneration, YuE).</summary>
+    public const int MaxLyricsCharacters = 3000;
+
     /// <summary>The seed of a piece when nothing else gives one.</summary>
     public const int DefaultSeed = 1987;
 

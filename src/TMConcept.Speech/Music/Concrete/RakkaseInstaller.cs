@@ -1,4 +1,3 @@
-using System.IO.Compression;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
@@ -20,6 +19,7 @@ namespace TMConcept.Speech.Music;
 public sealed class RakkaseInstaller(RakkaseLayout layout, PythonInstaller python, PythonLayout pythonLayout, IToolLocator tools, IProcessRunner runner,
     IArchiveDownloader downloader, ILogger<RakkaseInstaller> logger)
 {
+    private PinnedFileInstaller Files => new(downloader, logger);
     private IReadOnlyList<RakkaseWeight>? _weights;
 
     /// <summary>The fingerprint of the environment: both commits (a new pin installs it again).</summary>
@@ -100,9 +100,9 @@ public sealed class RakkaseInstaller(RakkaseLayout layout, PythonInstaller pytho
             ?? throw new ToolInstallException("The Python of the local models is not installed.") { Code = "missing" };
         Directory.CreateDirectory(layout.Root);
         progress?.Report(new ToolProgress(0.01, "rakkase"));
-        await UnpackAsync(RakkasePins.Rakkase, layout.RakkaseFolder, cancellationToken).ConfigureAwait(false);
+        await Files.UnpackAsync(RakkasePins.Rakkase, layout.Downloads, layout.RakkaseFolder, CopyTree, cancellationToken).ConfigureAwait(false);
         progress?.Report(new ToolProgress(0.03, "ACE-Step 1.5"));
-        await UnpackAsync(RakkasePins.Ace, layout.AceFolder, cancellationToken).ConfigureAwait(false);
+        await Files.UnpackAsync(RakkasePins.Ace, layout.Downloads, layout.AceFolder, CopyTree, cancellationToken).ConfigureAwait(false);
 
         progress?.Report(new ToolProgress(0.05, "uv sync"));
         Directory.CreateDirectory(layout.Home);
@@ -122,7 +122,7 @@ public sealed class RakkaseInstaller(RakkaseLayout layout, PythonInstaller pytho
 
         await File.WriteAllTextAsync(layout.Settings, SettingsJson(layout.AceFolder), cancellationToken).ConfigureAwait(false);
         await File.WriteAllTextAsync(layout.EnvironmentMarker, EnvironmentFingerprint, cancellationToken).ConfigureAwait(false);
-        TryDelete(layout.Downloads);
+        Files.TryDelete(layout.Downloads);
         progress?.Report(new ToolProgress(1, "ACE-Step 1.5"));
         logger.LogInformation("The local music model's environment is installed (rakkase {Rakkase}, ACE-Step {Ace})", RakkasePins.RakkaseCommit[..12],
             RakkasePins.AceCommit[..12]);
@@ -185,51 +185,17 @@ public sealed class RakkaseInstaller(RakkaseLayout layout, PythonInstaller pytho
             throw new ToolInstallException("The local music model's environment is not installed.") { Code = "missing" };
         }
 
-        var missing = weights.Where(w => !Present(w)).ToList();
-        var total = Math.Max(1, missing.Sum(w => w.Bytes));
-        long done = 0;
-        foreach (var weight in missing)
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(weight.File)!);
-            var before = done;
-            var part = new Progress<ToolProgress>(p => progress?.Report(new ToolProgress((before + (p.Share * weight.Bytes)) / total, weight.Target)));
-            await downloader.DownloadAsync(new ToolArchive(ToolKind.MusicWeights, RakkasePins.WeightsRevision[..12], "any", weight.Url, weight.Sha256,
-                string.Empty, weight.Target, weight.Bytes), weight.File, part, cancellationToken).ConfigureAwait(false);
-            done += weight.Bytes;
-        }
-
+        var downloaded = await Files.DownloadMissingAsync(weights.Select(Download).ToList(), progress, cancellationToken).ConfigureAwait(false);
         await File.WriteAllTextAsync(layout.WeightsMarker, RakkasePins.WeightsRevision, cancellationToken).ConfigureAwait(false);
-        logger.LogInformation("The local music model's weights are installed ({Count} files, {Downloaded} downloaded)", weights.Count, missing.Count);
+        logger.LogInformation("The local music model's weights are installed ({Count} files, {Downloaded} downloaded)", weights.Count, downloaded);
     }
 
-    private static bool Present(RakkaseWeight weight)
-    {
-        var file = new FileInfo(weight.File);
-        return file.Exists && file.Length == weight.Bytes;
-    }
+    private static PinnedDownload Download(RakkaseWeight weight) => new(new ToolArchive(ToolKind.MusicWeights, RakkasePins.WeightsRevision[..12], "any",
+        weight.Url, weight.Sha256, string.Empty, weight.Target, weight.Bytes), weight.File);
 
-    /// <summary>Downloads a source archive and copies its tree into <paramref name="target"/> (files there are replaced, others kept).</summary>
-    private async Task UnpackAsync(ToolArchive archive, string target, CancellationToken cancellationToken)
-    {
-        Directory.CreateDirectory(layout.Downloads);
-        var zip = Path.Combine(layout.Downloads, Path.GetFileName(archive.Root) + ".zip");
-        await downloader.DownloadAsync(archive, zip, null, cancellationToken).ConfigureAwait(false);
-        var staging = Path.Combine(layout.Downloads, "unpacked-" + Path.GetFileName(target));
-        TryDelete(staging);
-        await Task.Run(() =>
-        {
-            ZipFile.ExtractToDirectory(zip, staging, overwriteFiles: true);
-            var top = Path.Combine(staging, archive.Root);
-            if (!File.Exists(Path.Combine(top, archive.ExecutablePath)))
-            {
-                throw new ToolInstallException($"The archive of {archive.Root} has no {archive.ExecutablePath}.") { Code = "archive" };
-            }
+    private static bool Present(RakkaseWeight weight) => PinnedFileInstaller.Present(Download(weight));
 
-            CopyTree(top, target);
-        }, cancellationToken).ConfigureAwait(false);
-        TryDelete(staging);
-    }
-
+    /// <summary>Copies a source archive's tree into <paramref name="to"/> (files there are replaced, others kept: the weights and the environment stay).</summary>
     private static void CopyTree(string from, string to)
     {
         Directory.CreateDirectory(to);
@@ -241,21 +207,6 @@ public sealed class RakkaseInstaller(RakkaseLayout layout, PythonInstaller pytho
         foreach (var file in Directory.EnumerateFiles(from, "*", SearchOption.AllDirectories))
         {
             File.Copy(file, Path.Combine(to, Path.GetRelativePath(from, file)), overwrite: true);
-        }
-    }
-
-    private void TryDelete(string folder)
-    {
-        try
-        {
-            if (Directory.Exists(folder))
-            {
-                Directory.Delete(folder, recursive: true);
-            }
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            logger.LogWarning(ex, "A temporary folder of the music model's install could not be removed");
         }
     }
 }

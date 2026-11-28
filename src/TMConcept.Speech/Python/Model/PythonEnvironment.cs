@@ -11,4 +11,9 @@ namespace TMConcept.Speech.Python;
 /// <param name="CudaBytes">About how much the CUDA install downloads (PyTorch with CUDA alone is 3.5 GB on Windows).</param>
 /// <param name="CpuBytes">About how much the processor install downloads.</param>
 /// <param name="ProcessorOnly">Its voices always run on the processor (the small MMS): only the processor build is installed.</param>
-public sealed record PythonEnvironment(string Key, string Name, IReadOnlyList<string> Packages, long CudaBytes, long CpuBytes, bool ProcessorOnly = false);
+/// <param name="CudaBackend">
+/// Its PyTorch CUDA build (<see cref="PythonPins.CudaBackend"/>; 28 Nov 2026: MAGNeT's audiocraft needs PyTorch 2.1.0 with xformers, built for
+/// CUDA 12.1, <see cref="PythonPins.Cuda121Backend"/>).
+/// </param>
+public sealed record PythonEnvironment(string Key, string Name, IReadOnlyList<string> Packages, long CudaBytes, long CpuBytes, bool ProcessorOnly = false,
+    string CudaBackend = PythonPins.CudaBackend);

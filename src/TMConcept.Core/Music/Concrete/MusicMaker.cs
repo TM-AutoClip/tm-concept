@@ -33,6 +33,22 @@ public sealed class MusicMaker(IMusicGenerators generators, IMusicPieceRunner pi
         return text.Length > MusicGenerationRules.MaxPromptCharacters ? text[..MusicGenerationRules.MaxPromptCharacters] : text;
     }
 
+    /// <summary>
+    /// The words a piece sings (28 Nov 2026): the request's own, trimmed and cut to <see cref="MusicGenerationRules.MaxLyricsCharacters"/>, only
+    /// for a model that sings them with "Instrumental" off; empty otherwise (an instrumental piece).
+    /// </summary>
+    public static string Lyrics(MusicMakeRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.Instrumental || !request.Model.MusicLyrics)
+        {
+            return string.Empty;
+        }
+
+        var text = request.Lyrics.Trim();
+        return text.Length > MusicGenerationRules.MaxLyricsCharacters ? text[..MusicGenerationRules.MaxLyricsCharacters] : text;
+    }
+
     /// <summary>The name of a piece without one: the prompt's first words.</summary>
     public static string TitleOf(string prompt)
     {
@@ -86,7 +102,8 @@ public sealed class MusicMaker(IMusicGenerators generators, IMusicPieceRunner pi
             logger.LogInformation("Music page: {Model}, {Seconds} s, {Bpm} bpm, {Words}, seed {Seed}", ModelBase.KeyOf(request.Model), seconds,
                 bpm?.ToString(CultureInfo.InvariantCulture) ?? "-", request.Instrumental ? "instrumental" : "with words", seed);
             progress?.Report("generate");
-            var piece = new MusicGenerationRequest(resolved, prompt, seconds, bpm, request.Instrumental, output, seed);
+            var lyrics = Lyrics(request);
+            var piece = new MusicGenerationRequest(resolved, prompt, seconds, bpm, request.Instrumental, output, seed, lyrics);
             var made = await GenerateAsync(generator, piece, request.Prompt.Trim(), usd, cancellationToken).ConfigureAwait(false);
             progress?.Report("save");
             var title = request.Title.Trim().Length > 0 ? request.Title.Trim() : TitleOf(request.Prompt);

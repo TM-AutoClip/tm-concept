@@ -22,8 +22,11 @@ public sealed class PythonEnvironmentComponent(PythonEnvironment environment, Py
     /// <inheritdoc />
     public IReadOnlyList<string> DependsOn { get; } = [ComponentCodes.Python];
 
-    /// <inheritdoc />
-    public bool Supported => true;
+    /// <summary>
+    /// Supported when a lock is shipped for the build this computer gets: a card-only environment (no processor lock shipped, 28 Nov 2026: the
+    /// local music models) only with a usable NVIDIA card.
+    /// </summary>
+    public bool Supported => PythonFiles.HasLock(environment, installer.Backend(environment));
 
     /// <inheritdoc />
     public bool Ready => installer.EnvironmentReady(environment);
@@ -36,9 +39,9 @@ public sealed class PythonEnvironmentComponent(PythonEnvironment environment, Py
             return [];
         }
 
-        var cuda = installer.Backend(environment) == PythonPins.CudaBackend;
-        return [new ComponentDownload(Name + (cuda ? " (PyTorch for NVIDIA CUDA 12.8; large)" : " (PyTorch for the processor)"), "download.pytorch.org, pypi.org",
-            cuda ? environment.CudaBytes : environment.CpuBytes)];
+        var cuda = installer.Backend(environment) == environment.CudaBackend;
+        return [new ComponentDownload(Name + (cuda ? $" (PyTorch for NVIDIA CUDA {PythonInstaller.CudaVersion(environment.CudaBackend)}; large)" : " (PyTorch for the processor)"),
+            "download.pytorch.org, pypi.org", cuda ? environment.CudaBytes : environment.CpuBytes)];
     }
 
     /// <inheritdoc />

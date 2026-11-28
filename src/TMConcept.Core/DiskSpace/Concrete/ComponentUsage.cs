@@ -22,7 +22,8 @@ public sealed class ComponentUsage(IProfileStore profiles, IStepModelStore steps
     /// (0.1.45: templates choose it, and a template is not a profile's step; "Clean up unused" never takes it, it is removed on its own), and
     /// the local music model for the same reason (0.1.46), and whisper.cpp with its model, which every video's subtitles use once installed
     /// (0.1.48), and yt-dlp, which a template's reference video measure uses (0.1.52), and the composed music's synthesizer with its SoundFont,
-    /// for the same reason as the local music model (0.1.55).
+    /// for the same reason as the local music model (0.1.55). Every other local music model (<see cref="ComponentCodes.MusicModelPrefix"/>,
+    /// 28 Nov 2026: the families of LocalMusicFamilies.All, MusicGen to YuE) is kept the same way, with its environment and source through their dependencies.
     /// </summary>
     public static readonly IReadOnlyList<string> FixedNeeds = [ComponentCodes.Ffmpeg, ComponentCodes.MusicLibrary, ComponentCodes.MusicModel,
         ComponentCodes.SpeechRecognizer, ComponentCodes.RecognizerModel, ComponentCodes.VideoDownloader, ComponentCodes.MusicSynth,
@@ -32,7 +33,7 @@ public sealed class ComponentUsage(IProfileStore profiles, IStepModelStore steps
     public async Task<UsageMap> ComputeAsync(CancellationToken cancellationToken)
     {
         var direct = new Dictionary<string, List<DiskUse>>(StringComparer.Ordinal);
-        foreach (var code in FixedNeeds)
+        foreach (var code in FixedNeeds.Concat(planner.All.Select(c => c.Code).Where(c => c.StartsWith(ComponentCodes.MusicModelPrefix, StringComparison.Ordinal))))
         {
             Add(direct, code, new DiskUse(string.Empty, string.Empty));
         }

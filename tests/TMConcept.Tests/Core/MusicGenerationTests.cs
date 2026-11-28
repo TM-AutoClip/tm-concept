@@ -116,7 +116,9 @@ public sealed class MusicGenerationTests : IDisposable
         var catalog = new EmbeddedModelCatalog();
         var music = catalog.All.Where(m => m.Capabilities.HasFlag(ModelCapability.Music)).ToDictionary(m => ModelBase.KeyOf(m));
 
-        music.Keys.ShouldBe(["local/ace-step-1.5", "local/program-score", "google/lyria-3-clip-preview", "google/lyria-3.5", "elevenlabs/music_v1"],
+        // 28 Nov 2026: the MusicGen, MAGNeT and AudioLDM 2 families as well (one catalog row per pinned model, LocalMusicTests).
+        var families = TMConcept.Speech.Music.LocalMusicFamilies.All.SelectMany(f => f.Variants).Select(v => "local/" + v.Id);
+        music.Keys.ShouldBe(["local/ace-step-1.5", "local/program-score", "google/lyria-3-clip-preview", "google/lyria-3.5", "elevenlabs/music_v1", .. families],
             ignoreOrder: true);
         music["google/lyria-3-clip-preview"].MusicUsdPerPiece.ShouldBe(0.04m);
         music["google/lyria-3-clip-preview"].MusicSeconds.ShouldBe(30);

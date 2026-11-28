@@ -19,6 +19,12 @@ public static class PythonPins
     /// <summary>PyTorch with CUDA 12.8 (NVIDIA cards of compute capability 7.0 or higher, GTX 16 / RTX 20 to RTX 50: PyTorch 2.8 dropped Maxwell and Pascal from this build; needs an NVIDIA driver of 570 or newer; see SpeechDevices).</summary>
     public const string CudaBackend = "cu128";
 
+    /// <summary>PyTorch with CUDA 12.4 (28 Nov 2026: DiffRhythm, SongGeneration and YuE 1 pin PyTorch 2.6.0, built for it).</summary>
+    public const string Cuda124Backend = "cu124";
+
+    /// <summary>PyTorch with CUDA 12.1 (28 Nov 2026: MAGNeT's audiocraft needs PyTorch 2.1.0 with xformers 0.0.22.post7, built for it).</summary>
+    public const string Cuda121Backend = "cu121";
+
     /// <summary>PyTorch for the processor (AMD, Intel or no graphics card).</summary>
     public const string CpuBackend = "cpu";
 

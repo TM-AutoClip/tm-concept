@@ -508,6 +508,17 @@ Bir şablonla (Ayarlar → Şablonlar) üretilen video, modelin iyi niyetine kal
   *Üret (çevrimiçi)* Gemini anahtarınla Google Lyria 3 Clip (30 sn'lik parça $0,04) ya da Lyria 3.5 (şarkı başı $0,08), ElevenLabs
   anahtarınla Eleven Music (dakikası $0,15) kullanır. Parça seslendirmeden sonra sahne planının müzik ipuçlarıyla, sözsüz üretilir; videodan
   kısaysa döngüyle uzar, tahminde ve ücret ayrıntılarında sayılır ve videoyla saklanır: yeni sürüm onu yeniden üretmez.
+- **Yeni yerel müzik modelleri (28 Kas 2026):** MusicGen (10 model, en çok 30 sn), MAGNeT (4 müzik, 2 ses efekti modeli; 10 ya da 30 sn) ve
+  AudioLDM 2 (3 model, en çok 30 sn); hepsi NVIDIA kartlar için (küçükler ve AudioLDM 2 4-6 GB, MusicGen medium ve melody 8 GB,
+  MusicGen large 12 GB, MAGNeT medium 16 GB). Ağırlıkları **ticari kullanıma kapalı** (CC BY-NC 4.0, AudioLDM 2
+  CC BY-NC-SA 4.0): her biri turuncu etiket taşır ve ilk kullanımdan önce bir kez sorar. Her biri ekran kartı sınıfını gösterir; kartının
+  sınıfından büyük olan kırmızıdır ("bu kart çalıştıramaz") ama yine de denenebilir. Her aile kendi Python ortamını, her model kendi
+  ağırlıklarını yalnız onayladıktan sonra kurar.
+- **Bütün şarkı yapan yerel modeller (28 Kas 2026):** DiffRhythm 1.2 ve 1.0 (yalnız sözsüz; 95 sn ya da daha uzun parçalar; 8 GB kartlar,
+  tam modeller 12 GB; MuQ-MuLan metin kodlayıcısı yüzünden ticari kullanıma kapalı), SongGeneration / LeVo (6 model; Tencent'in ticari
+  olmayan lisansı; 10-22 GB kartlar), YuE2 3B (ticari kullanıma kapalı; 24 GB, düşük bellek kipinde 8 GB) ve YuE 1 (Apache-2.0: 24 GB
+  kartlar için 7B, 6 GB kartlar için onun exllamav2 ile küçültülmüş hâli ve 8 GB kartlar için 0.5B). Bir parça en çok 2 dakikadır. SongGeneration ve YuE senin sözlerini söyler: "Sözsüz" kapalıyken müzik sayfasında onlar için
+  şarkı sözü alanı çıkar. Hepsi NVIDIA kartlar için, yalnız onayladıktan sonra kurulur.
 - **Müzik üret sayfası (0.1.54):** ne istediğini kendi sözlerinle yaz ("antik Mısır'da disko"), istersen bir referans ses seç (program
   temposunu ölçer ve o tempoyu ister; modellerin hiçbiri sesi doğrudan almaz), yerel ya da çevrimiçi müzik modelini seç (yukarıdakilerin
   aynısı, fiyatlarıyla) ve parçayı üret. Parça **Müziklerim**'e eklenir; kendi ses dosyalarını da oraya ekleyebilirsin. Videonun müzik
@@ -657,6 +668,12 @@ program açılmayı reddeder.
   (SDXL VAE'si MIT); **FLUX.2 klein 9B ve Qwen-Image 2.1 (Qwen Research Lisansı) ticari kullanıma kapalı**; FLUX.3 Image Klein (FLUX Kommunity Lisansı), Stable Diffusion 3.5 Medium
   (Stability AI Topluluk Lisansı) ve SDXL Lightning (OpenRAIL++) koşullu; stable-diffusion.cpp MIT. Yalnız onayından sonra (koşullu
   lisanslarda lisansı da kabul edince) Hugging Face / GitHub'dan indirilir.
+- **Yerel müzik modelleri**: ACE-Step 1.5 (MIT) ve **YuE 1** (Apache-2.0) ticari kullanıma açık. **MusicGen ve MAGNeT** (CC BY-NC 4.0),
+  **AudioLDM 2** (CC BY-NC-SA 4.0), **DiffRhythm** (kendi ağırlıkları Apache-2.0, ama MuQ-MuLan ile çalışır, CC BY-NC 4.0),
+  **SongGeneration / LeVo** (Tencent'in License Terms of SongGeneration'ı: yalnız akademik, araştırma ve eğitim amaçlı) ve **YuE2** (CC BY-NC
+  4.0; M-A-P bireysel üreticilerin şarkılarından kazanmasına izin verir, şirketlerin lisans alması gerekir) **ticari kullanıma kapalı**: her
+  biri turuncu etiket taşır ve bir kez sorar. DiffRhythm'in VAE'si Stability AI Community License altında: yayımlarken "Powered by Stability
+  AI" diye belirt.
 
 Ayrıntı: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 

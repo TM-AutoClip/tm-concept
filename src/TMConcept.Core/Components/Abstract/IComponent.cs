@@ -31,6 +31,13 @@ public interface IComponent
     IReadOnlyList<string> Folders();
 
     /// <summary>
+    /// The folders of files it uses together with other components (28 Nov 2026: a local music family's shared model files, such as MAGNeT's
+    /// T5 or DiffRhythm's VAE, and the folder its libraries write to): never taken by its Remove (another component still needs them) and never
+    /// a leftover while a component names them. Empty by default.
+    /// </summary>
+    IReadOnlyList<string> SharedFolders() => [];
+
+    /// <summary>
     /// Whether an install of this app left it on disk, ready or not, in this version or an earlier one (a new app version may pin a newer
     /// download in a new folder): an update after a new app version installs again exactly these (with what <see cref="IInstallRecord"/>
     /// says). By default: one of its folders holds a finished file (<see cref="ComponentFolders.HasContent"/>; an empty folder or one with

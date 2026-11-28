@@ -60,7 +60,18 @@ public sealed partial class MusicViewModel(IVideoMediaServices services, IMusicM
 
     /// <summary>Without words (the default: it lies under a narration).</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowLyrics))]
     public partial bool Instrumental { get; set; } = true;
+
+    /// <summary>The words to sing (28 Nov 2026; only a model that sings them takes them, <see cref="ShowLyrics"/>).</summary>
+    [ObservableProperty]
+    public partial string Lyrics { get; set; } = string.Empty;
+
+    /// <summary>The lyrics field is shown: the chosen model sings words (SongGeneration, YuE) and "Instrumental" is off.</summary>
+    public bool ShowLyrics => !Instrumental && Model?.Model.MusicLyrics == true;
+
+    /// <summary>The most characters of a song's words.</summary>
+    public int MaxLyricsCharacters => MusicGenerationRules.MaxLyricsCharacters;
 
     /// <summary>The reference sound (full path; empty = none).</summary>
     [ObservableProperty]
@@ -78,7 +89,7 @@ public sealed partial class MusicViewModel(IVideoMediaServices services, IMusicM
 
     /// <summary>The chosen model.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(EstimateText), nameof(CardWarning))]
+    [NotifyPropertyChangedFor(nameof(EstimateText), nameof(CardWarning), nameof(ShowLyrics))]
     [NotifyCanExecuteChangedFor(nameof(GenerateCommand))]
     public partial MusicModelChoice? Model { get; set; }
 
@@ -181,7 +192,7 @@ public sealed partial class MusicViewModel(IVideoMediaServices services, IMusicM
 
             Status = text["music.stage.generate"];
             var request = new MusicMakeRequest(choice.Model, Prompt, (int)(Seconds ?? MusicGenerationRules.DefaultSeconds), Instrumental,
-                HasReference ? ReferenceFile : null, PieceTitle);
+                HasReference ? ReferenceFile : null, PieceTitle, ShowLyrics ? Lyrics : string.Empty);
             var entry = await Task.Run(() => maker.MakeAsync(request, progress, token), token).ConfigureAwait(true);
             Status = entry.Usd > 0 ? text.Format("music.made.paid", entry.Track.Title, text.Usd(entry.Usd)) : text.Format("music.made", entry.Track.Title);
             activity.Add(ActivityLevel.Info, Status);
@@ -289,8 +300,9 @@ public sealed partial class MusicViewModel(IVideoMediaServices services, IMusicM
         foreach (var model in _generators.Models)
         {
             var ready = _generators.Ready(model);
+            var tooBig = LocalMusicSupport.TooBig(model, _generators.Card);
             Models.Add(new MusicModelChoice(ModelBase.KeyOf(model), labels.ModelLabel(model, ready, _generators.Card), model,
-                model.Provider == ModelProviders.Local, ready));
+                model.Provider == ModelProviders.Local, ready, tooBig, !tooBig && model.LicenseUse == LicenseUse.NonCommercial));
         }
 
         Model = Models.FirstOrDefault(m => m.Key == chosen) ?? Models.FirstOrDefault(m => m.Ready) ?? Models.FirstOrDefault();

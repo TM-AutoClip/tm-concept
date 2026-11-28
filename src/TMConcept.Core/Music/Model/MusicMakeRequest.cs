@@ -11,4 +11,6 @@ namespace TMConcept.Core.Music;
 /// <param name="Instrumental">Without words.</param>
 /// <param name="ReferenceFile">A sound whose tempo the piece follows; null = none.</param>
 /// <param name="Title">The piece's name in "Müziklerim" (empty = from the prompt).</param>
-public sealed record MusicMakeRequest(Models.CatalogModel Model, string Prompt, int Seconds, bool Instrumental, string? ReferenceFile, string Title);
+/// <param name="Lyrics">The words to sing (28 Nov 2026, a model that sings them and "Instrumental" off); empty = none.</param>
+public sealed record MusicMakeRequest(Models.CatalogModel Model, string Prompt, int Seconds, bool Instrumental, string? ReferenceFile, string Title,
+    string Lyrics = "");

@@ -23,10 +23,20 @@ public sealed class MusicChoiceText(Localizer text) : IMusicChoiceText
         var label = model.Name + (ready ? string.Empty : " · " + text["models.not_installed"]);
         if (LocalMusicSupport.NeedsCard(model))
         {
-            label += (card.NvidiaOnly ? " " + text["style.music.generatelocal.nvidia_only"] : string.Empty)
+            // 28 Nov 2026: its card class like every other local model, red "this card cannot run it" above this card's class.
+            label += " · " + text.Format("models.tier", model.MinVideoMemoryGb)
+                + (LocalMusicSupport.TooBig(model, card) ? " · " + text["models.tier.too_big"] : string.Empty)
+                + (card.NvidiaOnly ? " " + text["style.music.generatelocal.nvidia_only"] : string.Empty)
                 + (card.Linux ? " " + text["style.music.generatelocal.unverified"] : string.Empty);
         }
 
+        // The licence badge of the model pickers (orange for non-commercial, rule 19; asked once before the first use).
+        label += model.LicenseUse switch
+        {
+            LicenseUse.NonCommercial => " · " + text["models.license.badge.noncommercial"],
+            LicenseUse.Limited => " · " + text["models.license.badge.limited"],
+            _ => string.Empty,
+        };
         return label;
     }
 
@@ -43,6 +53,7 @@ public sealed class MusicChoiceText(Localizer text) : IMusicChoiceText
         return string.Join(" ", new[]
         {
             card.NvidiaOnly ? text["styles.music.generate.nvidia_warning"] : string.Empty,
+            LocalMusicSupport.TooBig(model, card) ? text.Format("styles.music.generate.too_big", model.MinVideoMemoryGb, (int)card.Tier) : string.Empty,
             card.Linux ? text["styles.music.generate.linux"] : string.Empty,
         }.Where(p => p.Length > 0));
     }

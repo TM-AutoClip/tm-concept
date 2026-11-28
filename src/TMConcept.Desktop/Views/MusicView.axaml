@@ -20,7 +20,7 @@
             <ComboBox Name="MusicModel" ItemsSource="{Binding Models}" SelectedItem="{Binding Model}" MinWidth="320" IsEnabled="{Binding Idle}">
               <ComboBox.ItemTemplate>
                 <DataTemplate x:DataType="vm:MusicModelChoice">
-                  <TextBlock Text="{Binding Label}" />
+                  <TextBlock Text="{Binding Label}" Classes.error="{Binding IsError}" Classes.caution="{Binding IsCaution}" />
                 </DataTemplate>
               </ComboBox.ItemTemplate>
             </ComboBox>
@@ -45,6 +45,15 @@
           <TextBox Name="MusicTitle" Grid.Row="3" Grid.Column="1" Text="{Binding PieceTitle}" MaxLength="80" MaxWidth="360" HorizontalAlignment="Left" MinWidth="260"
                    PlaceholderText="{DynamicResource music.title.hint}" IsEnabled="{Binding Idle}" />
         </Grid>
+        <!-- 28 Nov 2026: the words of a model that sings them (SongGeneration, YuE), only with "Instrumental" off. -->
+        <StackPanel Spacing="4" IsVisible="{Binding ShowLyrics}">
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Text="{DynamicResource music.lyrics}" VerticalAlignment="Center" />
+            <views:HelpTip Text="{DynamicResource music.lyrics.tip}" />
+          </StackPanel>
+          <TextBox Name="MusicLyrics" Text="{Binding Lyrics}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="120" MaxLength="{Binding MaxLyricsCharacters}"
+                   PlaceholderText="{DynamicResource music.lyrics.hint}" IsEnabled="{Binding Idle}" />
+        </StackPanel>
         <TextBlock Name="MusicCardWarning" Text="{Binding CardWarning}" Classes="small warning" TextWrapping="Wrap"
                    IsVisible="{Binding CardWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
         <StackPanel Orientation="Horizontal" Spacing="8">

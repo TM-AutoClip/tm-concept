@@ -319,7 +319,8 @@ public sealed partial class VideoMediaViewModel : ObservableObject, IDisposable
     private List<MusicModelOption> Options(bool local) => _generators is not { } services
         ? []
         : services.Models.Where(m => (m.Provider == ModelProviders.Local) == local)
-            .Select(m => new MusicModelOption(ModelBase.KeyOf(m), _labels.ModelLabel(m, services.Ready(m), services.Card))).ToList();
+            .Select(m => new MusicModelOption(ModelBase.KeyOf(m), _labels.ModelLabel(m, services.Ready(m), services.Card), LocalMusicSupport.TooBig(m, services.Card),
+                !LocalMusicSupport.TooBig(m, services.Card) && m.LicenseUse == LicenseUse.NonCommercial)).ToList();
 
     private async Task<IReadOnlyList<MusicTrackOption>> ReadMineAsync()
     {

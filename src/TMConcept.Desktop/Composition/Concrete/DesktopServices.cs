@@ -94,6 +94,20 @@ public static class DesktopServices
         services.AddSingleton<Core.Components.IComponentSource, Speech.Music.MusicComponentSource>();
         services.AddSingleton<ILocalModelSource, Speech.Music.MusicModelSource>();
         services.AddSingleton<Core.Music.IMusicGenerator, Speech.Music.RakkaseMusicGenerator>();
+        // 28 Nov 2026: the MusicGen, MAGNeT, AudioLDM 2, DiffRhythm, SongGeneration and YuE families (most with non-commercial weights: the orange warning and a one-time question;
+        // each family its own Python environment, each model its own weights component, all installed only after a yes).
+        services.AddSingleton<Speech.Music.LocalMusicLayout>();
+        services.AddSingleton<Speech.Music.LocalMusicStore>();
+        services.AddSingleton<Core.Components.IComponentSource, Speech.Music.LocalMusicComponentSource>();
+        services.AddSingleton<Core.Music.IMusicGenerator, Speech.Music.MusicGenGenerator>();
+        services.AddSingleton<Core.Music.IMusicGenerator, Speech.Music.MagnetGenerator>();
+        services.AddSingleton<Core.Music.IMusicGenerator, Speech.Music.AudioLdm2Generator>();
+        // DiffRhythm 1.2 and 1.0 (instrumental), SongGeneration, YuE2 and YuE 1 (these sing the user's words; YuE 1 is Apache-2.0).
+        services.AddSingleton<Core.Music.IMusicGenerator, Speech.Music.DiffRhythmGenerator>();
+        services.AddSingleton<Core.Music.IMusicGenerator, Speech.Music.DiffRhythmLegacyGenerator>();
+        services.AddSingleton<Core.Music.IMusicGenerator, Speech.Music.SongGenerationGenerator>();
+        services.AddSingleton<Core.Music.IMusicGenerator, Speech.Music.Yue2Generator>();
+        services.AddSingleton<Core.Music.IMusicGenerator, Speech.Music.YueGenerator>();
 
         // "Program composes" (0.1.55): the app's own composer, played by spessasynth_core with the MuseScore General SoundFont on the processor.
         services.AddSingleton<Engines.Music.ISoundFontStore, Engines.Music.SoundFontStore>();

@@ -14,4 +14,9 @@ namespace TMConcept.Core.Music;
 /// <param name="Instrumental">Without words (the default: nothing sings over the narration).</param>
 /// <param name="OutputFolder">An empty folder the piece is written into.</param>
 /// <param name="Seed">The seed.</param>
-public sealed record MusicGenerationRequest(ResolvedModel Model, string Prompt, int Seconds, int? Bpm, bool Instrumental, string OutputFolder, int Seed);
+/// <param name="Lyrics">
+/// The words to sing, as the user wrote them (28 Nov 2026, only a model that sings them: <see cref="CatalogModel.MusicLyrics"/>); empty =
+/// none (an instrumental piece).
+/// </param>
+public sealed record MusicGenerationRequest(ResolvedModel Model, string Prompt, int Seconds, int? Bpm, bool Instrumental, string OutputFolder, int Seed,
+    string Lyrics = "");

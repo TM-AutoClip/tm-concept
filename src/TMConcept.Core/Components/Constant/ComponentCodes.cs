@@ -54,11 +54,21 @@ public static class ComponentCodes
     /// </summary>
     public const string MusicEnvironment = PythonEnvironmentPrefix + "ace-step";
 
-    /// <summary>Prefix of local music model weight components ("music.ace-step-1.5").</summary>
+    /// <summary>
+    /// Prefix of local music model weight components ("music.ace-step-1.5", "music.musicgen-small": 28 Nov 2026, one per catalog model of
+    /// the MusicGen, MAGNeT, AudioLDM 2, DiffRhythm, SongGeneration, YuE2 and YuE families, each after its family's Python environment).
+    /// </summary>
     public const string MusicModelPrefix = "music.";
 
     /// <summary>The weights of ACE-Step 1.5 with its Qwen3-Embedding text encoder (0.1.46, C5; about 6 GB, each file pinned by its SHA-256).</summary>
     public const string MusicModel = MusicModelPrefix + "ace-step-1.5";
+
+    /// <summary>
+    /// Prefix of a local music family's source code component (28 Nov 2026: "music-code.audiocraft", Meta's audiocraft at a pinned commit, which
+    /// MAGNeT runs from; also DiffRhythm's two commits, SongGeneration, YuE2 and YuE-exllamav2; each a GitHub source archive pinned by its
+    /// SHA-256, never installed as a package).
+    /// </summary>
+    public const string MusicCodePrefix = "music-code.";
 
     /// <summary>
     /// The synthesizer of the app's own composed music (0.1.55, "Program composes"): spessasynth_core (Apache-2.0) as pinned npm packages, run

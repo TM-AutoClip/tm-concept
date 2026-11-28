@@ -63,7 +63,8 @@ public sealed class LeftoverDiskSource(AppPaths paths, PythonLayout python, Comp
 
         yield return Folder(DiskSelection.AppModelLeftoversKey, "storage.item.app_model_leftovers", DiskArea.Models, appModels.UnreferencedBlobs(), true);
 
-        var owned = planner.All.SelectMany(c => c.Folders()).Concat(helpers).Append(downloads).Select(Full).ToList();
+        // A folder several components share (a local music family's shared model files) is owned while one of them names it.
+        var owned = planner.All.SelectMany(c => c.Folders().Concat(c.SharedFolders())).Concat(helpers).Append(downloads).Select(Full).ToList();
         var unowned = Unowned(tools, owned).ToList();
         // An image model folder this process has no catalog entry for is not a leftover: a newer version or a remote catalog entry this copy
         // refused (newer minApp, newer stable-diffusion.cpp, a damaged kept copy) installed it, and it is gigabytes to download again. It is
