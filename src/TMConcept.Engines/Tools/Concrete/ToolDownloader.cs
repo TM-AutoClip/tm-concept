@@ -14,7 +14,7 @@ namespace TMConcept.Engines.Tools;
 /// <para>
 /// A bad network does not end the install at the first error (0.1.16 did, and every failure started a 12 GB model from zero): each file gets
 /// <see cref="DownloadPolicy.Attempts"/> tries with a growing pause; the received part is kept in <c>&lt;file&gt;.part</c> and the next try
-/// (also the next install, days later) continues from its end with an HTTP Range request (its bytes are hashed again first, so the final
+/// of the same download continues from its end (28 Nov 2026: a later install deletes the half file first and downloads it again) with an HTTP Range request (its bytes are hashed again first, so the final
 /// check covers the whole file; a server that ignores the range sends the whole file and the part starts again). A try ends when no data
 /// arrives for <see cref="DownloadPolicy.ReadTimeout"/>, never because the whole file takes long. What finally failed says why
 /// (<see cref="ToolInstallException.Code"/> "tls", "dns", "connection", "timeout" with the system's own reason in
@@ -60,8 +60,9 @@ public sealed class ToolDownloader : IArchiveDownloader, IDisposable
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                // The user's cancel: the part stays for the next install.
-                _logger.LogInformation("{Tool} {Version}: download cancelled; the part received so far is kept", archive.Tool, archive.Version);
+                // The user's cancel: the half file stays until the next install or start deletes it and downloads it again.
+                _logger.LogInformation("{Tool} {Version}: download cancelled; the next install deletes the part received so far and downloads it again",
+                    archive.Tool, archive.Version);
                 throw;
             }
             catch (IOException ex) when (DiskFull(ex))

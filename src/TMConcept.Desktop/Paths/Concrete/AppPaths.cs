@@ -61,6 +61,12 @@ public sealed class AppPaths : IAppPaths
     /// <summary>What this app installed and with which app version (outside the components folder, so it outlives a reinstall).</summary>
     public string InstalledComponentsFile => Path.Combine(DataDirectory, "installed-components.json");
 
+    /// <summary>
+    /// The component installs that began and were not verified as finished (28 Nov 2026; outside the components folder, so it outlives
+    /// "Reinstall from scratch", which deletes that folder first).
+    /// </summary>
+    public string InstallJournalFile => Path.Combine(DataDirectory, "install-journal.json");
+
     /// <summary>The last look for a newer app version (once a day at most; what was found and the notes).</summary>
     public string UpdateCheckFile => Path.Combine(DataDirectory, "update-check.json");
 }

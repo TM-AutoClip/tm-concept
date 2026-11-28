@@ -5,11 +5,20 @@ namespace TMConcept.Core.DiskSpace;
 /// <inheritdoc cref="ILeftoverSweep" />
 public sealed partial class LeftoverSweep : ILeftoverSweep
 {
-    /// <summary>The start of the name an old components folder gets while a reinstall installs into a new one.</summary>
+    /// <summary>The start of the name an old components folder got while a reinstall of a version up to 0.1.56 installed into a new one.</summary>
     public const string OldInfix = ".old-";
 
-    /// <summary>The start of the name a new components folder gets when its install did not finish and the old one went back.</summary>
+    /// <summary>The start of the name a new components folder got (up to 0.1.56) when its install did not finish and the old one went back.</summary>
     public const string FailedInfix = ".failed-";
+
+    /// <summary>The start of the name an even older version gave the components folder it set aside during a reinstall.</summary>
+    public const string AsideInfix = ".aside-";
+
+    /// <summary>The end of the name of the marker file a reinstall of a version up to 0.1.56 kept next to <c>tools</c>.</summary>
+    public const string ReinstallMarkerSuffix = ".reinstalling";
+
+    /// <summary>The end of the name of a folder an archive is unpacked into before it is moved into place.</summary>
+    public const string UnpackSuffix = ".unpack";
 
     /// <summary>The engines' folder inside <c>tools</c>.</summary>
     public const string EnginesFolder = "engines";
@@ -18,15 +27,10 @@ public sealed partial class LeftoverSweep : ILeftoverSweep
     public const string TempFolder = "tmp";
 
     /// <inheritdoc />
-    public IReadOnlyList<string> OldComponentFolders(string tools, IEnumerable<string> folders, bool reinstalling, bool toolsPresent)
+    public IReadOnlyList<string> OldComponentFolders(string tools, IEnumerable<string> folders)
     {
         ArgumentException.ThrowIfNullOrEmpty(tools);
         ArgumentNullException.ThrowIfNull(folders);
-        if (reinstalling || !toolsPresent)
-        {
-            return [];
-        }
-
         var root = Full(tools);
         var parent = Path.GetDirectoryName(root);
         if (parent is null)
@@ -36,6 +40,25 @@ public sealed partial class LeftoverSweep : ILeftoverSweep
 
         var name = Path.GetFileName(root);
         return folders.Select(Full).Where(f => Same(Path.GetDirectoryName(f), parent) && Matches(name, Path.GetFileName(f)))
+            .Distinct(Comparer).Order(StringComparer.Ordinal).ToList();
+    }
+
+    /// <inheritdoc />
+    public string OldReinstallMarker(string tools)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(tools);
+        return Full(tools) + ReinstallMarkerSuffix;
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> Stagings(string tools, IEnumerable<string> folders)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(tools);
+        ArgumentNullException.ThrowIfNull(folders);
+        var root = Full(tools);
+        var downloads = Path.Combine(root, Components.ComponentFolders.DownloadsFolder);
+        return folders.Select(Full).Where(f => Same(f, downloads)
+                || (Paths.LibraryPaths.Inside(f, root) && Path.GetFileName(f).EndsWith(UnpackSuffix, Comparison) && Path.GetFileName(f).Length > UnpackSuffix.Length))
             .Distinct(Comparer).Order(StringComparer.Ordinal).ToList();
     }
 
@@ -61,7 +84,10 @@ public sealed partial class LeftoverSweep : ILeftoverSweep
             .Distinct(Comparer).Order(StringComparer.Ordinal).ToList();
     }
 
-    /// <summary>Whether <paramref name="folder"/> is exactly <paramref name="tools"/> + <c>.old-</c>/<c>.failed-</c> + a <c>yyyyMMdd-HHmmss</c> stamp.</summary>
+    /// <summary>
+    /// Whether <paramref name="folder"/> is exactly <paramref name="tools"/> + <c>.old-</c>/<c>.failed-</c>/<c>.aside-</c> + a
+    /// <c>yyyyMMdd-HHmmss</c> stamp.
+    /// </summary>
     public static bool Matches(string tools, string folder)
     {
         ArgumentNullException.ThrowIfNull(tools);
@@ -72,10 +98,10 @@ public sealed partial class LeftoverSweep : ILeftoverSweep
         }
 
         var suffix = folder[tools.Length..];
-        return (suffix.StartsWith(OldInfix, StringComparison.Ordinal) || suffix.StartsWith(FailedInfix, StringComparison.Ordinal)) && Stamped().IsMatch(suffix);
+        return Stamped().IsMatch(suffix);
     }
 
-    [GeneratedRegex(@"^\.(old|failed)-[0-9]{8}-[0-9]{6}$", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"^\.(old|failed|aside)-[0-9]{8}-[0-9]{6}$", RegexOptions.CultureInvariant)]
     private static partial Regex Stamped();
 
     private static StringComparison Comparison => OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;

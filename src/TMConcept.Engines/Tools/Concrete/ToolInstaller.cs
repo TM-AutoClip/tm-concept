@@ -41,6 +41,12 @@ public sealed class ToolInstaller(IAppPaths paths, IToolPlatform platform, ToolD
     /// <summary>A tool's own folder (<c>tools/&lt;name&gt;</c>) that holds its versions and its markers.</summary>
     public string ToolRoot(ToolKind tool) => Path.Combine(paths.ToolsDirectory, Name(tool));
 
+    /// <summary>
+    /// Where a tool's pinned archive is downloaded (<c>tools/downloads/&lt;file&gt;</c>, with <c>.part</c> while unfinished); null when this
+    /// computer has no download for it.
+    /// </summary>
+    public string? DownloadFile(ToolKind tool) => Archive(tool) is { } archive ? DownloadFile(archive) : null;
+
     /// <summary>The folder a tool's pinned version is installed into.</summary>
     public string InstallFolder(ToolKind tool) => Archive(tool) is { } archive ? Folder(archive) : Path.Combine(paths.ToolsDirectory, Name(tool));
 
@@ -118,10 +124,9 @@ public sealed class ToolInstaller(IAppPaths paths, IToolPlatform platform, ToolD
     private async Task<ToolStatus> InstallLockedAsync(ToolKind tool, ToolArchive archive, IProgress<ToolProgress>? progress, CancellationToken cancellationToken)
     {
         var folder = Folder(archive);
-        var download = Path.Combine(paths.ToolsDirectory, "downloads");
         var unpack = folder + ".unpack";
-        Directory.CreateDirectory(download);
-        var file = Path.Combine(download, archive.Url.Segments[^1]);
+        var file = DownloadFile(archive);
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
         try
         {
             try
@@ -259,6 +264,8 @@ public sealed class ToolInstaller(IAppPaths paths, IToolPlatform platform, ToolD
     };
 
     private string Folder(ToolArchive archive) => Path.Combine(paths.ToolsDirectory, Name(archive.Tool), archive.Version);
+
+    private string DownloadFile(ToolArchive archive) => Path.Combine(paths.ToolsDirectory, Core.Components.ComponentFolders.DownloadsFolder, archive.Url.Segments[^1]);
 
     private string Executable(ToolArchive archive) => Path.Combine(Folder(archive), archive.Root, archive.ExecutablePath);
 

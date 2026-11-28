@@ -10,6 +10,12 @@ public static class ComponentFolders
     /// <summary>The extension of an unfinished download.</summary>
     public const string PartExtension = ".part";
 
+    /// <summary>
+    /// The folder inside <c>tools</c> where the archives of the installers are downloaded (and kept as <c>.part</c> while unfinished). Nothing
+    /// in it is an install: an archive is unpacked into its component's folder.
+    /// </summary>
+    public const string DownloadsFolder = "downloads";
+
     /// <summary>Whether <paramref name="folder"/> exists and holds at least one finished file (in any sub folder).</summary>
     public static bool HasContent(string folder)
     {

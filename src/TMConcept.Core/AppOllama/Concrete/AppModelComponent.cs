@@ -12,8 +12,9 @@ namespace TMConcept.Core.AppOllama;
 /// component: only after the user confirmed the download list (Settings → Local AI, or a saved step choice that needs it), with the install
 /// window's progress and Cancel, recorded, listed and removed by the storage manager. It needs the app's Ollama program
 /// (<see cref="ComponentCodes.AppOllama"/>), which is installed first. Installing pulls the tag through the app's own server (started for
-/// it; never the user's Ollama); Ollama checks every layer's SHA-256 and keeps what it received, so a cancelled pull goes on from there the
-/// next time. Its "folders" are its manifest and the blobs no other model uses (<see cref="AppModelStore.OwnedPaths"/>).
+/// it; never the user's Ollama); Ollama checks every layer's SHA-256. Its "folders" are its manifest and the blobs no other model uses
+/// (<see cref="AppModelStore.OwnedPaths"/>). 28 Nov 2026: what a cancelled or cut-short pull received (<c>-partial</c> blobs) is deleted before
+/// the next install, which downloads the model again (<see cref="ReplacedPaths"/>).
 /// </summary>
 public sealed class AppModelComponent(AppModelInfo model, AppModelStore store, AppModelRegistry registry, IAppOllamaRuntime runtime, IAppOllamaServer server,
     IAppOllamaApi api, ILogger<AppModelComponent> logger) : IComponent
@@ -50,6 +51,13 @@ public sealed class AppModelComponent(AppModelInfo model, AppModelStore store, A
 
     /// <inheritdoc />
     public IReadOnlyList<string> Folders() => store.OwnedPaths(Model.Tag);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Its manifest and own blobs, and the received parts of unfinished pulls (a first pull cut short has no manifest yet, so its own files are
+    /// only these). One install runs at a time in the whole app, so no other pull is writing them.
+    /// </remarks>
+    public IReadOnlyList<string> ReplacedPaths() => [.. Folders(), .. store.PartialBlobs()];
 
     /// <inheritdoc />
     public Task RefreshAsync(CancellationToken cancellationToken)

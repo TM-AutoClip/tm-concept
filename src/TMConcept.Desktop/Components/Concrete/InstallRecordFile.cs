@@ -7,7 +7,7 @@ namespace TMConcept.Desktop.Components;
 
 /// <summary>
 /// <see cref="IInstallRecord"/> as <c>installed-components.json</c> in the data folder, next to the components folder and not inside it:
-/// "Reinstall from scratch" sets the components folder aside, a download may be declined or fail, and the record still says what to install
+/// "Reinstall from scratch" deletes the components folder first, a download may be declined or fail, and the record still says what to install
 /// again (with the app version each component was installed with), so the question after a new version comes back until it is done.
 /// </summary>
 public sealed class InstallRecordFile(AppPaths paths, string currentVersion, TimeProvider clock, ILogger<InstallRecordFile> logger) : IInstallRecord

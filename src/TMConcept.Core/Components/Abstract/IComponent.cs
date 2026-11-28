@@ -38,6 +38,17 @@ public interface IComponent
     IReadOnlyList<string> SharedFolders() => [];
 
     /// <summary>
+    /// The folders and files an install of it replaces (28 Nov 2026, the developer: "sıfırdan kur ve güncellerde modelleri silecek önce, kalıcı
+    /// tekte silecek, geri dönüşüm değil, sonra indirecek"): deleted for good right before its download starts, so an update never leaves the
+    /// old copy next to the new one and an unfinished install never resumes on half-written files. What another component names as its own or
+    /// shared folder stays (<see cref="ComponentPlanner"/>). By default <see cref="Folders"/>; a component whose new version goes into a new
+    /// folder names the folder of every version (and its download in the shared downloads folder), and one that is installed by another
+    /// component (the engines' browser) names nothing. The planner deletes nothing while <see cref="Downloads"/> is empty: a component that is
+    /// not ready only because a dependency is missing keeps its files (its install downloads none of them again).
+    /// </summary>
+    IReadOnlyList<string> ReplacedPaths() => Folders();
+
+    /// <summary>
     /// Whether an install of this app left it on disk, ready or not, in this version or an earlier one (a new app version may pin a newer
     /// download in a new folder): an update after a new app version installs again exactly these (with what <see cref="IInstallRecord"/>
     /// says). By default: one of its folders holds a finished file (<see cref="ComponentFolders.HasContent"/>; an empty folder or one with

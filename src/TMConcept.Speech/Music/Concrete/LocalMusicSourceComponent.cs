@@ -33,6 +33,10 @@ public sealed class LocalMusicSourceComponent(LocalMusicFamily family, string na
     public IReadOnlyList<string> Folders() => [layout.SourceFolder(family)];
 
     /// <inheritdoc />
+    /// <remarks>Its folder and the folder its source archive is downloaded and unpacked in (a half-finished archive is not resumed).</remarks>
+    public IReadOnlyList<string> ReplacedPaths() => [.. Folders(), layout.Downloads(family)];
+
+    /// <inheritdoc />
     public Task RefreshAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     /// <inheritdoc />

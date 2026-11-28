@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using TMConcept.Core.Components;
 using TMConcept.Core.Paths;
 using TMConcept.Core.Tools;
 
@@ -16,6 +17,16 @@ public sealed class SpeechModelInstaller(IAppPaths paths, IArchiveDownloader dow
         return Path.Combine(paths.ToolsDirectory, "speech", model.Tool.ToString().ToLowerInvariant(), model.Root);
     }
 
+    /// <summary>
+    /// Where the model's archive is downloaded to (the shared downloads folder; deleted after unpacking, a <c>.part</c> next to it while it
+    /// comes).
+    /// </summary>
+    public string DownloadFile(ToolArchive model)
+    {
+        ArgumentNullException.ThrowIfNull(model);
+        return Path.Combine(paths.ToolsDirectory, ComponentFolders.DownloadsFolder, model.Url.Segments[^1]);
+    }
+
     /// <summary>Whether the model is installed.</summary>
     public bool Ready(ToolArchive model) =>
         File.Exists(Path.Combine(Folder(model), model.ExecutablePath)) && File.Exists(Path.Combine(Path.GetDirectoryName(Folder(model))!, Marker));
@@ -31,9 +42,8 @@ public sealed class SpeechModelInstaller(IAppPaths paths, IArchiveDownloader dow
 
         var target = Path.GetDirectoryName(Folder(model))!;
         var unpack = target + ".unpack";
-        var download = Path.Combine(paths.ToolsDirectory, "downloads");
-        Directory.CreateDirectory(download);
-        var file = Path.Combine(download, model.Url.Segments[^1]);
+        var file = DownloadFile(model);
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
         try
         {
             await downloader.DownloadAsync(model, file, progress, cancellationToken).ConfigureAwait(false);

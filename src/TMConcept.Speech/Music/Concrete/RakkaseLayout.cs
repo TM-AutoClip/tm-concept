@@ -51,7 +51,7 @@ public sealed class RakkaseLayout(IAppPaths paths)
     public string WeightsMarker => Path.Combine(Checkpoints, Marker);
 
     /// <summary>The source archives while they are unpacked.</summary>
-    public string Downloads => Path.Combine(Root, "downloads");
+    public string Downloads => Path.Combine(Root, Core.Components.ComponentFolders.DownloadsFolder);
 
     /// <summary>The folder its libraries write their settings and caches to (instead of the user's home).</summary>
     public string Home => Path.Combine(Root, "home");

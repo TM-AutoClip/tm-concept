@@ -379,6 +379,20 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
             return;
         }
 
+        // 28 Nov 2026: an install or a "Reinstall from scratch" the previous run did not finish (closed, crashed) goes on first: the
+        // half-finished component's files are deleted for good and what is missing is downloaded again; the finished ones stay.
+        try
+        {
+            using (timer.Step("startup.install_resume"))
+            {
+                await services.GetRequiredService<Components.InstallResume>().RunAsync(CancellationToken.None).ConfigureAwait(true);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            logger.LogError(ex, "The unfinished component installs could not be resumed");
+        }
+
         // Another app version ran before: what to do with the installed components (update / reinstall / later). Only here, after the
         // first run or the unlock, in the main window; a failure is logged and shown, it never keeps the app from starting.
         try
@@ -393,8 +407,9 @@ public sealed class AppStartup(IServiceProvider services, Vault vault, Localizer
             logger.LogError(ex, "The components could not be checked after the version change");
         }
 
-        // 0.1.37: what a cut-short "Reinstall from scratch" left next to the components folder and the engines' leftover tmp folders, in the
-        // background (gigabytes take a while; the window never waits). After the version check, so the reinstall it may start has ended.
+        // 0.1.37: what an earlier version's "Reinstall from scratch" left next to the components folder, the staging folders of installs and
+        // the engines' leftover tmp folders, deleted without a question (28 Nov 2026), in the background (gigabytes take a while; the window
+        // never waits). After the version check, so the reinstall it may start has ended.
         var sweeper = services.GetRequiredService<DiskSpace.ILeftoverSweeper>();
         var swept = Task.Run(async () =>
         {

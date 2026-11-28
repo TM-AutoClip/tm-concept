@@ -252,6 +252,7 @@ public static class DesktopServices
         services.AddSingleton<IResidentModelSweep, Core.AppOllama.AppOllamaResidentSweep>();
         services.AddSingleton<Core.Components.IInstallRecord>(s => new Components.InstallRecordFile(paths, Logging.AppIdentity.ShortVersion,
             s.GetRequiredService<TimeProvider>(), s.GetRequiredService<ILogger<Components.InstallRecordFile>>()));
+        services.AddSingleton<Core.Components.IInstallJournal, Components.InstallJournalFile>();
         services.AddSingleton<Core.Components.ComponentPlanner>();
         services.AddSingleton<Components.ComponentInstallFlow>();
         services.AddSingleton<Components.IModelStartGate, Components.ModelStartGate>();
@@ -453,6 +454,7 @@ public static class DesktopServices
         services.AddSingleton<Dialogs.IAppUpdateDialog, Dialogs.AppUpdateDialog>();
         services.AddSingleton<Dialogs.IWhatsNewDialog, Dialogs.WhatsNewDialog>();
         services.AddSingleton<Components.ComponentReinstaller>();
+        services.AddSingleton<Components.InstallResume>();
 
         // The storage manager (Settings → Storage): components, leftovers and orphans as rows, who uses them, and a permanent removal.
         services.AddSingleton<Core.DiskSpace.IComponentUsage, Core.DiskSpace.ComponentUsage>();
@@ -462,6 +464,7 @@ public static class DesktopServices
         services.AddSingleton<Core.DiskSpace.IDiskItemSource, DiskSpace.LibraryOrphanSource>();
         services.AddSingleton<DiskSpace.PermanentDiscard>();
         services.AddSingleton<Core.DiskSpace.IFolderDiscard>(sp => sp.GetRequiredService<DiskSpace.PermanentDiscard>());
+        services.AddSingleton<Core.DiskSpace.IKeepingWipe, Core.DiskSpace.KeepingWipe>();
         services.AddSingleton<Core.DiskSpace.ILeftoverSweep, Core.DiskSpace.LeftoverSweep>();
         services.AddSingleton<DiskSpace.ILeftoverSweeper, DiskSpace.LeftoverSweeper>();
         services.AddSingleton<DiskSpace.IDiskCleaner, DiskSpace.DiskCleaner>();

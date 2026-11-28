@@ -36,6 +36,10 @@ public sealed class BrowserComponent(ChromeLocator chrome) : IComponent
     public IReadOnlyList<string> Folders() => [chrome.Root];
 
     /// <inheritdoc />
+    /// <remarks>Nothing: its own install does nothing (an engine's install fetches it), so deleting its folder first would only break the engines.</remarks>
+    public IReadOnlyList<string> ReplacedPaths() => [];
+
+    /// <inheritdoc />
     public Task RefreshAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     /// <inheritdoc />

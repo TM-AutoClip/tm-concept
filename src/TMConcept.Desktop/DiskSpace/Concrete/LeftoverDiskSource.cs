@@ -17,8 +17,8 @@ namespace TMConcept.Desktop.DiskSpace;
 /// part of a cancelled pull, layers of a removed model);</item>
 /// <item>folders inside <c>tools/</c> that no component owns (an older pinned version, a build for another graphics setting); image model
 /// folders (<c>tools/images/&lt;id&gt;</c>) this copy does not know are a row of their own that only the full delete takes;</item>
-/// <item>old components folders next to <c>tools/</c> left by "Reinstall from scratch" (<c>tools.old-*</c>, <c>tools.failed-*</c>,
-/// <c>tools.aside-*</c>);</item>
+/// <item>old components folders next to <c>tools/</c> left by "Reinstall from scratch" of a version up to 0.1.56 (<c>tools.old-*</c>,
+/// <c>tools.failed-*</c>, <c>tools.aside-*</c>; the start-up sweep deletes them too);</item>
 /// <item>the work caches: voice sample files, the listen and sample-render files, the scene images of concepts that no longer exist, and
 /// cached narration, run folders and scene images older than the work keep time (the clean-up takes those; the recent ones that a retry
 /// still uses go only with the full delete: a retry of a failed video would otherwise pay the online voice and the online images again).</item>
@@ -30,7 +30,7 @@ public sealed class LeftoverDiskSource(AppPaths paths, PythonLayout python, Comp
 {
     /// <summary>The names an old components folder starts with (next to <c>tools</c>).</summary>
     public static readonly IReadOnlyList<string> AsidePrefixes =
-        [Components.ComponentReinstaller.AsidePrefix, Components.ComponentReinstaller.FailedPrefix, ".aside-"];
+        [LeftoverSweep.OldInfix, LeftoverSweep.FailedInfix, LeftoverSweep.AsideInfix];
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<IDiskItem>> ListAsync(UsageMap usage, CancellationToken cancellationToken)
@@ -55,7 +55,7 @@ public sealed class LeftoverDiskSource(AppPaths paths, PythonLayout python, Comp
     private IEnumerable<IDiskItem> List(HashSet<string> goneConcepts)
     {
         var tools = paths.ToolsDirectory;
-        var downloads = Path.Combine(tools, "downloads");
+        var downloads = Path.Combine(tools, ComponentFolders.DownloadsFolder);
         yield return Folder("tools:downloads", "storage.item.downloads", DiskArea.Tools, [downloads], true);
 
         string[] helpers = [python.ScriptsFolder, python.LocksFolder, python.HomeFolder];

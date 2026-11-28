@@ -51,6 +51,16 @@ public abstract class ToolComponentBase(ToolInstaller installer, string code, st
 
     /// <inheritdoc />
     /// <remarks>
+    /// Only the tools of it that are not ready (the install downloads only those; a ready one of the same component stays): each one's own
+    /// folder (<c>tools/&lt;name&gt;</c>, every version inside: a new app version pins a new version in a new folder, the old one goes with it)
+    /// and its archive in the shared downloads folder, finished or <c>.part</c>.
+    /// </remarks>
+    public IReadOnlyList<string> ReplacedPaths() => Tools.Where(t => !Installer.Status(t).Ready)
+        .SelectMany(t => Installer.DownloadFile(t) is { } file ? [Installer.ToolRoot(t), file, file + ComponentFolders.PartExtension] : new[] { Installer.ToolRoot(t) })
+        .Distinct(StringComparer.Ordinal).ToList();
+
+    /// <inheritdoc />
+    /// <remarks>
     /// A tool's own folder (<c>tools/&lt;name&gt;</c>), whatever version is inside: a new app version pins a new version in a new folder, so
     /// <see cref="Folders"/> alone would say an updated component was never installed. Every tool of <see cref="FolderTools"/> counts: the
     /// image runtime chooses its build at call time (its constructor list is empty), and a 0.1.15 CUDA install in <c>tools/sd-cpp</c> must

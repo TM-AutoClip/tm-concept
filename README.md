@@ -425,7 +425,7 @@ Guide: [docs/api-keys.md](docs/api-keys.md#custom-server-openai-compatible), [Ol
 
 **Local AI (the app's own Ollama).** No key and no server of your own? Settings → **Local AI** installs *Ollama (TM Concept)*, the
 app's own copy of the official Ollama release (0.40.16), and downloads text models for it. Nothing is downloaded before you confirm the
-list (the install window shows the progress and can cancel; a cancelled model download goes on from where it stopped next time). After
+list (the install window shows the progress and can cancel; the next install deletes what a cancelled model download received and downloads it again). After
 unpacking only the graphics part your card needs is kept: NVIDIA CUDA 12 or 13 (by the driver), Vulkan for AMD and Intel, nothing for the
 processor (a graphics part needed later, after a new card or driver, makes the program show as not installed so it is offered
 again; a failed unpack keeps the checked download for the next try). The recommended models (Qwen 3.5, Gemma 4, gpt-oss; all Apache-2.0) are listed per graphics card class (4, 6, 8, 12, 16, 24,
@@ -624,12 +624,14 @@ Either way your data, tools and videos stay where they are. At the first start o
   and start fresh or restore a backup. One made by a newer version is not opened either: update the app.
 - **The components** (engines, voices, image models) are offered for an update or a reinstall. What was installed is recorded in
   `installed-components.json` (outside the components folder, with the app version of each), so a cancelled or failed reinstall is asked
-  again at the next start. **Reinstall from scratch** sets the components folder aside, installs again, and only then deletes the old folder
-  for good (the confirmation shows its size); if you cancel the download, the old folder goes back. An empty folder or an unfinished download never counts as
+  again at the next start. **Reinstall from scratch** first deletes the whole components folder for good (no recycle bin, nothing kept aside; the
+  confirmation shows its size), then downloads what you had again; an update deletes each component's old files right before its download.
+  If the app closes in the middle, the next start deletes only the half-finished component's files and downloads it again; the finished ones stay. An empty folder or an unfinished download never counts as
   installed.
 
 Downloads go on after a bad connection: each file is tried up to 5 times with a growing pause, and the part already received is kept
-(`.part`) so the next try, or the next install, continues from there instead of starting a 12 GB model again. When a download finally
+(`.part`) so the next try of the same download continues from there instead of starting a 12 GB model again. A later install, or the next
+start after a cancel or a close, deletes the half-finished component's files first and downloads it again. When a download finally
 fails, the message says why in your language, with the system's own reason (secure connection (SSL/TLS), server name not found, connection
 broken, no data for a minute).
 

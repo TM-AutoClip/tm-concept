@@ -17,8 +17,8 @@ namespace TMConcept.Engines.AppOllama;
 /// <c>.tar.zst</c> with <see cref="ZstdTarExtractor"/> on Linux), the graphics backends this computer does not need deleted
 /// (<see cref="AppOllamaBackends"/>; never written while unpacking), then moved into place with a marker that names them. A backend the
 /// computer needs later (a card or a driver added) makes the copy not ready, so it is offered again. A failed unpack keeps the verified
-/// package for the next try; a full disk says so ("disk"). A new pinned version installs into a new folder (the old one
-/// shows as a leftover in the storage manager). Its folders are the program and the server's own home folder; the models are components
+/// package on disk (the next install deletes it first and downloads it again); a full disk says so ("disk"). A new pinned version installs into a new folder, and the
+/// install deletes the old version, its home and a half-finished package for good first (28 Nov 2026, <see cref="ReplacedPaths"/>). Its folders are the program and the server's own home folder; the models are components
 /// of their own. It never touches an Ollama the user installed.
 /// </summary>
 public sealed class AppOllamaComponent(IAppPaths paths, IToolPlatform platform, IArchiveDownloader downloader, IGpuInfo gpu, AppOllamaLayout layout,
@@ -72,6 +72,17 @@ public sealed class AppOllamaComponent(IAppPaths paths, IToolPlatform platform, 
     public IReadOnlyList<string> Folders() => new[] { InstallFolder, layout.HomeDirectory }.Where(Directory.Exists).ToList();
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Its whole folder, every version inside (a new app version pins a new one in a new folder), its home and its package in the shared
+    /// downloads folder (finished or <c>.part</c>); the pulled models stay (each is a component of its own, so the planner keeps their files).
+    /// </remarks>
+    public IReadOnlyList<string> ReplacedPaths() => Archive is { } archive
+        ? [Root, layout.HomeDirectory, PackageFile(archive), PackageFile(archive) + ComponentFolders.PartExtension]
+        : [Root, layout.HomeDirectory];
+
+    private string PackageFile(ToolArchive archive) => Path.Combine(paths.ToolsDirectory, ComponentFolders.DownloadsFolder, archive.Url.Segments[^1]);
+
+    /// <inheritdoc />
     public Task RefreshAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     /// <inheritdoc />
@@ -97,9 +108,8 @@ public sealed class AppOllamaComponent(IAppPaths paths, IToolPlatform platform, 
 
     private async Task InstallLockedAsync(ToolArchive archive, IProgress<ToolProgress>? progress, CancellationToken cancellationToken)
     {
-        var downloads = Path.Combine(paths.ToolsDirectory, "downloads");
-        Directory.CreateDirectory(downloads);
-        var file = Path.Combine(downloads, archive.Url.Segments[^1]);
+        var file = PackageFile(archive);
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
         var unpack = InstallFolder + ".unpack";
         var installed = false;
         try

@@ -5,7 +5,8 @@ namespace TMConcept.Tests.Core;
 
 /// <summary>
 /// 0.1.37: the start-up sweep decides from folder lists alone: only old components folders whose name fits exactly, only next to
-/// <c>tools</c>, never <c>tools</c> itself, nothing while a reinstall runs; the engines' tmp folders only right under <c>tools/engines</c>.
+/// <c>tools</c>, never <c>tools</c> itself (28 Nov 2026: whatever state they were left in); the staging folders only inside <c>tools</c>; the
+/// engines' tmp folders only right under <c>tools/engines</c>.
 /// </summary>
 public sealed class LeftoverSweepTests
 {
@@ -16,7 +17,7 @@ public sealed class LeftoverSweepTests
     private readonly LeftoverSweep _sweep = new();
 
     [Fact]
-    public void OnlyTheOldAndFailedFoldersWhoseNameFitsExactlyAreSelected()
+    public void OnlyTheOldFailedAndAsideFoldersWhoseNameFitsExactlyAreSelected()
     {
         string[] folders =
         [
@@ -24,6 +25,7 @@ public sealed class LeftoverSweepTests
             Path.Combine(Data, "tools.old-20261116-120000"),
             Path.Combine(Data, "tools.failed-20261116-120501"),
             Path.Combine(Data, "tools.aside-20261116-120000"),
+            Path.Combine(Data, "tools.aside-20261116-120000-copy"),
             Path.Combine(Data, "tools.old-20261116-120000-copy"),
             Path.Combine(Data, "tools.old-2026111-120000"),
             Path.Combine(Data, "tools.old-"),
@@ -36,32 +38,49 @@ public sealed class LeftoverSweepTests
             Path.Combine(Path.GetTempPath(), "tools.old-20261116-120000"),
         ];
 
-        _sweep.OldComponentFolders(Tools, folders, reinstalling: false, toolsPresent: true).ShouldBe(
+        _sweep.OldComponentFolders(Tools, folders).ShouldBe(
         [
+            Path.Combine(Data, "tools.aside-20261116-120000"),
             Path.Combine(Data, "tools.failed-20261116-120501"),
             Path.Combine(Data, "tools.old-20261116-120000"),
         ]);
     }
 
     [Fact]
-    public void NothingIsSelectedWhileAReinstallRuns()
-    {
-        string[] folders = [Path.Combine(Data, "tools.old-20261116-120000"), Path.Combine(Data, "tools.failed-20261116-120501")];
-        _sweep.OldComponentFolders(Tools, folders, reinstalling: true, toolsPresent: true).ShouldBeEmpty();
-    }
+    public void TheOldReinstallMarkerIsTheFileNextToTheToolsFolder() =>
+        _sweep.OldReinstallMarker(Tools).ShouldBe(Path.Combine(Data, "tools.reinstalling"));
 
+    /// <summary>
+    /// 28 Nov 2026: the staging folders of installs are the shared downloads folder and the "*.unpack" folders inside tools; never an installed
+    /// folder, never anything outside tools.
+    /// </summary>
     [Fact]
-    public void NothingIsSelectedWhileTheToolsFolderIsNotThere()
+    public void TheStagingsAreTheDownloadsFolderAndTheUnpackFoldersInsideTools()
     {
-        // A reinstall whose old folder could not go back (or a crash right after setting it aside): it may be the only copy of the components.
-        string[] folders = [Path.Combine(Data, "tools.old-20261116-120000"), Path.Combine(Data, "tools.failed-20261116-120501")];
-        _sweep.OldComponentFolders(Tools, folders, reinstalling: false, toolsPresent: false).ShouldBeEmpty();
+        string[] folders =
+        [
+            Path.Combine(Tools, "downloads"),
+            Path.Combine(Tools, "ffmpeg", "7.1.unpack"),
+            Path.Combine(Tools, "voices", "supertonic.unpack"),
+            Path.Combine(Tools, "ffmpeg", "7.1"),
+            Path.Combine(Tools, ".unpack"),
+            Path.Combine(Tools, "music-py", "downloads"),
+            Path.Combine(Data, "x.unpack"),
+            Tools,
+        ];
+
+        _sweep.Stagings(Tools, folders).ShouldBe(
+        [
+            Path.Combine(Tools, "downloads"),
+            Path.Combine(Tools, "ffmpeg", "7.1.unpack"),
+            Path.Combine(Tools, "voices", "supertonic.unpack"),
+        ]);
     }
 
     [Fact]
     public void TheToolsFolderItselfIsNeverSelected()
     {
-        _sweep.OldComponentFolders(Tools, [Tools, Tools + Path.DirectorySeparatorChar, Data], reinstalling: false, toolsPresent: true).ShouldBeEmpty();
+        _sweep.OldComponentFolders(Tools, [Tools, Tools + Path.DirectorySeparatorChar, Data]).ShouldBeEmpty();
         LeftoverSweep.Matches("tools", "tools").ShouldBeFalse();
         LeftoverSweep.Matches("tools", "tools.old-20261116-120000").ShouldBeTrue();
         LeftoverSweep.Matches("tools", "tools.failed-20261116-120000").ShouldBeTrue();

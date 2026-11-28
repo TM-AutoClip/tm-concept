@@ -13,9 +13,10 @@ namespace TMConcept.Engines.Tools;
 /// <item>retries: a dropped connection, a TLS failure, a time-out, HTTP 408/429/5xx are tried again up to <see cref="Attempts"/> times with a
 /// growing pause (<see cref="FirstDelay"/>, doubled each time), each attempt resolving the redirects again (Hugging Face's signed file
 /// addresses expire);</item>
-/// <item>resume: what arrived stays in <c>&lt;file&gt;.part</c> (also when the user cancels, and across app starts) and the next attempt asks
-/// only for the rest (<c>Range: bytes=n-</c>); a server that answers with the whole file starts it again from 0; the part is hashed first so
-/// the SHA-256 covers the whole file;</item>
+/// <item>resume: what arrived stays in <c>&lt;file&gt;.part</c> and the next attempt of the same download asks only for the rest
+/// (<c>Range: bytes=n-</c>); a server that answers with the whole file starts it again from 0; the part is hashed first so the SHA-256 covers
+/// the whole file (28 Nov 2026: a later install, or the next start after a cancel or a close, deletes the half-finished component's files
+/// first and downloads it again);</item>
 /// <item>no time limit for the whole transfer (0.1.16 had 30 minutes: a 12 GB file needs about 7 MB/s), only for a read that brings
 /// nothing for <see cref="IdleTimeout"/>.</item>
 /// </list>

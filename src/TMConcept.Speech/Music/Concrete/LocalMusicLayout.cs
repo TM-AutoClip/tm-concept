@@ -82,7 +82,7 @@ public sealed class LocalMusicLayout(IAppPaths paths)
     public string Downloads(LocalMusicFamily family)
     {
         ArgumentNullException.ThrowIfNull(family);
-        return Path.Combine(FamilyFolder(family), "downloads", family.Key);
+        return Path.Combine(FamilyFolder(family), Core.Components.ComponentFolders.DownloadsFolder, family.Key);
     }
 
     /// <summary>The folder the libraries write their settings and caches to (instead of the user's home).</summary>

@@ -9,6 +9,9 @@ public enum UpdateChoice
     /// <summary>Install again what was installed before and is now missing or changed.</summary>
     Update = 1,
 
-    /// <summary>Set the whole components folder aside, install what was installed before, then delete the old folder for good.</summary>
+    /// <summary>
+    /// Delete the whole components folder for good first, then install again what was installed (28 Nov 2026); what is left unfinished is
+    /// resumed from the install journal at the next start.
+    /// </summary>
     Reinstall = 2,
 }

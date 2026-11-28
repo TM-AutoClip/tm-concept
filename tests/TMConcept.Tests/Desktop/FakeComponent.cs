@@ -17,7 +17,16 @@ internal sealed class FakeComponent(string code, bool ready, params string[] dep
 
     public bool Supported { get; set; } = true;
 
-    public bool Ready { get; set; } = ready;
+    private bool _ready = ready;
+
+    /// <summary>Ready only when its own files are there and, when set, this dependency is ready (an image model after its runtime).</summary>
+    public FakeComponent? ReadyOnlyWith { get; set; }
+
+    public bool Ready
+    {
+        get => _ready && (ReadyOnlyWith?.Ready ?? true);
+        set => _ready = value;
+    }
 
     public bool Fail { get; set; }
 
@@ -36,14 +45,20 @@ internal sealed class FakeComponent(string code, bool ready, params string[] dep
     /// <summary>Runs inside the install, before it ends (what the test looks at meanwhile).</summary>
     public Action? OnInstall { get; set; }
 
-    public IReadOnlyList<ComponentDownload> Downloads() => Ready ? [] : [new ComponentDownload(Name, "example.org", 1_000_000)];
+    /// <summary>Its own files only: nothing when they are there, also while it waits for <see cref="ReadyOnlyWith"/>.</summary>
+    public IReadOnlyList<ComponentDownload> Downloads() => _ready ? [] : [new ComponentDownload(Name, "example.org", 1_000_000)];
 
     public IReadOnlyList<string> Folders() => Folder is null ? [] : [Folder];
+
+    /// <summary>What its install replaces (null = its folders, the default of every component).</summary>
+    public IReadOnlyList<string>? Replaced { get; set; }
+
+    public IReadOnlyList<string> ReplacedPaths() => Replaced ?? Folders();
 
     public Task RefreshAsync(CancellationToken cancellationToken)
     {
         Refreshes++;
-        Ready |= FoundOnRefresh;
+        _ready |= FoundOnRefresh;
         return Task.CompletedTask;
     }
 
@@ -61,7 +76,7 @@ internal sealed class FakeComponent(string code, bool ready, params string[] dep
             throw new ToolInstallException("fake failure") { Code = "download" };
         }
 
-        Ready = true;
+        _ready = true;
         return Task.CompletedTask;
     }
 }

@@ -24,6 +24,14 @@ public abstract class SherpaSpeechEngineBase(SpeechModelInstaller installer, ITo
     public override string InstallFolder => Path.GetDirectoryName(installer.Folder(model))!;
 
     /// <inheritdoc />
+    /// <remarks>Its folder and its archive in the shared downloads folder, finished or <c>.part</c>.</remarks>
+    public override IReadOnlyList<string> ReplacedPaths()
+    {
+        var file = installer.DownloadFile(model);
+        return [InstallFolder, file, file + ComponentFolders.PartExtension];
+    }
+
+    /// <inheritdoc />
     public override IReadOnlyList<ComponentDownload> Downloads() =>
         ModelInstalled ? [] : [new ComponentDownload(Name + " " + model.Version, model.Url.Host, model.ApproximateBytes)];
 

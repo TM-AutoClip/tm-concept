@@ -7,9 +7,10 @@ using TMConcept.Desktop.DiskSpace;
 namespace TMConcept.Tests.Desktop;
 
 /// <summary>
-/// 0.1.37: the start-up sweep on a real data folder: what a cut-short reinstall left next to <c>tools</c> and the engines' tmp folders go for
-/// good; <c>tools</c> itself, folders of another name and the engines' installed files stay; nothing while an install runs; after a
-/// reinstall that was cut short the old folders stay for one start.
+/// 0.1.37: the start-up sweep on a real data folder: what an earlier version's reinstall left next to <c>tools</c> (its old folders and its
+/// marker file), the staging folders of installs and the engines' tmp folders go for good without a question (28 Nov 2026: also without the
+/// components folder and after a cut-short reinstall); <c>tools</c> itself, folders of another name and the installed files stay; nothing
+/// while an install runs.
 /// </summary>
 public sealed class LeftoverSweeperTests
 {
@@ -73,49 +74,43 @@ public sealed class LeftoverSweeperTests
             (await h.Get<ILeftoverSweeper>().SweepAsync(CancellationToken.None)).ShouldBe(0);
         }
 
-        using (gate.Reinstall())
-        {
-            File.Exists(gate.MarkerFile).ShouldBeTrue();
-            gate.Interrupted.ShouldBeFalse("this process's own reinstall is not a cut-short one");
-            (await h.Get<ILeftoverSweeper>().SweepAsync(CancellationToken.None)).ShouldBe(0);
-        }
-
-        File.Exists(gate.MarkerFile).ShouldBeFalse("the marker goes when the reinstall ends");
         Directory.Exists(old).ShouldBeTrue();
         Directory.Exists(failed).ShouldBeTrue();
         Directory.Exists(temp).ShouldBeTrue();
     }
 
     [Fact]
-    public async Task AfterACutShortReinstallTheOldFoldersStayForOneStart()
+    public async Task TheOldReinstallMarkerAndTheStagingFoldersGoWithoutAQuestion()
     {
         using var h = new DesktopHarness();
-        var (old, failed, _, temp, _) = Layout(h);
-        var gate = h.Get<IComponentWorkGate>();
-        File.WriteAllText(gate.MarkerFile, "previous run");
-        gate.Interrupted.ShouldBeTrue();
+        var (old, failed, _, _, installed) = Layout(h);
+        var marker = h.Paths.ToolsDirectory + ".reinstalling";
+        File.WriteAllText(marker, "an earlier version's cut-short reinstall");
+        var part = Folder(Path.Combine(h.Paths.ToolsDirectory, "downloads"), 100);
+        var unpack = Folder(Path.Combine(h.Paths.ToolsDirectory, "ffmpeg", "7.1.unpack"), 50);
+        var tool = Folder(Path.Combine(h.Paths.ToolsDirectory, "ffmpeg", "7.1"), 7);
 
-        (await h.Get<ILeftoverSweeper>().SweepAsync(CancellationToken.None)).ShouldBe(24, "only the engine's tmp");
-        Directory.Exists(old).ShouldBeTrue("it may hold the components that worked");
-        Directory.Exists(failed).ShouldBeTrue();
-        Directory.Exists(temp).ShouldBeFalse();
-        File.Exists(gate.MarkerFile).ShouldBeFalse("the next start sweeps them");
+        await h.Get<ILeftoverSweeper>().SweepAsync(CancellationToken.None);
 
-        (await h.Get<ILeftoverSweeper>().SweepAsync(CancellationToken.None)).ShouldBe(1500);
-        Directory.Exists(old).ShouldBeFalse();
+        File.Exists(marker).ShouldBeFalse();
+        Directory.Exists(old).ShouldBeFalse("an earlier version's old folder goes even after a cut-short reinstall");
         Directory.Exists(failed).ShouldBeFalse();
+        Directory.Exists(part).ShouldBeFalse("unfinished downloads are deleted; the component is downloaded again from the start");
+        Directory.Exists(unpack).ShouldBeFalse();
+        File.Exists(Path.Combine(tool, "f.bin")).ShouldBeTrue("an installed version stays");
+        Directory.Exists(installed).ShouldBeTrue();
     }
 
     [Fact]
-    public async Task WithoutTheComponentsFolderTheOldFoldersStay()
+    public async Task WithoutTheComponentsFolderTheOldFoldersGoToo()
     {
         using var h = new DesktopHarness();
         var (old, failed, _, _, _) = Layout(h);
         Directory.Delete(h.Paths.ToolsDirectory, recursive: true);
 
-        (await h.Get<ILeftoverSweeper>().SweepAsync(CancellationToken.None)).ShouldBe(0);
-        Directory.Exists(old).ShouldBeTrue("it may be the only copy of the components");
-        Directory.Exists(failed).ShouldBeTrue();
+        (await h.Get<ILeftoverSweeper>().SweepAsync(CancellationToken.None)).ShouldBe(1500);
+        Directory.Exists(old).ShouldBeFalse("the components they held are downloaded again through the install journal");
+        Directory.Exists(failed).ShouldBeFalse();
     }
 
     [Fact]
@@ -130,35 +125,5 @@ public sealed class LeftoverSweeperTests
 
         (await h.Get<ILeftoverSweeper>().SweepAsync(CancellationToken.None)).ShouldBe(0);
         logger.Levels.ShouldNotContain(LogLevel.Warning, "nothing is kept, so nothing to warn about");
-
-        // Old folders without the components folder: they stay, and that is worth a warning.
-        Folder(Path.Combine(h.Paths.DataDirectory, "tools.old-20261116-120000"));
-        (await h.Get<ILeftoverSweeper>().SweepAsync(CancellationToken.None)).ShouldBe(0);
-        logger.Levels.ShouldContain(LogLevel.Warning);
-    }
-
-    [Fact]
-    public void AReinstallWhoseOldFolderCouldNotGoBackKeepsTheMarker()
-    {
-        using var h = new DesktopHarness();
-        var gate = h.Get<IComponentWorkGate>();
-
-        gate.KeepMarker();
-        gate.Reinstall().Dispose();
-
-        File.Exists(gate.MarkerFile).ShouldBeFalse("a keep outside a reinstall does nothing");
-
-        using (gate.Reinstall())
-        {
-            gate.KeepMarker();
-        }
-
-        File.Exists(gate.MarkerFile).ShouldBeTrue();
-        gate.Interrupted.ShouldBeTrue("the next start keeps the old folders once more");
-
-        gate.ForgetInterrupted();
-        gate.Reinstall().Dispose();
-
-        File.Exists(gate.MarkerFile).ShouldBeFalse("the keep holds for that one reinstall only");
     }
 }

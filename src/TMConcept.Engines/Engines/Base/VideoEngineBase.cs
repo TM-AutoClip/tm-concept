@@ -62,22 +62,22 @@ public abstract class VideoEngineBase(EnginePackage package, ChromeLocator chrom
         var missing = new List<string>();
         if (!tools.Status(ToolKind.Node).Ready)
         {
-            missing.Add("node");
+            missing.Add(EngineNeeds.Node);
         }
 
         if (!tools.Status(ToolKind.Ffmpeg).Ready)
         {
-            missing.Add("ffmpeg");
+            missing.Add(EngineNeeds.Ffmpeg);
         }
 
         if (!Package.Ready(PackageProbe))
         {
-            missing.Add("packages");
+            missing.Add(EngineNeeds.Packages);
         }
 
         if (Browser() is null)
         {
-            missing.Add("browser");
+            missing.Add(EngineNeeds.Browser);
         }
 
         return new EngineStatus(missing.Count == 0, missing);

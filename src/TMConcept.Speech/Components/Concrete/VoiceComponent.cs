@@ -29,6 +29,9 @@ public sealed class VoiceComponent(LocalSpeechEngineBase voice) : IComponent
     public IReadOnlyList<string> Folders() => [voice.InstallFolder];
 
     /// <inheritdoc />
+    public IReadOnlyList<string> ReplacedPaths() => voice.ReplacedPaths();
+
+    /// <inheritdoc />
     public Task RefreshAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     /// <inheritdoc />

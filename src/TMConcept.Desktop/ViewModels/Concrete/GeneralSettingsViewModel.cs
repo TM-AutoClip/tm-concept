@@ -332,8 +332,9 @@ public sealed partial class GeneralSettingsViewModel(AppSession session, Localiz
     public partial bool Reinstalling { get; set; }
 
     /// <summary>
-    /// "Reinstall components from scratch" (the same as after a new app version): after a confirmation (which shows the folder's size) what
-    /// was installed is installed again into a new folder and the old one is deleted for good. Not while work runs: its components are in use.
+    /// "Reinstall components from scratch" (the same as after a new app version): after a confirmation (which shows the folder's size) the
+    /// whole components folder is deleted for good first, then what was installed is downloaded again (28 Nov 2026). Not while work runs: its
+    /// components are in use.
     /// </summary>
     [RelayCommand]
     public async Task ReinstallComponentsAsync()

@@ -21,20 +21,10 @@ public sealed class LeftoverSweeper(AppPaths paths, ILeftoverSweep sweep, ICompo
         }
 
         var tools = paths.ToolsDirectory;
-        var interrupted = gate.Interrupted;
-        if (interrupted)
-        {
-            // The previous run ended in the middle of a reinstall: an old folder may hold the components that worked. It stays for this run
-            // (the storage page lists it); the marker goes, so the next start sweeps it.
-            logger.LogWarning(LogEvents.OnScreen, "A components reinstall was cut short in the previous run; its old folders stay until the next start");
-            activity.Add(ActivityLevel.Warning, text.Format("storage.sweep.interrupted", ComponentReinstaller.Location(tools)));
-            gate.ForgetInterrupted();
-        }
-
-        var targets = await Task.Run(() => Targets(tools, interrupted), cancellationToken).ConfigureAwait(false);
+        var targets = await Task.Run(() => Targets(tools), cancellationToken).ConfigureAwait(false);
         long freed = 0;
         var kept = 0;
-        foreach (var folder in targets)
+        foreach (var target in targets)
         {
             if (gate.Busy)
             {
@@ -42,22 +32,22 @@ public sealed class LeftoverSweeper(AppPaths paths, ILeftoverSweep sweep, ICompo
                 break;
             }
 
-            var before = await Task.Run(() => DiskSizes.Of(folder), cancellationToken).ConfigureAwait(false);
+            var before = await Task.Run(() => SizeOf(target), cancellationToken).ConfigureAwait(false);
             try
             {
-                await discard.DiscardAsync(folder, cancellationToken).ConfigureAwait(false);
+                await discard.DiscardAsync(target, cancellationToken).ConfigureAwait(false);
                 freed += before;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
             {
                 // A file in use (a virus scanner, an Explorer window): what could not go stays for the next start.
-                freed += Math.Max(0, before - DiskSizes.Of(folder));
+                freed += Math.Max(0, before - SizeOf(target));
                 kept++;
-                logger.LogWarning(LogEvents.OnScreen, ex, "Start-up sweep: {Folder} could not be deleted; it is tried again at the next start", Name(tools, folder));
+                logger.LogWarning(LogEvents.OnScreen, ex, "Start-up sweep: {Folder} could not be deleted; it is tried again at the next start", Name(tools, target));
             }
         }
 
-        logger.LogInformation("Start-up sweep: {Count} folder(s), {Bytes} bytes freed, {Kept} kept for the next start", targets.Count - kept, freed, kept);
+        logger.LogInformation("Start-up sweep: {Count} leftover(s), {Bytes} bytes freed, {Kept} kept for the next start", targets.Count - kept, freed, kept);
         if (kept > 0)
         {
             activity.Add(ActivityLevel.Warning, text.Format("storage.sweep.kept", kept));
@@ -71,24 +61,29 @@ public sealed class LeftoverSweeper(AppPaths paths, ILeftoverSweep sweep, ICompo
         return freed;
     }
 
-    /// <summary>The folders to delete: the old components folders (not after a cut-short reinstall) and the engines' existing tmp folders.</summary>
-    private List<string> Targets(string tools, bool interrupted)
+    /// <summary>
+    /// What to delete: the old components folders and the reinstall marker of a version up to 0.1.56 (whatever state they were left in: the
+    /// components they held are installed again through the install journal), the staging folders, the engines' existing tmp folders and the
+    /// closed looks of "Kanaldan esinlen".
+    /// </summary>
+    private List<string> Targets(string tools)
     {
         var targets = new List<string>();
         var parent = Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(tools));
         var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(tools));
-        if (!interrupted && parent is not null && Directory.Exists(parent))
+        if (parent is not null && Directory.Exists(parent))
         {
-            var present = Directory.Exists(tools);
-            var found = Folders(parent, name + ".*");
-            var old = sweep.OldComponentFolders(tools, found, gate.Reinstalling, present);
-            if (!present && found.Count > 0)
+            targets.AddRange(sweep.OldComponentFolders(tools, Folders(parent, name + ".*")));
+            var marker = sweep.OldReinstallMarker(tools);
+            if (File.Exists(marker))
             {
-                // Only worth a warning when something is kept: a new data folder has neither the components folder nor old ones.
-                logger.LogWarning(LogEvents.OnScreen, "Start-up sweep: the components folder is not there; the old components folders next to it stay");
+                targets.Add(marker);
             }
+        }
 
-            targets.AddRange(old);
+        if (Directory.Exists(tools))
+        {
+            targets.AddRange(sweep.Stagings(tools, Stagings(tools)));
         }
 
         var engines = Path.Combine(tools, LeftoverSweep.EnginesFolder);
@@ -104,8 +99,36 @@ public sealed class LeftoverSweeper(AppPaths paths, ILeftoverSweep sweep, ICompo
             targets.AddRange(sweep.ChannelTemps(paths.WorkDirectory, Folders(channel, "*"), channels?.ActiveFolders ?? []));
         }
 
+        foreach (var target in targets)
+        {
+            logger.LogInformation("Start-up sweep: {Leftover} is a leftover of an earlier install; it is deleted permanently", Name(tools, target));
+        }
+
         return targets;
     }
+
+    /// <summary>
+    /// The candidates for staging folders: the shared downloads folder and every <c>*.unpack</c> folder up to three levels inside
+    /// <paramref name="tools"/> (a tool unpacks next to its version folder, <c>tools/&lt;name&gt;/&lt;version&gt;.unpack</c>; a voice next to its
+    /// model folder). Deeper folders belong to the installed packages themselves.
+    /// </summary>
+    private List<string> Stagings(string tools)
+    {
+        var found = new List<string> { Path.Combine(tools, Core.Components.ComponentFolders.DownloadsFolder) };
+        try
+        {
+            var options = new EnumerationOptions { RecurseSubdirectories = true, MaxRecursionDepth = 2, AttributesToSkip = FileAttributes.ReparsePoint };
+            found.AddRange(Directory.EnumerateDirectories(tools, "*" + LeftoverSweep.UnpackSuffix, options));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarning(ex, "Start-up sweep: the components folder could not be listed");
+        }
+
+        return found.Where(Directory.Exists).ToList();
+    }
+
+    private static long SizeOf(string path) => File.Exists(path) ? new FileInfo(path).Length : DiskSizes.Of(path);
 
     private List<string> Folders(string folder, string pattern)
     {

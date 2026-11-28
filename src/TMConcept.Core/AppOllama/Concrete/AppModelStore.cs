@@ -13,6 +13,9 @@ namespace TMConcept.Core.AppOllama;
 /// </summary>
 public sealed partial class AppModelStore(AppOllamaLayout layout)
 {
+    /// <summary>What Ollama puts in the name of a layer it is still receiving (<c>sha256-…-partial</c>, <c>sha256-…-partial-0</c>).</summary>
+    public const string PartialMarker = "-partial";
+
     private const string Registry = "registry.ollama.ai";
     private const string DefaultNamespace = "library";
 
@@ -120,9 +123,28 @@ public sealed partial class AppModelStore(AppOllamaLayout layout)
     }
 
     /// <summary>
+    /// The received parts of pulls that did not finish (<c>blobs/sha256-…-partial*</c>; 28 Nov 2026: deleted before the next pull, which then
+    /// downloads the layer again). Empty when the folder cannot be listed.
+    /// </summary>
+    public IReadOnlyList<string> PartialBlobs()
+    {
+        var blobs = Path.Combine(layout.ModelsDirectory, "blobs");
+        try
+        {
+            return Directory.Exists(blobs)
+                ? Directory.EnumerateFiles(blobs, "*" + PartialMarker + "*").Order(StringComparer.Ordinal).ToList()
+                : [];
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>
     /// The files in <c>blobs/</c> that no manifest names: the received parts of a pull that was cancelled (<c>sha256-…-partial*</c>; the app's
-    /// server never prunes them itself, so a pull can go on from there) and layers no model uses any more. Every manifest under
-    /// <c>manifests/</c> counts, of any registry and complete or not. When one manifest cannot be read, or the folder cannot be listed,
+    /// server never prunes them itself; the next install of a model deletes them, <see cref="PartialBlobs"/>) and layers no model uses any
+    /// more. Every manifest under <c>manifests/</c> counts, of any registry and complete or not. When one manifest cannot be read, or the folder cannot be listed,
     /// nothing is named (that manifest might use any blob).
     /// </summary>
     public IReadOnlyList<string> UnreferencedBlobs()

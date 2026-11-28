@@ -39,6 +39,10 @@ public sealed class MusicEnvironmentComponent(RakkaseInstaller installer, Rakkas
     public IReadOnlyList<string> Folders() => [layout.RakkaseFolder, layout.Environment];
 
     /// <inheritdoc />
+    /// <remarks>Its folders and the folder its source archives are downloaded and unpacked in (a half-finished archive is not resumed).</remarks>
+    public IReadOnlyList<string> ReplacedPaths() => [.. Folders(), layout.Downloads];
+
+    /// <inheritdoc />
     public Task RefreshAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     /// <inheritdoc />

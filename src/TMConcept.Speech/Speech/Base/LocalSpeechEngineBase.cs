@@ -37,6 +37,12 @@ public abstract class LocalSpeechEngineBase(IToolLocator tools, SpeechWorkerClie
     /// <summary>The folder the install window shows and removes (the model's own folder).</summary>
     public abstract string InstallFolder { get; }
 
+    /// <summary>
+    /// What an install of the model replaces (28 Nov 2026): deleted for good before its download, so a half-finished download is not resumed
+    /// at the next install. By default its <see cref="InstallFolder"/>.
+    /// </summary>
+    public virtual IReadOnlyList<string> ReplacedPaths() => [InstallFolder];
+
     /// <summary>What is still to download for the model (empty when it is installed).</summary>
     public abstract IReadOnlyList<ComponentDownload> Downloads();
 

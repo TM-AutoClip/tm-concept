@@ -44,7 +44,7 @@ public sealed class EngineComponent(IVideoEngine engine) : IComponent, IComponen
     {
         var missing = Engine.Status().Missing;
         var list = new List<ComponentDownload>();
-        if (missing.Contains("packages"))
+        if (missing.Contains(EngineNeeds.Packages))
         {
             list.Add(new ComponentDownload(Engine.Name + " (npm)", EngineDownloads.NpmHost, Engine.Kind switch
             {
@@ -54,7 +54,7 @@ public sealed class EngineComponent(IVideoEngine engine) : IComponent, IComponen
             }));
         }
 
-        if (missing.Contains("browser"))
+        if (missing.Contains(EngineNeeds.Browser))
         {
             list.Add(new ComponentDownload("Chrome Headless Shell", EngineDownloads.BrowserHost, EngineDownloads.BrowserBytes));
         }
@@ -66,12 +66,21 @@ public sealed class EngineComponent(IVideoEngine engine) : IComponent, IComponen
     public IReadOnlyList<string> Folders() => Engine is VideoEngineBase known ? [known.PackageRoot] : [];
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Its packages folder only when the packages are what is missing: an engine that waits only for Node.js, ffmpeg or the shared browser
+    /// keeps its packages (its install downloads none of them again).
+    /// </remarks>
+    public IReadOnlyList<string> ReplacedPaths() => Engine.Status().Missing.Contains(EngineNeeds.Packages) ? Folders() : [];
+
+    /// <inheritdoc />
     public Task RefreshAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     /// <inheritdoc />
     public Task InstallAsync(IProgress<ToolProgress>? progress, CancellationToken cancellationToken)
     {
         var missing = Engine.Status().Missing;
-        return missing.Contains("packages") || missing.Contains("browser") ? Engine.InstallAsync(agreed: true, progress, cancellationToken) : Task.CompletedTask;
+        return missing.Contains(EngineNeeds.Packages) || missing.Contains(EngineNeeds.Browser)
+            ? Engine.InstallAsync(agreed: true, progress, cancellationToken)
+            : Task.CompletedTask;
     }
 }

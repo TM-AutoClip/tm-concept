@@ -3,7 +3,9 @@ using System.Net;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
+using TMConcept.Core.Components;
 using TMConcept.Core.Tools;
+using TMConcept.Engines.Components;
 using TMConcept.Engines.Processes;
 using TMConcept.Engines.Tools;
 using TMConcept.Tests.Storage;
@@ -47,6 +49,26 @@ public sealed class ToolInstallTests
         }
 
         return memory.ToArray();
+    }
+
+    /// <summary>
+    /// 28 Nov 2026: what an install deletes first is only a tool that is not ready: its own folder (every version inside) and its archive in
+    /// the shared downloads folder, finished or <c>.part</c>; a ready tool is never deleted before an install.
+    /// </summary>
+    [Fact]
+    public async Task AnInstallReplacesOnlyAToolThatIsNotReadyWithItsArchiveAndPart()
+    {
+        var body = Zip("node-v26.13.0-win-x64", "node.exe");
+        var (installer, _, paths) = Create(body);
+        var component = new ToolComponent(installer, ComponentCodes.Node, "Node.js", [ToolKind.Node], []);
+        var file = installer.DownloadFile(ToolKind.Node).ShouldNotBeNull();
+
+        component.ReplacedPaths().ShouldBe([installer.ToolRoot(ToolKind.Node), file, file + ComponentFolders.PartExtension]);
+        Path.GetDirectoryName(file).ShouldBe(Path.Combine(paths.ToolsDirectory, ComponentFolders.DownloadsFolder));
+
+        (await installer.InstallAsync(ToolKind.Node, agreed: true, null, CancellationToken.None)).Ready.ShouldBeTrue();
+        component.ReplacedPaths().ShouldBeEmpty();
+        paths.Dispose();
     }
 
     [Fact]

@@ -317,6 +317,31 @@ public sealed class AppOllamaModelTests : IDisposable
         registry.Find(info.Tag).ShouldNotBeNull("the pickers offer it at once");
     }
 
+    /// <summary>
+    /// 28 Nov 2026: a first pull cut short has no manifest yet; its install still deletes what Ollama received (the <c>-partial</c> files) before
+    /// it pulls again, and never a layer another model uses.
+    /// </summary>
+    [Fact]
+    public void AnInstallReplacesTheReceivedPartsOfAnUnfinishedPull()
+    {
+        var qwen = AppModelFiles.Write(Store, "qwen3.5:4b-q4_K_M", "weights");
+        var blobs = Path.GetDirectoryName(Store.BlobPath(qwen[0])!)!;
+        var partial = Path.Combine(blobs, "sha256-" + new string('a', 64) + "-partial");
+        var part = Path.Combine(blobs, "sha256-" + new string('a', 64) + "-partial-0");
+        File.WriteAllText(partial, "half a layer");
+        File.WriteAllText(part, "a chunk");
+        var info = AppModelAdvisor.Find("qwen3.5:2b-q4_K_M")!;
+        var api = new FakeAppOllamaApi();
+        using var server = new AppOllamaServer(new FakeAppOllamaRuntime(), new FakeAppOllamaLauncher(), api,
+            new AppOllamaLayout(Path.Combine(_folder, "m"), Path.Combine(_folder, "h")), TimeProvider.System, NullLogger<AppOllamaServer>.Instance);
+        var component = new AppModelComponent(info, Store, new AppModelRegistry(Store, NullLogger<AppModelRegistry>.Instance), new FakeAppOllamaRuntime(), server,
+            api, NullLogger<AppModelComponent>.Instance);
+
+        component.Folders().ShouldBeEmpty("no manifest yet");
+        component.ReplacedPaths().ShouldBe([partial, part]);
+        Store.PartialBlobs().ShouldNotContain(Store.BlobPath(qwen[0])!);
+    }
+
     [Fact]
     public async Task APullThatLeavesNoCompleteModelFails()
     {

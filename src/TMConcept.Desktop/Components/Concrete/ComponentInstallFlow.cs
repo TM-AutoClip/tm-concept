@@ -51,7 +51,7 @@ public sealed class ComponentInstallFlow(ComponentPlanner planner, IConfirmDialo
         if (!answer.Confirmed)
         {
             logger.LogInformation("The download of {Components} was declined", string.Join(", ", plan.Missing.Select(c => c.Code)));
-            return new InstallOutcome(false, text["install.declined"]);
+            return new InstallOutcome(false, text["install.declined"], Declined: true);
         }
 
         var names = string.Join(", ", plan.Missing.Select(c => c.Name));

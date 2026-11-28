@@ -357,7 +357,7 @@ iki kez daha gönderilir; her deneme ödenir ve maliyete sayılır, üç okunama
 | XTTS-v2 / F5-TTS Türkçe / VoxCPM2 / Trendyol-TTS / Ahenk (+ VoxCPM2) / MMS-TTS Türkçe modelleri | huggingface.co | 1,9 GB / 1,4 GB / 5 GB / 5 GB / 145 MB / 145 MB |
 
 Sabitlenen her indirme SHA-256 ile denetlenir (npm paketleri: kilit dosyasının bütünlük değerleri; görsel ağırlıkları sabit bir Hugging Face
-commit'inden gelir; kopan bir görsel ağırlığı indirmesi yeniden denenir ve kaldığı yerden sürer, program yeniden açılsa da) ve programın kendi veri klasörüne gider; sistem PATH'i değişmez. Chrome Headless Shell HTTPS ile Google'dan gelir,
+commit'inden gelir; kopan bir görsel ağırlığı indirmesi aynı indirme içinde yeniden denenir ve kaldığı yerden sürer; sonraki kurulum ya da açılış yarım kalan dosyayı silip baştan indirir) ve programın kendi veri klasörüne gider; sistem PATH'i değişmez. Chrome Headless Shell HTTPS ile Google'dan gelir,
 Google onun için sağlama değeri yayımlamıyor. Ayarlar → **Genel** → *Kurulu bileşenler* diskte olanları boyutlarıyla listeler (yarım kalan
 ya da artık kullanılamayan *eksik* diye işaretlenir), kaldırabilir ve bir motorun örnek
 videosunu modelsiz, ağsız render edebilir.
@@ -418,8 +418,8 @@ Rehber: [docs/api-keys.tr.md](docs/api-keys.tr.md#özel-sunucu-openai-uyumlu), [
 
 **Yerel yapay zekâ (programın kendi Ollama'sı).** Anahtarın da kendi sunucun da yok mu? Ayarlar → **Yerel yapay zekâ**, *Ollama (TM
 Concept)*'i, yani Ollama'nın resmî sürümünün (0.40.16) programa ait kopyasını kurar ve ona metin modelleri indirir. Sen listeyi
-onaylamadan hiçbir şey inmez (kurulum penceresi ilerlemeyi gösterir ve iptal edebilirsin; iptal edilen bir model indirmesi bir dahaki
-sefere kaldığı yerden sürer). Açıldıktan sonra yalnız kartının ihtiyaç duyduğu grafik parçası kalır: NVIDIA için CUDA 12 ya da 13
+onaylamadan hiçbir şey inmez (kurulum penceresi ilerlemeyi gösterir ve iptal edebilirsin; iptal edilen bir model indirmesinin inen kısmı
+sonraki kurulumda silinir ve model yeniden indirilir). Açıldıktan sonra yalnız kartının ihtiyaç duyduğu grafik parçası kalır: NVIDIA için CUDA 12 ya da 13
 (sürücüye göre), AMD ve Intel için Vulkan, işlemci için hiçbiri (sonradan yeni bir kart ya da sürücüyle başka bir grafik parçası
 gerekirse program kurulu değil görünür ve yeniden kurulması önerilir; açma başarısız olursa doğrulanmış indirme bir sonraki deneme için
 saklanır). Önerilen modeller (Qwen 3.5, Gemma 4, gpt-oss; hepsi Apache-2.0) ekran
@@ -614,13 +614,14 @@ her şey dosyanın tamamını reddettirir ve yerleşik liste kalır. Ayrıntı: 
   oluşturduğu veritabanı da açılmaz: programı güncelle.
 - **Bileşenler** (motorlar, sesler, görsel modelleri) için güncelleme ya da yeniden kurulum önerilir. Neyin kurulu olduğu
   `installed-components.json` içinde (bileşen klasörünün dışında, her birinin kurulduğu sürümle) kaydedilir; bu yüzden iptal edilen ya da
-  başarısız olan bir yeniden kurulum bir sonraki açılışta yine sorulur. **Sıfırdan yeniden kur** bileşen klasörünü kenara alır, yeniden kurar
-  ve eski klasörü ancak ondan sonra kalıcı olarak siler (onay boyutunu gösterir); indirmeyi iptal edersen eski klasör yerine geri döner. Boş bir klasör ya da
+  başarısız olan bir yeniden kurulum bir sonraki açılışta yine sorulur. **Sıfırdan yeniden kur** önce bileşen klasörünün tamamını kalıcı olarak
+  siler (geri dönüşüm kutusu yok, kenara bir şey alınmaz; onay boyutunu gösterir), sonra sende olanları yeniden indirir; güncelleme her bileşenin
+  eski dosyalarını indirmesinden hemen önce siler. Program yarıda kapanırsa sonraki açılış yalnız yarım kalan bileşenin dosyalarını silip onu yeniden indirir; bitenler kalır. Boş bir klasör ya da
   yarım kalmış bir indirme asla kurulu sayılmaz.
 
 İndirmeler kötü bir bağlantıdan sonra devam eder: her dosya, aralarındaki bekleme giderek uzayarak en çok 5 kez denenir ve inen kısım
-saklanır (`.part`), böylece bir sonraki deneme ya da bir sonraki kurulum 12 GB'lık bir modeli baştan indirmek yerine kaldığı yerden devam
-eder. Bir indirme sonunda başarısız olursa ileti nedenini senin dilinde, sistemin kendi açıklamasıyla söyler (güvenli bağlantı (SSL/TLS),
+saklanır (`.part`), böylece aynı indirmenin bir sonraki denemesi 12 GB'lık bir modeli baştan indirmek yerine kaldığı yerden devam eder.
+Sonraki bir kurulum ya da iptal / kapanma sonrası ilk açılış yarım kalan bileşenin dosyalarını önce siler ve onu yeniden indirir. Bir indirme sonunda başarısız olursa ileti nedenini senin dilinde, sistemin kendi açıklamasıyla söyler (güvenli bağlantı (SSL/TLS),
 sunucu adı bulunamadı, bağlantı koptu, bir dakika boyunca veri gelmedi).
 
 ## Kaldırma
