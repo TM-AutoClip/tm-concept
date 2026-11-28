@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using TMConcept.Core.Music;
 using TMConcept.Core.Processes;
 using TMConcept.Speech.Python;
 
@@ -10,7 +11,7 @@ namespace TMConcept.Speech.Music;
 /// own guidance, and writes a 32 kHz WAV (two channels for the stereo models). The melody models run from the text alone.
 /// </summary>
 public sealed class MusicGenGenerator(LocalMusicStore store, LocalMusicLayout layout, PythonInstaller python, PythonLayout pythonLayout, IProcessRunner runner,
-    ILogger<MusicGenGenerator> logger) : LocalMusicGeneratorBase(LocalMusicFamilies.MusicGen, store, layout, python, pythonLayout, runner, logger)
+    IMusicProgressParser progress, ILogger<MusicGenGenerator> logger) : LocalMusicGeneratorBase(LocalMusicFamilies.MusicGen, store, layout, python, pythonLayout, runner, progress, logger)
 {
     /// <inheritdoc />
     protected override IReadOnlyList<string> FamilyArguments(LocalMusicVariant variant) => ["--guidance", LocalMusicRunRules.MusicGenGuidance];

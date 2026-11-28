@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using TMConcept.Core.Music;
 using TMConcept.Core.Processes;
 using TMConcept.Speech.Python;
 
@@ -13,7 +14,7 @@ namespace TMConcept.Speech.Music;
 /// WAV cut to the asked seconds.
 /// </summary>
 public sealed class YueGenerator(LocalMusicStore store, LocalMusicLayout layout, PythonInstaller python, PythonLayout pythonLayout, IProcessRunner runner,
-    ILogger<YueGenerator> logger) : LocalMusicGeneratorBase(LocalMusicFamilies.Yue, store, layout, python, pythonLayout, runner, logger)
+    IMusicProgressParser progress, ILogger<YueGenerator> logger) : LocalMusicGeneratorBase(LocalMusicFamilies.Yue, store, layout, python, pythonLayout, runner, progress, logger)
 {
     /// <inheritdoc />
     protected override IReadOnlyList<string> FamilyArguments(LocalMusicVariant variant)

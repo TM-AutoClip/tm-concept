@@ -5,7 +5,8 @@ model/ and vae/, their own code files pinned with them), offline, on the card wi
 of it in reserve) and, with --low-vram, its low-memory mode (only the active stage on the card). The prompt is its style, the words
 (--lyrics-file) its lyrics; an empty file makes an instrumental piece. Full chain of thought, seeded with --seed. The 48 kHz stereo song is
 cut to --seconds and written as a 16-bit WAV. Stages are printed as "TMC: ..." lines, a failure as one "TMC-E-<CODE>: ..." line before exit
-code 2.
+code 2. Progress (0.1.61), from YuE2's own callbacks (tmc_progress): stage 1 the score's tokens (at most its "abc" token limit), stage 2 the
+song's tokens (at most its "semantic" limit; a song ends before it, the stage then jumps), stage 3 the synthesis steps, stage 4 the decoding.
 """
 import argparse
 import os
@@ -16,6 +17,41 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 from tmc_music import fail, report, stage  # noqa: E402  (after the path above; the script runs with -I)
+from tmc_progress import Reporter  # noqa: E402
+
+STAGES = {"abc": (1, "tokens"), "semantic": (2, "tokens"), "nar": (3, "steps"), "vae": (4, "decoding")}
+
+
+class Follower:
+    """YuE2's callbacks as progress lines: on_token(phase, token) for the score and the song, on_progress(phase, done, total) after."""
+
+    def __init__(self, reporter, config):
+        self.reporter = reporter
+        self.limits = {"abc": config.abc.max_tokens, "semantic": config.semantic.max_tokens}
+        self.phase = None
+        self.tokens = 0
+
+    def enter(self, phase, total):
+        if phase != self.phase:
+            self.reporter.finish()
+            self.phase = phase
+            self.tokens = 0
+            number, unit = STAGES[phase]
+            self.reporter.begin(number, unit, total)
+
+    def token(self, phase, _token):
+        if phase not in self.limits:
+            return
+        self.enter(phase, self.limits[phase])
+        self.tokens += 1
+        self.reporter.update(self.tokens)
+
+    def step(self, phase, done, total):
+        if phase not in STAGES:
+            return
+        self.enter(phase, total)
+        self.reporter.length(total)
+        self.reporter.update(done)
 
 
 def main():
@@ -60,7 +96,9 @@ def main():
                                         memory_budget_gib=args.budget, low_vram=args.low_vram)
     try:
         stage("making the song (%s)" % ("with words" if lyrics else "instrumental"))
-        song = pipe(style=style, lyrics=lyrics, cot="full", seed=args.seed % (2 ** 63))
+        progress = Follower(Reporter(len(STAGES)), pipe.generation_config)
+        song = pipe(style=style, lyrics=lyrics, cot="full", seed=args.seed % (2 ** 63), on_token=progress.token, on_progress=progress.step)
+        progress.reporter.finish()
     finally:
         close = getattr(pipe, "close", None)
         if close is not None:

@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using TMConcept.Core.Components;
@@ -14,6 +15,7 @@ using TMConcept.Speech.Components;
 using TMConcept.Speech.Music;
 using TMConcept.Speech.Python;
 using TMConcept.Tests.Desktop;
+using TMConcept.Tests.Documents;
 using TMConcept.Tests.Storage;
 
 namespace TMConcept.Tests.Speech;
@@ -360,6 +362,36 @@ public sealed class LocalMusicTests : IDisposable
     }
 
     [Fact]
+    public async Task TheScriptsProgressLinesReachTheRequestAndTheLogEveryTenPerCent()
+    {
+        // A recorded shape of YuE 1's lines (0.1.61): stage 1 every per cent, then stage 2's blocks, then the decoding without a count.
+        var lines = new List<string> { "TMC: stage 1 (exllamav2)" };
+        lines.AddRange(Enumerable.Range(0, 101).Select(p => $"TMC-P: 1/3 {p * 60}/6000 tokens"));
+        lines.AddRange(["TMC: stage 2", "TMC-P: 2/3 0/40 blocks", "TMC-P: 2/3 16/40 blocks", "TMC-P: 2/3 40/40 blocks", "TMC: decoding",
+            "TMC-P: 3/3 0/0 decoding", "TMC-P: 9/3 1/1 tokens"]);
+        var runner = new FakeRunner { WritesWav = true, Lines = lines };
+        var logger = new RecordingLogger<TestGenerator>();
+        var (generator, model) = await ReadyAsync(runner, logger: logger);
+        var seen = new List<MusicProgress>();
+
+        await generator.GenerateAsync(Request(model, Path.Combine(_paths.WorkDirectory, "p"), "x", 10) with
+        {
+            Progress = new TMConcept.Core.Chat.ForwardProgress<MusicProgress>(seen.Add),
+        }, CancellationToken.None);
+
+        runner.Runs.ShouldHaveSingleItem().ProgressMark.ShouldBe(LocalMusicRunRules.ProgressMark, "progress lines stay out of a failure's kept lines");
+        seen.Count.ShouldBe(101 + 4, "every progress line reaches the screen; the malformed one (stage 9 of 3) is not one");
+        seen[50].ShouldBe(new MusicProgress(1, 3, 3000, 6000, MusicProgressUnit.Tokens));
+        seen[^2].Percent.ShouldBe(100);
+        seen[^1].ShouldBe(new MusicProgress(3, 3, 0, 0, MusicProgressUnit.Decoding));
+        var logged = logger.Lines.Where(l => l.Contains("Test: stage", StringComparison.Ordinal)).ToList();
+        logged.Count(l => l.Contains("stage 1/3", StringComparison.Ordinal)).ShouldBe(11, "0, 10, 20 … 100 % of stage 1");
+        logged.Count(l => l.Contains("stage 2/3", StringComparison.Ordinal)).ShouldBe(3, "0 %, 40 %, 100 %");
+        logged.ShouldContain(l => l.Contains("stage 3/3, 0/0 Decoding", StringComparison.Ordinal));
+        logger.All.ShouldNotContain("TMC-P", Case.Sensitive, "the raw lines are not logged");
+    }
+
+    [Fact]
     public async Task TheScriptsFailureLineIsTheReasonAndACardOutOfMemoryIsAMemoryFailure()
     {
         var runner = new FakeRunner();
@@ -386,7 +418,7 @@ public sealed class LocalMusicTests : IDisposable
     public async Task NothingRunsWhileAModelIsNotInstalled()
     {
         var runner = new FakeRunner();
-        var generator = new MusicGenGenerator(Store(new FakeDownloader()), _layout, Installer(new FakeGpu(6 * GiB), runner), _python, runner,
+        var generator = new MusicGenGenerator(Store(new FakeDownloader()), _layout, Installer(new FakeGpu(6 * GiB), runner), _python, runner, new MusicProgressLineParser(),
             NullLogger<MusicGenGenerator>.Instance);
         var model = new EmbeddedModelCatalog().Find(ModelProviders.Local, "musicgen-small")!;
 
@@ -404,9 +436,9 @@ public sealed class LocalMusicTests : IDisposable
         var runner = new FakeRunner();
         var installer = Installer(new FakeGpu(6 * GiB), runner);
         var store = Store(new FakeDownloader());
-        var musicGen = new MusicGenGenerator(store, _layout, installer, _python, runner, NullLogger<MusicGenGenerator>.Instance);
-        var magnet = new MagnetGenerator(store, _layout, installer, _python, runner, NullLogger<MagnetGenerator>.Instance);
-        var audioLdm2 = new AudioLdm2Generator(store, _layout, installer, _python, runner, NullLogger<AudioLdm2Generator>.Instance);
+        var musicGen = new MusicGenGenerator(store, _layout, installer, _python, runner, new MusicProgressLineParser(), NullLogger<MusicGenGenerator>.Instance);
+        var magnet = new MagnetGenerator(store, _layout, installer, _python, runner, new MusicProgressLineParser(), NullLogger<MagnetGenerator>.Instance);
+        var audioLdm2 = new AudioLdm2Generator(store, _layout, installer, _python, runner, new MusicProgressLineParser(), NullLogger<AudioLdm2Generator>.Instance);
         var catalog = new EmbeddedModelCatalog();
 
         musicGen.Handles(catalog.Find(ModelProviders.Local, "musicgen-stereo-large")!).ShouldBeTrue();
@@ -459,11 +491,11 @@ public sealed class LocalMusicTests : IDisposable
         var runner = new FakeRunner();
         var installer = Installer(new FakeGpu(6 * GiB), runner);
         var store = Store(new FakeDownloader());
-        var diffRhythm = new DiffRhythmGenerator(store, _layout, installer, _python, runner, NullLogger<DiffRhythmGenerator>.Instance);
-        var legacy = new DiffRhythmLegacyGenerator(store, _layout, installer, _python, runner, NullLogger<DiffRhythmLegacyGenerator>.Instance);
-        var song = new SongGenerationGenerator(store, _layout, installer, _python, runner, NullLogger<SongGenerationGenerator>.Instance);
-        var yue2 = new Yue2Generator(store, _layout, installer, _python, runner, NullLogger<Yue2Generator>.Instance);
-        var yue = new YueGenerator(store, _layout, installer, _python, runner, NullLogger<YueGenerator>.Instance);
+        var diffRhythm = new DiffRhythmGenerator(store, _layout, installer, _python, runner, new MusicProgressLineParser(), NullLogger<DiffRhythmGenerator>.Instance);
+        var legacy = new DiffRhythmLegacyGenerator(store, _layout, installer, _python, runner, new MusicProgressLineParser(), NullLogger<DiffRhythmLegacyGenerator>.Instance);
+        var song = new SongGenerationGenerator(store, _layout, installer, _python, runner, new MusicProgressLineParser(), NullLogger<SongGenerationGenerator>.Instance);
+        var yue2 = new Yue2Generator(store, _layout, installer, _python, runner, new MusicProgressLineParser(), NullLogger<Yue2Generator>.Instance);
+        var yue = new YueGenerator(store, _layout, installer, _python, runner, new MusicProgressLineParser(), NullLogger<YueGenerator>.Instance);
         var catalog = new EmbeddedModelCatalog();
 
         diffRhythm.Handles(catalog.Find(ModelProviders.Local, "diffrhythm-1.2-full")!).ShouldBeTrue();
@@ -547,7 +579,7 @@ public sealed class LocalMusicTests : IDisposable
         : family == LocalMusicFamilies.Yue ? "apache-2.0"
         : "cc-by-nc-4.0";
 
-    private async Task<(TestGenerator Generator, CatalogModel Model)> ReadyAsync(FakeRunner runner, bool lyrics = false)
+    private async Task<(TestGenerator Generator, CatalogModel Model)> ReadyAsync(FakeRunner runner, bool lyrics = false, ILogger? logger = null)
     {
         var installer = Installer(new FakeGpu(6 * GiB), runner);
         var store = Store(new FakeDownloader());
@@ -558,7 +590,7 @@ public sealed class LocalMusicTests : IDisposable
         await File.WriteAllTextAsync(_python.EnvironmentMarker(family.Environment.Key), PythonInstaller.Fingerprint(family.Environment, "cu128"),
             TestContext.Current.CancellationToken);
         await store.InstallModelAsync(family, family.Variants[0], null, CancellationToken.None);
-        var generator = new TestGenerator(family, store, _layout, installer, _python, runner);
+        var generator = new TestGenerator(family, store, _layout, installer, _python, runner, logger);
         var model = new CatalogModel { Provider = ModelProviders.Local, Id = family.Variants[0].Id, Name = "Test", Capabilities = ModelCapability.Music };
         generator.Ready(model).ShouldBeTrue();
         return (generator, model);
@@ -595,7 +627,8 @@ public sealed class LocalMusicTests : IDisposable
 
     /// <summary>A generator of the test family whose own argument is "--extra yes".</summary>
     private sealed class TestGenerator(LocalMusicFamily family, LocalMusicStore store, LocalMusicLayout layout, PythonInstaller python, PythonLayout pythonLayout,
-        IProcessRunner runner) : LocalMusicGeneratorBase(family, store, layout, python, pythonLayout, runner, NullLogger.Instance)
+        IProcessRunner runner, ILogger? logger = null)
+        : LocalMusicGeneratorBase(family, store, layout, python, pythonLayout, runner, new MusicProgressLineParser(), logger ?? NullLogger.Instance)
     {
         protected override IReadOnlyList<string> FamilyArguments(LocalMusicVariant variant) => ["--extra", "yes"];
     }
@@ -636,9 +669,17 @@ public sealed class LocalMusicTests : IDisposable
 
         public bool WritesWav { get; init; }
 
+        /// <summary>The lines the run prints (to the line handler) before it ends.</summary>
+        public IReadOnlyList<string> Lines { get; init; } = [];
+
         public Task<ProcessResult> RunAsync(ProcessStart start, Action<string>? onLine, CancellationToken cancellationToken)
         {
             Runs.Add(start);
+            foreach (var line in Lines)
+            {
+                onLine?.Invoke(line);
+            }
+
             if (FailOutput is not null)
             {
                 return Task.FromResult(new ProcessResult(2, FailOutput));

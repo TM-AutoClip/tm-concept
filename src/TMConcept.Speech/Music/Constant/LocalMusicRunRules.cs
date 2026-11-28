@@ -2,13 +2,19 @@ namespace TMConcept.Speech.Music;
 
 /// <summary>
 /// How the app and the local music families' scripts talk (28 Nov 2026): a script prints its stages as <c>TMC: …</c> lines (written to the
-/// log as they come) and a failure as one <c>TMC-E-&lt;CODE&gt;: …</c> line before it exits with 2 (that line is the reason on screen; the
+/// log as they come), its progress as <c>TMC-P: …</c> lines (0.1.61) and a failure as one <c>TMC-E-&lt;CODE&gt;: …</c> line before it exits with 2 (that line is the reason on screen; the
 /// whole tail goes to the log, as for rakkase since 0.1.55). The numbers the scripts are given come from here.
 /// </summary>
 public static class LocalMusicRunRules
 {
     /// <summary>The start of a stage line.</summary>
     public const string StageMark = "TMC:";
+
+    /// <summary>
+    /// The start of a progress line (0.1.61): <c>TMC-P: &lt;stage&gt;/&lt;stages&gt; &lt;done&gt;/&lt;total&gt; &lt;unit&gt;</c>, printed by the
+    /// scripts' <c>tmc_progress.py</c> at most once per whole per cent and once a second (<see cref="MusicProgressLineParser"/> reads it).
+    /// </summary>
+    public const string ProgressMark = "TMC-P:";
 
     /// <summary>The start of a failure line.</summary>
     public const string ErrorMark = "TMC-E-";

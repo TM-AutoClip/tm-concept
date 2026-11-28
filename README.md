@@ -543,7 +543,11 @@ A video made with a template (Settings → Templates) follows it without relying
 - **Make music page (0.1.54):** write what you want in your own words ("disco in ancient Egypt"), optionally choose a reference sound (the
   app measures its tempo and asks for it; no model takes a sound directly), pick the local or an online music model (the same ones as
   above, with their prices) and make a piece. It goes into **My music**, which also takes your own audio files; the video's music choice
-  picks from it with the *My music* source. Choosing a model per video in a batch is not offered yet.
+  picks from it with the *My music* source. Choosing a model per video in a batch is not offered yet. While a piece is made (0.1.61) a bar
+  shows how far it is: a local model fills it with its stage and count ("Stage 2/3 · block 16/40 · 40 %": YuE 1's tokens, 6-second blocks
+  and decoding, YuE2's score and song tokens, MusicGen's and SongGeneration's tokens, the steps of MAGNeT, AudioLDM 2 and DiffRhythm); an
+  online model and ACE-Step, which report nothing, keep it moving with the time so far. The same line appears in the video's step row when
+  the music is made for a video; the log takes every 10 %.
 - **Program composes (0.1.55, music from code):** a second local choice that needs no model and no graphics card. The app writes the
   notes itself from the words of the prompt (moods such as calm, epic, sad, tense, mysterious and styles such as orchestral, electronic,
   ambient, acoustic, pop, world, medieval, in English or Turkish; a reference sound's or the video's tempo), as a MIDI file, and

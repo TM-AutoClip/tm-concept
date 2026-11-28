@@ -39,6 +39,19 @@ public sealed class MusicPieceRunnerTests
         await Should.ThrowAsync<OperationCanceledException>(() => runner.RunAsync(new Throwing(new OperationCanceledException()), Request(), CancellationToken.None));
     }
 
+    [Fact]
+    public async Task APieceStartsWithNothingCountedThenTheModelsOwnProgress()
+    {
+        var runner = new MusicPieceRunner(new ImageBackendTests.FakeCoordinator(), NullLogger<MusicPieceRunner>.Instance);
+        var seen = new List<MusicProgress>();
+        var request = Request() with { Progress = new TMConcept.Core.Chat.ForwardProgress<MusicProgress>(seen.Add) };
+
+        await Should.ThrowAsync<MusicGenerationException>(() => runner.RunAsync(new Throwing(new MusicGenerationException("empty")), request,
+            CancellationToken.None));
+
+        seen.ShouldHaveSingleItem().ShouldBe(MusicProgress.Unknown, "an online model counts nothing: an indeterminate bar with the time so far");
+    }
+
     private sealed class Throwing(Exception error) : IMusicGenerator
     {
         public bool Handles(CatalogModel model) => true;

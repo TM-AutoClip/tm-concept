@@ -106,8 +106,9 @@ public sealed class VideoMusicStep(IMediaTools media, IMusicLibrary library, IMu
     /// scene plans' beats are timed again). Returns the music to mix; <paramref name="music"/> null = null.
     /// </summary>
     /// <param name="spend">Gets what generated music cost (its USD and whether that is exact) as soon as it is made (0.1.46).</param>
+    /// <param name="progress">Gets how far the music model is while it makes the piece (0.1.61; the video's step row shows it).</param>
     public async Task<PreparedMusic?> SettleAsync(PreparedMusic? music, VideoStyle? style, RenderInput input, IReadOnlyList<SpeechClip?> clips, string work,
-        bool align, CancellationToken cancellationToken, Action<decimal, bool>? spend = null)
+        bool align, CancellationToken cancellationToken, Action<decimal, bool>? spend = null, IProgress<MusicProgress>? progress = null)
     {
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(clips);
@@ -120,8 +121,8 @@ public sealed class VideoMusicStep(IMediaTools media, IMusicLibrary library, IMu
         var tempo = style?.Tempo ?? NarrationTempos.Default;
         if (music.Generate is { } generate)
         {
-            music = await GenerateAsync(generate, style?.Music ?? new VideoMusic(), hints, tempo, input.DurationSeconds, work, spend, cancellationToken)
-                .ConfigureAwait(false);
+            music = await GenerateAsync(generate, style?.Music ?? new VideoMusic(), hints, tempo, input.DurationSeconds, work, spend, progress,
+                cancellationToken).ConfigureAwait(false);
         }
         else if (music.Automatic)
         {
@@ -226,7 +227,7 @@ public sealed class VideoMusicStep(IMediaTools media, IMusicLibrary library, IMu
     /// work folder like any other track. Any failure stops the video with <c>music</c>.
     /// </summary>
     private async Task<PreparedMusic> GenerateAsync(ResolvedModel model, VideoMusic settings, IReadOnlyList<MusicHint?> hints, NarrationTempo tempo,
-        double videoSeconds, string work, Action<decimal, bool>? spend, CancellationToken cancellationToken)
+        double videoSeconds, string work, Action<decimal, bool>? spend, IProgress<MusicProgress>? progress, CancellationToken cancellationToken)
     {
         var generator = generators.For(model.Model) is { } found
             ? found
@@ -239,7 +240,7 @@ public sealed class VideoMusicStep(IMediaTools media, IMusicLibrary library, IMu
         logger.LogInformation("Music generation: {Model}, {Seconds} s, {Pace}, {Words} (prompt: {Prompt})", ModelBase.KeyOf(model.Model), seconds, pace,
             settings.Instrumental ? "instrumental" : "with words", prompt);
         var request = new MusicGenerationRequest(model, prompt, seconds, MusicPromptBuilder.Bpm(pace), settings.Instrumental, folder,
-            MusicGenerationRules.DefaultSeed);
+            MusicGenerationRules.DefaultSeed) { Progress = progress };
         GeneratedMusic made;
         try
         {

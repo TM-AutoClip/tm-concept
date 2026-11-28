@@ -61,7 +61,11 @@
           <Button Name="MusicCancel" Content="{DynamicResource common.cancel}" Command="{Binding CancelCommand}" IsVisible="{Binding Busy}" />
           <TextBlock Name="MusicEstimate" Text="{Binding EstimateText}" Classes="small muted" VerticalAlignment="Center" />
         </StackPanel>
-        <ProgressBar IsIndeterminate="True" IsVisible="{Binding Busy}" />
+        <!-- 0.1.61: a local model fills the bar with its stage's share ("Aşama 2/3 · blok 16/40 · %40"); a model that counts nothing keeps it
+             moving with the time so far. -->
+        <ProgressBar Name="MusicProgress" IsIndeterminate="{Binding Piece.Indeterminate}" Value="{Binding Piece.Percent}" Minimum="0" Maximum="100"
+                     IsVisible="{Binding Busy}" />
+        <TextBlock Name="MusicProgressText" Text="{Binding Piece.Text}" Classes="small muted" TextWrapping="Wrap" IsVisible="{Binding Piece.Active}" />
         <SelectableTextBlock Name="MusicStatus" Text="{Binding Status}" TextWrapping="Wrap" />
       </StackPanel>
     </ScrollViewer>

@@ -11,4 +11,11 @@ public sealed record ProcessStart(string Program, IReadOnlyList<string> Argument
     /// for many minutes is never silent in the log); null = none.
     /// </summary>
     public TimeSpan? Heartbeat { get; init; }
+
+    /// <summary>
+    /// The start of the program's progress lines (0.1.61: a local music script's "TMC-P:"): they go to the line handler only, never into the
+    /// kept last lines (a line a second would push a failure's own lines out of the log); the heartbeat still names one as the last line.
+    /// Null = every line is kept.
+    /// </summary>
+    public string? ProgressMark { get; init; }
 }

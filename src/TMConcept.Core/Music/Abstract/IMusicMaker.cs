@@ -14,6 +14,9 @@ public interface IMusicMaker
     /// <summary>The work folders of the pieces being made now (the start-up sweep never deletes them; every other one is a closed app's leftover).</summary>
     IReadOnlyCollection<string> ActiveFolders { get; }
 
-    /// <summary>Makes the piece and adds it to the collection; <paramref name="progress"/> gets the stage ("reference", "generate", "save").</summary>
-    Task<MyMusicEntry> MakeAsync(MusicMakeRequest request, IProgress<string>? progress, CancellationToken cancellationToken);
+    /// <summary>
+    /// Makes the piece and adds it to the collection; <paramref name="progress"/> gets the stage ("reference", "generate", "save"),
+    /// <paramref name="piece"/> how far the model is while it makes the piece (0.1.61, <see cref="MusicGenerationRequest.Progress"/>).
+    /// </summary>
+    Task<MyMusicEntry> MakeAsync(MusicMakeRequest request, IProgress<string>? progress, IProgress<MusicProgress>? piece, CancellationToken cancellationToken);
 }

@@ -15,7 +15,9 @@ namespace TMConcept.Speech.Music;
 /// folder. The WAV it writes under <c>O</c> is the piece; rakkase's own archive copy is removed afterwards. Made for NVIDIA cards (measured on
 /// a 4 GB GTX 1050 Ti, about 2.6 GB at its peak; 16 GB main memory); the caller holds the graphics card's lock. Never tried on Linux.
 /// Words (lyrics) are not offered yet: the piece is always instrumental. A failed run writes its last lines to the log and its plan check's
-/// findings into the error (<see cref="RakkaseOutput"/>).
+/// findings into the error (<see cref="RakkaseOutput"/>). Progress (0.1.61): none — rakkase prints no step lines (it counts the DiT steps only
+/// for its final record) and ACE-Step turns its own bars off when its output is not a terminal, so the screen shows an indeterminate bar with
+/// the time so far, like an online model.
 /// </summary>
 public sealed class RakkaseMusicGenerator(RakkaseInstaller installer, RakkaseLayout layout, IProcessRunner runner, ILogger<RakkaseMusicGenerator> logger)
     : IMusicGenerator

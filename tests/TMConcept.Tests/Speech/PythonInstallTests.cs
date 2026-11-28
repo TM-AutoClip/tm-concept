@@ -110,7 +110,8 @@ public sealed class PythonInstallTests
     {
         // 28 Nov 2026: the local music families' scripts ship with them (each run by its own generator, never by the worker) with their helpers.
         PythonFiles.Scripts.ShouldBe(["adapter_f5.py", "adapter_mms.py", "adapter_voxcpm.py", "adapter_xtts.py", "adapter_yazgi.py", "f5_ref_tr.wav", "music_audioldm2.py",
-            "music_diffrhythm.py", "music_magnet.py", "music_musicgen.py", "music_songgeneration.py", "music_yue.py", "music_yue2.py", "tmc_common.py", "tmc_music.py", "worker.py"]);
+            "music_diffrhythm.py", "music_magnet.py", "music_musicgen.py", "music_songgeneration.py", "music_yue.py", "music_yue2.py", "tmc_common.py", "tmc_music.py",
+            "tmc_progress.py", "worker.py"]);
         foreach (var script in new[] { "music_audioldm2.py", "music_magnet.py", "music_musicgen.py", "music_yue2.py" })
         {
             var text = System.Text.Encoding.UTF8.GetString(PythonFiles.Read(script));
@@ -124,6 +125,8 @@ public sealed class PythonInstallTests
         }
 
         System.Text.Encoding.UTF8.GetString(PythonFiles.Read("tmc_music.py")).ShouldContain("\"TMC-E-\" + code");
+        System.Text.Encoding.UTF8.GetString(PythonFiles.Read("tmc_progress.py")).ShouldContain("MARK = \"TMC-P: \"", Case.Sensitive,
+            "0.1.61: the progress lines' mark, as LocalMusicRunRules.ProgressMark reads it");
         System.Text.Encoding.UTF8.GetString(PythonFiles.Read("worker.py")).ShouldContain("HF_HUB_OFFLINE");
     }
 

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using TMConcept.Core.Music;
 using TMConcept.Core.Processes;
 using TMConcept.Speech.Python;
 
@@ -12,7 +13,7 @@ namespace TMConcept.Speech.Music;
 /// audio, its code version from the model's own option (<see cref="LocalMusicVariant.Options"/>), seeds every random source (upstream seeds from the clock), and writes the 48 kHz piece it makes as a WAV cut to the asked seconds.
 /// </summary>
 public sealed class SongGenerationGenerator(LocalMusicStore store, LocalMusicLayout layout, PythonInstaller python, PythonLayout pythonLayout, IProcessRunner runner,
-    ILogger<SongGenerationGenerator> logger) : LocalMusicGeneratorBase(LocalMusicFamilies.SongGeneration, store, layout, python, pythonLayout, runner, logger)
+    IMusicProgressParser progress, ILogger<SongGenerationGenerator> logger) : LocalMusicGeneratorBase(LocalMusicFamilies.SongGeneration, store, layout, python, pythonLayout, runner, progress, logger)
 {
     /// <inheritdoc />
     protected override IReadOnlyList<string> FamilyArguments(LocalMusicVariant variant)

@@ -97,6 +97,8 @@ public static class DesktopServices
         // 28 Nov 2026: the MusicGen, MAGNeT, AudioLDM 2, DiffRhythm, SongGeneration and YuE families (most with non-commercial weights: the orange warning and a one-time question;
         // each family its own Python environment, each model its own weights component, all installed only after a yes).
         services.AddSingleton<Speech.Music.LocalMusicLayout>();
+        // 0.1.61: the scripts' progress lines ("TMC-P: 2/3 16/40 blocks"), read the same way for every family.
+        services.AddSingleton<Core.Music.IMusicProgressParser, Speech.Music.MusicProgressLineParser>();
         services.AddSingleton<Speech.Music.LocalMusicStore>();
         services.AddSingleton<Core.Components.IComponentSource, Speech.Music.LocalMusicComponentSource>();
         services.AddSingleton<Core.Music.IMusicGenerator, Speech.Music.MusicGenGenerator>();
@@ -414,6 +416,7 @@ public static class DesktopServices
         services.AddTransient<ProductionChecklistViewModel>();
         services.AddSingleton<IVideoMediaServices, VideoMediaServices>();
         services.AddSingleton<IMusicChoiceText, MusicChoiceText>();
+        services.AddSingleton<IMusicProgressText, MusicProgressText>();
         services.AddTransient<VideoMediaViewModel>();
         services.AddTransient<VideoLookViewModel>();
 

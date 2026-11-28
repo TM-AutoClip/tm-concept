@@ -2,7 +2,8 @@
 
 Loads the diffusers AudioLDM2Pipeline from the model's folder in float16 (offline), on a card of 8 GB or more whole, on a smaller one with
 accelerate's model offload (only the working part on the card), switches to the DPM-Solver++ scheduler, makes one piece and writes it as a
-16-bit WAV (16 kHz, mono). Stages are printed as "TMC: ..." lines, a failure as one "TMC-E-<CODE>: ..." line before exit code 2.
+16-bit WAV (16 kHz, mono). Stages are printed as "TMC: ..." lines, a failure as one "TMC-E-<CODE>: ..." line before exit code 2. Progress
+(0.1.61): one stage, the denoising steps, from the pipeline's own step callback (tmc_progress).
 """
 import argparse
 import os
@@ -13,6 +14,7 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 from tmc_music import fail, report, stage  # noqa: E402  (after the path above; the script runs with -I)
+from tmc_progress import Reporter  # noqa: E402
 
 # A card below this much memory gets the model offload (AudioLDM 2 Large holds about 3 GB of weights in float16).
 WHOLE_ON_CARD_BYTES = 7.5 * 1024 ** 3
@@ -59,9 +61,14 @@ def main():
 
     generator = torch.Generator("cuda").manual_seed(args.seed)
     stage("making %d s in %d steps" % (round(args.seconds), args.steps))
+    progress = Reporter(1)
+    progress.begin(1, "steps", args.steps)
     with torch.inference_mode():
+        # The pipeline calls back after each step with its index (0-based).
         audio = pipe(prompt, negative_prompt=NEGATIVE, num_inference_steps=args.steps, audio_length_in_s=args.seconds, guidance_scale=args.guidance,
-                     num_waveforms_per_prompt=1, generator=generator).audios[0]
+                     num_waveforms_per_prompt=1, generator=generator, callback=lambda index, _t, _latents: progress.update(index + 1),
+                     callback_steps=1).audios[0]
+    progress.finish()
 
     stage("writing the piece")
     samples = np.asarray(audio, dtype=np.float32)

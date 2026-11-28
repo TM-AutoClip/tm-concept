@@ -66,10 +66,13 @@ public sealed class ProcessRunner(ChildProcessGuardBase children, ILogger<Proces
 
             lock (gate)
             {
-                last.Enqueue(line);
-                if (last.Count > KeptLines)
+                if (start.ProgressMark is not { Length: > 0 } mark || !line.StartsWith(mark, StringComparison.Ordinal))
                 {
-                    last.Dequeue();
+                    last.Enqueue(line);
+                    if (last.Count > KeptLines)
+                    {
+                        last.Dequeue();
+                    }
                 }
 
                 if (line.Trim().Length > 0)

@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.Extensions.Logging;
+using TMConcept.Core.Music;
 using TMConcept.Core.Processes;
 using TMConcept.Speech.Python;
 
@@ -13,7 +14,7 @@ namespace TMConcept.Speech.Music;
 /// code versions differ in the sampler's arguments (<see cref="CodeVersion"/>).
 /// </summary>
 public abstract class DiffRhythmGeneratorBase(LocalMusicFamily family, string codeVersion, LocalMusicStore store, LocalMusicLayout layout, PythonInstaller python,
-    PythonLayout pythonLayout, IProcessRunner runner, ILogger logger) : LocalMusicGeneratorBase(family, store, layout, python, pythonLayout, runner, logger)
+    PythonLayout pythonLayout, IProcessRunner runner, IMusicProgressParser progress, ILogger logger) : LocalMusicGeneratorBase(family, store, layout, python, pythonLayout, runner, progress, logger)
 {
     /// <summary>The DiffRhythm code version the script follows (<see cref="DiffRhythmPins.CurrentVersion"/> or <see cref="DiffRhythmPins.LegacyVersion"/>).</summary>
     public string CodeVersion { get; } = codeVersion;

@@ -6,7 +6,9 @@ given, so DiffRhythm's phonemizer (which needs espeak-ng) is never built. To fit
 and is freed, the transformer is cast to 16 bits on the processor before it moves to the card, and it is freed before the VAE decodes in
 chunks. A base model (--frames 2048) makes exactly 95 s; a full one (--frames 6144) 96-285 s with the 1.2 code, exactly 285 s with the 1.0
 code; the piece is cut to --seconds, peak-normalised and written as a 16-bit 44.1 kHz stereo WAV. Stages are printed as "TMC: ..." lines, a
-failure as one "TMC-E-<CODE>: ..." line before exit code 2.
+failure as one "TMC-E-<CODE>: ..." line before exit code 2. Progress (0.1.61): stage 1 the sampler's steps (each call of the flow function
+torchdiffeq's Euler solver makes between two of the 32 time points: 31), counted by wrapping the odeint DiffRhythm's model code calls, from
+outside its file; stage 2 the VAE's decoding, without a count (tmc_progress).
 """
 import argparse
 import gc
@@ -19,6 +21,7 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 from tmc_music import fail, report, stage  # noqa: E402  (after the path above; the script runs with -I)
+from tmc_progress import Reporter  # noqa: E402
 
 SAMPLE_RATE = 44100
 DOWNSAMPLE = 2048
@@ -38,6 +41,28 @@ def load_mulan(shared):
     state = torch.load(os.path.join(shared, "muq-mulan", "pytorch_model.bin"), map_location="cpu", weights_only=True)
     model.load_state_dict(state, strict=False)
     return model.eval()
+
+
+def follow_steps(progress):
+    """The sampler's steps: DiffRhythm's model code calls torchdiffeq's odeint by the name it imported, so that name is wrapped (its file is
+    not changed); the flow function is counted at each call."""
+    import model.cfm as code
+
+    real = code.odeint
+
+    def odeint(func, y0, t, **kwargs):
+        progress.begin(1, "steps", max(1, len(t) - 1))
+        calls = {"n": 0}
+
+        def counted(*args, **inner):
+            out = func(*args, **inner)
+            calls["n"] += 1
+            progress.update(calls["n"])
+            return out
+
+        return real(counted, y0, t, **kwargs)
+
+    code.odeint = odeint
 
 
 def main():
@@ -76,6 +101,9 @@ def main():
         fail("CUDA", "PyTorch sees no NVIDIA graphics card (CUDA); DiffRhythm runs only there in the app")
     from infer_utils import decode_audio, get_lrc_token
     from model import CFM, DiT
+
+    progress = Reporter(2)
+    follow_steps(progress)
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed % (2 ** 32))
@@ -129,7 +157,9 @@ def main():
     gc.collect()
     torch.cuda.empty_cache()
 
+    progress.finish()
     stage("decoding")
+    progress.begin(2, "decoding")
     vae = torch.jit.load(os.path.join(args.shared, "vae", "vae_model.pt"), map_location="cpu").to(device)
     with torch.inference_mode():
         audio = decode_audio(latent, vae, chunked=True)

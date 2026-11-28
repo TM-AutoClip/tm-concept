@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using TMConcept.Core.Music;
 using TMConcept.Core.Processes;
 using TMConcept.Speech.Python;
 
@@ -12,7 +13,7 @@ namespace TMConcept.Speech.Music;
 /// entries' own options, <see cref="LocalMusicVariant.Options"/>).
 /// </summary>
 public sealed class Yue2Generator(LocalMusicStore store, LocalMusicLayout layout, PythonInstaller python, PythonLayout pythonLayout, IProcessRunner runner,
-    ILogger<Yue2Generator> logger) : LocalMusicGeneratorBase(LocalMusicFamilies.Yue2, store, layout, python, pythonLayout, runner, logger)
+    IMusicProgressParser progress, ILogger<Yue2Generator> logger) : LocalMusicGeneratorBase(LocalMusicFamilies.Yue2, store, layout, python, pythonLayout, runner, progress, logger)
 {
     /// <inheritdoc />
     protected override IReadOnlyList<string> FamilyArguments(LocalMusicVariant variant)

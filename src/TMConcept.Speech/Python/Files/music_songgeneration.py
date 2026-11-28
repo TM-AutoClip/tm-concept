@@ -6,7 +6,9 @@ always in its low-memory mode and without flash-attn. The prompt is its descript
 its sections ("[verse] line one. line two ; [chorus] ..."): the user's own [section] tags are kept, plain paragraphs alternate verse and
 chorus between a short intro and outro; an empty file makes pure music (its "bgm" type). Every random source is seeded with --seed (upstream
 seeds from the clock). The 48 kHz piece is cut to --seconds and written as a 16-bit WAV. Stages are printed as "TMC: ..." lines, a failure
-as one "TMC-E-<CODE>: ..." line before exit code 2.
+as one "TMC-E-<CODE>: ..." line before exit code 2. Progress (0.1.61): stage 1 the generated tokens, from the tqdm bar of SongGeneration's
+token loop (followed off screen, tmc_progress), stage 2 the decoding, without a count; the stages are told apart by wrapping CodecLM's generate
+and generate_audio from outside its file.
 """
 import argparse
 import json
@@ -20,6 +22,7 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 from tmc_music import blocks, fail, report, stage  # noqa: E402  (after the path above; the script runs with -I)
+from tmc_progress import Reporter, follow_tqdm  # noqa: E402
 
 
 def sentence(line):
@@ -36,6 +39,32 @@ def sections(text):
         sung = " ".join(s for s in (sentence(l) for l in lines) if s)
         parts.append("[" + tag.lower().replace(" ", "-") + "]" + (" " + sung if sung else ""))
     return " ; ".join(parts if tagged else ["[intro-short]"] + parts + ["[outro-short]"])
+
+
+def count_tokens(progress, bar):
+    """The token loop's bar (only while the tokens are made: the decoding's own bars, if any, are not counted)."""
+    if progress.stage == 1 and progress.unit == "tokens" and bar.total:
+        progress.length(bar.total)
+        progress.update(bar.n)
+
+
+def follow_stages(progress, codec):
+    """Stage 1 starts with CodecLM.generate (the tokens), stage 2 with the first CodecLM.generate_audio (the decoding)."""
+    generate, decode = codec.generate, codec.generate_audio
+
+    def tokens(self, *args, **kwargs):
+        progress.begin(1, "tokens")
+        made = generate(self, *args, **kwargs)
+        progress.finish()
+        return made
+
+    def decoding(self, *args, **kwargs):
+        if progress.stage != 2:
+            progress.begin(2, "decoding")
+        return decode(self, *args, **kwargs)
+
+    codec.generate = tokens
+    codec.generate_audio = decoding
 
 
 def main():
@@ -97,8 +126,14 @@ def main():
     OmegaConf.register_new_resolver("load_yaml", lambda x: list(OmegaConf.load(from_code(x))))
     torch.backends.cudnn.enabled = False
 
+    progress = Reporter(2)
+    # Before upstream's modules import tqdm (its token loop's bar is followed from then on).
+    follow_tqdm(lambda bar, depth: count_tokens(progress, bar))
     import generate as upstream
+    from codeclm.models import CodecLM
     from codeclm.utils.offload_profiler import OffloadParamParse, OffloadProfiler
+
+    follow_stages(progress, CodecLM)
 
     upstream.OffloadProfiler = OffloadProfiler
     upstream.OffloadParamParse = OffloadParamParse
@@ -119,6 +154,7 @@ def main():
     stage("making the song (%s, %s)" % (args.version, "with words" if words else "pure music"))
     upstream.generate_lowmem(options, version=args.version)
 
+    progress.finish()
     made = os.path.join(save, "audios", "piece.flac")
     if not os.path.isfile(made):
         fail("OUTPUT", "SongGeneration wrote no piece")

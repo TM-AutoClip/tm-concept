@@ -19,4 +19,11 @@ namespace TMConcept.Core.Music;
 /// none (an instrumental piece).
 /// </param>
 public sealed record MusicGenerationRequest(ResolvedModel Model, string Prompt, int Seconds, int? Bpm, bool Instrumental, string OutputFolder, int Seed,
-    string Lyrics = "");
+    string Lyrics = "")
+{
+    /// <summary>
+    /// Gets how far the piece is (0.1.61): <see cref="MusicProgress.Unknown"/> when it starts, then a local script's progress lines (the music
+    /// page's bar, the video's step row); null = nobody watches.
+    /// </summary>
+    public IProgress<MusicProgress>? Progress { get; init; }
+}

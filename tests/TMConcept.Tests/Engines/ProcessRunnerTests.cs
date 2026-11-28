@@ -86,4 +86,23 @@ public sealed class ProcessRunnerTests
         clock.Advance(TimeSpan.FromSeconds(60));
         logger.Lines.Count(l => l.Contains("still runs after", StringComparison.Ordinal)).ShouldBe(2, "no heartbeat after the end");
     }
+
+    [Fact]
+    public async Task ProgressLinesGoToTheHandlerButNotIntoTheKeptLastLines()
+    {
+        using var guard = ChildProcessTests.Guard();
+        var runner = new ProcessRunner(guard, new RecordingLogger<ProcessRunner>());
+        var (program, arguments) = OperatingSystem.IsWindows()
+            ? (Path.Combine(Environment.SystemDirectory, "cmd.exe"), new[] { "/d", "/c", "echo TMC-P: 1/1 1/2 steps&echo a real line&echo TMC-P: 1/1 2/2 steps" })
+            : ("/bin/sh", ["-c", "echo 'TMC-P: 1/1 1/2 steps'; echo 'a real line'; echo 'TMC-P: 1/1 2/2 steps'"]);
+        var seen = new List<string>();
+
+        var result = await runner.RunAsync(new ProcessStart(program, arguments, Path.GetTempPath()) { ProgressMark = "TMC-P:" },
+            line => { lock (seen) { seen.Add(line.Trim()); } }, TestContext.Current.CancellationToken);
+
+        result.ExitCode.ShouldBe(0);
+        seen.Count(l => l.StartsWith("TMC-P:", StringComparison.Ordinal)).ShouldBe(2, "the handler gets every line");
+        result.LastLines.ShouldContain("a real line");
+        result.LastLines.ShouldNotContain("TMC-P:", Case.Sensitive, "a line a second would push a failure's own lines out");
+    }
 }

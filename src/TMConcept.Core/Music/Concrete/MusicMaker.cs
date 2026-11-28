@@ -68,7 +68,8 @@ public sealed class MusicMaker(IMusicGenerators generators, IMusicPieceRunner pi
     }
 
     /// <inheritdoc />
-    public async Task<MyMusicEntry> MakeAsync(MusicMakeRequest request, IProgress<string>? progress, CancellationToken cancellationToken)
+    public async Task<MyMusicEntry> MakeAsync(MusicMakeRequest request, IProgress<string>? progress, IProgress<MusicProgress>? piece,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         if (string.IsNullOrWhiteSpace(request.Prompt))
@@ -113,8 +114,8 @@ public sealed class MusicMaker(IMusicGenerators generators, IMusicPieceRunner pi
                 bpm?.ToString(CultureInfo.InvariantCulture) ?? "-", request.Instrumental ? "instrumental" : "with words", seed);
             progress?.Report("generate");
             var lyrics = Lyrics(request);
-            var piece = new MusicGenerationRequest(resolved, prompt, seconds, bpm, request.Instrumental, output, seed, lyrics);
-            var made = await GenerateAsync(generator, piece, request.Prompt.Trim(), usd, cancellationToken).ConfigureAwait(false);
+            var asked = new MusicGenerationRequest(resolved, prompt, seconds, bpm, request.Instrumental, output, seed, lyrics) { Progress = piece };
+            var made = await GenerateAsync(generator, asked, request.Prompt.Trim(), usd, cancellationToken).ConfigureAwait(false);
             progress?.Report("save");
             var title = request.Title.Trim().Length > 0 ? request.Title.Trim() : TitleOf(request.Prompt);
             return await collection.AddGeneratedAsync(new GeneratedPiece(made.File, title, ModelBase.KeyOf(request.Model), request.Prompt.Trim(), referenceName,

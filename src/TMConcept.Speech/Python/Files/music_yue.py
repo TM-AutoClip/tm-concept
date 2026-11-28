@@ -5,8 +5,14 @@ stage 1 (--stage1: the 7B or 0.5B model, or with --exl2 its 4.25-bit exllamav2 q
 or with --exl2 its 8-bit quantisation with a Q8 cache) and the post-processing with the codec's weights (--xcodec). Two segments. The prompt
 is its genre tags; the words (--lyrics-file) become its sections ("[verse]", "[chorus]"...: the user's own tags are kept, plain paragraphs
 alternate verse and chorus); an empty file gives an instrumental structure with "instrumental" added to the tags. The post-processing runs
-through this script again (--post) so that its MP3 files are written and read as WAV with soundfile (no FFmpeg needed). The final mix is cut to
+through this script again so that its MP3 files are written and read as WAV with soundfile (no FFmpeg needed). The final mix is cut to
 --seconds and written as a 16-bit WAV. Stages are printed as "TMC: ..." lines, a failure as one "TMC-E-<CODE>: ..." line before exit code 2.
+
+Progress (0.1.61): every stage runs through this script (--child <stage> <YuE's script> ...), which hooks a counter into the libraries before
+YuE's own script runs (YuE's files are not changed) and prints "TMC-P: ..." lines (tmc_progress): stage 1 counts the generated tokens of all
+segments (exllamav2: each sampled token's forward, a segment starts with its prompt's forward; transformers: each generation step, a segment
+starts with its generate call; a segment that ends early jumps to the next one), stage 2 the 6-second blocks (300 frames each) of the two
+tracks, from the frames refined so far (one frame of every block in a batch per forward or generate call), and the decoding has no count.
 """
 import argparse
 import glob
@@ -20,6 +26,13 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 from tmc_music import blocks, fail, report, stage  # noqa: E402  (after the path above; the script runs with -I)
+from tmc_progress import MARK, Reporter, count_generation_steps, follow_exllamav2, follow_generate_calls  # noqa: E402
+
+STAGES = 3
+BLOCK_FRAMES = 300
+TRACKS = ("vtrack.npy", "itrack.npy")
+# YuE's own split of the lyrics into segments (infer_stage1.py, split_lyrics).
+SEGMENT = re.compile(r"\[(\w+)\](.*?)(?=\[|\Z)", re.DOTALL)
 
 
 def sections(text):
@@ -37,7 +50,7 @@ def run_stage(name, command, work):
     for line in process.stdout:
         sys.stdout.write(line)
         sys.stdout.flush()
-        if line.strip():
+        if line.strip() and not line.startswith(MARK):
             last = line.strip()
         if "out of memory" in line.lower() or "OutOfMemoryError" in line:
             memory = True
@@ -46,6 +59,79 @@ def run_stage(name, command, work):
         if memory:
             fail("MEMORY", "the graphics card ran out of memory in " + name)
         fail("STAGE", name + " ended with " + str(code) + (": " + last[:300] if last else ""))
+
+
+def options(rest):
+    """The YuE arguments a counter needs (the stage scripts take the same list)."""
+    parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+    parser.add_argument("--run_n_segments", type=int, default=2)
+    parser.add_argument("--max_new_tokens", type=int, default=3000)
+    parser.add_argument("--lyrics_txt", default="")
+    parser.add_argument("--output_dir", default="")
+    return parser.parse_known_args(rest)[0]
+
+
+def count_tokens(reporter, known):
+    """Stage 1: the generated tokens of all segments (each at most --max_new_tokens)."""
+    with open(known.lyrics_txt, encoding="utf-8") as handle:
+        segments = max(1, min(known.run_n_segments, len(SEGMENT.findall(handle.read()))))
+    each = max(1, known.max_new_tokens)
+    reporter.begin(1, "tokens", segments * each)
+    state = {"segment": -1, "tokens": 0}
+
+    def show():
+        reporter.update(max(0, state["segment"]) * each + min(state["tokens"], each))
+
+    def segment(*_):
+        state["segment"], state["tokens"] = state["segment"] + 1, 0
+        show()
+
+    def token():
+        state["tokens"] += 1
+        show()
+
+    follow_exllamav2(lambda ids, prompt: segment() if prompt else token())
+    follow_generate_calls(segment)
+    count_generation_steps(token)
+
+
+def count_blocks(reporter, known):
+    """Stage 2: the 6-second blocks of the two tracks, from the frames refined so far."""
+    import numpy as np
+
+    frames = [int(np.load(os.path.join(known.output_dir, "stage1", name), mmap_mode="r").shape[-1]) for name in TRACKS]
+    total = max(1, sum(frames))
+    count = sum(-(-f // BLOCK_FRAMES) for f in frames)
+    reporter.begin(2, "blocks", count)
+    state = {"frames": 0}
+
+    def frame(ids):
+        shape = getattr(ids, "shape", None)
+        state["frames"] += int(shape[0]) if shape is not None and len(shape) > 1 else 1
+        reporter.update(state["frames"] * count // total)
+
+    follow_exllamav2(lambda ids, prompt: frame(ids) if prompt else None)
+    follow_generate_calls(frame)
+
+
+def child(stage_number, script, rest):
+    """One of YuE's stages in this process, with its counter hooked in first (stage 3, the decoding, through post)."""
+    import runpy
+
+    reporter = Reporter(STAGES)
+    known = options(rest)
+    if stage_number == "1":
+        count_tokens(reporter, known)
+    elif stage_number == "2":
+        count_blocks(reporter, known)
+    else:
+        reporter.begin(3, "decoding")
+        post(script, rest)
+        return
+    sys.path.insert(0, os.path.dirname(script))
+    sys.argv = [script] + rest
+    runpy.run_path(script, run_name="__main__")
+    reporter.finish()
 
 
 def post(script, rest):
@@ -125,9 +211,10 @@ def main():
     # -s: no user site packages; the stage scripts import their neighbours, so their own folder stays first on the path. -u (and
     # PYTHONUNBUFFERED from the app): a stage's lines reach this script, and the app's log, as they are printed.
     python = [sys.executable, "-u", "-s", "-X", "utf8"]
-    run_stage("stage 1 (%s)" % ("exllamav2" if args.exl2 else "16-bit"), python + [os.path.join(yue, "infer_stage1.py")] + common, work)
-    run_stage("stage 2", python + [os.path.join(yue, "infer_stage2.py")] + common, work)
-    run_stage("decoding", python + [os.path.abspath(__file__), "--post", os.path.join(yue, "infer_postprocess.py")] + common, work)
+    here = [os.path.abspath(__file__), "--child"]
+    run_stage("stage 1 (%s)" % ("exllamav2" if args.exl2 else "16-bit"), python + here + ["1", os.path.join(yue, "infer_stage1.py")] + common, work)
+    run_stage("stage 2", python + here + ["2", os.path.join(yue, "infer_stage2.py")] + common, work)
+    run_stage("decoding", python + here + ["3", os.path.join(yue, "infer_postprocess.py")] + common, work)
 
     mixes = sorted(glob.glob(os.path.join(output, "*.mp3")), key=os.path.getmtime)
     if not mixes:
@@ -144,8 +231,8 @@ def main():
 
 if __name__ == "__main__":
     try:
-        if len(sys.argv) > 2 and sys.argv[1] == "--post":
-            post(sys.argv[2], sys.argv[3:])
+        if len(sys.argv) > 3 and sys.argv[1] == "--child":
+            child(sys.argv[2], sys.argv[3], sys.argv[4:])
         else:
             main()
     except SystemExit:

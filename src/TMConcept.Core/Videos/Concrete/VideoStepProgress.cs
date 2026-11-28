@@ -1,4 +1,5 @@
 using TMConcept.Core.Chat;
+using TMConcept.Core.Music;
 
 namespace TMConcept.Core.Videos;
 
@@ -6,7 +7,8 @@ namespace TMConcept.Core.Videos;
 /// One video run's progress and what it paid, in one place (the first make and every later version): the weighted steps it does (its plan;
 /// only these count toward the share), <see cref="Report"/> a share inside a step with the engine's line or the scenes done,
 /// <see cref="Finish"/> a step (the next step of the plan is reported as running: the steps follow each other), <see cref="Spend"/> every
-/// paid call as it is paid (also a failed one), and the code call's own progress (<see cref="Call"/>). Each change is reported at once with
+/// paid call as it is paid (also a failed one), the code call's own progress (<see cref="Call"/>) and the music model's (<see cref="Music"/>,
+/// 0.1.61). Each change is reported at once with
 /// the money spent so far, so the screen shows the cost rising during the run; the record and a failure read the same costs
 /// (<see cref="Spent"/>), so nothing is counted twice. Reports may come from the engine's or the provider's thread: guarded by a lock.
 /// </summary>
@@ -25,6 +27,7 @@ public sealed class VideoStepProgress
     private int _count;
     private int _of;
     private ChatProgress? _call;
+    private MusicProgress? _music;
 
     /// <summary>A run of <paramref name="steps"/> (in order, with their weights) that reports to <paramref name="progress"/>.</summary>
     public VideoStepProgress(IReadOnlyList<(string Step, double Weight)> steps, IProgress<VideoProgress>? progress)
@@ -71,6 +74,7 @@ public sealed class VideoStepProgress
             if (!string.Equals(step, _step, StringComparison.Ordinal))
             {
                 _call = null;
+                _music = null;
             }
 
             _step = step;
@@ -96,6 +100,7 @@ public sealed class VideoStepProgress
             _count = 0;
             _of = 0;
             _call = null;
+            _music = null;
         }
 
         Send();
@@ -125,6 +130,24 @@ public sealed class VideoStepProgress
         Send();
     }
 
+    /// <summary>
+    /// The music model's progress while it makes the video's music (0.1.61), reported with the running step (the timing, or the step the
+    /// scene plan's music is laid in); a new step clears it.
+    /// </summary>
+    public void Music(MusicProgress progress)
+    {
+        ArgumentNullException.ThrowIfNull(progress);
+        lock (_lock)
+        {
+            _music = progress;
+        }
+
+        Send();
+    }
+
+    /// <summary>Where the music model reports to (<see cref="Music"/>; the generator's lines come from the process reader's thread).</summary>
+    public IProgress<MusicProgress> MusicReporter => new ForwardProgress<MusicProgress>(Music);
+
     private double Weight(string step) => _steps.FirstOrDefault(w => string.Equals(w.Step, step, StringComparison.Ordinal)).Weight;
 
     private void Send()
@@ -138,7 +161,7 @@ public sealed class VideoStepProgress
         lock (_lock)
         {
             var share = Math.Clamp((_done + (Weight(_step) * _inside)) / _total, 0, 1);
-            report = new VideoProgress(share, _step, _detail, _spent.Sum(c => c.Usd), Plan, _count, _of, _call);
+            report = new VideoProgress(share, _step, _detail, _spent.Sum(c => c.Usd), Plan, _count, _of, _call, _music);
         }
 
         _progress.Report(report);

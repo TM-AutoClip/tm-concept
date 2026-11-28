@@ -2,7 +2,8 @@
 
 Loads a MusicGen checkpoint from its folder with Hugging Face transformers (offline), makes one instrumental piece from the prompt and writes
 it as a 16-bit WAV (32 kHz; two channels for the stereo models). Stages are printed as "TMC: ..." lines, a failure as one "TMC-E-<CODE>: ..."
-line before exit code 2 (the app shows that line and logs the rest). MusicGen makes at most 30 s (1503 tokens) per call.
+line before exit code 2 (the app shows that line and logs the rest). MusicGen makes at most 30 s (1503 tokens) per call. Progress (0.1.61):
+one stage, its generated tokens, counted at each generation step of transformers (tmc_progress).
 """
 import argparse
 import json
@@ -14,6 +15,7 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 from tmc_music import fail, report, stage  # noqa: E402  (after the path above; the script runs with -I)
+from tmc_progress import Reporter, count_generation_steps  # noqa: E402
 
 MAX_TOKENS = 1503
 
@@ -72,8 +74,18 @@ def main():
     tokens = max(1, min(MAX_TOKENS, int(args.seconds * frame_rate) + 3))
     inputs = processor(text=[prompt], padding=True, return_tensors="pt").to("cuda")
     stage("making %d s (%d tokens)" % (round(args.seconds), tokens))
+    progress = Reporter(1)
+    made = {"tokens": 0}
+
+    def step():
+        made["tokens"] += 1
+        progress.update(made["tokens"])
+
+    count_generation_steps(step)
+    progress.begin(1, "tokens", tokens)
     with torch.inference_mode():
         audio = model.generate(**inputs, do_sample=True, guidance_scale=args.guidance, max_new_tokens=tokens)
+    progress.finish()
 
     stage("writing the piece")
     samples = audio[0].float().cpu().numpy().T

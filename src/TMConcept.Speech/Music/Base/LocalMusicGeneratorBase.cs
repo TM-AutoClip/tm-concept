@@ -15,12 +15,14 @@ namespace TMConcept.Speech.Music;
 /// (<see cref="FamilyArguments"/>). The prompt and the words go in UTF-8 files, never on the command line. Offline: Hugging Face and transformers may not reach the network, the libraries write under the
 /// app's folder. The length is the model's longest at most (<see cref="LocalMusicVariant.MaxSeconds"/>; a longer video loops the piece). The
 /// script's stage lines go to the log as they come, a line every <see cref="MusicGenerationRules.Heartbeat"/> while it runs (time so far, its
-/// last line; a cancel writes the last lines too: <see cref="IProcessRunner"/>); a failed run writes its whole tail to the log and its own failure line into the error
+/// last line; a cancel writes the last lines too: <see cref="IProcessRunner"/>); its progress lines (0.1.61, <see cref="IMusicProgressParser"/>)
+/// go to the request's <see cref="MusicGenerationRequest.Progress"/> as they come and to the log every 10 % of a stage, never into the kept last
+/// lines; a failed run writes its whole tail to the log and its own failure line into the error
 /// (<see cref="LocalMusicOutput"/>; a card out of memory is <see cref="MusicFailure.Memory"/>). The caller holds the graphics card's lock
 /// (<see cref="IMusicPieceRunner"/>). Never tried on a real card by the app's tests (no GPU work in tests).
 /// </summary>
 public abstract class LocalMusicGeneratorBase(LocalMusicFamily family, LocalMusicStore store, LocalMusicLayout layout, PythonInstaller python,
-    PythonLayout pythonLayout, IProcessRunner runner, ILogger logger) : IMusicGenerator
+    PythonLayout pythonLayout, IProcessRunner runner, IMusicProgressParser progress, ILogger logger) : IMusicGenerator
 {
     /// <summary>The family.</summary>
     public LocalMusicFamily Family { get; } = family;
@@ -69,7 +71,8 @@ public abstract class LocalMusicGeneratorBase(LocalMusicFamily family, LocalMusi
 
     /// <summary>
     /// The variables of a run: offline (Hugging Face, transformers), the libraries' caches under the app's folder, no progress bars (their
-    /// carriage returns would fill the log's tail), PyTorch's expandable memory segments (less fragmentation on a small card), unbuffered
+    /// carriage returns would fill the log's tail; 0.1.61: the scripts follow the bars they count off screen and print their own progress
+    /// lines), PyTorch's expandable memory segments (less fragmentation on a small card), unbuffered
     /// output (0.1.59: the script and its stage processes pass every line on at once, not when a pipe buffer fills), the user's own Python
     /// variables emptied.
     /// </summary>
@@ -123,12 +126,24 @@ public abstract class LocalMusicGeneratorBase(LocalMusicFamily family, LocalMusi
         {
             Environment = RunEnvironment(),
             Heartbeat = MusicGenerationRules.Heartbeat,
+            ProgressMark = LocalMusicRunRules.ProgressMark,
         };
         logger.LogInformation("{Family}: {Model}, {Seconds} s, seed {Seed}, {Words}", Family.Name, variant.Id, seconds, request.Seed,
             lyrics is null ? "no words" : request.Instrumental || request.Lyrics.Trim().Length == 0 ? "instrumental" : "with words");
+        MusicProgress? logged = null;
         var result = await runner.RunAsync(start, line =>
         {
-            if (line.StartsWith(LocalMusicRunRules.StageMark, StringComparison.Ordinal))
+            if (progress.Parse(line) is { } step)
+            {
+                request.Progress?.Report(step);
+                if (step.LogsAfter(logged))
+                {
+                    logged = step;
+                    logger.LogInformation("{Family}: stage {Stage}/{Stages}, {Done}/{Total} {Unit} ({Percent} %)", Family.Name, step.Stage, step.Stages,
+                        step.Done, step.Total, step.Unit, step.Percent);
+                }
+            }
+            else if (line.StartsWith(LocalMusicRunRules.StageMark, StringComparison.Ordinal))
             {
                 logger.LogInformation("{Family}: {Stage}", Family.Name, line[LocalMusicRunRules.StageMark.Length..].Trim());
             }

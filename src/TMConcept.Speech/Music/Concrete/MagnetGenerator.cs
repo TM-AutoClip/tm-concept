@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using TMConcept.Core.Music;
 using TMConcept.Core.Processes;
 using TMConcept.Speech.Python;
 
@@ -11,7 +12,7 @@ namespace TMConcept.Speech.Music;
 /// seconds, normalises its loudness and writes a WAV (32 kHz for music, 16 kHz for sound effects).
 /// </summary>
 public sealed class MagnetGenerator(LocalMusicStore store, LocalMusicLayout layout, PythonInstaller python, PythonLayout pythonLayout, IProcessRunner runner,
-    ILogger<MagnetGenerator> logger) : LocalMusicGeneratorBase(LocalMusicFamilies.Magnet, store, layout, python, pythonLayout, runner, logger)
+    IMusicProgressParser progress, ILogger<MagnetGenerator> logger) : LocalMusicGeneratorBase(LocalMusicFamilies.Magnet, store, layout, python, pythonLayout, runner, progress, logger)
 {
     /// <inheritdoc />
     protected override IReadOnlyList<string> FamilyArguments(LocalMusicVariant variant)

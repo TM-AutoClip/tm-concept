@@ -129,7 +129,8 @@ public sealed class SceneFixer(IChatClientFactory chats, ICostCalculator costs, 
                 NewPlans(timed, planItems, spans);
             }
 
-            music = await assembler.Music.SettleAsync(music, options.Style, timed, clips, work, align: true, cancellationToken, VideoMusicStep.Spender(steps, id))
+            music = await assembler.Music.SettleAsync(music, options.Style, timed, clips, work, align: true, cancellationToken, VideoMusicStep.Spender(steps, id),
+                steps.MusicReporter)
                 .ConfigureAwait(false);
             steps.Finish(VideoSteps.Timing);
             var rendered = await assembler.RenderKeptAsync(source.Engine, source.Code, options, timed, work, steps, cancellationToken).ConfigureAwait(false);

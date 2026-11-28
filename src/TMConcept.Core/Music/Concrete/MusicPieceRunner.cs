@@ -12,6 +12,10 @@ public sealed class MusicPieceRunner(IGpuCoordinator gpu, ILogger<MusicPieceRunn
         ArgumentNullException.ThrowIfNull(generator);
         ArgumentNullException.ThrowIfNull(request);
         var model = request.Model.Model;
+
+        // 0.1.61: nothing counted yet. An online model and ACE-Step stay so (an indeterminate bar with the time so far, plan K15); a local
+        // script's first progress line replaces it.
+        request.Progress?.Report(MusicProgress.Unknown);
         try
         {
             if (LocalMusicSupport.NeedsCard(model))

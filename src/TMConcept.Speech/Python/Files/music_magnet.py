@@ -4,6 +4,7 @@ Runs Meta's audiocraft from its pinned source folder (--code; never installed as
 state_dict.bin and compression_state_dict.bin) and the T5 text encoder folder audiocraft's T5 name points at (--t5-name t5-base or t5-large,
 --t5 its folder), all offline. A checkpoint makes exactly its own length (10 or 30 s); the piece is cut to --seconds, its loudness normalised
 and written as a 16-bit WAV. Stages are printed as "TMC: ..." lines, a failure as one "TMC-E-<CODE>: ..." line before exit code 2.
+Progress (0.1.61): one stage, MAGNeT's decoding steps (20 + 10 + 10 + 10 = 50), from audiocraft's own progress callback (tmc_progress).
 """
 import argparse
 import os
@@ -14,6 +15,7 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 from tmc_music import fail, report, stage  # noqa: E402  (after the path above; the script runs with -I)
+from tmc_progress import Reporter  # noqa: E402
 
 
 class LocalPretrained:
@@ -74,8 +76,17 @@ def main():
     model.set_generation_params(use_sampling=True, top_k=0, top_p=0.9, temperature=3.0, max_cfg_coef=10.0, min_cfg_coef=1.0,
                                 decoding_steps=[20, 10, 10, 10], span_arrangement="nonoverlap")
     stage("making %d s" % round(model.duration))
+    progress = Reporter(1)
+    progress.begin(1, "steps", sum(model.generation_params.get("decoding_steps", [])))
+
+    def step(done, total):
+        progress.length(total)
+        progress.update(done)
+
+    model.set_custom_progress_callback(step)
     with torch.inference_mode():
-        wav = model.generate([prompt])[0]
+        wav = model.generate([prompt], progress=True)[0]
+    progress.finish()
 
     stage("writing the piece")
     rate = model.sample_rate

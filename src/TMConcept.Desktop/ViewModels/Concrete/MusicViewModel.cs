@@ -21,10 +21,12 @@ namespace TMConcept.Desktop.ViewModels;
 /// online model's key and ONE confirmation listing its downloads (with ffmpeg for a reference sound) are asked, then it is installed and the
 /// piece is made (<see cref="IModelStartGate"/>). Each piece goes into "Müziklerim", which also takes the user's own audio files; the video
 /// page's music choice picks from it. Making a piece is page work (the profile cannot be switched meanwhile, closing asks); Cancel stops it.
-/// Choosing a model per video in a batch is not offered (the developer: not now).
+/// Choosing a model per video in a batch is not offered (the developer: not now). While the piece is made, its bar (0.1.61,
+/// <see cref="Piece"/>) fills with a local model's stage and count, or moves with the time so far for a model that counts nothing.
 /// </summary>
 public sealed partial class MusicViewModel(IVideoMediaServices services, IMusicMaker maker, IMyMusic myMusic, IModelStartGate gate, IMusicChoiceText labels,
-    IActivityLog activity, IConfirmDialog confirm, Os.IShellLauncher shell, Localizer text, ILogger<MusicViewModel> logger) : PageViewModelBase
+    IMusicProgressText progressText, IActivityLog activity, IConfirmDialog confirm, Os.IShellLauncher shell, Localizer text, ILogger<MusicViewModel> logger)
+    : PageViewModelBase
 {
     private CancellationTokenSource? _work;
     private MusicGeneratorServices? _generators;
@@ -120,6 +122,9 @@ public sealed partial class MusicViewModel(IVideoMediaServices services, IMusicM
     /// <summary>Not making a piece.</summary>
     public bool Idle => !Busy;
 
+    /// <summary>The bar of the piece being made (0.1.61).</summary>
+    public MusicProgressViewModel Piece { get; } = new(progressText);
+
     /// <summary>"Müziklerim", newest first.</summary>
     public ObservableCollection<MyMusicRow> Pieces { get; } = [];
 
@@ -193,7 +198,9 @@ public sealed partial class MusicViewModel(IVideoMediaServices services, IMusicM
             Status = text["music.stage.generate"];
             var request = new MusicMakeRequest(choice.Model, Prompt, (int)(Seconds ?? MusicGenerationRules.DefaultSeconds), Instrumental,
                 HasReference ? ReferenceFile : null, PieceTitle, ShowLyrics ? Lyrics : string.Empty);
-            var entry = await Task.Run(() => maker.MakeAsync(request, progress, token), token).ConfigureAwait(true);
+            Piece.Begin();
+            var reporter = Piece.Reporter;
+            var entry = await Task.Run(() => maker.MakeAsync(request, progress, reporter, token), token).ConfigureAwait(true);
             Status = entry.Usd > 0 ? text.Format("music.made.paid", entry.Track.Title, text.Usd(entry.Usd)) : text.Format("music.made", entry.Track.Title);
             activity.Add(ActivityLevel.Info, Status);
             PieceTitle = string.Empty;
@@ -214,6 +221,7 @@ public sealed partial class MusicViewModel(IVideoMediaServices services, IMusicM
         }
         finally
         {
+            Piece.End();
             Busy = false;
             Working = false;
         }

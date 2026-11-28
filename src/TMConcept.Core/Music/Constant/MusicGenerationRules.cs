@@ -39,6 +39,11 @@ public static class MusicGenerationRules
     /// <summary>How often a running local music piece writes a line to the log (0.1.59: time so far and the script's last line).</summary>
     public static readonly TimeSpan Heartbeat = TimeSpan.FromSeconds(60);
 
+    /// <summary>
+    /// The step of a local piece's progress that goes to the log (0.1.61: percent of a stage; the screen takes every line, up to one a second).
+    /// </summary>
+    public const int ProgressLogPercent = 10;
+
     /// <summary>The length a piece on the music page starts with (seconds).</summary>
     public const int DefaultSeconds = 60;
 

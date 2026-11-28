@@ -85,4 +85,20 @@ public sealed class VideoStepProgressTests
         reports.Select(r => r.SpentUsd).ShouldBeInOrder();
         reports[^1].Share.ShouldBe(1);
     }
+
+    [Fact]
+    public void TheMusicModelsProgressPassesThroughUntilAnotherStepRuns()
+    {
+        var (steps, reports) = Make((VideoSteps.Timing, 1), (VideoSteps.Code, 1));
+        steps.Report(VideoSteps.Timing, 0);
+
+        steps.MusicReporter.Report(new TMConcept.Core.Music.MusicProgress(2, 3, 16, 40, TMConcept.Core.Music.MusicProgressUnit.Blocks));
+
+        reports[^1].Step.ShouldBe(VideoSteps.Timing);
+        reports[^1].Music.ShouldNotBeNull().Percent.ShouldBe(40);
+        steps.Spend(new VideoCost { VideoId = Guid.NewGuid(), Step = "music", Usd = 0.1m });
+        reports[^1].Music.ShouldNotBeNull("a spend keeps the music line");
+        steps.Finish(VideoSteps.Timing);
+        reports[^1].Music.ShouldBeNull("the next step starts without it");
+    }
 }

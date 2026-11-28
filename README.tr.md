@@ -526,7 +526,11 @@ Bir şablonla (Ayarlar → Şablonlar) üretilen video, modelin iyi niyetine kal
 - **Müzik üret sayfası (0.1.54):** ne istediğini kendi sözlerinle yaz ("antik Mısır'da disko"), istersen bir referans ses seç (program
   temposunu ölçer ve o tempoyu ister; modellerin hiçbiri sesi doğrudan almaz), yerel ya da çevrimiçi müzik modelini seç (yukarıdakilerin
   aynısı, fiyatlarıyla) ve parçayı üret. Parça **Müziklerim**'e eklenir; kendi ses dosyalarını da oraya ekleyebilirsin. Videonun müzik
-  seçimi *Müziklerim* kaynağıyla oradan seçer. Toplu üretimde videoya özel model seçimi şimdilik yok.
+  seçimi *Müziklerim* kaynağıyla oradan seçer. Toplu üretimde videoya özel model seçimi şimdilik yok. Parça üretilirken (0.1.61) bir çubuk
+  ne kadarının bittiğini gösterir: yerel model onu aşaması ve sayısıyla doldurur ("Aşama 2/3 · blok 16/40 · %40": YuE 1'in jetonları,
+  6 saniyelik blokları ve çözmesi, YuE2'nin nota ve şarkı jetonları, MusicGen'in ve SongGeneration'ın jetonları, MAGNeT, AudioLDM 2 ve
+  DiffRhythm'in adımları); hiçbir şey bildirmeyen online modeller ve ACE-Step'te çubuk geçen süreyle birlikte ilerler gibi döner. Müzik bir
+  video için üretiliyorsa aynı satır videonun adım satırında da görünür; günlüğe her %10'da bir satır yazılır.
 - **Program besteler (0.1.55, koddan müzik):** model de ekran kartı da istemeyen ikinci yerel seçenek. Notaları program istemdeki
   kelimelerden kendisi yazar (sakin, epik, hüzünlü, gergin, gizemli gibi ruh hâlleri; orkestra, elektronik, ambiyans, akustik, pop, etnik,
   ortaçağ gibi tarzlar, Türkçe ya da İngilizce; referans sesin ya da videonun temposu), MIDI dosyası olarak; spessasynth_core (Apache-2.0)

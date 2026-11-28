@@ -13,7 +13,8 @@ namespace TMConcept.Desktop.ViewModels;
 /// The detailed progress of one running video (0.1.13, the developer: "while producing, the stages must be told in detail, and the money
 /// spent"), shared by the queue item on the Concept → video page and the new version on the Produced page: one row per step of the work
 /// (✓ done, ● running, ○ waiting, – skipped because the run does not do it, ✕ failed), each with how long it ran and what it paid, the scenes
-/// done for the narration and the images, the code call's own line (thinking, writing with about how many tokens) and the engine's line
+/// done for the narration and the images, the code call's own line (thinking, writing with about how many tokens), the music model's line
+/// while it makes the video's music (0.1.61: "Müzik: Aşama 2/3 · blok 16/40 · %40", <see cref="IMusicProgressText"/>) and the engine's line
 /// while it renders; on top the whole share, the time since the start and what the run has paid so far. The money also goes to the
 /// spending pill while the run lasts (<see cref="SpendingMeter"/>), and the current step to the strip at the bottom (<see cref="WorkStatus"/>).
 /// The times count on by themselves once a second.
@@ -23,17 +24,20 @@ public sealed partial class ProductionProgressViewModel : ObservableObject
     private readonly Localizer _text;
     private readonly SpendingMeter _spending;
     private readonly WorkStatus _work;
+    private readonly IMusicProgressText _music;
+    private readonly HashSet<string> _musicRows = new(StringComparer.Ordinal);
     private readonly DispatcherTimer _timer;
     private long _started;
     private string _workKey = "work.video";
     private string _model = string.Empty;
 
     /// <summary>Creates (one per running video).</summary>
-    public ProductionProgressViewModel(Localizer text, SpendingMeter spending, WorkStatus work)
+    public ProductionProgressViewModel(Localizer text, SpendingMeter spending, WorkStatus work, IMusicProgressText music)
     {
         _text = text;
         _spending = spending;
         _work = work;
+        _music = music;
         Call = new CallStatusViewModel(text);
         Call.PropertyChanged += (_, e) =>
         {
@@ -102,6 +106,7 @@ public sealed partial class ProductionProgressViewModel : ObservableObject
         _started = Stopwatch.GetTimestamp();
         Call.Stop();
         Stages.Clear();
+        _musicRows.Clear();
         foreach (var step in VideoSteps.All)
         {
             Stages.Add(new StageRowViewModel(step, _text["video.step." + step]));
@@ -223,8 +228,9 @@ public sealed partial class ProductionProgressViewModel : ObservableObject
                 row.Detail = Call.Text;
                 Call.Stop();
             }
-            else if (row.Code == VideoSteps.Render)
+            else if (row.Code == VideoSteps.Render || _musicRows.Remove(row.Code))
             {
+                // The engine's last line and the music model's (its piece is made) do not stay under a finished step.
                 row.Detail = string.Empty;
             }
         }
@@ -245,6 +251,11 @@ public sealed partial class ProductionProgressViewModel : ObservableObject
         if (row.Code == VideoSteps.Code && progress.Call is { } call)
         {
             Call.Report(call);
+        }
+        else if (progress.Music is { } music)
+        {
+            row.Detail = _music.Video(music);
+            _musicRows.Add(row.Code);
         }
         else if (row.Code != VideoSteps.Code && progress.Detail.Length > 0)
         {
