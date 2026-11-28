@@ -25,5 +25,4 @@ SUMMARY: «{summary}»
 CONTENT:
 «{content}»
 CHANGE: «{instruction}»
-DRAWING STYLE (the video is drawn in this style; write the concept and its "ekranda" lines for it): {style}
 Write the edited concept: exactly 1 concept. JSON: {"konseptler":[{"baslik":"…","ozet":"…","icerik":"…"}]}

@@ -79,6 +79,12 @@ public static class PipelineSteps
     /// </summary>
     public const string VideoMedia = "video-media";
 
+    /// <summary>
+    /// Not a model step (28 Nov 2026): the name the profile's look (drawing style, motion, finishing layer) is kept under among its step
+    /// choices (<see cref="Styles.VideoLookStore"/>).
+    /// </summary>
+    public const string VideoLook = "video-look";
+
     /// <summary>Every step in display order.</summary>
     public static readonly IReadOnlyList<PipelineStep> All =
     [

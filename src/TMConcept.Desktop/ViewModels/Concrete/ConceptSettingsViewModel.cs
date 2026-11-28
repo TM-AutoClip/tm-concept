@@ -4,7 +4,6 @@ using CommunityToolkit.Mvvm.Input;
 using TMConcept.Core.Concepts;
 using TMConcept.Core.Pipeline;
 using TMConcept.Core.Profiles;
-using TMConcept.Core.Styles;
 using TMConcept.Desktop.Localization;
 
 namespace TMConcept.Desktop.ViewModels;
@@ -34,21 +33,6 @@ public sealed partial class ConceptSettingsViewModel(IFocusSource focus, Localiz
 
     /// <summary>The fine-tuning drop-downs (tone, audience, telling), "any" until the user picks one.</summary>
     public ObservableCollection<FocusRowViewModel> FocusRows { get; } = [];
-
-    /// <summary>
-    /// The drawing style the concepts are written for (0.1.32): "not set" first, then every style of <see cref="DrawStyles"/> but the AI
-    /// choice. A storytelling style (the stick-figure narrator) changes how the scenes are written; the others ask for drawable scenes.
-    /// </summary>
-    public IReadOnlyList<ChoiceOption> StyleOptions => _styleOptions ??= BuildStyleOptions();
-
-    private IReadOnlyList<ChoiceOption>? _styleOptions;
-
-    /// <summary>The chosen style option ("not set" = none).</summary>
-    [ObservableProperty]
-    public partial ChoiceOption? SelectedStyleOption { get; set; }
-
-    /// <summary>The chosen drawing style (null = none).</summary>
-    public DrawStyle? Style => SelectedStyleOption is { Value.Length: > 0 } chosen && Enum.TryParse<DrawStyle>(chosen.Value, out var style) ? style : null;
 
     /// <summary>Whether the fine-tuning is unfolded.</summary>
     [ObservableProperty]
@@ -144,7 +128,6 @@ public sealed partial class ConceptSettingsViewModel(IFocusSource focus, Localiz
             FocusRows.Add(row);
         }
 
-        SelectedStyleOption = StyleOptions[0];
         ShowFineTune();
     }
 
@@ -171,27 +154,7 @@ public sealed partial class ConceptSettingsViewModel(IFocusSource focus, Localiz
     }
 
     private void ShowFineTune() => FineTuneSummary = string.Join(" · ",
-        FocusRows.Select(r => r.Title + ": " + (r.Chosen is null ? text["concepts.finetune.none"] : r.Selected!.Label))
-            .Append(text["concepts.style"] + ": " + (Style is null ? text["concepts.finetune.none"] : SelectedStyleOption!.Label)));
-
-    partial void OnSelectedStyleOptionChanged(ChoiceOption? value)
-    {
-        ShowFineTune();
-        Changed?.Invoke(this, EventArgs.Empty);
-    }
-
-    private List<ChoiceOption> BuildStyleOptions()
-    {
-        var options = new List<ChoiceOption> { new(string.Empty, text["concepts.style.none"]) };
-        options.AddRange(DrawStyles.Choosable.Select(d => new ChoiceOption(d.Style.ToString(), StyleLabel(d))));
-        return options;
-    }
-
-    private string StyleLabel(DrawStyleDefinition definition)
-    {
-        var key = "style.draw." + definition.Style.ToString().ToLowerInvariant();
-        return text.Has(key) ? text[key] : definition.Key;
-    }
+        FocusRows.Select(r => r.Title + ": " + (r.Chosen is null ? text["concepts.finetune.none"] : r.Selected!.Label)));
 
     private string Name(Core.Templates.LocalizedText name) => text.Language == ContentLanguages.Turkish ? name.Tr : name.En;
 

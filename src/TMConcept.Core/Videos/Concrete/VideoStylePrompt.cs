@@ -94,8 +94,9 @@ public static class VideoStylePrompt
     public static string ImageStyle(DrawStyle style) => DrawStyles.Of(style).ImagePrompt;
 
     /// <summary>
-    /// The look lines of the template block (0.1.32): how scenes are drawn, the style's craft rules and the texture the app lays over the
-    /// picture. <see cref="DrawStyle.Auto"/>: the style chosen for this video in its own words (<see cref="VideoStyle.ChosenStyle"/>), or,
+    /// The look lines of the template block (0.1.32; since 28 Nov 2026 the look is the profile's choice on the video page): how scenes are
+    /// drawn, the style's craft rules and the texture the app lays over the picture (how a storytelling look adapts the scenes goes with the
+    /// scenes, <see cref="VideoCodePrompt.User"/>, so this block stays small). <see cref="DrawStyle.Auto"/>: the style chosen for this video in its own words (<see cref="VideoStyle.ChosenStyle"/>), or,
     /// before any choice (a video without images), one style the code chooses for the topic and keeps in every scene.
     /// </summary>
     internal static string Look(VideoStyle style)

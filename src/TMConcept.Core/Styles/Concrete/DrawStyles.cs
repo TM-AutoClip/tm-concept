@@ -1,5 +1,3 @@
-using TMConcept.Core.Templates;
-
 namespace TMConcept.Core.Styles;
 
 /// <summary>
@@ -15,17 +13,15 @@ namespace TMConcept.Core.Styles;
 /// </summary>
 public static class DrawStyles
 {
-    private static readonly LocalizedText NoGuidance = new();
-
-    /// <summary>Every style in the order of the template editor (the AI choice first).</summary>
+    /// <summary>Every style in the order of the video page's look choice (the AI choice first).</summary>
     public static readonly IReadOnlyList<DrawStyleDefinition> All =
     [
-        new(DrawStyle.Auto, "auto", string.Empty, string.Empty, string.Empty, StyleTexture.None, string.Empty, NoGuidance),
+        new(DrawStyle.Auto, "auto", string.Empty, string.Empty, string.Empty, StyleTexture.None, string.Empty),
         new(DrawStyle.Flat, "flat",
             "flat vector illustration, solid colours, simple shapes",
             "flat shapes and simple icons in solid colours",
             "Shapes pop in (at most 0.45 s, a little overshoot) and settle; no outlines.",
-            StyleTexture.None, string.Empty, NoGuidance)
+            StyleTexture.None, string.Empty)
         {
             Pitfalls =
             [
@@ -40,21 +36,11 @@ public static class DrawStyles
             "a stick-figure presenter (round head, line body) at one side who acts out and points at the scene's subject, next to simple line "
             + "drawings or diagrams of it",
             "The presenter changes pose on key words (point, walk, think, cheer); something changes every 2–3 s; drawings appear as reactions to it.",
-            StyleTexture.None, "paper", new LocalizedText
-            {
-                Tr = "Bu video bir çöp adam anlatıcıyla çizilecek: anlatıcı sahnede durur, konuşur, gösterir, yürür ve olanlara tepki verir. Her sahnenin "
-                    + "\"ekranda\" satırını anlatıcının yaptığı somut bir hareketle yaz (ör. \"çöp adam haritada rotayı parmağıyla çiziyor\", \"çöp adam "
-                    + "dev bir çipin yanında küçük kalıyor\"). Kur, eylem, tepki zinciri kur: bir şey olur, anlatıcı bir şey yapar, sonuç görünür. "
-                    + "Soyut fikirleri görsel benzetmeyle anlat (ör. bellek = çekmeceli dolap). Her bölümde tanınır yeni bir yer olsun. Konu teknik ya da "
-                    + "tarihî olsa da anlatıcı yanındaki çizimleri, şemaları ve nesneleri gösterir; seslendirme anlatıcının ağzından, izleyiciye konuşur gibi.",
-                En = "This video is drawn with a stick-figure narrator: the narrator stands in the scene, talks, shows, walks and reacts. Write every scene's "
-                    + "\"ekranda\" line as a concrete action of the narrator (e.g. \"the stick figure traces the route on the map with a finger\", \"the "
-                    + "stick figure looks tiny next to a giant chip\"). Build setup, action, reaction chains: something happens, the narrator does "
-                    + "something, the result shows. Explain abstract ideas with a visual metaphor (memory = a chest of drawers). Every segment gets a new "
-                    + "recognisable place. Even for a technical or historical subject the narrator points at the drawings, diagrams and objects beside "
-                    + "it; the narration is the narrator speaking to the viewer.",
-            })
+            StyleTexture.None, "paper")
         {
+            // Short on purpose: it also goes into the video code block, which stays small for local models.
+            SceneGuidance = "every scene's on-screen line becomes an action of the stick-figure narrator (it points, walks, reacts); setup → "
+                + "action → result; abstract ideas as visual metaphors; a new recognisable place in every segment.",
             Pitfalls =
             [
                 "The presenter stands in the lower left corner: keep pins, labels and diagram boxes out of that corner.",
@@ -67,7 +53,7 @@ public static class DrawStyles
             "clean line art, thin ink lines, minimal shading",
             "thin one-colour line drawings without fills",
             "Lines draw on along their length (stroke-dashoffset, 0.6–1.2 s) before anything is filled.",
-            StyleTexture.Paper, string.Empty, NoGuidance)
+            StyleTexture.Paper, string.Empty)
         {
             Pitfalls =
             [
@@ -81,7 +67,7 @@ public static class DrawStyles
             "layered paper cut-out illustration, soft shadows, craft paper texture",
             "layered paper cut-out shapes with soft shadows",
             "Paper pieces slide in horizontally to their place (at most 0.9 s) and keep one fixed soft shadow; paper never fades, morphs or bends.",
-            StyleTexture.Paper, "paper", NoGuidance, Transition: Scenes.SceneTransitions.Slide)
+            StyleTexture.Paper, "paper", Transition: Scenes.SceneTransitions.Slide)
         {
             Pitfalls =
             [
@@ -95,7 +81,7 @@ public static class DrawStyles
             "clean infographic-style illustration with simple icons and diagrams (no text)",
             "an infographic: big numbers, simple charts, icons and arrows",
             "Bars grow from zero, numbers count up and land with a small scale, connectors draw on one after another.",
-            StyleTexture.None, string.Empty, NoGuidance)
+            StyleTexture.None, string.Empty)
         {
             Pitfalls =
             [
@@ -109,7 +95,7 @@ public static class DrawStyles
             "neon glow illustration, glowing lines on a dark background",
             "glowing accent lines on the dark background (a soft glow, no fills)",
             "Glowing lines draw on, then breathe softly; at most one flicker per scene.",
-            StyleTexture.Grain, "ocean", NoGuidance)
+            StyleTexture.Grain, "ocean")
         {
             Pitfalls =
             [
@@ -124,7 +110,7 @@ public static class DrawStyles
             "graphite pencil drawings: a light construction line first, then a darker confident line, shading only with hatching",
             "Everything is drawn on, never popped: pencil first, then the dark line, then a quick scribbled colour; one accent colour, on the subject "
             + "only; no gradients.",
-            StyleTexture.Paper, "sketch", NoGuidance, Transition: Scenes.SceneTransitions.Wipe)
+            StyleTexture.Paper, "sketch", Transition: Scenes.SceneTransitions.Wipe)
         {
             Pitfalls =
             [
@@ -139,7 +125,7 @@ public static class DrawStyles
             + "background",
             "cartoon shapes with thick dark outlines and flat cel-shaded colours, rounded friendly forms",
             "Squash and stretch on entrances (at most 0.45 s), a small anticipation before a move, a short hold after it.",
-            StyleTexture.None, string.Empty, NoGuidance, PrefersImages: true)
+            StyleTexture.None, string.Empty, PrefersImages: true)
         {
             Pitfalls =
             [
@@ -153,7 +139,7 @@ public static class DrawStyles
             "white technical blueprint drawing on deep blueprint blue, fine grid, dimension lines, schematic, no text",
             "white technical line drawings on the blue background: outlines, section views, dimension arrows and a faint grid",
             "Lines draw on (stroke-dashoffset), then dimension arrows extend and small labels appear; nothing bounces.",
-            StyleTexture.Grid, "blueprint", NoGuidance, Transition: Scenes.SceneTransitions.Wipe)
+            StyleTexture.Grid, "blueprint", Transition: Scenes.SceneTransitions.Wipe)
         {
             Pitfalls =
             [
@@ -167,7 +153,7 @@ public static class DrawStyles
             "cyan sci-fi hologram, glowing thin wireframes and HUD readouts on a near-black background, futuristic interface, no text",
             "thin cyan wireframes, rings and readout panels that glow on the dark background, one warm amber accent",
             "Wireframes draw on and rotate slowly; panels open with a scan line; the opacity flickers gently between 0.85 and 1.",
-            StyleTexture.Scanlines, "hologram", NoGuidance)
+            StyleTexture.Scanlines, "hologram")
         {
             Pitfalls =
             [
@@ -181,7 +167,7 @@ public static class DrawStyles
             "retro computer terminal screen, green phosphor text-mode graphics on black, ASCII art look, CRT glow",
             "monospace text-mode drawings: shapes built from characters (the ramp \" .:-=+*#%@\"), boxes and progress bars in the accent colour",
             "Text types in character by character (12–15 per second) with a blinking cursor; whole lines scroll up; no smooth tweening.",
-            StyleTexture.Scanlines, "terminal", NoGuidance, Transition: Scenes.SceneTransitions.Cut)
+            StyleTexture.Scanlines, "terminal", Transition: Scenes.SceneTransitions.Cut)
         {
             Pitfalls =
             [
@@ -195,7 +181,7 @@ public static class DrawStyles
             "isometric illustration, small 3D-looking blocks and buildings at 30 degrees, clean flat shading, soft palette",
             "isometric shapes (30° projection): blocks, platforms and small buildings, outline first, then the faces filled",
             "Each object draws its outline along its length, then its faces fill in; objects rise onto the grid one after another.",
-            StyleTexture.None, string.Empty, NoGuidance)
+            StyleTexture.None, string.Empty)
         {
             Pitfalls =
             [
@@ -209,7 +195,7 @@ public static class DrawStyles
             "watercolour painting, soft wet-edged washes and blooms on textured paper, light pencil underdrawing",
             "soft translucent colour washes with lighter edges, a thin pencil line under them",
             "Washes bloom in slowly (about 0.8 s) and stay; no hard pops.",
-            StyleTexture.Paper, "paper", NoGuidance, PrefersImages: true)
+            StyleTexture.Paper, "paper", PrefersImages: true)
         {
             Pitfalls =
             [
@@ -225,7 +211,7 @@ public static class DrawStyles
             + "of gradients, hard square edges",
             "Everything snaps to whole pixels and changes in steps, 12 a second; no soft gradients, glows or blur; scenes change by a dither "
             + "dissolve, an iris or stair-stepped blocks straight into the next scene, never through black.",
-            StyleTexture.None, string.Empty, NoGuidance, Transition: Scenes.SceneTransitions.Dissolve)
+            StyleTexture.None, string.Empty, Transition: Scenes.SceneTransitions.Dissolve)
         {
             Transitions = [Scenes.SceneTransitions.Dissolve, Scenes.SceneTransitions.Iris, Scenes.SceneTransitions.Blocks],
             Pitfalls =
@@ -245,27 +231,16 @@ public static class DrawStyles
         All.FirstOrDefault(d => d.Style != DrawStyle.Auto && string.Equals(d.Key, key?.Trim(), StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
-    /// The concept prompt's style line for concepts written for <paramref name="style"/> in a prompt language ("tr" or English): the style's
-    /// own guidance (a storytelling style such as the stick-figure narrator), otherwise one sentence that the scenes must be drawable in its
-    /// look. Empty for no style and for <see cref="DrawStyle.Auto"/> (the look is chosen per video).
+    /// How the scenes of a video are adapted to its look (28 Nov 2026, <see cref="DrawStyleDefinition.SceneGuidance"/>): the guidance of the
+    /// snapshot's style (the profile's choice, or the preset chosen for "AI chooses"); empty without a snapshot, for "AI chooses" before a
+    /// preset is chosen, for the model's own style description and for a plain look. The scene plan reads it; the video code prompt reads the
+    /// same guidance by the render key (<see cref="SceneGuidanceOfKey"/>).
     /// </summary>
-    public static string ConceptLine(DrawStyle? style, string language)
-    {
-        if (style is not { } chosen || chosen == DrawStyle.Auto)
-        {
-            return string.Empty;
-        }
+    public static string SceneGuidance(VideoStyle? style) =>
+        style is null || style.DrawStyle == DrawStyle.Auto ? string.Empty : Of(style.DrawStyle).SceneGuidance;
 
-        var definition = Of(chosen);
-        if (definition.HasConceptGuidance)
-        {
-            return definition.GuidanceFor(language);
-        }
-
-        return language == Profiles.ContentLanguages.Turkish
-            ? "Video şu tarzda çizilecek: " + definition.Drawing + ". \"ekranda\" satırlarını bu tarzda çizilebilecek biçimde yaz."
-            : "The video is drawn as " + definition.Drawing + ". Write the \"ekranda\" lines so they can be drawn in this look.";
-    }
+    /// <summary>The scene guidance of the style with the render token <paramref name="key"/> ("stick-figure"); empty when there is none.</summary>
+    public static string SceneGuidanceOfKey(string? key) => FindKey(key)?.SceneGuidance ?? string.Empty;
 
     /// <summary>The styles the model may choose from for <see cref="DrawStyle.Auto"/>.</summary>
     public static IEnumerable<DrawStyleDefinition> Choosable => All.Where(d => d.Style != DrawStyle.Auto);

@@ -107,34 +107,25 @@ public sealed class StyleSettingsTests
     }
 
     [AvaloniaFact]
-    public async Task ANewTemplateLetsTheAiChooseTheStyleAndEveryStyleIsDescribedWithItsPalette()
+    public async Task ATemplateCarriesNoDrawingStyleMotionOrFinishing()
     {
         using var h = new DesktopHarness();
         await FirstRunTests.CreateAsync(h);
-        var text = h.Get<Localizer>();
         var section = (await h.Get<SettingsViewModel>().ShowAsync<VideoStylesSettingsViewModel>()).ShouldNotBeNull();
         section.Add();
         var editor = section.Editor.ShouldNotBeNull();
 
-        // 0.1.32: the AI choice first and chosen; every style has its description under the list.
-        editor.DrawStyles[0].Value.ShouldBe((int)DrawStyle.Auto);
-        editor.DrawStyle.Value.ShouldBe((int)DrawStyle.Auto);
-        editor.DrawStyleNote.ShouldBe(text["style.draw.auto.desc"]);
-        editor.DrawStyles.Select(c => c.Value).ShouldBe(DrawStyles.All.Select(d => (int)d.Style));
+        // 28 Nov 2026 (the developer: "şablondan kaldıralım"): the look is the profile's on the video page; a template keeps the neutral defaults.
+        var made = editor.ToStyle();
+        (made.DrawStyle, made.Motion, made.Finish, made.ChosenStyle).ShouldBe((DrawStyle.Auto, MotionIntensity.Normal, false, string.Empty));
+        made.Drawer.ShouldBe(SceneDrawer.App, "who draws stays in the template");
 
-        // A style with a palette of its own suggests it; taking it hides the suggestion.
-        editor.DrawStyle = editor.DrawStyles.Single(c => c.Value == (int)DrawStyle.Blueprint);
-        editor.DrawStyleNote.ShouldBe(text["style.draw.blueprint.desc"]);
-        editor.HasSuggestedPalette.ShouldBeTrue();
-        editor.SuggestedPaletteText.ShouldContain(text["style.palette.blueprint"]);
-        editor.ApplySuggestedPalette();
-        editor.Palette.Palette.Id.ShouldBe("blueprint");
-        editor.HasSuggestedPalette.ShouldBeFalse();
-
-        // A style that needs an image model says so.
-        editor.DrawStyle = editor.DrawStyles.Single(c => c.Value == (int)DrawStyle.Cartoon);
-        editor.DrawStyleNote.ShouldEndWith(text["styles.draw.prefers_images"]);
-        editor.ToStyle().DrawStyle.ShouldBe(DrawStyle.Cartoon);
+        // A template saved before with a look of its own opens without it, and that is no unsaved change.
+        var old = new VideoStyle { Name = "Old", DrawStyle = DrawStyle.Neon, Motion = MotionIntensity.Lively, Finish = true, ChosenStyle = "ink" };
+        var reopened = new VideoStyleEditorViewModel(old, false, h.Get<Localizer>());
+        reopened.Changed.ShouldBeFalse();
+        var saved = reopened.ToStyle();
+        (saved.DrawStyle, saved.Motion, saved.Finish, saved.ChosenStyle).ShouldBe((DrawStyle.Auto, MotionIntensity.Normal, false, string.Empty));
     }
 
     [AvaloniaFact]

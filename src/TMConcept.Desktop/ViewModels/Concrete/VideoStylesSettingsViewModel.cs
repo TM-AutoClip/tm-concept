@@ -12,7 +12,8 @@ namespace TMConcept.Desktop.ViewModels;
 /// <summary>
 /// Settings → Templates ("Şablonlar", the developer's 0.1.19 decision): at most <see cref="VideoStyleLimits.Max"/> templates on this
 /// computer, not tied to profiles, kept in the encrypted database. Each one says how videos look and end: subtitles, the progress bar (off by
-/// default), font, title style and position, colours, the drawing style of scenes without images, motion and the closing call to action.
+/// default), font, title style and position, colours, who draws, the narration tempo, the quality mode and the closing call to action (the
+/// drawing style, motion and finishing layer are the profile's look on the video page since 28 Nov 2026).
 /// Add, edit (Save / Cancel) and delete (asked first; the template is removed completely, made videos keep their own copy). The Concept to
 /// video page picks one; each queued video reads it when it starts. Unsaved changes survive a page switch, and opening another template asks
 /// before they are dropped. A database error is logged and shown, never left to the dispatcher.
@@ -125,7 +126,7 @@ public sealed partial class VideoStylesSettingsViewModel(IVideoStyleStore store,
         SelectedStyle = null;
         _loading = false;
         // 0.1.33: a new template is drawn by the app from the scene plan; the model's free code stays a choice.
-        Editor = NewEditor(new VideoStyle { Name = NewName(), Drawer = SceneDrawer.App, Finish = true }, true);
+        Editor = NewEditor(new VideoStyle { Name = NewName(), Drawer = SceneDrawer.App }, true);
         Status = string.Empty;
     }
 

@@ -7,7 +7,7 @@ namespace TMConcept.Core.Channels;
 /// <summary>
 /// The template draft of "Kanaldan esinlen" (0.1.53, rule 4: a template itself never changes): always a NEW template ("&lt;channel&gt; esinli")
 /// with the merged tempo profile of the channel's samples as its reference video (K18 fields: the tempo set to the nearest preset, the plan's
-/// targets from the numbers) and the defaults of a new template (drawn by the app, with its finishing layer). It is added only while there are
+/// targets from the numbers) and the defaults of a new template (drawn by the app; the look with its finishing layer is the profile's choice on the video page). It is added only while there are
 /// fewer than <see cref="VideoStyleLimits.Max"/> templates (rule 20); an existing template is never touched, also when an id would clash.
 /// </summary>
 public sealed class ChannelTemplateCreator(IVideoStyleStore store, TimeProvider clock, ILogger<ChannelTemplateCreator> logger) : IChannelTemplateCreator
@@ -21,7 +21,6 @@ public sealed class ChannelTemplateCreator(IVideoStyleStore store, TimeProvider 
         {
             Name = trimmed.Length <= VideoStyleLimits.NameMax ? trimmed : trimmed[..VideoStyleLimits.NameMax].TrimEnd(),
             Drawer = SceneDrawer.App,
-            Finish = true,
             Reference = tempo,
             Tempo = ReferenceTempoMapper.Suggest(tempo).Tempo,
             CreatedAtUtc = now,

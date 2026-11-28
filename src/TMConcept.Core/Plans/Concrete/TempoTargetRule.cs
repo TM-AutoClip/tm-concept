@@ -6,7 +6,7 @@ namespace TMConcept.Core.Plans;
 /// The tempo targets of the plan (F9, 0.1.42; <see cref="NarrationTempos.Targets"/>): a tight video needs at least half of its changes (beats
 /// with a camera move or an action, about 4 in 10 s, never more than it has sentences) and, from three such beats on, at least half of its
 /// camera share; a relaxed one at most twice its changes. A natural video is not checked (every plan before 0.1.42 was made for it), nor
-/// a tempo the template's motion contradicts (<see cref="Applies"/>: a calm motion asks for one or two beats per scene and few camera moves,
+/// a tempo the video's motion (the profile's look) contradicts (<see cref="Applies"/>: a calm motion asks for one or two beats per scene and few camera moves,
 /// a lively one for a beat on every sentence; the motion wins, otherwise every such video would pay a repair it cannot pass). S1 (0.1.52):
 /// with a reference video (<see cref="PlanCheck.Target"/>) its own numbers are the targets, at every tempo, checked both ways.
 /// </summary>

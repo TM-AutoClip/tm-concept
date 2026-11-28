@@ -26,26 +26,25 @@ public sealed class ConceptEditor(IRunStore runs, IConceptWishStore wishes, ICha
 {
     /// <summary>The estimate of one edit of <paramref name="concept"/> (its content read) with <paramref name="model"/> at <paramref name="effort"/>.</summary>
     public Task<CostEstimate> EstimateAsync(Profile profile, Concept concept, string instruction, CatalogModel model, string effort,
-        Styles.DrawStyle? style, CancellationToken cancellationToken)
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(model);
         cancellationToken.ThrowIfCancellationRequested();
-        var prompt = Prompt(profile, concept, instruction, style);
+        var prompt = Prompt(profile, concept, instruction);
         var (low, high) = OutputRange(profile, concept, model, effort);
         return Task.FromResult(costs.EstimateChat(model, costs.Tokens(prompt.System + prompt.User, profile.ContentLanguage), 0, low, high));
     }
 
     /// <summary>
-    /// Asks for the edited concept; <paramref name="progress"/> gets the call's steps (sent, thinking, writing, done). <paramref name="style"/>
-    /// (0.1.32): adapt the concept to this drawing style (its guidance goes into the prompt; null = no style line).
+    /// Asks for the edited concept; <paramref name="progress"/> gets the call's steps (sent, thinking, writing, done).
     /// </summary>
-    public async Task<ConceptEditResult> EditAsync(Profile profile, Concept concept, string instruction, ResolvedModel model, Styles.DrawStyle? style,
+    public async Task<ConceptEditResult> EditAsync(Profile profile, Concept concept, string instruction, ResolvedModel model,
         IProgress<ChatProgress>? progress, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(concept);
         ArgumentNullException.ThrowIfNull(model);
-        var prompt = Prompt(profile, concept, instruction, style);
+        var prompt = Prompt(profile, concept, instruction);
         var (low, high) = OutputRange(profile, concept, model.Model, model.Effort);
         var estimate = costs.EstimateChat(model.Model, costs.Tokens(prompt.System + prompt.User, profile.ContentLanguage), 0, low, high);
         var run = new Run
@@ -145,12 +144,11 @@ public sealed class ConceptEditor(IRunStore runs, IConceptWishStore wishes, ICha
         return ((long)Math.Min(visible * low, roof), (long)Math.Min(visible * high, roof));
     }
 
-    private static ConceptPrompt Prompt(Profile profile, Concept concept, string instruction, Styles.DrawStyle? style)
+    private static ConceptPrompt Prompt(Profile profile, Concept concept, string instruction)
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(concept);
-        return ConceptPromptBuilder.BuildEdit(new ConceptEditPromptInput(profile, concept.Title, concept.Summary, concept.Content, instruction ?? string.Empty,
-            Styles.DrawStyles.ConceptLine(style, OutputLanguages.Of(profile.ContentLanguage).PromptLanguage)));
+        return ConceptPromptBuilder.BuildEdit(new ConceptEditPromptInput(profile, concept.Title, concept.Summary, concept.Content, instruction ?? string.Empty));
     }
 
     /// <summary>

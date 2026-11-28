@@ -28,7 +28,6 @@ ANLATIMI BEĞENİLMEYENLER (başlık: açılış cümlesi):{disliked_telling}
 KULLANICININ İSTEKLERİ (önceki düzeltmeleri; yeni konseptlerde baştan uygula, yalnız tek bir konsepte özgü olanı atla):{wishes}
 KONU: «{extra}»
 ODAK (kullanıcının seçtiği ton, izleyici ve anlatım; buna uy): {focus}
-ÇİZİM TARZI (video bu tarzda çizilecek; konsepti ve "ekranda" satırlarını buna göre yaz): {style}
 KONULAR (her birine bir konsept, sırasıyla):{topics}
 BELGELER (numara: başlık):{documents}
 BELGE PARÇALARI (kullanabileceğin tek bilgiler; [belge numarası] «yer»: «metin»):{sources}

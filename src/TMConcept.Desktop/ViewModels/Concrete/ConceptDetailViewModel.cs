@@ -7,7 +7,6 @@ using TMConcept.Core.Models;
 using TMConcept.Core.Pipeline;
 using TMConcept.Core.Profiles;
 using TMConcept.Core.Scenes;
-using TMConcept.Core.Styles;
 using TMConcept.Core.Text;
 using TMConcept.Desktop.Concepts;
 using TMConcept.Desktop.Dialogs;
@@ -50,9 +49,6 @@ public sealed partial class ConceptDetailViewModel(AppSession session, IConceptS
     /// profile's wishes only when the editor is saved, forgotten when it is canceled.
     /// </summary>
     private readonly List<string> _aiWishes = [];
-
-    // 0.1.32: the drawing style the AI edits behind the open editor adapted the concept to (saved with the text); null = none.
-    private DrawStyle? _aiAdaptedStyle;
 
     /// <summary>The panel approved, took back or trashed its concept: the host moves the card.</summary>
     public event EventHandler<ConceptStatusChange>? Changed;
@@ -173,25 +169,6 @@ public sealed partial class ConceptDetailViewModel(AppSession session, IConceptS
     /// <summary>Longest wish.</summary>
     public int AiInstructionMax => ConceptLimits.ExtraPromptMax;
 
-    /// <summary>
-    /// "Adapt to a style" in the AI edit box (0.1.32): "keep the style" first, then every drawing style. A chosen style's guidance goes into the
-    /// edit prompt (the stick-figure narrator rewrites the scenes as the narrator's actions); the instruction may stay empty then.
-    /// </summary>
-    public IReadOnlyList<ChoiceOption> AiStyleOptions => _aiStyleOptions ??= BuildAiStyleOptions();
-
-    private IReadOnlyList<ChoiceOption>? _aiStyleOptions;
-
-    /// <summary>The chosen "adapt to a style" option (the first = keep).</summary>
-    [ObservableProperty]
-    public partial ChoiceOption? AiStyleOption { get; set; }
-
-    /// <summary>The style the AI edit adapts the concept to (null = none).</summary>
-    public DrawStyle? AiStyle => AiStyleOption is { Value.Length: > 0 } chosen && Enum.TryParse<DrawStyle>(chosen.Value, out var style) ? style : null;
-
-    /// <summary>The style the open concept was written for ("Written for: stick-figure narrator"), empty when none.</summary>
-    [ObservableProperty]
-    public partial string StyleLine { get; set; } = string.Empty;
-
     /// <summary>The estimate of one AI edit ("≈ 0.01 $–0.02 $").</summary>
     [ObservableProperty]
     public partial string AiPrice { get; set; } = string.Empty;
@@ -241,7 +218,6 @@ public sealed partial class ConceptDetailViewModel(AppSession session, IConceptS
         Card = card;
         Mode = card is null ? DetailMode.Empty : DetailMode.Viewing;
         MetaLine = string.Empty;
-        StyleLine = string.Empty;
         Notify();
         if (card is null)
         {
@@ -258,7 +234,6 @@ public sealed partial class ConceptDetailViewModel(AppSession session, IConceptS
         card.ShowContent(full.Content);
         SceneWarning = SceneWarnings.Line(text, full.Content, full.Language, session.Profile);
         MetaLine = Meta(full);
-        StyleLine = Written(full);
         Notify();
     }
 
@@ -414,14 +389,6 @@ public sealed partial class ConceptDetailViewModel(AppSession session, IConceptS
         }
 
         _aiWishes.Clear();
-        if (_aiAdaptedStyle is { } adapted)
-        {
-            // The saved text is written for the style the AI edit adapted it to.
-            await concepts.SetDrawStyleAsync(card.Id, adapted, CancellationToken.None).ConfigureAwait(true);
-            card.Concept.DrawStyle = adapted;
-            _aiAdaptedStyle = null;
-            StyleLine = Written(card.Concept);
-        }
         CloseEditor();
         Mode = DetailMode.Viewing;
         Notice = notice;
@@ -491,7 +458,6 @@ public sealed partial class ConceptDetailViewModel(AppSession session, IConceptS
         _aiBase = full;
         CloseEditor();
         AiInstruction = string.Empty;
-        AiStyleOption = AiStyleOptions[0];
         AiStatus = string.Empty;
         AiFailed = false;
         Mode = DetailMode.AiEditing;
@@ -526,14 +492,6 @@ public sealed partial class ConceptDetailViewModel(AppSession session, IConceptS
         }
 
         var instruction = TextClean.Clean(AiInstruction, ConceptLimits.ExtraPromptMax).Trim();
-        var adapt = AiStyle;
-        var adaptOnly = instruction.Length == 0 && adapt is not null;
-        if (adaptOnly)
-        {
-            // Only a style chosen: the instruction says to adapt (it is not kept as a wish for the next concepts).
-            instruction = text["concepts.ai.adapt_instruction"];
-        }
-
         if (instruction.Length == 0)
         {
             AiFailed = true;
@@ -565,7 +523,7 @@ public sealed partial class ConceptDetailViewModel(AppSession session, IConceptS
             cancel.Token.ThrowIfCancellationRequested();
             var model = await resolver.ResolveAsync(PipelineSteps.Concepts, picker.Choice(PipelineSteps.Concepts), CancellationToken.None).ConfigureAwait(true);
             AiCall.Begin(model.Model.Name);
-            var result = await editor.EditAsync(profile, concept, instruction, model, adapt, new Progress<Core.Chat.ChatProgress>(AiCall.Report), cancel.Token)
+            var result = await editor.EditAsync(profile, concept, instruction, model, new Progress<Core.Chat.ChatProgress>(AiCall.Report), cancel.Token)
                 .ConfigureAwait(true);
             var cost = text.Usd(result.CostUsd);
             if (cancel.IsCancellationRequested || session.Profile?.Id != profile.Id || !ReferenceEquals(Card, card) || Mode != DetailMode.AiEditing)
@@ -588,16 +546,7 @@ public sealed partial class ConceptDetailViewModel(AppSession session, IConceptS
 
                 _aiBase = null;
                 _aiFromEditor = false;
-                if (!adaptOnly)
-                {
-                    _aiWishes.Add(instruction);
-                }
-
-                if (adapt is not null)
-                {
-                    _aiAdaptedStyle = adapt;
-                }
-
+                _aiWishes.Add(instruction);
                 OpenEditor(edited.Title, edited.Summary, edited.Content, ready, lookAlike, fromAi: true);
                 return;
             }
@@ -699,24 +648,6 @@ public sealed partial class ConceptDetailViewModel(AppSession session, IConceptS
     public Task TrashJustAsync() => TrashAsync(TrashReason.None);
 
     partial void OnAiInstructionChanged(string value) => _ = SafeAsync(AiEstimateAsync);
-
-    partial void OnAiStyleOptionChanged(ChoiceOption? value) => _ = SafeAsync(AiEstimateAsync);
-
-    private List<ChoiceOption> BuildAiStyleOptions()
-    {
-        var options = new List<ChoiceOption> { new(string.Empty, text["concepts.ai.style_keep"]) };
-        options.AddRange(DrawStyles.Choosable.Select(d => new ChoiceOption(d.Style.ToString(), StyleName(d.Style))));
-        return options;
-    }
-
-    private string StyleName(DrawStyle style)
-    {
-        var key = "style.draw." + style.ToString().ToLowerInvariant();
-        return text.Has(key) ? text[key] : DrawStyles.Of(style).Key;
-    }
-
-    /// <summary>"Written for: …" of a concept (empty when it was written for no style).</summary>
-    private string Written(Concept concept) => concept.DrawStyle is { } style ? text.Format("detail.style_written", StyleName(style)) : string.Empty;
 
     private Task TrashAsync(TrashReason reason) => ChangeAsync(ConceptStatus.Trashed, Always(card => actions.TrashAsync([card.Concept], reason, _owner)));
 
@@ -833,7 +764,7 @@ public sealed partial class ConceptDetailViewModel(AppSession session, IConceptS
         }
 
         var effort = picker.Row(PipelineSteps.Concepts)?.Effort?.Value ?? string.Empty;
-        var estimate = await editor.EstimateAsync(profile, concept, AiInstruction, model, effort, AiStyle, CancellationToken.None).ConfigureAwait(true);
+        var estimate = await editor.EstimateAsync(profile, concept, AiInstruction, model, effort, CancellationToken.None).ConfigureAwait(true);
         AiPrice = text.Format("concepts.ai.estimate", model.Name, text.Usd(estimate.MinUsd), text.Usd(estimate.MaxUsd));
     }
 

@@ -25,9 +25,10 @@ public static class VideoCodePrompt
     /// computer gets a short checklist of the rules small models break most and the lines the file must end with, see <see cref="SmallModelChecklist"/>;
     /// 11: the repair shows a minimal file that puts each scene's image full frame, and a code that never shows the images is sent back;
     /// 12 (0.1.32): motion that tells (two thirds of the scenes, entrance length caps, an effect budget, a moving hook) and the template's look
-    /// lines from <see cref="Styles.DrawStyles"/>: drawing, craft and texture of the style).
+    /// lines from <see cref="Styles.DrawStyles"/>: drawing, craft and texture of the style); 13 (28 Nov 2026): a storytelling look adapts
+    /// the scenes (<see cref="Styles.DrawStyleDefinition.SceneGuidance"/>), since concepts are written for no style.
     /// </summary>
-    public const string Version = "12";
+    public const string Version = "13";
 
     /// <summary>
     /// SVG: the check allows exactly the SVG (and xlink) namespace written as one whole literal; a model that only read "no web addresses"
@@ -152,6 +153,13 @@ public static class VideoCodePrompt
         // must be in that language too, never in English by habit.
         var language = Profiles.OutputLanguages.Of(input.Language);
         text.Append(c, $"Video language: {language.English} ({language.Code}). Any word you write into the code yourself is in {language.English}.\n");
+
+        // 28 Nov 2026: the concept is written for no style; a storytelling look (the stick-figure narrator) adapts the scenes here.
+        if (Styles.DrawStyles.SceneGuidanceOfKey(input.Style?.DrawStyle) is { Length: > 0 } guidance)
+        {
+            text.Append("Adapt the scenes to this look: ").Append(guidance).Append('\n');
+        }
+
         foreach (var scene in input.Scenes)
         {
             // A scene without a caption (subtitles off: the captions are left out on purpose) shows no caption at all.

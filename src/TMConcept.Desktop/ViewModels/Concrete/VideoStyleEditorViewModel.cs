@@ -26,7 +26,8 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
     /// <summary>
     /// Fills the form from <paramref name="source"/> (a copy is edited; the source is not changed); <paramref name="saved"/> are the user's
     /// saved palettes, listed after the shipped ones and before the template's own colours. 0.1.54: the music and the reference video are no
-    /// longer the template's (the video page's model choice holds them per profile); a template saved before keeps nothing of them.
+    /// longer the template's (the video page's model choice holds them per profile); 28 Nov 2026: nor are the drawing style, the motion and the
+    /// finishing layer (the video page's look, per profile). A template saved before keeps nothing of them.
     /// </summary>
     public VideoStyleEditorViewModel(VideoStyle source, bool isNew, Localizer text, IReadOnlyList<SavedPalette>? saved = null)
     {
@@ -37,6 +38,7 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         // A template saved before 0.1.54 may still hold music and a reference: they are not the template's any more (no unsaved change).
         _source.Music = new VideoMusic();
         _source.Reference = null;
+        Neutral(_source);
         _text = text;
         IsNew = isNew;
         Palettes = new ObservableCollection<PaletteOption>(VideoPalettes.All.Select(p => Option(p, Label("style.palette." + p.Id, p.Id))));
@@ -50,9 +52,6 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         Fonts = VideoFonts.All.Concat(SystemFonts.Installed).Select(f => new FontOption(f, VideoFontPreview.For(f))).ToList();
         Emphases = Choices<FontEmphasis>("style.emphasis.");
         TitleStyles = Choices<TitleStyle>("style.title.");
-        // 0.1.32: in the catalog's order (the AI choice first), each with its description under the list.
-        DrawStyles = Core.Styles.DrawStyles.All.Select(d => new NumberChoice((int)d.Style, Label("style.draw." + Key(d.Style), d.Key))).ToList();
-        Motions = Choices<MotionIntensity>("style.motion.");
         Tempos = Choices<NarrationTempo>("style.tempo.");
         Drawers = Choices<SceneDrawer>("style.drawer.");
         Qualities = Choices<QualityMode>("style.quality.");
@@ -69,7 +68,6 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         Name = _source.Name;
         Subtitles = _source.Subtitles;
         WordHighlight = _source.WordHighlight;
-        Finish = _source.Finish;
         PlanReview = _source.PlanReview;
         FirstSceneReview = _source.FirstSceneReview;
         ProgressBar = _source.ProgressBar;
@@ -83,9 +81,6 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         Fill(Palette.Palette);
         PaletteName = Palette.SavedId is not null ? Palette.Label : string.Empty;
         TitleStyle = Pick(TitleStyles, (int)_source.TitleStyle);
-        DrawStyle = Pick(DrawStyles, (int)_source.DrawStyle);
-        ShowDrawStyle();
-        Motion = Pick(Motions, (int)_source.Motion);
         Tempo = Pick(Tempos, (int)_source.Tempo);
         Drawer = Pick(Drawers, (int)_source.Drawer);
         Quality = Pick(Qualities, (int)_source.Quality);
@@ -174,12 +169,6 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
     /// <summary>Title styles.</summary>
     public IReadOnlyList<NumberChoice> TitleStyles { get; }
 
-    /// <summary>Drawing styles (scenes without images; also the style of generated images).</summary>
-    public IReadOnlyList<NumberChoice> DrawStyles { get; }
-
-    /// <summary>Motion intensities.</summary>
-    public IReadOnlyList<NumberChoice> Motions { get; }
-
     /// <summary>Narration tempos (0.1.31).</summary>
     public IReadOnlyList<NumberChoice> Tempos { get; }
 
@@ -250,46 +239,9 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
     [ObservableProperty]
     public partial NumberChoice TitleStyle { get; set; }
 
-    /// <summary>Drawing style.</summary>
-    [ObservableProperty]
-    public partial NumberChoice DrawStyle { get; set; }
-
-    /// <summary>What the chosen drawing style looks like (0.1.32, shown under the list).</summary>
-    [ObservableProperty]
-    public partial string DrawStyleNote { get; set; } = string.Empty;
-
-    /// <summary>The built-in palette the chosen style suggests (null = none, or it is already chosen).</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasSuggestedPalette), nameof(SuggestedPaletteText))]
-    public partial PaletteOption? SuggestedPalette { get; set; }
-
-    /// <summary>Whether a palette is suggested.</summary>
-    public bool HasSuggestedPalette => SuggestedPalette is not null;
-
-    /// <summary>"Suggested palette for this style: Blueprint".</summary>
-    public string SuggestedPaletteText => SuggestedPalette is { } palette ? _text.Format("styles.draw.palette", palette.Label) : string.Empty;
-
-    /// <summary>Takes the palette the style suggests.</summary>
-    [RelayCommand]
-    public void ApplySuggestedPalette()
-    {
-        if (SuggestedPalette is { } palette)
-        {
-            Palette = palette;
-        }
-    }
-
-    /// <summary>Motion intensity.</summary>
-    [ObservableProperty]
-    public partial NumberChoice Motion { get; set; }
-
     /// <summary>Word-by-word highlighted subtitles (0.1.34).</summary>
     [ObservableProperty]
     public partial bool WordHighlight { get; set; }
-
-    /// <summary>The style's finishing layer (F12, 0.1.43: paper tooth, grain, vignette, glow, shadow, boil; the app's drawer only).</summary>
-    [ObservableProperty]
-    public partial bool Finish { get; set; }
 
     /// <summary>F10 (0.1.49): show the plan and wait for approval (the app's drawer only; off by default).</summary>
     [ObservableProperty]
@@ -405,18 +357,16 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
 
         style.TitleStyle = (TitleStyle)TitleStyle.Value;
         style.TitlePosition = Position;
-        style.DrawStyle = (DrawStyle)DrawStyle.Value;
-        style.Motion = (MotionIntensity)Motion.Value;
         style.Tempo = (NarrationTempo)Tempo.Value;
         style.Drawer = (SceneDrawer)Drawer.Value;
         style.Quality = (QualityMode)(Quality?.Value ?? 0);
         style.WordHighlight = WordHighlight;
-        style.Finish = Finish;
         style.PlanReview = PlanReview;
         style.FirstSceneReview = PlanReview && FirstSceneReview;
         // 0.1.54: the music and the reference video are the profile's (the video page's model choice), never the template's.
         style.Music = new VideoMusic();
         style.Reference = null;
+        Neutral(style);
 
         style.Closing = (ClosingPlacement)Closing.Value;
         style.ClosingPlatform = (ClosingPlatform)Platform.Value;
@@ -437,15 +387,9 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
         }
 
         if (e.PropertyName is nameof(BaseColour) or nameof(GenerateLight) or nameof(PaletteName) or nameof(PaletteStatus) or nameof(PaletteOk)
-            or nameof(OwnColours) or nameof(SavedChosen) or nameof(DrawStyleNote) or nameof(SuggestedPalette) or nameof(HasSuggestedPalette)
-            or nameof(SuggestedPaletteText))
+            or nameof(OwnColours) or nameof(SavedChosen))
         {
             return;
-        }
-
-        if (e.PropertyName is nameof(DrawStyle) or nameof(Palette))
-        {
-            ShowDrawStyle();
         }
 
         if (e.PropertyName == nameof(Palette))
@@ -657,21 +601,17 @@ public sealed partial class VideoStyleEditorViewModel : ObservableObject
 
     private static NumberChoice Pick(IReadOnlyList<NumberChoice> choices, int value) => choices.FirstOrDefault(c => c.Value == value) ?? choices[0];
 
-    /// <summary>The description of the chosen drawing style and the palette it suggests (none when that palette is already chosen).</summary>
-    private void ShowDrawStyle()
+    /// <summary>
+    /// 28 Nov 2026 (the developer: "şablondan kaldıralım"): the drawing style, the motion and the finishing layer are the profile's look on the
+    /// video page, never the template's; a template keeps their neutral defaults (each video's snapshot takes the look,
+    /// <see cref="VideoStyleRules.WithChoices"/>).
+    /// </summary>
+    private static void Neutral(VideoStyle style)
     {
-        if (DrawStyle is null)
-        {
-            return;
-        }
-
-        var definition = Core.Styles.DrawStyles.Of((DrawStyle)DrawStyle.Value);
-        var key = "style.draw." + Key(definition.Style) + ".desc";
-        var note = _text.Has(key) ? _text[key] : string.Empty;
-        DrawStyleNote = definition.PrefersImages && note.Length > 0 ? note + " " + _text["styles.draw.prefers_images"] : note;
-        SuggestedPalette = definition.PaletteId.Length == 0 || (Palette is { Editable: false } current && current.Palette.Id == definition.PaletteId)
-            ? null
-            : Palettes.FirstOrDefault(p => !p.Editable && p.SavedId is null && p.Palette.Id == definition.PaletteId);
+        style.DrawStyle = Core.Styles.DrawStyle.Auto;
+        style.ChosenStyle = string.Empty;
+        style.Motion = MotionIntensity.Normal;
+        style.Finish = false;
     }
 
     private static SolidColorBrush Brush(string hex) => new(Color.Parse(hex));

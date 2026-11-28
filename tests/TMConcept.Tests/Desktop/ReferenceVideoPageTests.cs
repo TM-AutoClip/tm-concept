@@ -50,7 +50,7 @@ public sealed class ReferenceVideoPageTests
 
         // A starting video: the template with the profile's reference; the reference's tempo wins, the template is not changed.
         var template = new VideoStyle { Name = "A", Tempo = NarrationTempo.Relaxed };
-        var video = VideoStyleRules.WithMedia(template, new VideoMedia { Reference = reference.Profile });
+        var video = VideoStyleRules.WithChoices(template, new VideoMedia { Reference = reference.Profile }, null);
         video.Reference.ShouldNotBeNull().CutsPer10Seconds.ShouldBe(6.3);
         video.Tempo.ShouldBe(NarrationTempo.Tight, "6.3 cuts every 10 s is nearest to tight");
         video.PaletteId.ShouldNotBe(VideoPalettes.CustomId, "the colours are the template's");
@@ -58,7 +58,7 @@ public sealed class ReferenceVideoPageTests
         template.Reference.ShouldBeNull();
 
         reference.RemoveCommand.Execute(null);
-        VideoStyleRules.WithMedia(template, new VideoMedia { Reference = reference.Profile }).Tempo.ShouldBe(NarrationTempo.Relaxed, "the template's own tempo");
+        VideoStyleRules.WithChoices(template, new VideoMedia { Reference = reference.Profile }, null).Tempo.ShouldBe(NarrationTempo.Relaxed, "the template's own tempo");
     }
 
     [AvaloniaFact]

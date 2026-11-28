@@ -1,54 +1,32 @@
-using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using TMConcept.Core.Models;
 using TMConcept.Core.Render;
 
 namespace TMConcept.Core.Styles;
 
 /// <summary>
-/// <see cref="IVideoMediaStore"/> over the profile's saved step choices (no new table): one choice of the step
-/// <see cref="Pipeline.PipelineSteps.VideoMedia"/> whose options hold the <see cref="VideoMedia"/> as JSON. It names no model of the catalog,
-/// so nothing installs or prices it. A damaged value reads as an empty choice.
+/// <see cref="IVideoMediaStore"/> over the profile's saved step choices (<see cref="ProfileChoiceStoreBase{T}"/>): the step
+/// <see cref="Pipeline.PipelineSteps.VideoMedia"/> holds the <see cref="VideoMedia"/>. A damaged value reads as an empty choice.
 /// </summary>
-public sealed class VideoMediaStore(IStepModelStore steps) : IVideoMediaStore
+public sealed class VideoMediaStore(IStepModelStore steps) : ProfileChoiceStoreBase<VideoMedia>(steps), IVideoMediaStore
 {
-    /// <summary>The provider written into the step choice (not a catalog provider).</summary>
-    public const string Provider = "app";
-
-    /// <summary>The model written into the step choice (not a catalog model).</summary>
-    public const string Model = "media";
+    /// <inheritdoc />
+    protected override string Step => Pipeline.PipelineSteps.VideoMedia;
 
     /// <inheritdoc />
-    public async Task<VideoMedia> GetAsync(Guid profileId, CancellationToken cancellationToken)
-    {
-        var choice = await steps.GetAsync(Pipeline.PipelineSteps.VideoMedia, profileId, cancellationToken).ConfigureAwait(false);
-        if (choice is null || string.IsNullOrWhiteSpace(choice.OptionsJson))
-        {
-            return new VideoMedia();
-        }
-
-        try
-        {
-            var media = JsonSerializer.Deserialize(choice.OptionsJson, CoreJsonContext.Default.VideoMedia) ?? new VideoMedia();
-            media.Music ??= new VideoMusic();
-            return media;
-        }
-        catch (JsonException)
-        {
-            return new VideoMedia();
-        }
-    }
+    protected override string Model => "media";
 
     /// <inheritdoc />
-    public Task SaveAsync(Guid profileId, VideoMedia media, CancellationToken cancellationToken)
+    protected override JsonTypeInfo<VideoMedia> Json => CoreJsonContext.Default.VideoMedia;
+
+    /// <inheritdoc />
+    protected override VideoMedia Empty() => new();
+
+    /// <inheritdoc />
+    protected override VideoMedia Normalize(VideoMedia value)
     {
-        ArgumentNullException.ThrowIfNull(media);
-        return steps.SaveAsync(new StepModelChoice
-        {
-            Step = Pipeline.PipelineSteps.VideoMedia,
-            ProfileId = profileId,
-            Provider = Provider,
-            Model = Model,
-            OptionsJson = JsonSerializer.Serialize(media, CoreJsonContext.Default.VideoMedia),
-        }, cancellationToken);
+        ArgumentNullException.ThrowIfNull(value);
+        value.Music ??= new VideoMusic();
+        return value;
     }
 }

@@ -1,0 +1,51 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:TMConcept.Desktop.ViewModels"
+             xmlns:views="using:TMConcept.Desktop.Views"
+             x:Class="TMConcept.Desktop.Views.VideoLookView"
+             x:DataType="vm:VideoLookViewModel">
+  <!-- 28 Nov 2026: the profile's look (drawing style, motion, finishing layer), next to the video code model; they left the template. -->
+  <Border Classes="card">
+    <WrapPanel ItemSpacing="12" LineSpacing="6">
+      <StackPanel Spacing="4" MaxWidth="460">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <TextBlock Text="{DynamicResource styles.draw}" VerticalAlignment="Center" />
+            <views:HelpTip Text="{DynamicResource styles.draw.tip}" />
+          </StackPanel>
+          <ComboBox Name="LookDraw" ItemsSource="{Binding DrawStyles}" SelectedItem="{Binding DrawStyle}" MinWidth="200">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:NumberChoice">
+                <TextBlock Text="{Binding Label}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+        </StackPanel>
+        <TextBlock Name="LookDrawNote" Text="{Binding DrawStyleNote}" Classes="small muted" TextWrapping="Wrap"
+                   IsVisible="{Binding DrawStyleNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+        <TextBlock Name="LookPalette" Text="{Binding SuggestedPaletteText}" Classes="small" TextWrapping="Wrap"
+                   IsVisible="{Binding SuggestedPaletteText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+      </StackPanel>
+      <!-- A label and its picker wrap together (a long style note never leaves a label alone at the end of a line). -->
+      <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
+        <TextBlock Text="{DynamicResource styles.motion}" VerticalAlignment="Center" />
+        <ComboBox Name="LookMotion" ItemsSource="{Binding Motions}" SelectedItem="{Binding Motion}" MinWidth="140"
+                  ToolTip.Tip="{DynamicResource styles.motion.tip}">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:NumberChoice">
+              <TextBlock Text="{Binding Label}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+      </StackPanel>
+      <StackPanel Spacing="2" VerticalAlignment="Top" MaxWidth="360">
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+          <CheckBox Name="LookFinish" IsChecked="{Binding Finish}" Content="{DynamicResource styles.finish}" />
+          <views:HelpTip Text="{DynamicResource styles.finish.tip}" />
+        </StackPanel>
+        <TextBlock Name="LookFinishNote" Text="{Binding FinishNote}" Classes="small warning" TextWrapping="Wrap"
+                   IsVisible="{Binding FinishNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+      </StackPanel>
+    </WrapPanel>
+  </Border>
+</UserControl>

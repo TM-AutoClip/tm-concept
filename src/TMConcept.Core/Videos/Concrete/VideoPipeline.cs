@@ -875,7 +875,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
     /// without one readable prompt is asked again as it was (at most twice, <see cref="JsonAnswerRetry"/>); an answer that does not fit the
     /// scenes (<see cref="ImagePromptBuilder.Check"/>: the count, a scene without a prompt, a wrong number, an empty prompt) gets ONE repair
     /// request with those findings, and when that does not fit either the video stops with them ("images"). A cut-off answer keeps its
-    /// complete items and goes to the same check. Every call is paid and counted. 0.1.32: a template without a style
+    /// complete items and goes to the same check. Every call is paid and counted. 0.1.32: a video whose look has no style
     /// (<see cref="Styles.DrawStyle.Auto"/>) lets this call choose one; the second value is the chosen preset's key or the model's own words
     /// (empty otherwise; a repair answer that names one replaces the first).
     /// </summary>
@@ -964,7 +964,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
     }
 
     /// <summary>
-    /// Writes the style chosen for a template without one into this video's snapshot (0.1.32): a preset's key becomes its
+    /// Writes the style chosen for a video whose look has none into this video's snapshot (0.1.32): a preset's key becomes its
     /// <see cref="Styles.VideoStyle.DrawStyle"/> (so the code gets its drawing, craft and texture), the model's own words go to
     /// <see cref="Styles.VideoStyle.ChosenStyle"/>. Nothing chosen leaves the snapshot on Auto (the code then chooses).
     /// </summary>
@@ -993,7 +993,7 @@ public sealed class VideoPipeline(IEnumerable<IVideoEngine> engines, SpeechServi
     public static string SceneImageFolder(string workDirectory, Guid conceptId) => Path.Combine(workDirectory, "scene-images", conceptId.ToString("N"));
 
     /// <summary>
-    /// The key of a concept's kept image prompts and images: another channel, model, size, scene text, template drawing style or prompt format
+    /// The key of a concept's kept image prompts and images: another channel, model, size, scene text, the video's drawing style or prompt format
     /// (<see cref="ImagePromptBuilder.Version"/>) makes new ones.
     /// </summary>
     private static string CacheKey(string channel, CatalogModel model, int width, int height, IReadOnlyList<string> visuals, Styles.DrawStyle? drawStyle,

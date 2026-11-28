@@ -49,17 +49,12 @@ public sealed class ConceptGenerator(IConceptStore concepts, IRunStore runs, ICh
     /// <summary>Band around a measured per-concept output (it already contains the thinking tokens).</summary>
     public static readonly (double Low, double High) MeasuredBand = (0.85, 1.15);
 
-    /// <summary>The prompt's style line for concepts written for <paramref name="style"/> (in the profile's prompt language; empty = none).</summary>
-    private static string StyleLine(Profile profile, Styles.DrawStyle? style) =>
-        Styles.DrawStyles.ConceptLine(style, OutputLanguages.Of(profile.ContentLanguage).PromptLanguage);
-
     /// <summary>
     /// The estimate of a run of <paramref name="brief"/> (<paramref name="focus"/>: the chosen focus line, empty = none;
-    /// <paramref name="effort"/>: the chosen effort, empty = automatic; <paramref name="style"/>: the drawing style the concepts are written
-    /// for, null = none): every batch's prompt as <see cref="GenerateAsync"/> sends it.
+    /// <paramref name="effort"/>: the chosen effort, empty = automatic): every batch's prompt as <see cref="GenerateAsync"/> sends it.
     /// </summary>
     public async Task<CostEstimate> EstimateAsync(Profile profile, ConceptBrief brief, string focus, Models.CatalogModel model, string effort,
-        Styles.DrawStyle? style, CancellationToken cancellationToken)
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(brief);
@@ -78,7 +73,7 @@ public sealed class ConceptGenerator(IConceptStore concepts, IRunStore runs, ICh
         {
             var asked = Math.Min(planned, count - offset);
             var (prompt, batch, batchRoof, size) = await BatchPromptAsync(source, new ConceptPromptInput(profile, past, brief.ExtraPrompt, asked, focus,
-                brief.Topics(offset, asked), brief.Grounded ? DocumentGrounding.Empty : null, StyleLine(profile, style)), brief, model, offset, high, true, null,
+                brief.Topics(offset, asked), brief.Grounded ? DocumentGrounding.Empty : null), brief, model, offset, high, true, null,
                 cancellationToken)
                 .ConfigureAwait(false);
             planned = Math.Min(planned, size);
@@ -157,7 +152,7 @@ public sealed class ConceptGenerator(IConceptStore concepts, IRunStore runs, ICh
         var brief = request.Brief;
         var count = brief.Count;
         var source = SourceOf(brief);
-        var estimate = await EstimateAsync(profile, brief, request.Focus, request.Model.Model, request.Model.Effort, request.Style, cancellationToken)
+        var estimate = await EstimateAsync(profile, brief, request.Focus, request.Model.Model, request.Model.Effort, cancellationToken)
             .ConfigureAwait(false);
         var run = new Run
         {
@@ -203,7 +198,7 @@ public sealed class ConceptGenerator(IConceptStore concepts, IRunStore runs, ICh
                 var subjects = await concepts.HistoryAsync(profile.Id, cancellationToken).ConfigureAwait(false);
                 var past = await memory.ReadAsync(profile, cancellationToken).ConfigureAwait(false);
                 var (prompt, sourceBatch, maxTokens, fitted) = await BatchPromptAsync(source, new ConceptPromptInput(profile, past, brief.ExtraPrompt, sizes[index],
-                    request.Focus, brief.Topics(topicsDone, sizes[index]), brief.Grounded ? DocumentGrounding.Empty : null, StyleLine(profile, request.Style)),
+                    request.Focus, brief.Topics(topicsDone, sizes[index]), brief.Grounded ? DocumentGrounding.Empty : null),
                     brief, request.Model.Model, topicsDone,
                     outputPerConcept * outputBand.High, false, sent, cancellationToken).ConfigureAwait(false);
                 if (fitted < sizes[index])
@@ -325,7 +320,6 @@ public sealed class ConceptGenerator(IConceptStore concepts, IRunStore runs, ICh
                         Similarity = verdict.Result.Kind == DuplicateKind.Similar ? verdict.Result.Similarity : null,
                         DuplicateNote = verdict.Result.Code,
                         Sources = string.Join("; ", cited),
-                        DrawStyle = request.Style is Styles.DrawStyle.Auto ? null : request.Style,
                         CreatedAtUtc = clock.GetUtcNow(),
                     });
                 }

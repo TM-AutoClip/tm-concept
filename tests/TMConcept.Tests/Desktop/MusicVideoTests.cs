@@ -67,7 +67,9 @@ public sealed class MusicVideoTests
         var options = new VideoOptions { Speech = true };
         if (style is not null)
         {
-            VideoStyleRules.Snapshot(options, style);
+            // The snapshot as a starting video holds it (the profile's music, reference and look already in it).
+            options.Style = VideoStyleRules.Copy(style);
+            options.Subtitles = style.Subtitles;
         }
 
         var model = new ResolvedModel(h.Get<IModelCatalog>().Find("anthropic", "claude-sonnet-5-5")!, key, string.Empty);

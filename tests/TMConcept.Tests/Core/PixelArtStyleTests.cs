@@ -78,7 +78,6 @@ public sealed class PixelArtStyleTests
     {
         ImagePromptBuilder.User("Byzantium", ["a map"], DrawStyle.Auto).ShouldContain("pixel-art");
         ImagePromptBuilder.ReadStyle("""{"prompts":[{"scene":1,"prompt":"p"}],"style":"pixel-art"}""").Preset.ShouldBe(DrawStyle.PixelArt);
-        DrawStyles.ConceptLine(DrawStyle.PixelArt, "en").ShouldContain("pixel art");
     }
 
     [Fact]

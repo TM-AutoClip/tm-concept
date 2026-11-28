@@ -4,7 +4,7 @@ namespace TMConcept.Core.Styles;
 /// A template ("Şablon" in the interface; the code says VideoStyle because "template" already means <see cref="Templates.ChannelTemplate"/>):
 /// how a video looks and ends. Templates are a global list (not tied to profiles, at most <see cref="VideoStyleLimits.Max"/>) in the
 /// encrypted database (<see cref="IVideoStyleStore"/>). When a queued video starts, a copy goes into <see cref="Videos.VideoOptions.Style"/>
-/// (<see cref="VideoStyleRules.Snapshot"/>); later edits change only the next video. The settings are enforced by the app (overlays it draws,
+/// (<see cref="VideoStyleRules.Snapshot"/>, with the profile's music, reference and look); later edits change only the next video. The settings are enforced by the app (overlays it draws,
 /// fonts it copies, colour tokens, the style check), not only asked for in the prompt. Enums are stored as numbers; the palette and font are
 /// ids so a removed one falls back to the default (<see cref="VideoStyleRules.Palette"/>, <see cref="VideoStyleRules.Font"/>).
 /// </summary>
@@ -20,8 +20,8 @@ public sealed class VideoStyle
     public bool Subtitles { get; set; } = true;
 
     /// <summary>
-    /// Word-by-word highlighted subtitles (0.1.34, <see cref="WordHighlight"/>): the word being said in the accent colour, in the drawing
-    /// style's way. Off by default; only with <see cref="Subtitles"/>.
+    /// Word-by-word highlighted subtitles (0.1.34, <see cref="WordHighlight"/>): the word being said in the accent colour, in the way of
+    /// the video's drawing style (the profile's look, <see cref="VideoLook"/>). Off by default; only with <see cref="Subtitles"/>.
     /// </summary>
     public bool WordHighlight { get; set; }
 
@@ -63,8 +63,9 @@ public sealed class VideoStyle
     public string CustomPaletteName { get; set; } = string.Empty;
 
     /// <summary>
-    /// The look of the video (<see cref="DrawStyles"/>): how scenes without an image are drawn and how images are asked for. A new template
-    /// starts on <see cref="DrawStyle.Auto"/> (0.1.32: no style given = the model chooses one that fits each video's topic).
+    /// The look of the video (<see cref="DrawStyles"/>): how scenes without an image are drawn and how images are asked for. Since 28 Nov 2026 it
+    /// is not the template's: it is set only on a video's snapshot from the profile's <see cref="VideoLook"/> (chosen on the video page,
+    /// <see cref="VideoStyleRules.WithChoices"/>); a saved template keeps the default (<see cref="DrawStyle.Auto"/>, the model chooses).
     /// </summary>
     public DrawStyle DrawStyle { get; set; } = DrawStyle.Auto;
 
@@ -75,7 +76,10 @@ public sealed class VideoStyle
     /// </summary>
     public string ChosenStyle { get; set; } = string.Empty;
 
-    /// <summary>How much things move.</summary>
+    /// <summary>
+    /// How much things move. Like <see cref="DrawStyle"/>, set only on a video's snapshot from the profile's <see cref="VideoLook"/> (28 Nov 2026);
+    /// a saved template keeps the default.
+    /// </summary>
     public MotionIntensity Motion { get; set; } = MotionIntensity.Normal;
 
     /// <summary>
@@ -92,8 +96,8 @@ public sealed class VideoStyle
 
     /// <summary>
     /// The style's finishing layer ("Son işlem", F12, 0.1.43; <see cref="DrawStyleDefinition.Finish"/>): paper tooth, grain, vignette, glow,
-    /// shadow and boil over the scenes the app draws. A template saved before has none in its JSON and stays off, so its videos look as they
-    /// did; the editor starts a new template with it on.
+    /// shadow and boil over the scenes the app draws. Like <see cref="DrawStyle"/>, set only on a video's snapshot from the profile's
+    /// <see cref="VideoLook"/> (28 Nov 2026); a saved template keeps it off.
     /// </summary>
     public bool Finish { get; set; }
 

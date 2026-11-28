@@ -120,7 +120,7 @@ public sealed class VideoStyleTests
         var style = new VideoStyle { Name = "Tarih", Subtitles = false, ProgressBar = true, PaletteId = "paper", Closing = ClosingPlacement.Both };
         var options = new VideoOptions { Subtitles = true };
 
-        VideoStyleRules.Snapshot(options, style);
+        VideoStyleRules.Snapshot(options, style, null, null);
         style.Name = "Changed after start";
         style.Subtitles = true;
 
@@ -148,14 +148,32 @@ public sealed class VideoStyleTests
         var options = new VideoOptions();
         VideoStyleRules.Snapshot(options, new VideoStyle
         {
-            Name = "Neon", FontId = "anton", TitleStyle = TitleStyle.Boxed, TitlePosition = TitlePosition.BottomRight, DrawStyle = DrawStyle.Neon,
-            Motion = MotionIntensity.Lively, Closing = ClosingPlacement.Screen, ClosingPhrase = ClosingPhrase.Thanks, ClosingPlatform = ClosingPlatform.TikTok,
-        });
+            Name = "Neon", FontId = "anton", TitleStyle = TitleStyle.Boxed, TitlePosition = TitlePosition.BottomRight,
+            Closing = ClosingPlacement.Screen, ClosingPhrase = ClosingPhrase.Thanks, ClosingPlatform = ClosingPlatform.TikTok,
+        }, null, new VideoLook { DrawStyle = DrawStyle.Neon, Motion = MotionIntensity.Lively });
 
         var json = JsonSerializer.Serialize(options, CoreJsonContext.Default.VideoOptions);
         var back = JsonSerializer.Deserialize(json, CoreJsonContext.Default.VideoOptions).ShouldNotBeNull();
         JsonSerializer.Serialize(back, CoreJsonContext.Default.VideoOptions).ShouldBe(json);
         back.Style.ShouldNotBeNull().TitlePosition.ShouldBe(TitlePosition.BottomRight);
+        (back.Style.DrawStyle, back.Style.Motion).ShouldBe((DrawStyle.Neon, MotionIntensity.Lively), "the chosen look is kept with the video");
+    }
+
+    [Fact]
+    public void TheSnapshotTakesTheProfilesLookAndNeverTheTemplatesOwn()
+    {
+        // 28 Nov 2026: the drawing style, motion and finishing layer are the profile's look on the video page; a template's old values
+        // (a template saved before) are replaced, also by the default look when none was chosen.
+        var old = new VideoStyle { Name = "Old", DrawStyle = DrawStyle.Blueprint, Motion = MotionIntensity.Calm, Finish = true, ChosenStyle = "ink" };
+        var options = new VideoOptions();
+
+        VideoStyleRules.Snapshot(options, old, null, new VideoLook { DrawStyle = DrawStyle.StickFigure, Motion = MotionIntensity.Lively, Finish = false });
+        var taken = options.Style.ShouldNotBeNull();
+        (taken.DrawStyle, taken.Motion, taken.Finish, taken.ChosenStyle).ShouldBe((DrawStyle.StickFigure, MotionIntensity.Lively, false, string.Empty));
+
+        var plain = VideoStyleRules.WithChoices(old, null, null);
+        (plain.DrawStyle, plain.Motion, plain.Finish).ShouldBe((DrawStyle.Auto, MotionIntensity.Normal, true), "no choice = the default look: the AI chooses");
+        (old.DrawStyle, old.Motion).ShouldBe((DrawStyle.Blueprint, MotionIntensity.Calm), "the stored template is not changed");
     }
 
     [Fact]

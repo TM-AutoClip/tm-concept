@@ -35,8 +35,9 @@ namespace TMConcept.Desktop.ViewModels;
 /// item the queue is read again, so a removed item is not made, a new one is, and the order follows ↑↓; the models are the profile's
 /// choices when the item starts, and so is the template (0.1.19, Settings → Templates; chosen here and kept on this computer,
 /// <see cref="Paths.UiPreferences.VideoStyleId"/>, empty on a new install): nothing is produced until a code model and a template are chosen;
-/// each video takes a copy of the template as it is stored when the video starts (<see cref="VideoStyleRules.Snapshot"/>), so a change of
-/// the choice or of the template reaches the next video, never the one being made. Cancel stops after the running step.
+/// each video takes a copy of the template as it is stored when the video starts, with the profile's music, reference video and look
+/// (<see cref="VideoStyleRules.Snapshot"/>; the look, 28 Nov 2026: drawing style, motion and finishing layer, chosen next to the video code
+/// model), so a change of the choice or of the template reaches the next video, never the one being made. Cancel stops after the running step.
 /// <para>0.1.18 stop rules (<see cref="IVideoQueueRunner"/>): with "Night mode" off (the default at every start) any failed video stops the
 /// whole queue (its error on the page, a notification and a red line); with it on (for when nobody is at the computer, a checkbox next to
 /// "Produce in order", read at every decision so it can be ticked while the queue runs) a failed video is reported and the next one is made
@@ -73,6 +74,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
     private readonly Dictionary<Guid, Concept> _queued = [];
     private readonly Core.Pronunciation.IPronunciationStore _pronunciations;
     private readonly IVideoMediaStore _mediaStore;
+    private readonly IVideoLookStore _lookStore;
     private readonly Components.IModelStartGate _gate;
     private int _check;
     private CancellationTokenSource? _cancel;
@@ -89,7 +91,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
         Func<ProductionProgressViewModel> progress, ConceptEvents events, INotifier notifier, IVideoQueueRunner runner, IActivityLog activity, Localizer text,
         Paths.UiPreferencesFile preferences, IVideoStyleStore styles, Core.Paths.IAppPaths paths, WindowHost host, PlanReviewViewModel review,
         ProductionChecklistViewModel checklist, Core.Pronunciation.IPronunciationStore pronunciations, VideoMediaViewModel videoMedia,
-        IVideoMediaStore mediaStore, Components.IModelStartGate gate, ILogger<VideoViewModel> logger)
+        IVideoMediaStore mediaStore, VideoLookViewModel look, IVideoLookStore lookStore, Components.IModelStartGate gate, ILogger<VideoViewModel> logger)
     {
         _session = session;
         _concepts = concepts;
@@ -119,6 +121,8 @@ public sealed partial class VideoViewModel : PageViewModelBase
         Detail = detail;
         _pronunciations = pronunciations;
         _mediaStore = mediaStore;
+        _lookStore = lookStore;
+        Look = look;
         _gate = gate;
         Media = videoMedia;
         Review = review;
@@ -157,8 +161,16 @@ public sealed partial class VideoViewModel : PageViewModelBase
     /// </summary>
     public VideoMediaViewModel Media { get; }
 
-    /// <summary>The chosen template with the profile's music and reference, as a starting video would take it (null without a template).</summary>
-    public VideoStyle? EffectiveStyle => SelectedStyle is { } style ? VideoStyleRules.WithMedia(style, Media.ToMedia()) : null;
+    /// <summary>
+    /// The profile's look (28 Nov 2026: drawing style, motion, finishing layer; next to the video code model, they left the template). Every
+    /// change is saved for the profile; each video takes it when it starts.
+    /// </summary>
+    public VideoLookViewModel Look { get; }
+
+    /// <summary>
+    /// The chosen template with the profile's music, reference and look, as a starting video would take it (null without a template).
+    /// </summary>
+    public VideoStyle? EffectiveStyle => SelectedStyle is { } style ? VideoStyleRules.WithChoices(style, Media.ToMedia(), Look.ToLook()) : null;
 
     /// <summary>Whether the model cards are unfolded (folded when the page opens).</summary>
     [ObservableProperty]
@@ -176,21 +188,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
     /// next video, never to the one being made; nothing is produced while none is chosen.
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(StyleConceptNote), nameof(HasStyleConceptNote))]
     public partial VideoStyle? SelectedStyle { get; set; }
-
-    /// <summary>
-    /// 0.1.32: the chosen template's style changes how a concept should be written (the stick-figure narrator): a note that a concept written
-    /// for no style or another one can be adapted on the concepts page (AI edit → adapt to a style). Empty otherwise.
-    /// </summary>
-    public string StyleConceptNote => SelectedStyle is { } style && Core.Styles.DrawStyles.Of(style.DrawStyle).HasConceptGuidance
-        ? _text.Format("video.style.concept_note", _text.Has("style.draw." + style.DrawStyle.ToString().ToLowerInvariant())
-            ? _text["style.draw." + style.DrawStyle.ToString().ToLowerInvariant()]
-            : style.DrawStyle.ToString())
-        : string.Empty;
-
-    /// <summary>Whether <see cref="StyleConceptNote"/> is shown.</summary>
-    public bool HasStyleConceptNote => StyleConceptNote.Length > 0;
 
     /// <summary>There is no template yet (the picker says to make one in Settings).</summary>
     [ObservableProperty]
@@ -334,6 +332,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
                 }
             };
             Media.Changed += async (_, _) => await SafeAsync(SaveMediaAsync).ConfigureAwait(true);
+            Look.Changed += async (_, _) => await SafeAsync(SaveLookAsync).ConfigureAwait(true);
             Picker.Changed += async (_, _) =>
             {
                 if (!_loading)
@@ -657,6 +656,8 @@ public sealed partial class VideoViewModel : PageViewModelBase
 
     partial void OnSelectedStyleChanged(VideoStyle? value)
     {
+        // The look's notes follow the template (its palette, its drawer), also while the list is filled.
+        Look.ShowTemplate(value);
         // Filled from the kept choice when the list is read: nothing to keep or estimate.
         if (_loadingStyles)
         {
@@ -878,6 +879,21 @@ public sealed partial class VideoViewModel : PageViewModelBase
         await CheckAsync().ConfigureAwait(true);
     }
 
+    /// <summary>Saves the profile's look (28 Nov 2026), then the estimate and the checklist follow it.</summary>
+    private async Task SaveLookAsync()
+    {
+        if (_loading || _session.Profile is not { } profile)
+        {
+            return;
+        }
+
+        var look = Look.ToLook();
+        await _lookStore.SaveAsync(profile.Id, look, CancellationToken.None).ConfigureAwait(true);
+        _logger.LogInformation("Profile look saved: style {Style}, motion {Motion}, finishing {Finish}", look.DrawStyle, look.Motion, look.Finish ? "on" : "off");
+        await EstimateAsync().ConfigureAwait(true);
+        await CheckAsync().ConfigureAwait(true);
+    }
+
     private async Task LoadModelsAsync()
     {
         _loading = true;
@@ -888,6 +904,7 @@ public sealed partial class VideoViewModel : PageViewModelBase
             await Picker.LoadAsync(profile?.Id, language, PipelineSteps.VideoPage).ConfigureAwait(true);
             var media = profile is null ? new VideoMedia() : await _mediaStore.GetAsync(profile.Id, CancellationToken.None).ConfigureAwait(true);
             await Media.LoadAsync(media).ConfigureAwait(true);
+            Look.Load(profile is null ? new VideoLook() : await _lookStore.GetAsync(profile.Id, CancellationToken.None).ConfigureAwait(true));
         }
         finally
         {
@@ -1032,15 +1049,19 @@ public sealed partial class VideoViewModel : PageViewModelBase
                 return outcome;
             }
 
+            // The profile's music, reference and look as they are stored now (a change in the middle of the queue reaches this video, never one
+            // being made).
             var options = new VideoOptions();
-            VideoStyleRules.Snapshot(options, style, await _mediaStore.GetAsync(profile.Id, CancellationToken.None).ConfigureAwait(true));
+            var look = await _lookStore.GetAsync(profile.Id, CancellationToken.None).ConfigureAwait(true);
+            VideoStyleRules.Snapshot(options, style, await _mediaStore.GetAsync(profile.Id, CancellationToken.None).ConfigureAwait(true), look);
             if (ProductionChecklist.WithoutMusic(options.Style, Checklist.Gaps, Checklist.Skipped))
             {
                 _logger.LogInformation("The template's music file was skipped on purpose; this video is made without music");
             }
 
-            _logger.LogInformation("Queued video starts with template {Id} (subtitles {Subtitles}, progress bar {ProgressBar}, closing {Closing})",
-                style.Id, style.Subtitles ? "on" : "off", style.ProgressBar ? "on" : "off", style.Closing);
+            _logger.LogInformation("Queued video starts with template {Id} (subtitles {Subtitles}, progress bar {ProgressBar}, closing {Closing}) "
+                + "and the profile's look (style {Style}, motion {Motion}, finishing {Finish})",
+                style.Id, style.Subtitles ? "on" : "off", style.ProgressBar ? "on" : "off", style.Closing, look.DrawStyle, look.Motion, look.Finish ? "on" : "off");
             ResolvedModel model;
             var choice = await _resolver.ChoiceAsync(PipelineSteps.VideoCode, profile.Id, CancellationToken.None).ConfigureAwait(true);
             try

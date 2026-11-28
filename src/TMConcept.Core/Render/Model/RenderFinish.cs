@@ -2,7 +2,7 @@ namespace TMConcept.Core.Render;
 
 /// <summary>
 /// The finishing layer for the app's drawer (F12, 0.1.43; input.json <c>style.finish</c>, written by <see cref="RenderFinishBuilder"/> only
-/// when the template has its finishing on and the style has effects; absent otherwise, and then <c>plan.js</c> draws no canvas and the video
+/// when the video's look has its finishing on and the style has effects; absent otherwise, and then <c>plan.js</c> draws no canvas and the video
 /// looks exactly as before). The strengths are 0 (off) to 1 (<see cref="Styles.StyleFinish"/>). <see cref="Seed"/> fixes every random choice
 /// of the layer, so a frame is the same however often and in whatever order it is drawn; <see cref="Steps"/> are the boil's 12 offsets
 /// (x, y pairs from −1 to 1) made from it.

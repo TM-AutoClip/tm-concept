@@ -5,7 +5,7 @@ namespace TMConcept.Core.Render;
 
 /// <summary>
 /// Makes the finishing layer of a video drawn by the app (F12, 0.1.43, <see cref="RenderFinish"/>): the style's effects
-/// (<see cref="DrawStyleDefinition.Finish"/>) when the template has its finishing on, with a seed from the style and the video's title and
+/// (<see cref="DrawStyleDefinition.Finish"/>) when the video's look has its finishing on, with a seed from the style and the video's title and
 /// the boil's 12 offsets made from that seed. The same style and title always give the same layer; no model is asked. The idea of a seeded
 /// stream per key follows ReelMimic's engine kit (<c>rnd(key)</c>, MIT); the generator here is our own (FNV-1a hash, SplitMix64 stream).
 /// </summary>
@@ -15,8 +15,8 @@ public static class RenderFinishBuilder
     public const int BoilSteps = 12;
 
     /// <summary>
-    /// The layer for <paramref name="style"/> and a video titled <paramref name="title"/>; <c>null</c> when the template has finishing off
-    /// (every template saved before 0.1.43), for no style or "AI chooses" without a chosen preset, and for a style without effects.
+    /// The layer for <paramref name="style"/> and a video titled <paramref name="title"/>; <c>null</c> when the video's look has finishing off
+    /// (the profile's choice on the video page), for no style or "AI chooses" without a chosen preset, and for a style without effects.
     /// </summary>
     public static RenderFinish? For(VideoStyle? style, string title)
     {

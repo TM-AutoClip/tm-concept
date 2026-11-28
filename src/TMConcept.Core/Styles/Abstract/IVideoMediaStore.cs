@@ -7,5 +7,5 @@ public interface IVideoMediaStore
     Task<VideoMedia> GetAsync(Guid profileId, CancellationToken cancellationToken);
 
     /// <summary>Saves the profile's choice.</summary>
-    Task SaveAsync(Guid profileId, VideoMedia media, CancellationToken cancellationToken);
+    Task SaveAsync(Guid profileId, VideoMedia value, CancellationToken cancellationToken);
 }

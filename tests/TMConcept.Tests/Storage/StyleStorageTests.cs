@@ -32,7 +32,7 @@ public sealed class StyleStorageTests
         var style = new VideoStyle
         {
             Name = "  Shorts  ", Subtitles = false, ProgressBar = true, FontId = "anton", TitleStyle = TitleStyle.Boxed,
-            TitlePosition = TitlePosition.BottomRight, PaletteId = "paper", DrawStyle = DrawStyle.Neon, Motion = MotionIntensity.Lively,
+            TitlePosition = TitlePosition.BottomRight, PaletteId = "paper", Drawer = SceneDrawer.App, Quality = QualityMode.Careful,
             Closing = ClosingPlacement.Both, ClosingPhrase = ClosingPhrase.Thanks, ClosingPlatform = ClosingPlatform.TikTok,
             CreatedAtUtc = created, UpdatedAtUtc = created,
         };
@@ -41,8 +41,8 @@ public sealed class StyleStorageTests
 
         (await store.ListAsync(None)).Select(s => s.Name).ShouldBe(["Calm history", "Shorts"], "by name, the name trimmed");
         var back = (await store.GetAsync(style.Id, None)).ShouldNotBeNull();
-        (back.Subtitles, back.ProgressBar, back.FontId, back.TitleStyle, back.TitlePosition, back.PaletteId, back.DrawStyle, back.Motion)
-            .ShouldBe((false, true, "anton", TitleStyle.Boxed, TitlePosition.BottomRight, "paper", DrawStyle.Neon, MotionIntensity.Lively));
+        (back.Subtitles, back.ProgressBar, back.FontId, back.TitleStyle, back.TitlePosition, back.PaletteId, back.Drawer, back.Quality)
+            .ShouldBe((false, true, "anton", TitleStyle.Boxed, TitlePosition.BottomRight, "paper", SceneDrawer.App, QualityMode.Careful));
         (back.Closing, back.ClosingPhrase, back.ClosingPlatform, back.CreatedAtUtc).ShouldBe((ClosingPlacement.Both, ClosingPhrase.Thanks, ClosingPlatform.TikTok, created));
 
         back.Name = "Shorts 2";

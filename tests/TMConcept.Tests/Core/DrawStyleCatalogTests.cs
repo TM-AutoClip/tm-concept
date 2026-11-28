@@ -1,6 +1,7 @@
 using Shouldly;
 using TMConcept.Core.Concepts;
 using TMConcept.Core.Images;
+using TMConcept.Core.Plans;
 using TMConcept.Core.Profiles;
 using TMConcept.Core.Render;
 using TMConcept.Core.Styles;
@@ -111,34 +112,53 @@ public sealed class DrawStyleCatalogTests
     }
 
     [Fact]
-    public void TheStickFigureNarratorChangesHowConceptsAreWrittenAndOtherStylesAskForDrawableScenes()
+    public void TheStickFigureNarratorAdaptsTheScenesWhileTheVideoIsMadeAndOtherStylesDoNot()
     {
-        DrawStyles.Of(DrawStyle.StickFigure).HasConceptGuidance.ShouldBeTrue();
-        DrawStyles.ConceptLine(DrawStyle.StickFigure, ContentLanguages.Turkish).ShouldContain("çöp adam anlatıcı");
-        DrawStyles.ConceptLine(DrawStyle.StickFigure, ContentLanguages.English).ShouldContain("stick-figure narrator");
-        DrawStyles.ConceptLine(DrawStyle.Blueprint, ContentLanguages.Turkish).ShouldContain("Video şu tarzda çizilecek");
-        DrawStyles.ConceptLine(DrawStyle.Auto, ContentLanguages.Turkish).ShouldBeEmpty();
-        DrawStyles.ConceptLine(null, ContentLanguages.Turkish).ShouldBeEmpty();
+        // 28 Nov 2026: the concept is written for no style; the scene plan and the video code adapt the scenes to the chosen look.
+        DrawStyles.Of(DrawStyle.StickFigure).SceneGuidance.ShouldContain("stick-figure narrator");
+        DrawStyles.All.Where(d => d.Style != DrawStyle.StickFigure).ShouldAllBe(d => d.SceneGuidance.Length == 0, "only the storytelling look adapts the scenes");
+        var narrator = new VideoStyle { Name = "t", DrawStyle = DrawStyle.StickFigure };
+        var scenes = new[] { new PlanScene(1, 6, "a map of the route", ["The army marched."], string.Empty) };
+
+        PlanPromptBuilder.User("Siege", "en", narrator, scenes).ShouldContain("Adapt the scenes to this look: " + DrawStyles.Of(DrawStyle.StickFigure).SceneGuidance);
+        VideoCodePrompt.User(Input("stick-figure")).ShouldContain("Adapt the scenes to this look: " + DrawStyles.Of(DrawStyle.StickFigure).SceneGuidance);
+        VideoStylePrompt.Block(TMConcept.Core.Engines.EngineKind.HyperFrames, narrator, "en").ShouldNotContain("Adapt the scenes",
+            customMessage: "the block stays small for local models; the guidance goes with the scenes");
+        foreach (var plain in new[] { DrawStyle.Auto, DrawStyle.Blueprint })
+        {
+            var style = new VideoStyle { Name = "t", DrawStyle = plain };
+            PlanPromptBuilder.User("Siege", "en", style, scenes).ShouldNotContain("Adapt the scenes", customMessage: plain.ToString());
+            VideoCodePrompt.User(Input(DrawStyles.Of(plain).Key)).ShouldNotContain("Adapt the scenes", customMessage: plain.ToString());
+        }
+
+        DrawStyles.SceneGuidance(null).ShouldBeEmpty("no snapshot, no look");
+        DrawStyles.SceneGuidanceOfKey("stick-figure").ShouldBe(DrawStyles.Of(DrawStyle.StickFigure).SceneGuidance, "the same guidance by the render key");
+        DrawStyles.SceneGuidanceOfKey(null).ShouldBeEmpty();
+        DrawStyles.SceneGuidance(new VideoStyle { DrawStyle = DrawStyle.Auto, ChosenStyle = "ink wash" }).ShouldBeEmpty("the model's own words have no guidance");
+    }
+
+    private static RenderInput Input(string style)
+    {
+        var input = RenderInputBuilder.Build("Siege", "en", [new("a map", "The army marched.", string.Empty, 6000)], 1920, 1080, 30);
+        input.Style = new RenderStyle { DrawStyle = style };
+        return input;
     }
 
     [Fact]
-    public void TheConceptAndEditPromptsCarryTheStyleLineOnlyWhenOneIsChosen()
+    public void TheConceptAndEditPromptsHaveNoStyleLine()
     {
         var profile = new Profile { Name = "Kanal", ContentLanguage = ContentLanguages.Turkish, ConceptText = "Tarih" };
-        var memory = PromptMemory.Empty;
-        var with = ConceptPromptBuilder.Build(new ConceptPromptInput(profile, memory, string.Empty, 3,
-            Style: DrawStyles.ConceptLine(DrawStyle.StickFigure, ContentLanguages.Turkish)));
-        (with.System + with.User).ShouldContain("ÇİZİM TARZI");
-        (with.System + with.User).ShouldContain("çöp adam anlatıcı");
-
-        var without = ConceptPromptBuilder.Build(new ConceptPromptInput(profile, memory, string.Empty, 3));
-        (without.System + without.User).ShouldNotContain("ÇİZİM TARZI");
-        (without.System + without.User).ShouldNotContain("{style}");
-
-        var edit = ConceptPromptBuilder.BuildEdit(new ConceptEditPromptInput(profile, "Başlık", "Özet.", "[ekranda: harita]\nMetin.", "uyarla",
-            DrawStyles.ConceptLine(DrawStyle.StickFigure, ContentLanguages.Turkish)));
-        (edit.System + edit.User).ShouldContain("ÇİZİM TARZI");
-        var plainEdit = ConceptPromptBuilder.BuildEdit(new ConceptEditPromptInput(profile, "Başlık", "Özet.", "[ekranda: harita]\nMetin.", "kısalt"));
-        (plainEdit.System + plainEdit.User).ShouldNotContain("{style}");
+        foreach (var language in new[] { ContentLanguages.Turkish, ContentLanguages.English })
+        {
+            profile.ContentLanguage = language;
+            var concepts = ConceptPromptBuilder.Build(new ConceptPromptInput(profile, PromptMemory.Empty, string.Empty, 3));
+            var edit = ConceptPromptBuilder.BuildEdit(new ConceptEditPromptInput(profile, "Başlık", "Özet.", "[ekranda: harita]\nMetin.", "kısalt"));
+            foreach (var text in new[] { concepts.System + concepts.User, edit.System + edit.User })
+            {
+                text.ShouldNotContain("ÇİZİM TARZI");
+                text.ShouldNotContain("DRAWING STYLE");
+                text.ShouldNotContain("{style}");
+            }
+        }
     }
 }

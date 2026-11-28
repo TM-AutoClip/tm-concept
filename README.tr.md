@@ -29,12 +29,13 @@ veritabanını şifreli tutar.
   konsepti, isteğe bağlı kanal fotoğrafı (kapanış bitiş kartı için yuvarlak avatar) ve genel ayardan farklı
   olmasını istediğin her adım için kendi modelleri (ses, görseller, motor…). Fotoğraf profil daha yeniyken de eklenir; kaydedince
   kopyalanır. Dört hazır profil şablonu alanları doldurur (tarih: Bizans, Osmanlı; teknoloji: antik, modern).
-- **Video şablonları** (Ayarlar → **Şablonlar**, en çok 20, profile bağlı değil): videoların nasıl görüneceği ve nasıl biteceği. Altyazı
-  açık ya da kapalı, programın çizdiği ilerleme çubuğu (varsayılan kapalı), Türkçe harfleri olan altı ücretsiz yazı tipinden biri, başlık
-  biçimi ve 3×3 ızgarada yeri, renk paleti, görseli olmayan sahnelerin çizim tarzı, hareket miktarı ve kapanış çağrısı ("Diğer videolar
+- **Video şablonları** (Ayarlar → **Şablonlar**, en çok 20, profile bağlı değil): videoların kimliği ve nasıl biteceği. Altyazı açık ya
+  da kapalı, programın çizdiği ilerleme çubuğu (varsayılan kapalı), Türkçe harfleri olan altı ücretsiz yazı tipinden biri, başlık biçimi ve
+  3×3 ızgarada yeri, renk paleti, çizen, anlatım temposu, kalite modu ve kapanış çağrısı ("Diğer videolar
   için abone olmayı unutma!"; YouTube'da *abone ol*, Instagram ve TikTok'ta *takip et*) seste, ekranda, ikisinde ya da kapalı; her zaman
   videonun dilinde. Form canlı önizleme gösterir. Her video başlarken şablonunun bir kopyasını alır; şablonu düzenlemek ya da silmek
-  yapılmış videoyu değiştirmez.
+  yapılmış videoyu değiştirmez. Çizim tarzı, hareket ve son işlem şablonda değil: Konseptten video sayfasında profilin **görünümü**
+  (aşağıda).
 - **Konsept üret.** Dört ayrı bölüm, istediğin sırayla kullanılır; hepsi aynı listeye ekler. **Konu önererek üret**: 5–100 konu önert, beğendiklerini işaretle, **Seçilenleri üret**'e bas: her
   işaretli konudan tam bir konsept. İşaretlemediğin konu kötü sayılmaz: sonra yeniden önerilebilir; yalnız konsepti yapılan konu bir daha
   gelmez (0.1.18'den önce önerilen konular engelli kalır: o sürüm hangisinden konsept yapıldığını kaydetmiyordu). **Fikirden üret**: bir fikir yaz (ya da boş bırak), 1–100 konsept seç. Her basış listeye ekler. Her
@@ -494,7 +495,7 @@ Bir şablonla (Ayarlar → Şablonlar) üretilen video, modelin iyi niyetine kal
   yerler arasında gezen kamera, yolu yürüyen figürler — program bunu çizer ve sesle zamanlar. *Hareketsiz / Normal / Hareketli* ne kadar
   hareket olacağını belirler. İsteğe bağlı bir görsel modeli (yerel Gemma 3 4B ya da ucuz bir çevrimiçi model) üretilen resimlerde
   şeylerin yerini bulur, işaretler tam üstüne gelir. *Serbest kod* (animasyonu model yazar) şablonda seçenek olarak duruyor.
-- **Son işlem (0.1.43, yeni şablonlarda açık):** programın çizdiği sahnelerin üstüne çizim tarzına uygun bir katman: kâğıt dokusu, gren,
+- **Son işlem (0.1.43; profilin görünümünün parçası, varsayılan açık):** programın çizdiği sahnelerin üstüne çizim tarzına uygun bir katman: kâğıt dokusu, gren,
   köşe gölgesi, yumuşak ışıma, derinliğe göre gölge ve saniyede 12 adımlık hafif titreme, hepsi sabit bir tohumdan. Her tarz bilinen
   tuzaklarını da sahne planı isteğine yazar. Yapay zekâya ek istek yok.
 - **Arka plan müziği (0.1.44, varsayılan kapalı):** *Kendi dosyam* videonun tamamının altına kendi parçanı koyar. Anlatım konuşurken
@@ -552,15 +553,19 @@ Bir şablonla (Ayarlar → Şablonlar) üretilen video, modelin iyi niyetine kal
   (program çizerken yalnız kusurlu sahnenin planı yeniden istenir; en çok 3 inceleme, 2.'den sonra yalnız engeller, liste küçülmezse
   durur), tekrar eden karakterin sayfasıyla resimlerin karşılaştırılması ve yerel denetçinin kusurlu bulduğu yerel resimlerin yeniden
   yapılması. Her istek tahmine girer. Tekrar eden karakter bir kez tarif edilip her resim istemine eklenir (Standart ve Özenli).
-- **Çizim tarzı:** görseli olmayan sahneler şablonun tarzında çizilir, üretilen görseller de aynı tarzda istenir. Düzenleyicide her
-  biri açıklamalı on beş seçenek: *Yapay zekâ seçsin* (yeni şablonun varsayılanı: her videoda konuya uyan görünüşü model seçer), düz
+- **Görünüm (28 Kas 2026): çizim tarzı, hareket ve son işlem profil başına.** Konseptten video sayfasında video kodu modelinin yanında
+  seçilir (şablonda değil), her profil için saklanır ve her video başlarken okunur; sıra beklerken yapılan değişiklik sonraki videoya
+  uygulanır, yapılmakta olana değil. **Çizim tarzı:** görseli olmayan sahneler seçilen tarzda çizilir, üretilen görseller de aynı tarzda
+  istenir. Listenin altında her biri açıklamalı on beş seçenek: *Yapay zekâ seçsin* (varsayılan: her videoda konuya uyan görünüşü model
+  seçer), düz
   şekiller, çöp adam anlatıcı, çizgi çizim, kâğıt kesme, infografik, neon, kara kalem, animasyon (çizgi film), teknik çizim (blueprint),
   hologram, eski terminal, izometrik, suluboya ve **piksel sanatı** (0.1.51: dört kat büyütülen 480 × 270 ızgara, paletin renk
   merdivenleri, noktalamayla gölge; sahneler noktalı çözülme, iris ya da bloklarla, asla siyahtan geçmeden değişir; görsel kaynağı
   Kapalı iken kendi gökyüzünü ve tepelerini çizer). Her tarzın kendi hareket kuralları var (kâğıt kayarak gelir, blueprint çizgileri
   çizilerek belirir, terminal yazısı harf harf yazılır); bazılarında programın resmin üstüne koyduğu hafif bir doku (kâğıt, gren, tarama
-  çizgisi, ızgara) ve önerilen bir palet var. **Çöp adam anlatıcı** konseptin yazılışını da değiştirir: Konseptler sayfasında İnce ayar →
-  Çizim tarzı'ndan seç ya da sonradan Yapay zekâyla düzenle → Tarza uyarla ile uyarla.
+  çizgisi, ızgara) ve önerilen bir palet var (şablonun paletinin yanında gösterilir; paletin kendisi şablonda kalır). **Çöp adam
+  anlatıcı** sahneleri video yapılırken uyarlar (sahne planı ve video kodu her sahneyi anlatıcının hareketlerine çevirir); konseptler bir
+  tarz için yazılmaz.
 - **Anlatım temposu:** seslendirme cümle cümle okunur; her cümleden sonra bir duraklama, sahneler arasında daha uzun bir ara olur:
   *Sıkı*, *Doğal* (varsayılan) ya da *Rahat*. Kendi duraklama yer tutucuların bunun üstüne eklenir.
 - **Referans video (0.1.52, isteğe bağlı):** "bu videonun temposunda yap". Bir video dosyası seç ya da tek bir videonun adresini yapıştır

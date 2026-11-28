@@ -29,12 +29,13 @@ needed) and narrates it with a **free local voice**. It runs on Windows and Linu
   end card), and its own models for any step (voice, images, engine…) where it should differ from the general setting. The photo
   can be added while the profile is new; it is copied when you save. Four ready profile templates fill the fields
   (history: Byzantine, Ottoman; technology: ancient, modern).
-- **Video templates** (Settings → **Templates**, at most 20, not tied to a profile): how videos look and end. Subtitles on or off, a
-  progress bar drawn by the app (off by default), one of six free fonts with Turkish letters, the title style and its place on a 3×3
-  grid, a colour palette, the drawing style of scenes without images, how much things move, and a closing call to action ("Don't forget
+- **Video templates** (Settings → **Templates**, at most 20, not tied to a profile): the identity of the videos and how they end. Subtitles
+  on or off, a progress bar drawn by the app (off by default), one of six free fonts with Turkish letters, the title style and its place on
+  a 3×3 grid, a colour palette, who draws, the narration tempo, the quality mode, and a closing call to action ("Don't forget
   to subscribe for more videos!"; *subscribe* for YouTube, *follow* for Instagram and TikTok) in the narration, on screen, both or off,
   always in the video's language. The form shows a live preview. Each video takes a copy of its template when it starts, so editing or
-  deleting a template never changes a made video.
+  deleting a template never changes a made video. The drawing style, motion and finishing are not in the template: they are the
+  profile's **look** on the Concept to video page (below).
 - **Generate concepts.** Four separate sections, used in any order; each one adds to the same list. **Generate from suggested topics**: suggest 5–100 topics, tick the ones you like and
   press **Generate selected**: exactly one concept per ticked topic. A topic you did not tick is not a bad one: it may be suggested again
   later; only a topic that got a concept never comes back (topics suggested before 0.1.18 stay blocked: that version did not record which
@@ -502,7 +503,7 @@ A video made with a template (Settings → Templates) follows it without relying
   places, travellers walking a route — and the app draws and times it with the voice. *Still / Normal / Lively* set how much moves. An
   optional vision model (local Gemma 3 4B or a cheap online one) finds where things are in the generated pictures so the marks land on
   them. *Free code* (the model writes the animation itself) stays a choice in the template.
-- **Finishing (0.1.43, on in new templates):** over the scenes the app draws, a layer that fits the drawing style: paper texture, grain,
+- **Finishing (0.1.43; part of the profile's look, on by default):** over the scenes the app draws, a layer that fits the drawing style: paper texture, grain,
   darker corners, a soft glow, a shadow by depth and a slight 12-steps-a-second tremble, all from a fixed seed. Each style also lists
   its known pitfalls in the scene plan request. No extra AI request.
 - **Background music (0.1.44, off by default):** *My own file* puts a track of your own under the whole video. It is quieter while
@@ -563,15 +564,18 @@ A video made with a template (Settings → Templates) follows it without relying
   asked again when the app draws; at most 3 reviews, only blockers after the 2nd, stops when the list does not shrink), a recurring
   character's sheet compared with the pictures, and local pictures made again when a local reviewer finds them faulty. Every request is in
   the estimate. A recurring character is described once and added to every picture prompt (Standard and Careful).
-- **Drawing style:** scenes without an image are drawn in the template's style, and generated images are asked for in the same style.
-  Fifteen choices, each described in the editor: *Let the AI choose* (the default of a new template: the model picks the look that fits
-  each video), flat shapes, stick-figure narrator, line art, paper cut-out, infographic, neon, pencil sketch, animation (cartoon),
+- **Look (28 Nov 2026): drawing style, motion and finishing per profile.** They are chosen on the Concept to video page next to the
+  video code model (not in the template), kept for each profile and read when each video starts, so a change while the queue waits
+  reaches the next video, never the one being made. **Drawing style:** scenes without an image are drawn in the chosen style, and
+  generated images are asked for in the same style. Fifteen choices, each described under the list: *Let the AI choose* (the default:
+  the model picks the look that fits each video), flat shapes, stick-figure narrator, line art, paper cut-out, infographic, neon, pencil sketch, animation (cartoon),
   blueprint, hologram, retro terminal, isometric, watercolour and **pixel art** (0.1.51: a 480 × 270 grid blown up four times, colour ramps
   of the palette, dithered shading, scenes changing by a dither dissolve, an iris or blocks, never through black; it draws its own sky and
   hills when the image source is off). Each style brings its own motion rules (paper slides in, blueprint lines
   draw on, terminal text types in) and, for some, a faint texture the app lays over the picture (paper, grain, scanlines, grid) and a
-  suggested palette. The **stick-figure narrator** also changes how concepts are written: choose it on the Concepts page (Fine-tuning →
-  Drawing style) or adapt a concept later (AI edit → Adapt to a style).
+  suggested palette (shown next to the template's palette; the palette itself stays in the template). The **stick-figure narrator**
+  adapts the scenes while the video is made (the scene plan and the video code turn every scene into the narrator's actions); concepts
+  are written for no style.
 - **Narration tempo:** the narration is spoken sentence by sentence with a pause after every sentence and a longer one between scenes:
   *Tight*, *Natural* (default) or *Relaxed*. Your own pause placeholders are added on top.
 - **Reference video (0.1.52, optional):** "make it at the tempo of this video". Choose a video file or paste the address of one video

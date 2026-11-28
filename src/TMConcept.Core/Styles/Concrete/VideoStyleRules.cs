@@ -236,35 +236,25 @@ public static class VideoStyleRules
     }
 
     /// <summary>
-    /// Takes the template into the options of a video that is starting: a copy (later edits change only the next video) and
-    /// <see cref="VideoOptions.Subtitles"/> set from it, so code that reads only the old field agrees.
+    /// Takes the template, the profile's background music and reference video (0.1.54, <see cref="VideoMedia"/>) and the profile's look
+    /// (28 Nov 2026, <see cref="VideoLook"/>) into the options of a video that is starting (<see cref="WithChoices"/>): a copy, so later edits
+    /// change only the next video, and <see cref="VideoOptions.Subtitles"/> set from it, so code that reads only the old field agrees.
     /// </summary>
-    public static void Snapshot(VideoOptions options, VideoStyle style)
+    public static void Snapshot(VideoOptions options, VideoStyle style, VideoMedia? media, VideoLook? look)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(style);
-        options.Style = Copy(style);
+        options.Style = WithChoices(style, media, look);
         options.Subtitles = style.Subtitles;
     }
 
     /// <summary>
-    /// Takes the template and the profile's background music and reference video (0.1.54, <see cref="VideoMedia"/>) into the options of a video
-    /// that is starting (<see cref="WithMedia"/>).
+    /// A copy of the template with the profile's choices of the video page. The music and reference (0.1.54) and the drawing style, motion
+    /// and finishing layer (28 Nov 2026) are no longer the template's: a template's own old values are replaced, an empty choice = no music,
+    /// no reference and the default look (the AI chooses the style). A reference sets the narration tempo it suggests, as measuring it in the
+    /// template did before. <see cref="VideoStyle.ChosenStyle"/> starts empty (the video's own choice is written later).
     /// </summary>
-    public static void Snapshot(VideoOptions options, VideoStyle style, VideoMedia? media)
-    {
-        ArgumentNullException.ThrowIfNull(options);
-        ArgumentNullException.ThrowIfNull(style);
-        options.Style = WithMedia(style, media);
-        options.Subtitles = style.Subtitles;
-    }
-
-    /// <summary>
-    /// A copy of the template with the profile's music and reference (0.1.54: they are no longer the template's; a template's own old values
-    /// are replaced, an empty choice = no music and no reference). A reference sets the narration tempo it suggests, as measuring it in the
-    /// template did before.
-    /// </summary>
-    public static VideoStyle WithMedia(VideoStyle style, VideoMedia? media)
+    public static VideoStyle WithChoices(VideoStyle style, VideoMedia? media, VideoLook? look)
     {
         ArgumentNullException.ThrowIfNull(style);
         var copy = Copy(style);
@@ -278,6 +268,11 @@ public static class VideoStyleRules
             copy.Tempo = References.ReferenceTempoMapper.Suggest(reference).Tempo;
         }
 
+        var seen = look ?? new VideoLook();
+        copy.DrawStyle = seen.DrawStyle;
+        copy.Motion = seen.Motion;
+        copy.Finish = seen.Finish;
+        copy.ChosenStyle = string.Empty;
         return copy;
     }
 

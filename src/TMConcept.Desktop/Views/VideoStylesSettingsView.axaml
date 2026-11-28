@@ -228,39 +228,12 @@
                         </ItemsControl>
                       </Border>
 
+                      <!-- 28 Nov 2026: the drawing style, the motion and the finishing layer left the template (the video page's look, per profile). -->
                       <StackPanel Grid.Row="4" Orientation="Horizontal" VerticalAlignment="Top" Margin="0,6,0,0">
-                        <TextBlock Text="{DynamicResource styles.draw}" VerticalAlignment="Center" />
-                        <views:HelpTip Text="{DynamicResource styles.draw.tip}" />
+                        <TextBlock Text="{DynamicResource styles.production}" VerticalAlignment="Center" />
+                        <views:HelpTip Text="{DynamicResource styles.production.tip}" />
                       </StackPanel>
                       <WrapPanel Grid.Row="4" Grid.Column="1" ItemSpacing="12" LineSpacing="6">
-                        <StackPanel Spacing="4" MaxWidth="420">
-                          <ComboBox Name="StyleDraw" ItemsSource="{Binding DrawStyles}" SelectedItem="{Binding DrawStyle}" MinWidth="200">
-                            <ComboBox.ItemTemplate>
-                              <DataTemplate x:DataType="vm:NumberChoice">
-                                <TextBlock Text="{Binding Label}" />
-                              </DataTemplate>
-                            </ComboBox.ItemTemplate>
-                          </ComboBox>
-                          <TextBlock Name="StyleDrawNote" Text="{Binding DrawStyleNote}" Classes="small muted" TextWrapping="Wrap"
-                                     IsVisible="{Binding DrawStyleNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-                          <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding HasSuggestedPalette}">
-                            <TextBlock Text="{Binding SuggestedPaletteText}" Classes="small" VerticalAlignment="Center" TextWrapping="Wrap" />
-                            <Button Name="StyleDrawPalette" Classes="small" Content="{DynamicResource styles.draw.palette_apply}"
-                                    Command="{Binding ApplySuggestedPaletteCommand}" />
-                          </StackPanel>
-                        </StackPanel>
-                        <!-- A label and its picker wrap together (a long style note never leaves a label alone at the end of a line). -->
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                          <TextBlock Text="{DynamicResource styles.motion}" VerticalAlignment="Center" />
-                          <ComboBox Name="StyleMotion" ItemsSource="{Binding Motions}" SelectedItem="{Binding Motion}" MinWidth="140"
-                                    ToolTip.Tip="{DynamicResource styles.motion.tip}">
-                            <ComboBox.ItemTemplate>
-                              <DataTemplate x:DataType="vm:NumberChoice">
-                                <TextBlock Text="{Binding Label}" />
-                              </DataTemplate>
-                            </ComboBox.ItemTemplate>
-                          </ComboBox>
-                        </StackPanel>
                         <StackPanel Orientation="Horizontal" Spacing="8">
                           <TextBlock Text="{DynamicResource styles.drawer}" VerticalAlignment="Center" />
                           <ComboBox Name="StyleDrawer" ItemsSource="{Binding Drawers}" SelectedItem="{Binding Drawer}" MinWidth="160"
@@ -296,10 +269,6 @@
                               </DataTemplate>
                             </ComboBox.ItemTemplate>
                           </ComboBox>
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                          <CheckBox Name="StyleFinish" IsChecked="{Binding Finish}" Content="{DynamicResource styles.finish}" />
-                          <views:HelpTip Text="{DynamicResource styles.finish.tip}" />
                         </StackPanel>
                         <!-- F10 (0.1.49): the plan shown before the images are paid for; off by default. -->
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">

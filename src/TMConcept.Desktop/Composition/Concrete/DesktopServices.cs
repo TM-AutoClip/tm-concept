@@ -361,6 +361,7 @@ public static class DesktopServices
         services.AddSingleton<IVideoRater, VideoRater>();
         services.AddSingleton<Core.Styles.IVideoStyleStore, VideoStyleStore>();
         services.AddSingleton<Core.Styles.IVideoMediaStore, Core.Styles.VideoMediaStore>();
+        services.AddSingleton<Core.Styles.IVideoLookStore, Core.Styles.VideoLookStore>();
         services.AddSingleton<Core.Styles.IVideoPaletteStore, VideoPaletteStore>();
         services.AddSingleton<IApiKeyStore, ApiKeyStore>();
         services.AddSingleton<IStepModelStore, StepModelStore>();
@@ -412,6 +413,7 @@ public static class DesktopServices
         services.AddSingleton<IVideoMediaServices, VideoMediaServices>();
         services.AddSingleton<IMusicChoiceText, MusicChoiceText>();
         services.AddTransient<VideoMediaViewModel>();
+        services.AddTransient<VideoLookViewModel>();
 
         // The concept page's parts: the page (a singleton) gets its own bar, runner, sections and detail panel; the status changes are one
         // service for every page.

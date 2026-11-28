@@ -29,7 +29,6 @@
             </ComboBox.ItemTemplate>
           </ComboBox>
           <views:HelpTip Name="StyleHelp" Text="{DynamicResource video.style.tip}" Margin="0" />
-          <views:HelpTip Name="StyleConceptHelp" Text="{Binding StyleConceptNote}" Margin="0" IsVisible="{Binding HasStyleConceptNote}" />
           <TextBlock Name="NoStylesHint" Text="{DynamicResource video.style.empty}" Classes="small warning" VerticalAlignment="Center"
                      IsVisible="{Binding NoStyles}" />
         </StackPanel>
@@ -263,6 +262,12 @@
         <ScrollViewer HorizontalScrollBarVisibility="Disabled">
           <StackPanel Spacing="6">
             <views:StepPickerView Name="ModelPickers" DataContext="{Binding Picker}" />
+            <!-- 28 Nov 2026: the profile's look (drawing style, motion, finishing layer), next to the video code model; it left the template. -->
+            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+              <TextBlock Text="{DynamicResource look.title}" FontWeight="SemiBold" VerticalAlignment="Center" />
+              <views:HelpTip Text="{DynamicResource look.tip}" />
+            </StackPanel>
+            <views:VideoLookView Name="LookChoice" DataContext="{Binding Look}" />
             <!-- 0.1.54: the profile's reference video and background music (they left the template). -->
             <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
               <TextBlock Text="{DynamicResource media.title}" FontWeight="SemiBold" VerticalAlignment="Center" />

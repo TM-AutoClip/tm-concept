@@ -6,7 +6,7 @@ namespace TMConcept.Core.Styles;
 /// the picture. <paramref name="Grain"/>: film grain that changes 12 times a second. <paramref name="Vignette"/>: darker corners.
 /// <paramref name="Bloom"/>: a soft glow of the accent colour (an approximation: the page cannot read its own pixels).
 /// <paramref name="Shadow"/>: a drop shadow by depth (drawings one step above the background, labels two). <paramref name="Boil"/>: the
-/// picture trembles a little in 12 steps a second, like hand-made frames. Drawn only when the template has its finishing on
+/// picture trembles a little in 12 steps a second, like hand-made frames. Drawn only when the video's look (the profile's choice) has its finishing on
 /// (<see cref="VideoStyle.Finish"/>).
 /// </summary>
 public sealed record StyleFinish(double Tooth = 0, double Grain = 0, double Vignette = 0, double Bloom = 0, double Shadow = 0, double Boil = 0)

@@ -10,16 +10,18 @@ namespace TMConcept.Core.Plans;
 /// <summary>
 /// The scene plan call of the app's drawer (0.1.33; English, models plan best in English). One call writes, for every scene, what it stands
 /// on (its generated image, a map region, a diagram or a title), its named points and at most one beat per narration sentence with a camera
-/// move and overlay actions; the app draws all of it (<c>plan.js</c>), so no model writes code. The amount of motion follows the template's
-/// motion (<see cref="MotionIntensity"/>: calm = still, a scene's overlays shown at once; normal = drawn on with the sentences; lively =
+/// move and overlay actions; the app draws all of it (<c>plan.js</c>), so no model writes code. The amount of motion follows the video's
+/// motion (the profile's look, <see cref="VideoLook"/>; <see cref="MotionIntensity"/>: calm = still, a scene's overlays shown at once; normal = drawn on with the sentences; lively =
 /// something changes every 2–3 s, travellers on the routes). Since 0.1.42 the same call also chooses each scene's transition from the
 /// catalog of the tempo's energy (F1) and each camera move's ease, and is told the tempo's targets (F9); since 0.1.43 the user text
-/// also lists the drawing style's known pitfalls (F12). No call is added.
+/// also lists the drawing style's known pitfalls (F12); since 28 Nov 2026 a storytelling style also tells how the scenes are adapted to it
+/// (<see cref="DrawStyleDefinition.SceneGuidance"/>: the stick-figure narrator acts every line out), as concepts are written for no style.
+/// No call is added.
 /// </summary>
 public static class PlanPromptBuilder
 {
-    /// <summary>The version of the plan prompt, kept with every video made with the drawer.</summary>
-    public const string Version = "5";
+    /// <summary>The version of the plan prompt, kept with every video made with the drawer (6: the look's scene guidance).</summary>
+    public const string Version = "6";
 
     /// <summary>
     /// The system text for a video in <paramref name="motion"/> at <paramref name="tempo"/> (its transitions, eases and targets);
@@ -141,6 +143,11 @@ public static class PlanPromptBuilder
         var text = new StringBuilder();
         text.Append(c, $"Video: «{Clean(title, 200)}», {scenes.Count} scenes, language {video.English} ({video.Code}): every label and text in {video.English}.\n");
         text.Append("Look: ").Append(Look(style)).Append('\n');
+        if (DrawStyles.SceneGuidance(style) is { Length: > 0 } guidance)
+        {
+            text.Append("Adapt the scenes to this look: ").Append(guidance).Append('\n');
+        }
+
         // S1 (0.1.52): the reference video's emphasis moments, by scene (not for a single scene asked again: it has no place in the whole).
         if (scenes.Count > 1 && References.ReferenceTempoMapper.PlanText(style, [.. scenes.Select(s => s.Seconds)]) is { Length: > 0 } reference)
         {
@@ -193,7 +200,7 @@ public static class PlanPromptBuilder
         return text.Append("Write the whole plan again: change what the notes ask for and keep every scene without a note as it was.").ToString();
     }
 
-    /// <summary>The look of the video for the plan (colours and labels follow it): the template's style or the chosen words.</summary>
+    /// <summary>The look of the video for the plan (colours and labels follow it): the snapshot's style or the chosen words.</summary>
     private static string Look(VideoStyle? style)
     {
         if (style is null || style.DrawStyle == DrawStyle.Auto)
@@ -205,7 +212,7 @@ public static class PlanPromptBuilder
     }
 
     /// <summary>
-    /// The known mistakes of the template's drawing style (F12, 0.1.43, <see cref="DrawStyleDefinition.Pitfalls"/>); none without a template,
+    /// The known mistakes of the video's drawing style (F12, 0.1.43, <see cref="DrawStyleDefinition.Pitfalls"/>); none without a snapshot,
     /// for "AI chooses" (a preset it chose is already in the snapshot's style) and for the model's own style description.
     /// </summary>
     public static IReadOnlyList<string> Pitfalls(VideoStyle? style) =>

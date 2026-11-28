@@ -42,13 +42,6 @@ public sealed class Concept
     /// <summary>The documents a concept made from documents is based on, by title ("Byzantine trade; The Nika riots"); empty otherwise.</summary>
     public string Sources { get; set; } = string.Empty;
 
-    /// <summary>
-    /// The drawing style the concept was written for (0.1.32: the concept page's style choice, or an AI edit that adapted it to a style);
-    /// <c>null</c> = written for no particular style. A style with concept guidance (<see cref="Styles.DrawStyleDefinition.ConceptGuidance"/>,
-    /// the stick-figure narrator) changes how the scenes are written, so the video page can say when a template's style does not match.
-    /// </summary>
-    public Styles.DrawStyle? DrawStyle { get; set; }
-
     /// <summary>Created (UTC).</summary>
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
 

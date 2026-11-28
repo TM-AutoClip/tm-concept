@@ -28,7 +28,6 @@ DISLIKED TELLING (title: opening sentence):{disliked_telling}
 USER'S WISHES (their earlier fixes; apply them from the start in new concepts, skip one that fits only a single concept):{wishes}
 SUBJECT: «{extra}»
 FOCUS (the tone, audience and structure the user chose; follow it): {focus}
-DRAWING STYLE (the video is drawn in this style; write the concept and its "ekranda" lines for it): {style}
 TOPICS (one concept each, in order):{topics}
 DOCUMENTS (number: title):{documents}
 DOCUMENT PASSAGES (the only facts you may use; [document number] «where»: «text»):{sources}

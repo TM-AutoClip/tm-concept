@@ -216,11 +216,11 @@ public sealed class MusicPageTests
         // A template saved before 0.1.54 with its own music: the video takes the profile's, the template keeps its JSON as it is.
         var template = new VideoStyle { Name = "Old", Music = new VideoMusic { Source = MusicSource.Library } };
         var options = new VideoOptions();
-        VideoStyleRules.Snapshot(options, template, read);
+        VideoStyleRules.Snapshot(options, template, read, null);
         options.Style!.Music.Source.ShouldBe(MusicSource.OwnFile);
         options.Style.Reference.ShouldNotBeNull();
         template.Music.Source.ShouldBe(MusicSource.Library);
-        VideoStyleRules.Snapshot(options, template, await store.GetAsync(two.Id, CancellationToken.None));
+        VideoStyleRules.Snapshot(options, template, await store.GetAsync(two.Id, CancellationToken.None), null);
         options.Style!.Music.Source.ShouldBe(MusicSource.Off, "an empty choice: no music, whatever an old template held");
         options.Style.Reference.ShouldBeNull();
 

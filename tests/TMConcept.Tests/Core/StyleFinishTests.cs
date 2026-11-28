@@ -54,7 +54,7 @@ public sealed class StyleFinishTests
 
         PlanPromptBuilder.User("Silk Road", "en", new VideoStyle { Name = "t", DrawStyle = DrawStyle.Auto }, Scenes).ShouldNotContain("Known pitfalls");
         PlanPromptBuilder.User("Silk Road", "en", null, Scenes).ShouldNotContain("Known pitfalls");
-        PlanPromptBuilder.Version.ShouldBe("5", "3: transitions and eases; 4: the style's pitfalls; 5: a reference video's targets and emphasis moments");
+        PlanPromptBuilder.Version.ShouldBe("6", "3: transitions and eases; 4: the style's pitfalls; 5: a reference video's targets and emphasis moments; 6: the look's scene guidance");
     }
 
     [Fact]

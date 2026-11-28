@@ -428,6 +428,37 @@ public sealed class VideoPageTests
     }
 
     [AvaloniaFact]
+    public async Task EachVideoTakesTheProfilesLookWhenItStartsAndNeverTheTemplatesOwn()
+    {
+        // 28 Nov 2026: the look (drawing style, motion, finishing) is the profile's choice on this page; a template saved before with a
+        // look of its own does not decide it. The video reads the stored look when it starts, so a change made while the queue waits
+        // reaches it; the stick-figure narrator adapts the scenes in the video code step.
+        var engine = new FakeEngine();
+        var chat = new FakeChat().Answer(_ => Code(engine.SampleCode));
+        using var h = Harness(chat, engine);
+        var (page, concept) = await OpenAsync(h, template: s =>
+        {
+            s.DrawStyle = DrawStyle.Neon;
+            s.Motion = MotionIntensity.Calm;
+            s.Finish = true;
+        });
+        page.Look.DrawStyle!.Value.ShouldBe((int)DrawStyle.Auto, "a profile without a choice: the AI chooses");
+        page.EffectiveStyle.ShouldNotBeNull().DrawStyle.ShouldBe(DrawStyle.Auto, "the template's own old style is not used");
+        await page.EnqueueAsync(page.Approved.Single());
+        await h.Get<IVideoLookStore>().SaveAsync(concept.ProfileId,
+            new VideoLook { DrawStyle = DrawStyle.StickFigure, Motion = MotionIntensity.Lively, Finish = false }, CancellationToken.None);
+
+        await page.ProduceAllAsync();
+
+        var request = chat.Requests.ShouldHaveSingleItem();
+        (request.System + request.User).ShouldContain("Adapt the scenes to this look: " + DrawStyles.Of(DrawStyle.StickFigure).SceneGuidance);
+        (request.System + request.User).ShouldContain("Motion: lively");
+        var video = (await h.Get<IVideoStore>().ListAsync(concept.ProfileId, CancellationToken.None)).Single();
+        var snapshot = VideoRemaker.Options(video).Style.ShouldNotBeNull();
+        (snapshot.DrawStyle, snapshot.Motion, snapshot.Finish).ShouldBe((DrawStyle.StickFigure, MotionIntensity.Lively, false), "the chosen look is kept with the video");
+    }
+
+    [AvaloniaFact]
     public async Task NothingIsProducedUntilACodeModelAndATemplateAreChosen()
     {
         var engine = new FakeEngine();

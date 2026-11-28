@@ -1,6 +1,5 @@
 using TMConcept.Core.Concepts;
 using TMConcept.Core.Duplicates;
-using TMConcept.Core.Styles;
 
 namespace TMConcept.Tests.Desktop;
 
@@ -32,9 +31,6 @@ internal sealed class CountingConceptStore(IConceptStore inner) : IConceptStore
 
     public Task UpdateContentAsync(Guid id, string content, CancellationToken cancellationToken) =>
         inner.UpdateContentAsync(id, content, cancellationToken);
-
-    public Task SetDrawStyleAsync(Guid id, DrawStyle? style, CancellationToken cancellationToken) =>
-        inner.SetDrawStyleAsync(id, style, cancellationToken);
 
     public Task UpdateTextAsync(Guid id, string title, string summary, string content, CancellationToken cancellationToken) =>
         inner.UpdateTextAsync(id, title, summary, content, cancellationToken);
