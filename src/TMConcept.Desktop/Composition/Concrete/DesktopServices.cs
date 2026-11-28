@@ -468,6 +468,7 @@ public static class DesktopServices
         services.AddSingleton<Core.DiskSpace.IFolderDiscard>(sp => sp.GetRequiredService<DiskSpace.PermanentDiscard>());
         services.AddSingleton<Core.DiskSpace.IKeepingWipe, Core.DiskSpace.KeepingWipe>();
         services.AddSingleton<Core.DiskSpace.ILeftoverSweep, Core.DiskSpace.LeftoverSweep>();
+        services.AddSingleton<Core.DiskSpace.IWorkFolderRemover, Core.DiskSpace.WorkFolderRemover>();
         services.AddSingleton<DiskSpace.ILeftoverSweeper, DiskSpace.LeftoverSweeper>();
         services.AddSingleton<DiskSpace.IDiskCleaner, DiskSpace.DiskCleaner>();
         services.AddSingleton<DiskSpace.IOrphanFileCheck, DiskSpace.OrphanFileCheck>();

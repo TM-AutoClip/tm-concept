@@ -43,7 +43,7 @@ public sealed class MemoryNoticeLog(IActivityLog activity, Localizer text) : IMe
                 activity.Add(ActivityLevel.Info, text.Format("memory.notice.enough", name));
                 break;
             case MemoryNoticeKind.Placed when First(notice):
-                activity.Add(ActivityLevel.Warning, text.Format(notice.Placement == MemoryPlacement.Disk ? "memory.notice.disk" : "memory.notice.main", name));
+                activity.Add(ActivityLevel.Warning, text.Format(PlacedKey(notice.Placement), name));
                 break;
             case MemoryNoticeKind.ProcessorFallback when First(notice):
                 activity.Add(ActivityLevel.Warning, text.Format("memory.notice.processor", name));
@@ -65,6 +65,14 @@ public sealed class MemoryNoticeLog(IActivityLog activity, Localizer text) : IMe
     private static string Seconds(TimeSpan wait) => wait.TotalSeconds.ToString("0.#", CultureInfo.CurrentCulture);
 
     private static double Gb(long bytes) => Math.Round(Math.Max(0, bytes) / Gigabyte, 1);
+
+    /// <summary>The line of a placement off the card: disk, shared memory after "Try anyway" (K24-a), otherwise main memory.</summary>
+    private static string PlacedKey(MemoryPlacement placement) => placement switch
+    {
+        MemoryPlacement.Disk => "memory.notice.disk",
+        MemoryPlacement.SharedMemory => "memory.notice.shared",
+        _ => "memory.notice.main",
+    };
 
     private void Forget()
     {

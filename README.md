@@ -329,7 +329,9 @@ card was freed at the end of a video) the app waits 3 seconds and measures the f
 measures again; if it is still not enough a window shows the card's total and free memory, what the model needs and the free main memory:
 close programs that use the card or memory (games, browsers) and press **Try again** (it waits 5 seconds and measures again, as often as you
 like; a model of TM Concept's own local server that could not be unloaded is named in the window and asked to unload again before every
-new reading), or **Cancel** (the video queue stops; the app stays open). Every step is a line in the activity panel. In night mode nobody is asked:
+new reading), or **Cancel** (the video queue stops; the app stays open). A local music model runs in a process of its own and cannot move its
+weights to main memory: with less than three quarters of its class free it does not start, and the window also offers **Try anyway (may be
+very slow)** (the graphics driver would spill into shared memory). Every step is a line in the activity panel. In night mode nobody is asked:
 that video fails. The free memory is measured each time: on Windows the smaller of what Task Manager shows and what Windows lets (the latter alone never refuses a picture: it may only make sd-cli offload)
 the app use, on Linux the AMD driver's files or `nvidia-smi`. Graphics memory classes are 4, 6, 8, 12, 16, 24 and 32 GB: a card counts in
 the class it reports within 8 % (a "16 GB" card that reports 15.8 GB is a 16 GB card; an 11 GB card is an 8 GB card) and can use its own class and every
@@ -534,7 +536,7 @@ A video made with a template (Settings → Templates) follows it without relying
 - **Local models that make whole songs (28 Nov 2026):** DiffRhythm 1.2 and 1.0 (instrumental only, 95 s or longer pieces; 8 GB cards,
   12 GB for the full models; non-commercial because of its MuQ-MuLan text encoder), SongGeneration / LeVo (6 models; Tencent's
   non-commercial licence; 10 to 22 GB cards), YuE2 3B (non-commercial; 24 GB, or 8 GB in its low-memory mode) and YuE 1 (Apache-2.0: the
-  7B model for 24 GB cards, its exllamav2 quantisation for 6 GB cards, and the 0.5B model for 8 GB cards). A piece is at most 2 minutes. SongGeneration and YuE sing your own words: the music page shows a lyrics
+  7B model for 24 GB cards, its exllamav2 quantisation and the 0.5B model for 8 GB cards). A piece is at most 2 minutes. SongGeneration and YuE sing your own words: the music page shows a lyrics
   field for them when "Instrumental" is off. All for NVIDIA cards, installed only after you confirm.
 - **Make music page (0.1.54):** write what you want in your own words ("disco in ancient Egypt"), optionally choose a reference sound (the
   app measures its tempo and asks for it; no model takes a sound directly), pick the local or an online music model (the same ones as

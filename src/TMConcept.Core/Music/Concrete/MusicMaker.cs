@@ -1,5 +1,7 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using Microsoft.Extensions.Logging;
+using TMConcept.Core.DiskSpace;
 using TMConcept.Core.Models;
 using TMConcept.Core.Paths;
 using TMConcept.Core.Runs;
@@ -10,11 +12,18 @@ namespace TMConcept.Core.Music;
 /// <remarks>
 /// The piece itself is made by the shared <see cref="IMusicPieceRunner"/> (the graphics card's lock, every failure as a
 /// <see cref="MusicGenerationException"/>), the same as a video's music. A piece of an online model is a run of its own
-/// (<see cref="RunKind.Music"/>), so the month's spending counts it with its exact or estimated price.
+/// (<see cref="RunKind.Music"/>), so the month's spending counts it with its exact or estimated price. The piece's work folder is removed when
+/// it ends however it ends (<see cref="IWorkFolderRemover"/>: a stopped script's process has exited by then, the remover still tries a few
+/// times); a folder a closed app left is removed by the start-up sweep (<see cref="ActiveFolders"/> are never swept).
 /// </remarks>
 public sealed class MusicMaker(IMusicGenerators generators, IMusicPieceRunner pieces, IMusicAudio audio, IMyMusic collection, IRunStore runs, IAppPaths paths,
-    TimeProvider clock, ILogger<MusicMaker> logger) : IMusicMaker
+    IWorkFolderRemover remover, TimeProvider clock, ILogger<MusicMaker> logger) : IMusicMaker
 {
+    private readonly ConcurrentDictionary<string, byte> _active = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <inheritdoc />
+    public IReadOnlyCollection<string> ActiveFolders => [.. _active.Keys];
+
     /// <inheritdoc />
     public (decimal Usd, int Seconds) Estimate(CatalogModel model, int seconds)
     {
@@ -82,6 +91,7 @@ public sealed class MusicMaker(IMusicGenerators generators, IMusicPieceRunner pi
 
         var folder = Path.Combine(paths.WorkDirectory, MusicGenerationRules.MakeWorkFolder, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
+        _active[folder] = 0;
         try
         {
             int? bpm = null;
@@ -112,14 +122,9 @@ public sealed class MusicMaker(IMusicGenerators generators, IMusicPieceRunner pi
         }
         finally
         {
-            try
-            {
-                Directory.Delete(folder, recursive: true);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                logger.LogWarning(ex, "Music page: the work folder of a piece could not be removed");
-            }
+            // After a cancel too: the token is already canceled, the pauses between tries must not end with it.
+            await remover.RemoveAsync(folder, CancellationToken.None).ConfigureAwait(false);
+            _active.TryRemove(folder, out _);
         }
     }
 

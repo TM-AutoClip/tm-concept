@@ -13,6 +13,17 @@ public sealed partial class ConfirmWindow : Window
         CancelButton.Click += (_, _) => Close();
         ConfirmButton.Click += (_, _) => Confirm();
         DangerButton.Click += (_, _) => Confirm();
+        AlternateButton.Click += (_, _) => Alternate();
+    }
+
+    private void Alternate()
+    {
+        if (DataContext is ConfirmViewModel model)
+        {
+            model.Alternated = true;
+        }
+
+        Close();
     }
 
     private void Confirm()

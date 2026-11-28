@@ -11,6 +11,9 @@ public interface IMusicMaker
     /// <summary>What a piece of <paramref name="seconds"/> of <paramref name="model"/> costs (0 for the local model) and the length really asked.</summary>
     (decimal Usd, int Seconds) Estimate(Models.CatalogModel model, int seconds);
 
+    /// <summary>The work folders of the pieces being made now (the start-up sweep never deletes them; every other one is a closed app's leftover).</summary>
+    IReadOnlyCollection<string> ActiveFolders { get; }
+
     /// <summary>Makes the piece and adds it to the collection; <paramref name="progress"/> gets the stage ("reference", "generate", "save").</summary>
     Task<MyMusicEntry> MakeAsync(MusicMakeRequest request, IProgress<string>? progress, CancellationToken cancellationToken);
 }

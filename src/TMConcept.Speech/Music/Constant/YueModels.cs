@@ -16,7 +16,8 @@ namespace TMConcept.Speech.Music;
 /// <para>
 /// YuE 1 (<see cref="Yue1Models"/>, Apache-2.0: commercial use allowed), English chain of thought, two segments (about a minute): the
 /// official 7B stage 1 (24 GB, the README's figure), its 4.25-bit exllamav2 quantisation (Doctor-Shotgun's; the only 6 GB run is the
-/// YuE-exllamav2 README's RTX 3060 Laptop 6 GB, no peak published) and the 0.5B stage 1 (8 GB: its stage 2 is the original 16-bit 1B model
+/// YuE-exllamav2 README's RTX 3060 Laptop 6 GB, no peak published; its stage 1 needs about 6.1 to 6.5 GB, so a 6 GB card that also
+/// draws the desktop spills into shared memory: class 8 GB since 0.1.59) and the 0.5B stage 1 (8 GB: its stage 2 is the original 16-bit 1B model
 /// with batch size 4, which the same README's 6 GB table shows running out of memory; no official figure above that). Every YuE
 /// 1 model needs the stage 2 model and the codec's weights (<c>m-a-p/xcodec_mini_infer</c>: its checkpoint, the two vocoder decoders and their
 /// configurations), shared in <c>shared/</c>; the quantised one has its own stage 2.

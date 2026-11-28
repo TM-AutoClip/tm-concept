@@ -9,7 +9,7 @@ namespace TMConcept.Desktop.DiskSpace;
 
 /// <inheritdoc cref="ILeftoverSweeper" />
 public sealed class LeftoverSweeper(AppPaths paths, ILeftoverSweep sweep, IComponentWorkGate gate, IFolderDiscard discard, IActivityLog activity,
-    Localizer text, ILogger<LeftoverSweeper> logger, Core.Channels.IChannelInspirer? channels = null) : ILeftoverSweeper
+    Localizer text, ILogger<LeftoverSweeper> logger, Core.Channels.IChannelInspirer? channels = null, Core.Music.IMusicMaker? music = null) : ILeftoverSweeper
 {
     /// <inheritdoc />
     public async Task<long> SweepAsync(CancellationToken cancellationToken)
@@ -64,7 +64,7 @@ public sealed class LeftoverSweeper(AppPaths paths, ILeftoverSweep sweep, ICompo
     /// <summary>
     /// What to delete: the old components folders and the reinstall marker of a version up to 0.1.56 (whatever state they were left in: the
     /// components they held are installed again through the install journal), the staging folders, the engines' existing tmp folders and the
-    /// closed looks of "Kanaldan esinlen".
+    /// closed looks of "Kanaldan esinlen" and the music page's leftover work folders.
     /// </summary>
     private List<string> Targets(string tools)
     {
@@ -97,6 +97,13 @@ public sealed class LeftoverSweeper(AppPaths paths, ILeftoverSweep sweep, ICompo
         if (Directory.Exists(channel))
         {
             targets.AddRange(sweep.ChannelTemps(paths.WorkDirectory, Folders(channel, "*"), channels?.ActiveFolders ?? []));
+        }
+
+        // 0.1.59: work folders of "Müzik üret" a closed or stopped app left (never the folder of a piece being made now).
+        var pieces = Path.Combine(paths.WorkDirectory, Core.Music.MusicGenerationRules.MakeWorkFolder);
+        if (Directory.Exists(pieces))
+        {
+            targets.AddRange(sweep.MusicTemps(paths.WorkDirectory, Folders(pieces, "*"), music?.ActiveFolders ?? []));
         }
 
         foreach (var target in targets)

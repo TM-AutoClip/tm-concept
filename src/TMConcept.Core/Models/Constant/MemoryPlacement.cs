@@ -21,4 +21,11 @@ public enum MemoryPlacement
 
     /// <summary>Not even the disk level can run: the card lacks the working memory the model needs besides its weights.</summary>
     Refused = 5,
+
+    /// <summary>
+    /// A model in a process of its own (a local music script: exllamav2 or PyTorch in a Python child) does not find its minimum free on the
+    /// card. The app cannot move its weights to main memory; the graphics driver would spill them into shared system memory, many times slower
+    /// (28 Nov 2026, YuE 7B ran 38 minutes without a line). It is not started unless the user chooses "Try anyway" (K24-a).
+    /// </summary>
+    SharedMemory = 6,
 }

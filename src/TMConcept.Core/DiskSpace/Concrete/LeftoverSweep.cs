@@ -73,16 +73,12 @@ public sealed partial class LeftoverSweep : ILeftoverSweep
     }
 
     /// <inheritdoc />
-    public IReadOnlyList<string> ChannelTemps(string work, IEnumerable<string> folders, IReadOnlyCollection<string> active)
-    {
-        ArgumentException.ThrowIfNullOrEmpty(work);
-        ArgumentNullException.ThrowIfNull(folders);
-        ArgumentNullException.ThrowIfNull(active);
-        var root = Path.Combine(Full(work), Channels.ChannelLimits.Folder);
-        var running = active.Select(Full).ToHashSet(Comparer);
-        return folders.Select(Full).Where(f => Same(Path.GetDirectoryName(f), root) && Path.GetFileName(f).Length > 0 && !running.Contains(f))
-            .Distinct(Comparer).Order(StringComparer.Ordinal).ToList();
-    }
+    public IReadOnlyList<string> ChannelTemps(string work, IEnumerable<string> folders, IReadOnlyCollection<string> active) =>
+        Inactive(work, Channels.ChannelLimits.Folder, folders, active);
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> MusicTemps(string work, IEnumerable<string> folders, IReadOnlyCollection<string> active) =>
+        Inactive(work, Music.MusicGenerationRules.MakeWorkFolder, folders, active);
 
     /// <summary>
     /// Whether <paramref name="folder"/> is exactly <paramref name="tools"/> + <c>.old-</c>/<c>.failed-</c>/<c>.aside-</c> + a
@@ -103,6 +99,18 @@ public sealed partial class LeftoverSweep : ILeftoverSweep
 
     [GeneratedRegex(@"^\.(old|failed|aside)-[0-9]{8}-[0-9]{6}$", RegexOptions.CultureInvariant)]
     private static partial Regex Stamped();
+
+    /// <summary>Of <paramref name="folders"/>, those right under <c>&lt;work&gt;/&lt;area&gt;</c> that are not in <paramref name="active"/>.</summary>
+    private static List<string> Inactive(string work, string area, IEnumerable<string> folders, IReadOnlyCollection<string> active)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(work);
+        ArgumentNullException.ThrowIfNull(folders);
+        ArgumentNullException.ThrowIfNull(active);
+        var root = Path.Combine(Full(work), area);
+        var running = active.Select(Full).ToHashSet(Comparer);
+        return folders.Select(Full).Where(f => Same(Path.GetDirectoryName(f), root) && Path.GetFileName(f).Length > 0 && !running.Contains(f))
+            .Distinct(Comparer).Order(StringComparer.Ordinal).ToList();
+    }
 
     private static StringComparison Comparison => OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 

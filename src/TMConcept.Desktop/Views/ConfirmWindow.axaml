@@ -12,6 +12,7 @@
     <CheckBox IsChecked="{Binding Checked}" Content="{Binding CheckboxText}" IsVisible="{Binding HasCheckbox}" />
     <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
       <Button Name="CancelButton" Content="{Binding CancelText}" IsCancel="True" />
+      <Button Name="AlternateButton" Content="{Binding AlternateText}" IsVisible="{Binding HasAlternate}" />
       <Button Name="ConfirmButton" Classes="accent" Content="{Binding ConfirmText}" IsVisible="{Binding Normal}" />
       <Button Name="DangerButton" Classes="danger" Content="{Binding ConfirmText}" IsVisible="{Binding Danger}" />
     </StackPanel>

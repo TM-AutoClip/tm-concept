@@ -93,7 +93,8 @@ public sealed class LocalMusicTests : IDisposable
         var fitting = Families.SelectMany(f => f.Variants).Where(v => !LocalMusicSupport.TooBig(catalog.Find(ModelProviders.Local, v.Id)!, card)).Select(v => v.Id);
 
         fitting.ShouldBe(["musicgen-small", "musicgen-stereo-small", "magnet-small-10secs", "magnet-small-30secs", "audio-magnet-small", "audioldm2-music",
-            "audioldm2", "audioldm2-large", "yue-v1-exl2"], ignoreOrder: true);
+            "audioldm2", "audioldm2-large"], ignoreOrder: true);
+        catalog.Find(ModelProviders.Local, "yue-v1-exl2")!.MinVideoMemoryGb.ShouldBe(8, "0.1.59: its stage 1 needs about 6.1 to 6.5 GB; red on a 6 GB card");
         // Same decoder, same class: a melody or stereo MusicGen never below its plain twin.
         foreach (var (plain, twins) in new[]
         {

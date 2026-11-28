@@ -96,4 +96,16 @@ public sealed class LeftoverSweepTests
 
         _sweep.EngineTemps(Tools, folders).ShouldBe([Path.Combine(engines, "hyperframes", "tmp"), Path.Combine(engines, "remotion", "tmp")]);
     }
+
+    [Fact]
+    public void TheMusicPageWorkFoldersAreThoseRightUnderMusicMakeThatNoPieceUsesNow()
+    {
+        // 0.1.59: a stopped YuE run left its folder behind; the folder of a piece being made now stays.
+        var work = Path.Combine(Data, "work");
+        var root = Path.Combine(work, "music-make");
+        var old = Path.Combine(root, "e5152260");
+        var running = Path.Combine(root, "a1b2c3");
+
+        _sweep.MusicTemps(work, [old, running, Path.Combine(old, "out"), root, Path.Combine(work, "channel", "x")], [running]).ShouldBe([old]);
+    }
 }

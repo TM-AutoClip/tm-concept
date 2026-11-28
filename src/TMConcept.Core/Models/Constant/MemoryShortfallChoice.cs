@@ -8,4 +8,7 @@ public enum MemoryShortfallChoice
 
     /// <summary>Give up: the video queue stops (the app stays open).</summary>
     Cancel = 2,
+
+    /// <summary>Start it anyway, knowing it may be very slow (offered only when <see cref="MemoryShortfall.CanTryAnyway"/>).</summary>
+    TryAnyway = 3,
 }

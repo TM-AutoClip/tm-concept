@@ -8,6 +8,7 @@ namespace TMConcept.Core.Models;
 /// <see cref="MemoryWaitOptions.Settle"/> after the last unload (at once when nothing was unloaded or the time has passed); a second one
 /// <see cref="MemoryWaitOptions.Recheck"/> later; then the user is asked (<see cref="IMemoryShortfallHandler"/>), unless the flow runs
 /// unattended (<see cref="MemoryShortfallScope"/>) or there is nobody to ask: then the use fails with <see cref="MemoryShortfallException"/>.
+/// "Try anyway" (a model in a process of its own, <see cref="MemoryShortfall.CanTryAnyway"/>) ends the wait without enough memory.
 /// Retry waits exactly <see cref="MemoryWaitOptions.Retry"/> and measures again; the user decides how often. The caller's token ends a wait
 /// and closes the question. Every step is reported (<see cref="IMemoryNotices"/>) and logged: the first reading is reported only after an
 /// unload (a run of images measures before every picture; a reading that finds enough at once says nothing).
@@ -61,6 +62,14 @@ public sealed class MemoryWaiter(TimeProvider clock, MemoryWaitOptions options, 
                 MemoryShortfallException.Describe(shortfall));
             Report(new MemoryNotice(MemoryNoticeKind.Asking, model.Name, model.Key) { Shortfall = shortfall });
             var choice = await handler.AskAsync(shortfall, cancellationToken).ConfigureAwait(false);
+            if (choice == MemoryShortfallChoice.TryAnyway && shortfall.CanTryAnyway)
+            {
+                // K24-a: the user knows it may spill into shared memory and be very slow; the coordinator reports the placement.
+                logger.LogWarning(LogEvents.OnScreen, "{Model}: the user chose Try anyway with too little graphics memory ({Figures}); it may run very slowly",
+                    model.Key, MemoryShortfallException.Describe(shortfall));
+                return;
+            }
+
             if (choice != MemoryShortfallChoice.Retry)
             {
                 logger.LogWarning(LogEvents.OnScreen, "{Model}: the user canceled at the memory question; the video queue stops", model.Key);

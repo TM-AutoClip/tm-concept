@@ -103,9 +103,11 @@ public sealed class RakkaseMusicGenerator(RakkaseInstaller installer, RakkaseLay
                 ["HF_HOME"] = Path.Combine(layout.Home, "hf"),
                 ["HF_HUB_OFFLINE"] = "1",
                 ["PYTHONIOENCODING"] = "utf-8",
+                ["PYTHONUNBUFFERED"] = "1",
                 ["PYTHONPATH"] = string.Empty,
                 ["PYTHONHOME"] = string.Empty,
             },
+            Heartbeat = MusicGenerationRules.Heartbeat,
         };
         logger.LogInformation("rakkase: {Seconds} s, seed {Seed}", request.Seconds, request.Seed);
         var result = await runner.RunAsync(start, null, cancellationToken).ConfigureAwait(false);

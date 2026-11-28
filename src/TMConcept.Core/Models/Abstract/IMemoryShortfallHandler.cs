@@ -2,7 +2,8 @@ namespace TMConcept.Core.Models;
 
 /// <summary>
 /// Asks the user what to do when a local model's memory is still not free after the readings of <see cref="IMemoryWaiter"/>: close the
-/// programs that use the card or the memory and retry, or cancel (the video queue stops). The desktop shows a dialog on the interface thread;
+/// programs that use the card or the memory and retry, or cancel (the video queue stops); for a model in a process of its own also "Try anyway"
+/// (<see cref="MemoryShortfall.CanTryAnyway"/>). The desktop shows a dialog on the interface thread;
 /// it closes when the token is canceled (the queue's Cancel) and the call then throws <see cref="OperationCanceledException"/>.
 /// </summary>
 public interface IMemoryShortfallHandler

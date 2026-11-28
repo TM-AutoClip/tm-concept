@@ -5,7 +5,8 @@ namespace TMConcept.Core.DiskSpace;
 /// disk access): the old components folders that "Reinstall from scratch" of a version up to 0.1.56 left next to <c>tools</c>
 /// (<c>tools.old-&lt;stamp&gt;</c>, <c>tools.failed-&lt;stamp&gt;</c>, <c>tools.aside-&lt;stamp&gt;</c>) with its marker file
 /// (<c>tools.reinstalling</c>), the staging folders an install left (the shared downloads folder, <c>*.unpack</c>), the temporary folder of
-/// each engine package (<c>tools/engines/&lt;name&gt;/tmp</c>) and the temporary folders of "Kanaldan esinlen".
+/// each engine package (<c>tools/engines/&lt;name&gt;/tmp</c>), the temporary folders of "Kanaldan esinlen" and the work folders of the music
+/// page's pieces (0.1.59).
 /// </summary>
 public interface ILeftoverSweep
 {
@@ -33,4 +34,10 @@ public interface ILeftoverSweep
     /// <c>&lt;work&gt;/channel</c> that is not in <paramref name="active"/> (a look running now, or one whose preview is still open).
     /// </summary>
     IReadOnlyList<string> ChannelTemps(string work, IEnumerable<string> folders, IReadOnlyCollection<string> active);
+
+    /// <summary>
+    /// The work folders of "Müzik üret" a closed or stopped app left (0.1.59: a stopped YuE run left one behind): each of
+    /// <paramref name="folders"/> right under <c>&lt;work&gt;/music-make</c> that is not in <paramref name="active"/> (a piece being made now).
+    /// </summary>
+    IReadOnlyList<string> MusicTemps(string work, IEnumerable<string> folders, IReadOnlyCollection<string> active);
 }

@@ -126,4 +126,18 @@ public sealed class LeftoverSweeperTests
         (await h.Get<ILeftoverSweeper>().SweepAsync(CancellationToken.None)).ShouldBe(0);
         logger.Levels.ShouldNotContain(LogLevel.Warning, "nothing is kept, so nothing to warn about");
     }
+
+    [Fact]
+    public async Task AMusicPageWorkFolderAClosedAppLeftIsRemoved()
+    {
+        // 0.1.59: work/music-make/<piece> of a stopped or closed run (no piece is being made at start).
+        using var h = new DesktopHarness();
+        var left = Folder(Path.Combine(h.Paths.WorkDirectory, "music-make", "e5152260", "out"), 7);
+
+        await h.Get<ILeftoverSweeper>().SweepAsync(CancellationToken.None);
+
+        Directory.Exists(Path.GetDirectoryName(left)).ShouldBeFalse();
+        Directory.Exists(Path.Combine(h.Paths.WorkDirectory, "music-make")).ShouldBeTrue("only the pieces' folders go");
+    }
 }
+

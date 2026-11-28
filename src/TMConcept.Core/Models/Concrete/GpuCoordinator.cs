@@ -381,7 +381,7 @@ public sealed class GpuCoordinator(IModelDirectory directory, IVramProbe probe, 
                 return plan.Runs || !reading.Measured
                     ? null
                     : new MemoryShortfall(model.Name, reading.TotalBytes, Math.Max(reading.FreeBytes, reading.SystemFreeBytes ?? 0), reading.Source,
-                        plan.NeededVideoBytes, free, plan.NeededMainBytes) { HeldBy = stuck };
+                        plan.NeededVideoBytes, free, plan.NeededMainBytes) { HeldBy = stuck, CanTryAnyway = plan.CanTryAnyway };
             }, cancellationToken).ConfigureAwait(false);
 
             if (plan is { Slower: true })

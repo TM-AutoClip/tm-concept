@@ -11,9 +11,15 @@ namespace TMConcept.Core.Models;
 /// <param name="Reason">Why it was refused (empty otherwise), in English for the log.</param>
 public sealed record MemoryPlan(MemoryPlacement Placement, long NeededVideoBytes, long NeededMainBytes, IReadOnlyList<string> Arguments, string Reason)
 {
-    /// <summary>Whether the model can run with this plan (not <see cref="MemoryPlacement.Refused"/>).</summary>
-    public bool Runs => Placement != MemoryPlacement.Refused;
+    /// <summary>
+    /// Whether the model can run with this plan without asking: not <see cref="MemoryPlacement.Refused"/> and not
+    /// <see cref="MemoryPlacement.SharedMemory"/> (that one waits for the user's "Try anyway").
+    /// </summary>
+    public bool Runs => Placement is not (MemoryPlacement.Refused or MemoryPlacement.SharedMemory);
 
-    /// <summary>Whether the model runs but not wholly on the card (main memory or disk): slower, shown as a warning.</summary>
-    public bool Slower => Placement is MemoryPlacement.MainMemory or MemoryPlacement.Disk;
+    /// <summary>Whether the user may still start it, knowing it will be very slow (<see cref="MemoryPlacement.SharedMemory"/>).</summary>
+    public bool CanTryAnyway => Placement == MemoryPlacement.SharedMemory;
+
+    /// <summary>Whether the model runs but not wholly on the card (main memory, disk, or shared memory after "Try anyway"): slower, shown as a warning.</summary>
+    public bool Slower => Placement is MemoryPlacement.MainMemory or MemoryPlacement.Disk or MemoryPlacement.SharedMemory;
 }

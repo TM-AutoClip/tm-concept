@@ -19,4 +19,10 @@ public sealed record MemoryShortfall(string ModelName, long CardTotalBytes, long
     /// says so, since closing games and browsers would not help then.
     /// </summary>
     public IReadOnlyList<string> HeldBy { get; init; } = [];
+
+    /// <summary>
+    /// Whether the question also offers "Try anyway (may be very slow)" (<see cref="MemoryShortfallChoice.TryAnyway"/>, K24-a): a model in a
+    /// process of its own that would spill into shared memory (<see cref="MemoryPlacement.SharedMemory"/>).
+    /// </summary>
+    public bool CanTryAnyway { get; init; }
 }

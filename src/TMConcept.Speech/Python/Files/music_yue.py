@@ -122,8 +122,9 @@ def main():
         common += ["--stage1_use_exl2", "--stage2_use_exl2", "--stage1_cache_mode", "Q4", "--stage2_cache_mode", "Q8", "--stage2_cache_size", "32768"]
     else:
         common += ["--stage2_batch_size", "4"]
-    # -s: no user site packages; the stage scripts import their neighbours, so their own folder stays first on the path.
-    python = [sys.executable, "-s", "-X", "utf8"]
+    # -s: no user site packages; the stage scripts import their neighbours, so their own folder stays first on the path. -u (and
+    # PYTHONUNBUFFERED from the app): a stage's lines reach this script, and the app's log, as they are printed.
+    python = [sys.executable, "-u", "-s", "-X", "utf8"]
     run_stage("stage 1 (%s)" % ("exllamav2" if args.exl2 else "16-bit"), python + [os.path.join(yue, "infer_stage1.py")] + common, work)
     run_stage("stage 2", python + [os.path.join(yue, "infer_stage2.py")] + common, work)
     run_stage("decoding", python + [os.path.abspath(__file__), "--post", os.path.join(yue, "infer_postprocess.py")] + common, work)

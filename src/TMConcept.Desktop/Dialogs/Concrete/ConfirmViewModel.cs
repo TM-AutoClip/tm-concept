@@ -36,4 +36,13 @@ public sealed partial class ConfirmViewModel(string title, string message, strin
 
     /// <summary>Whether the user confirmed.</summary>
     public bool Confirmed { get; set; }
+
+    /// <summary>A third button's text (empty = none): another way to go on, such as the memory question's "Try anyway".</summary>
+    public string AlternateText { get; init; } = string.Empty;
+
+    /// <summary>Whether the third button is shown.</summary>
+    public bool HasAlternate => AlternateText.Length > 0;
+
+    /// <summary>Whether the user pressed the third button.</summary>
+    public bool Alternated { get; set; }
 }

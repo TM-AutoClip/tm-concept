@@ -322,7 +322,8 @@ kart boşaltıldığında da) program 3 saniye bekleyip boş belleği ölçer; y
 pencere kartın toplam ve boş belleğini, modelin ihtiyacını ve boş ana belleği gösterir: ekran kartını ya da belleği kullanan programları
 (oyun, tarayıcı) kapatıp **Yeniden dene**'ye basarsın (5 saniye bekleyip yeniden ölçer, istediğin kadar; TM Concept'in kendi yerel
 sunucusunda bellekten çıkarılamayan bir model varsa pencerede adıyla yazar ve her yeni ölçümden önce onu bir kez daha çıkarmayı dener), ya da **İptal**'e (video sırası
-durur, program açık kalır). Her adım etkinlik panelinde bir satırdır. Gece modunda soru sorulmaz: o video hata sayılır. Boş bellek her seferinde ölçülür: Windows'ta Görev Yöneticisi'nin gösterdiğiyle Windows'un programa izin verdiğinden (ikincisi tek başına hiçbir görseli reddettirmez, yalnızca sd-cli'ye yükü ana belleğe aktarttırabilir) küçük
+durur, program açık kalır). Yerel müzik modeli ayrı bir süreçte çalışır, ağırlıklarını ana belleğe taşıyamaz: sınıfının dörtte üçü boş değilse
+başlamaz, pencere **Tekrar dene**'nin yanında **Yine de dene (çok yavaş olabilir)** de sunar (sürücü paylaşılan belleğe taşırdı). Her adım etkinlik panelinde bir satırdır. Gece modunda soru sorulmaz: o video hata sayılır. Boş bellek her seferinde ölçülür: Windows'ta Görev Yöneticisi'nin gösterdiğiyle Windows'un programa izin verdiğinden (ikincisi tek başına hiçbir görseli reddettirmez, yalnızca sd-cli'ye yükü ana belleğe aktarttırabilir) küçük
 olanı, Linux'ta AMD sürücüsünün dosyaları ya da `nvidia-smi`. Ekran belleği sınıfları 4, 6, 8, 12, 16, 24 ve 32 GB'tır: bir kart
 bildirdiği belleğe yüzde 8 payla en yakın sınıfta sayılır (15,8 GB bildiren "16 GB" kart 16 GB'lık, 11 GB'lık kart 8 GB'lık karttır), kendi sınıfını ve
 altındakileri kullanabilir; daha yüksek sınıftaki model kırmızı görünür. Bu bilgisayardaki Ollama ya da LM Studio'nun önceden (önceki bir
@@ -518,7 +519,7 @@ Bir şablonla (Ayarlar → Şablonlar) üretilen video, modelin iyi niyetine kal
 - **Bütün şarkı yapan yerel modeller (28 Kas 2026):** DiffRhythm 1.2 ve 1.0 (yalnız sözsüz; 95 sn ya da daha uzun parçalar; 8 GB kartlar,
   tam modeller 12 GB; MuQ-MuLan metin kodlayıcısı yüzünden ticari kullanıma kapalı), SongGeneration / LeVo (6 model; Tencent'in ticari
   olmayan lisansı; 10-22 GB kartlar), YuE2 3B (ticari kullanıma kapalı; 24 GB, düşük bellek kipinde 8 GB) ve YuE 1 (Apache-2.0: 24 GB
-  kartlar için 7B, 6 GB kartlar için onun exllamav2 ile küçültülmüş hâli ve 8 GB kartlar için 0.5B). Bir parça en çok 2 dakikadır. SongGeneration ve YuE senin sözlerini söyler: "Sözsüz" kapalıyken müzik sayfasında onlar için
+  kartlar için 7B, 8 GB kartlar için onun exllamav2 ile küçültülmüş hâli ve 0.5B). Bir parça en çok 2 dakikadır. SongGeneration ve YuE senin sözlerini söyler: "Sözsüz" kapalıyken müzik sayfasında onlar için
   şarkı sözü alanı çıkar. Hepsi NVIDIA kartlar için, yalnız onayladıktan sonra kurulur.
 - **Müzik üret sayfası (0.1.54):** ne istediğini kendi sözlerinle yaz ("antik Mısır'da disko"), istersen bir referans ses seç (program
   temposunu ölçer ve o tempoyu ister; modellerin hiçbiri sesi doğrudan almaz), yerel ya da çevrimiçi müzik modelini seç (yukarıdakilerin

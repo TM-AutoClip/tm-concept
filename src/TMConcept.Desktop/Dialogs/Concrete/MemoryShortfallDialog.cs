@@ -11,7 +11,9 @@ namespace TMConcept.Desktop.Dialogs;
 /// <see cref="IMemoryShortfallHandler"/> as a normal (not danger) question window over the active window, on the interface thread: the card's
 /// total and free memory with its source, what the model needs, the free main memory, TM Concept's own models that could not be unloaded
 /// (they may hold the card: Try again asks them again), what to do ("close games, browsers… and press Retry;
-/// otherwise Cancel") and the hint to choose another model. Retry / Cancel. A notification is shown too, so a window in the background is
+/// otherwise Cancel") and the hint to choose another model. Retry / Cancel. For a model in a process of its own that would spill into shared
+/// memory (<see cref="MemoryShortfall.CanTryAnyway"/>, K24-a) a short text with free and needed memory, and a third button "Try anyway (may
+/// be very slow)". A notification is shown too, so a window in the background is
 /// noticed. The window closes when the queue is canceled (the token) and the call throws <see cref="OperationCanceledException"/>; no
 /// window to show it over counts as Cancel.
 /// </summary>
@@ -32,6 +34,12 @@ public sealed class MemoryShortfallDialog(WindowHost host, Localizer text, INoti
     public string Message(MemoryShortfall shortfall)
     {
         ArgumentNullException.ThrowIfNull(shortfall);
+        if (shortfall.CanTryAnyway)
+        {
+            var spill = text.Format("memory.shortfall.separate", shortfall.ModelName, Gb(shortfall.CardFreeBytes), Gb(shortfall.NeededVideoBytes));
+            return shortfall.HeldBy.Count > 0 ? spill + "\n\n" + text.Format("memory.shortfall.held", string.Join(", ", shortfall.HeldBy)) : spill;
+        }
+
         var main = shortfall.FreeMainBytes is { } free ? text.Format("memory.gb", Gb(free)) : text["memory.unknown"];
         var mainNeed = shortfall.NeededMainBytes > 0 ? text.Format("memory.shortfall.main_need", Gb(shortfall.NeededMainBytes)) : string.Empty;
         var message = text.Format("memory.shortfall.message", shortfall.ModelName, Gb(shortfall.CardTotalBytes), Gb(shortfall.CardFreeBytes),
@@ -51,7 +59,12 @@ public sealed class MemoryShortfallDialog(WindowHost host, Localizer text, INoti
             return MemoryShortfallChoice.Cancel;
         }
 
-        var model = new ConfirmViewModel(Title(shortfall), Message(shortfall), text["memory.shortfall.retry"], text["common.cancel"], false, null);
+        var model = shortfall.CanTryAnyway
+            ? new ConfirmViewModel(Title(shortfall), Message(shortfall), text["memory.shortfall.separate.retry"], text["common.cancel"], false, null)
+            {
+                AlternateText = text["memory.shortfall.separate.anyway"],
+            }
+            : new ConfirmViewModel(Title(shortfall), Message(shortfall), text["memory.shortfall.retry"], text["common.cancel"], false, null);
         var window = new ConfirmWindow { DataContext = model };
         using (cancellationToken.Register(() => Dispatcher.UIThread.Post(window.Close)))
         {
@@ -59,7 +72,7 @@ public sealed class MemoryShortfallDialog(WindowHost host, Localizer text, INoti
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        return model.Confirmed ? MemoryShortfallChoice.Retry : MemoryShortfallChoice.Cancel;
+        return model.Confirmed ? MemoryShortfallChoice.Retry : model.Alternated ? MemoryShortfallChoice.TryAnyway : MemoryShortfallChoice.Cancel;
     }
 
     private static double Gb(long bytes) => Math.Round(Math.Max(0, bytes) / Gigabyte, 1);

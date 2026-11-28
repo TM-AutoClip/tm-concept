@@ -6,12 +6,28 @@ namespace TMConcept.Engines.Processes;
 
 /// <summary>
 /// Runs a program with a cleaned environment (names containing KEY, TOKEN, SECRET, PASSWORD, PASS, AUTH or CREDENTIAL are removed) and
-/// below-normal priority; keeps the last 40 output lines for error messages. Cancel kills the whole process tree. Every child is handed to
-/// the <see cref="ChildProcessGuardBase"/>, so it cannot outlive the app.
+/// below-normal priority; keeps the last 40 output lines for error messages. Cancel kills the whole process tree, waits until the program
+/// has really exited (at most <see cref="KillWait"/>: its caller deletes the work folder and gives the graphics card back right after) and
+/// writes those last lines to the log. With <see cref="ProcessStart.Heartbeat"/> a line goes to the log at every interval while it runs.
+/// Every child is handed to the <see cref="ChildProcessGuardBase"/>, so it cannot outlive the app.
 /// </summary>
-public sealed class ProcessRunner(ChildProcessGuardBase children, ILogger<ProcessRunner> logger) : IProcessRunner
+public sealed class ProcessRunner(ChildProcessGuardBase children, ILogger<ProcessRunner> logger, TimeProvider? clock = null) : IProcessRunner
 {
+    /// <summary>
+    /// How long a cancel waits for the killed program to exit (0.1.59: a CUDA program takes a few seconds to close; its folder could not be
+    /// deleted 6 ms after the kill, and the next model would have measured memory it still held).
+    /// </summary>
+    public static readonly TimeSpan KillWait = TimeSpan.FromSeconds(15);
+
+    /// <summary>The output lines kept (the error message's tail, the log's lines after a cancel).</summary>
+    public const int KeptLines = 40;
+
+    private const int LogCharacters = 4000;
+    private const int HeartbeatLineCharacters = 300;
+
     private static readonly string[] SecretWords = ["KEY", "TOKEN", "SECRET", "PASSWORD", "PASS", "AUTH", "CREDENTIAL"];
+
+    private readonly TimeProvider _clock = clock ?? TimeProvider.System;
 
     /// <inheritdoc />
     public async Task<ProcessResult> RunAsync(ProcessStart start, Action<string>? onLine, CancellationToken cancellationToken)
@@ -39,6 +55,7 @@ public sealed class ProcessRunner(ChildProcessGuardBase children, ILogger<Proces
         }
 
         var last = new Queue<string>();
+        var latest = string.Empty;
         var gate = new object();
         void Line(string? line)
         {
@@ -50,9 +67,14 @@ public sealed class ProcessRunner(ChildProcessGuardBase children, ILogger<Proces
             lock (gate)
             {
                 last.Enqueue(line);
-                if (last.Count > 40)
+                if (last.Count > KeptLines)
                 {
                     last.Dequeue();
+                }
+
+                if (line.Trim().Length > 0)
+                {
+                    latest = line.Trim();
                 }
             }
 
@@ -83,12 +105,27 @@ public sealed class ProcessRunner(ChildProcessGuardBase children, ILogger<Proces
 
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
+        var started = _clock.GetTimestamp();
+        using var heartbeat = start.Heartbeat is { } every && every > TimeSpan.Zero
+            ? _clock.CreateTimer(_ =>
+            {
+                string line;
+                lock (gate)
+                {
+                    line = latest;
+                }
+
+                logger.LogInformation("{Program} still runs after {Minutes} min; its last line: {Line}", name,
+                    (int)_clock.GetElapsedTime(started).TotalMinutes, line.Length == 0 ? "-" : ChildOutput.Detail(line, 1, HeartbeatLineCharacters));
+            }, null, every, every)
+            : null;
         try
         {
             await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
+            heartbeat?.Dispose();
             try
             {
                 process.Kill(entireProcessTree: true);
@@ -98,7 +135,24 @@ public sealed class ProcessRunner(ChildProcessGuardBase children, ILogger<Proces
                 // Already gone.
             }
 
-            logger.LogInformation("{Program} was cancelled after {Ms} ms; its process tree was ended", name, watch.ElapsedMilliseconds);
+            var exited = await WaitForExitAsync(process).ConfigureAwait(false);
+            string tail;
+            lock (gate)
+            {
+                tail = string.Join('\n', last);
+            }
+
+            if (exited)
+            {
+                logger.LogInformation("{Program} was cancelled after {Ms} ms; its process tree was ended; its last output: {Lines}", name,
+                    watch.ElapsedMilliseconds, ChildOutput.Detail(tail, KeptLines, LogCharacters));
+            }
+            else
+            {
+                logger.LogWarning("{Program} was cancelled after {Ms} ms; its process tree was told to end but it had not exited after {Seconds} s; its last output: {Lines}",
+                    name, watch.ElapsedMilliseconds, (int)KillWait.TotalSeconds, ChildOutput.Detail(tail, KeptLines, LogCharacters));
+            }
+
             throw;
         }
 
@@ -115,6 +169,25 @@ public sealed class ProcessRunner(ChildProcessGuardBase children, ILogger<Proces
         lock (gate)
         {
             return new ProcessResult(process.ExitCode, string.Join('\n', last));
+        }
+    }
+
+    /// <summary>Waits until the killed <paramref name="process"/> has exited, at most <see cref="KillWait"/>; false when it is still there.</summary>
+    private async Task<bool> WaitForExitAsync(Process process)
+    {
+        using var limit = new CancellationTokenSource(KillWait, _clock);
+        try
+        {
+            await process.WaitForExitAsync(limit.Token).ConfigureAwait(false);
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            return process.HasExited;
+        }
+        catch (InvalidOperationException)
+        {
+            return true;
         }
     }
 

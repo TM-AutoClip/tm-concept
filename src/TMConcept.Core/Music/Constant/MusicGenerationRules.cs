@@ -36,6 +36,9 @@ public static class MusicGenerationRules
     /// <summary>The work folder of the music page's pieces (under the app's work folder; removed after each piece).</summary>
     public const string MakeWorkFolder = "music-make";
 
+    /// <summary>How often a running local music piece writes a line to the log (0.1.59: time so far and the script's last line).</summary>
+    public static readonly TimeSpan Heartbeat = TimeSpan.FromSeconds(60);
+
     /// <summary>The length a piece on the music page starts with (seconds).</summary>
     public const int DefaultSeconds = 60;
 
