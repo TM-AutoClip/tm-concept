@@ -133,7 +133,7 @@
           <ComboBox Name="MediaMusicLocalModel" ItemsSource="{Binding LocalMusicModels}" SelectedItem="{Binding LocalMusicModel}" MinWidth="320">
             <ComboBox.ItemTemplate>
               <DataTemplate x:DataType="vm:MusicModelOption">
-                <TextBlock Text="{Binding Label}" Classes.error="{Binding IsError}" Classes.caution="{Binding IsCaution}" />
+                <TextBlock Text="{Binding Label}" Classes.error="{Binding IsError}" Classes.caution="{Binding IsCaution}" Classes.warning="{Binding IsTight}" />
               </DataTemplate>
             </ComboBox.ItemTemplate>
           </ComboBox>
@@ -146,7 +146,7 @@
           <ComboBox Name="MediaMusicModel" ItemsSource="{Binding OnlineMusicModels}" SelectedItem="{Binding OnlineMusicModel}" MinWidth="320">
             <ComboBox.ItemTemplate>
               <DataTemplate x:DataType="vm:MusicModelOption">
-                <TextBlock Text="{Binding Label}" Classes.error="{Binding IsError}" Classes.caution="{Binding IsCaution}" />
+                <TextBlock Text="{Binding Label}" Classes.error="{Binding IsError}" Classes.caution="{Binding IsCaution}" Classes.warning="{Binding IsTight}" />
               </DataTemplate>
             </ComboBox.ItemTemplate>
           </ComboBox>

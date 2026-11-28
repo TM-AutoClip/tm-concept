@@ -197,8 +197,8 @@ public sealed partial class VideoMediaViewModel : ObservableObject, IDisposable
             MusicSource = MusicSources.FirstOrDefault(c => c.Value == (int)_music.Source) ?? MusicSources[0];
             _lastSource = MusicSource;
             MusicFile = _music.File;
-            LocalMusicModel = LocalMusicModels.FirstOrDefault(o => o.Key == _music.Generator) ?? LocalMusicModels.FirstOrDefault();
-            OnlineMusicModel = OnlineMusicModels.FirstOrDefault(o => o.Key == _music.Generator) ?? OnlineMusicModels.FirstOrDefault();
+            LocalMusicModel = Pick(LocalMusicModels, _music.Generator);
+            OnlineMusicModel = Pick(OnlineMusicModels, _music.Generator);
             MusicAttribution = _music.Attribution;
             MusicLevel = (decimal)Math.Round(_music.LevelDb, 1);
             MusicDuck = (decimal)Math.Round(_music.DuckDb, 1);
@@ -232,8 +232,8 @@ public sealed partial class VideoMediaViewModel : ObservableObject, IDisposable
             {
                 LocalMusicModels = Options(local: true);
                 OnlineMusicModels = Options(local: false);
-                LocalMusicModel = LocalMusicModels.FirstOrDefault(o => o.Key == local) ?? LocalMusicModels.FirstOrDefault();
-                OnlineMusicModel = OnlineMusicModels.FirstOrDefault(o => o.Key == online) ?? OnlineMusicModels.FirstOrDefault();
+                LocalMusicModel = Pick(LocalMusicModels, local);
+                OnlineMusicModel = Pick(OnlineMusicModels, online);
             }
         }
         finally
@@ -318,9 +318,20 @@ public sealed partial class VideoMediaViewModel : ObservableObject, IDisposable
 
     private List<MusicModelOption> Options(bool local) => _generators is not { } services
         ? []
-        : services.Models.Where(m => (m.Provider == ModelProviders.Local) == local)
-            .Select(m => new MusicModelOption(ModelBase.KeyOf(m), _labels.ModelLabel(m, services.Ready(m), services.Card), LocalMusicSupport.TooBig(m, services.Card),
-                !LocalMusicSupport.TooBig(m, services.Card) && m.LicenseUse == LicenseUse.NonCommercial)).ToList();
+        : services.Models.Where(m => (m.Provider == ModelProviders.Local) == local).Select(m => Option(services, m)).ToList();
+
+    private MusicModelOption Option(MusicGeneratorServices services, CatalogModel model)
+    {
+        var group = services.Group(model);
+        var red = group == ModelListGroup.CannotRun;
+        var caution = !red && model.LicenseUse == LicenseUse.NonCommercial;
+        return new MusicModelOption(ModelBase.KeyOf(model), _labels.ModelLabel(model, services.Ready(model), services.Card), group, caution,
+            !red && !caution && services.Card.Tight(model));
+    }
+
+    // Nothing chosen (or the chosen one gone): the first model that runs here (0.1.60, the one order of the model lists).
+    private MusicModelOption? Pick(IReadOnlyList<MusicModelOption> options, string? key) =>
+        options.FirstOrDefault(o => o.Key == key) ?? _generators?.Order.First(options, o => o.Group) ?? options.FirstOrDefault();
 
     private async Task<IReadOnlyList<MusicTrackOption>> ReadMineAsync()
     {

@@ -335,7 +335,9 @@ very slow)** (the graphics driver would spill into shared memory). Every step is
 that video fails. The free memory is measured each time: on Windows the smaller of what Task Manager shows and what Windows lets (the latter alone never refuses a picture: it may only make sd-cli offload)
 the app use, on Linux the AMD driver's files or `nvidia-smi`. Graphics memory classes are 4, 6, 8, 12, 16, 24 and 32 GB: a card counts in
 the class it reports within 8 % (a "16 GB" card that reports 15.8 GB is a 16 GB card; an 11 GB card is an 8 GB card) and can use its own class and every
-lower one; a model of a higher class is shown in red. What Ollama or LM Studio on this computer still holds from before (an earlier run;
+lower one; a model of a higher class is shown in red. Every model list has one order (0.1.60): the models that run on this computer first,
+then the online ones, the red ones (a class above the card, or an NVIDIA card needed and not there) always last; when nothing is chosen in a music
+list, the first model that runs here is chosen. A local music model of exactly the card's class is yellow: "tight — close other programs". What Ollama or LM Studio on this computer still holds from before (an earlier run;
 LM Studio keeps a loaded model with no time limit) is unloaded before the first local model of a run, and the last local model is unloaded
 when the video queue ends and when the app closes. A model its server would not unload is asked again at the next change.
 

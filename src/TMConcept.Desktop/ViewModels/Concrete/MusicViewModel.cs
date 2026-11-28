@@ -300,12 +300,15 @@ public sealed partial class MusicViewModel(IVideoMediaServices services, IMusicM
         foreach (var model in _generators.Models)
         {
             var ready = _generators.Ready(model);
-            var tooBig = LocalMusicSupport.TooBig(model, _generators.Card);
+            var group = _generators.Group(model);
+            var red = group == ModelListGroup.CannotRun;
+            var caution = !red && model.LicenseUse == LicenseUse.NonCommercial;
             Models.Add(new MusicModelChoice(ModelBase.KeyOf(model), labels.ModelLabel(model, ready, _generators.Card), model,
-                model.Provider == ModelProviders.Local, ready, tooBig, !tooBig && model.LicenseUse == LicenseUse.NonCommercial));
+                model.Provider == ModelProviders.Local, ready, group, caution, !red && !caution && _generators.Card.Tight(model)));
         }
 
-        Model = Models.FirstOrDefault(m => m.Key == chosen) ?? Models.FirstOrDefault(m => m.Ready) ?? Models.FirstOrDefault();
+        // Nothing chosen: the first model that runs here (0.1.60; before, the first installed one, which could be a red one).
+        Model = Models.FirstOrDefault(m => m.Key == chosen) ?? _generators.Order.First(Models, m => m.Group);
         OnPropertyChanged(nameof(CardWarning));
     }
 

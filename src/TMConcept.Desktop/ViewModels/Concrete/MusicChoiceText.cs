@@ -25,7 +25,8 @@ public sealed class MusicChoiceText(Localizer text) : IMusicChoiceText
         {
             // 28 Nov 2026: its card class like every other local model, red "this card cannot run it" above this card's class.
             label += " · " + text.Format("models.tier", model.MinVideoMemoryGb)
-                + (LocalMusicSupport.TooBig(model, card) ? " · " + text["models.tier.too_big"] : string.Empty)
+                + (card.TooBig(model) ? " · " + text["models.tier.too_big"] : string.Empty)
+                + (card.Tight(model) ? " · " + text["models.tier.tight"] : string.Empty)
                 + (card.NvidiaOnly ? " " + text["style.music.generatelocal.nvidia_only"] : string.Empty)
                 + (card.Linux ? " " + text["style.music.generatelocal.unverified"] : string.Empty);
         }
@@ -53,7 +54,9 @@ public sealed class MusicChoiceText(Localizer text) : IMusicChoiceText
         return string.Join(" ", new[]
         {
             card.NvidiaOnly ? text["styles.music.generate.nvidia_warning"] : string.Empty,
-            LocalMusicSupport.TooBig(model, card) ? text.Format("styles.music.generate.too_big", model.MinVideoMemoryGb, (int)card.Tier) : string.Empty,
+            card.TooBig(model) ? text.Format("styles.music.generate.too_big", model.MinVideoMemoryGb, (int)card.Tier) : string.Empty,
+            // 0.1.60, K13: its class is exactly the card's class; Windows and the open programs keep part of the card, so it is said in yellow.
+            card.Tight(model) ? text.Format("styles.music.generate.tight", (int)card.Tier) : string.Empty,
             card.Linux ? text["styles.music.generate.linux"] : string.Empty,
         }.Where(p => p.Length > 0));
     }

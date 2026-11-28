@@ -133,7 +133,8 @@ public sealed class MusicGeneratePageTests
         largeLabel.ShouldContain(text["models.tier.too_big"]);
         labels.CardWarning(large, card).ShouldBe(text.Format("styles.music.generate.too_big", 12, 6), "said, never a block (rule 19)");
         labels.ModelLabel(catalog.Find(ModelProviders.Local, "ace-step-1.5")!, ready: true, card).ShouldNotContain(text["models.license.badge.noncommercial"]);
-        LocalMusicSupport.Ordered([large, small], card).ShouldBe([small, large], "the ones this card holds first");
+        var order = h.Get<IModelListOrder>();
+        order.Order([large, small], m => order.GroupOf(m, card.CannotRun(m))).ShouldBe([small, large], "the ones this card holds first");
         await Task.CompletedTask;
     }
 
@@ -173,6 +174,103 @@ public sealed class MusicGeneratePageTests
         editor.GeneratedModel.ShouldNotBeNull().Id.ShouldBe("music_v1", "its key is asked before the video starts");
         VideoStyleRules.MediaProblems(editor.ToMedia()).ShouldNotContain(VideoStyleProblem.MusicModelMissing);
     }
+
+    [AvaloniaFact]
+    public async Task TheMusicPageListsWhatRunsHereThenOnlineThenRedAndChoosesTheFirstThatRuns()
+    {
+        // 0.1.60, the plan's step 2: on the developer's 6 GB card the 8 GB YuE 7B and the larger models come after the online ones.
+        using var h = PageHarness(new GpuReport([new GpuAdapter(GpuVendor.Nvidia, "RTX 3060 Laptop", 6 * GiB)], true, true));
+        await FirstRunTests.CreateAsync(h);
+        var page = h.Get<MusicViewModel>();
+        await page.ActivateAsync();
+
+        var groups = page.Models.Select(m => m.Group).ToList();
+        groups.ShouldBe(groups.Order().ToList(), "runs here, online, red: never mixed");
+        groups.ShouldContain(ModelListGroup.Runs);
+        groups.ShouldContain(ModelListGroup.Online);
+        page.Models.Last(m => m.Group == ModelListGroup.Online).ShouldNotBe(page.Models[^1], "red ones after the online ones");
+        page.Models.Single(m => m.Key == "local/yue-v1-exl2").IsError.ShouldBeTrue("8 GB class on a 6 GB card");
+        page.Models.Where(m => !m.Local).ShouldAllBe(m => m.Group == ModelListGroup.Online);
+        page.Model.ShouldNotBeNull().Group.ShouldBe(ModelListGroup.Runs, "nothing chosen: the first model that runs here");
+        page.Model.ShouldBe(page.Models[0]);
+
+        // The catalog's order inside each group.
+        var catalog = h.Get<IMusicGenerators>().Models.Select(ModelBase.KeyOf).ToList();
+        foreach (var group in Enum.GetValues<ModelListGroup>())
+        {
+            var keys = page.Models.Where(m => m.Group == group).Select(m => m.Key).ToList();
+            keys.ShouldBe(catalog.Where(keys.Contains).ToList());
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task WithoutNvidiaTheCardModelsAreRedAndLastAndProgramComposesIsChosen()
+    {
+        using var h = PageHarness(Amd);
+        await FirstRunTests.CreateAsync(h);
+        var page = h.Get<MusicViewModel>();
+        await page.ActivateAsync();
+
+        page.Model.ShouldNotBeNull().Key.ShouldBe("local/" + ScoreRules.ModelId);
+        page.Models.Where(m => m.Local && m.Key != "local/" + ScoreRules.ModelId).ShouldAllBe(m => m.IsError, "they need an NVIDIA card");
+        page.Models.Where(m => m.IsError).ShouldAllBe(m => !m.IsCaution && !m.IsTight, "red wins over orange and yellow");
+        var groups = page.Models.Select(m => m.Group).ToList();
+        groups.ShouldBe(groups.Order().ToList());
+        page.Models[1].Group.ShouldBe(ModelListGroup.Online, "the online ones right after Program composes");
+
+        // A red one is still offered and can be chosen (rule 19), with its note.
+        page.Model = page.Models.First(m => m.Key == "local/ace-step-1.5");
+        page.CardWarning.ShouldContain(h.Get<Localizer>()["styles.music.generate.nvidia_warning"]);
+    }
+
+    [AvaloniaFact]
+    public async Task AModelOfExactlyTheCardsClassIsYellowTight()
+    {
+        // K13: YuE 7B (8 GB class) on an 8 GB card; MusicGen Small (4 GB) is not tight, MusicGen Large (12 GB) is red, not tight.
+        using var h = PageHarness(Nvidia);
+        await FirstRunTests.CreateAsync(h);
+        var text = h.Get<Localizer>();
+        var page = h.Get<MusicViewModel>();
+        await page.ActivateAsync();
+
+        var yue = page.Models.Single(m => m.Key == "local/yue-v1-exl2");
+        yue.IsError.ShouldBeFalse();
+        yue.Group.ShouldBe(ModelListGroup.Runs);
+        yue.Label.ShouldContain(text["models.tier.tight"]);
+        (yue.IsTight || yue.IsCaution).ShouldBeTrue("yellow, or orange when its licence is non-commercial (orange wins)");
+        page.Models.Single(m => m.Key == "local/musicgen-small").Label.ShouldNotContain(text["models.tier.tight"]);
+        var large = page.Models.Single(m => m.Key == "local/musicgen-large");
+        large.IsError.ShouldBeTrue();
+        large.IsTight.ShouldBeFalse();
+        large.Label.ShouldNotContain(text["models.tier.tight"]);
+
+        page.Model = yue;
+        page.CardWarning.ShouldBe(text.Format("styles.music.generate.tight", 8));
+        text["models.tier.tight"].ShouldNotBeNullOrWhiteSpace();
+    }
+
+    [AvaloniaFact]
+    public async Task TheVideoPagesLocalModelsPutRedLastAndChooseTheFirstThatRuns()
+    {
+        var (h, editor) = await EditorAsync(new GpuReport([new GpuAdapter(GpuVendor.Nvidia, "RTX 3060 Laptop", 6 * GiB)], true, true), localInstalled: false);
+        using var _ = h;
+
+        var red = editor.LocalMusicModels.Select(o => o.IsError).ToList();
+        red.ShouldContain(true);
+        red.ShouldBe(red.Order().ToList(), "every red one after every one that runs");
+        editor.LocalMusicModel.ShouldNotBeNull().IsError.ShouldBeFalse();
+        editor.OnlineMusicModels.ShouldAllBe(o => o.Group == ModelListGroup.Online);
+    }
+
+    private static DesktopHarness PageHarness(GpuReport card) => new(s =>
+    {
+        s.AddSingleton<IConfirmDialog>(new FakeConfirm());
+        s.RemoveAll<IGpuInfo>();
+        s.AddSingleton<IGpuInfo>(new FakeGpu(card));
+        s.RemoveAll<IMusicGenerators>();
+        s.AddSingleton<IMusicGenerators>(sp => new InstalledOrNot(new MusicGenerators(sp.GetRequiredService<IModelCatalog>(), [],
+            sp.GetRequiredService<StepModelResolver>()), localInstalled: false));
+    });
 
     /// <summary>The catalog's music models; the local one counts as installed or not.</summary>
     private sealed class InstalledOrNot(IMusicGenerators inner, bool localInstalled) : IMusicGenerators

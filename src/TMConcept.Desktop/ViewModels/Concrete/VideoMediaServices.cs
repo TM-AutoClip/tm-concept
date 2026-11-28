@@ -9,7 +9,7 @@ namespace TMConcept.Desktop.ViewModels;
 
 /// <inheritdoc cref="IVideoMediaServices" />
 public sealed class VideoMediaServices(Startup.FileDialogs dialogs, IMusicLibrary library, IMusicSearch search, Components.ComponentInstallFlow installs,
-    IMusicGenerators generators, Core.Hardware.IGpuInfo gpu, IReferenceMeasurer measurer, IActivityLog activity, ILogger<VideoMediaServices> logger)
+    IMusicGenerators generators, Core.Hardware.IGpuInfo gpu, Core.Models.IModelListOrder order, IReferenceMeasurer measurer, IActivityLog activity, ILogger<VideoMediaServices> logger)
     : IVideoMediaServices
 {
     private LocalMusicCard? _card;
@@ -28,7 +28,10 @@ public sealed class VideoMediaServices(Startup.FileDialogs dialogs, IMusicLibrar
     public async Task<MusicGeneratorServices> GeneratorsAsync()
     {
         _card ??= await Task.Run(() => LocalMusicSupport.Of(gpu.Detect(), OperatingSystem.IsLinux())).ConfigureAwait(true);
-        return new MusicGeneratorServices(LocalMusicSupport.Ordered(generators.Models, _card), generators.Ready, _card);
+        var card = _card;
+
+        // The one order of the model lists (0.1.60): the local ones that run here, the online ones, the red ones last; the catalog's order inside.
+        return new MusicGeneratorServices(order.Order(generators.Models, m => order.GroupOf(m, card.CannotRun(m))), generators.Ready, card, order);
     }
 
     /// <summary>Installs the ready music library (one confirmation). True when the library is ready afterwards.</summary>

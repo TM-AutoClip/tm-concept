@@ -12,12 +12,14 @@ public interface IMusicChoiceText
 {
     /// <summary>
     /// "ACE-Step 1.5 · not installed yet: downloaded when you start · 4 GB class (NVIDIA only)" / "MusicGen Large · 12 GB class · this card cannot
-    /// run it · NON-COMMERCIAL" / "Eleven Music — 0.15 $ a minute". <paramref name="ready"/> = installed (an online model always is).
+    /// run it · NON-COMMERCIAL" / "YuE 7B · 8 GB class · tight — close other programs" (its class is this card's class, 0.1.60) /
+    /// "Eleven Music — 0.15 $ a minute". <paramref name="ready"/> = installed (an online model always is).
     /// </summary>
     string ModelLabel(CatalogModel model, bool ready, LocalMusicCard card);
 
     /// <summary>
-    /// The note of <paramref name="model"/> on this computer (a card it is not made for, a card of a lower class than it needs, Linux); empty
+    /// The note of <paramref name="model"/> on this computer (a card it is not made for, a card of a lower class than it needs, a card of exactly
+    /// its class: tight, Linux); empty
     /// when there is nothing to say.
     /// </summary>
     string CardWarning(CatalogModel? model, LocalMusicCard card);

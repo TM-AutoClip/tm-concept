@@ -37,7 +37,7 @@ namespace TMConcept.Desktop.ViewModels;
 /// </summary>
 public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepModelStore steps, StepModelResolver resolver, IEnumerable<IVideoEngine> engines,
     SpeechService speech, VoiceSampleLibrary voiceSamples, ComponentInstallFlow installs, IModelStartGate gate, AppSession session, IConfirmDialog confirm, IApiKeyDialog keyDialog, Engines.Images.ImageBackendSelector backends, IGpuInfo gpu, IAppPaths paths,
-    ShellLauncher shell, Localizer text, ILogger<StepPickerViewModel> logger, LocalServerSync localServers, AccountVoiceLibrary accountVoices) : ObservableObject
+    ShellLauncher shell, Localizer text, ILogger<StepPickerViewModel> logger, LocalServerSync localServers, AccountVoiceLibrary accountVoices, IModelListOrder order) : ObservableObject
 {
     /// <summary>The "saved" mark of a row whose saved choice is not offered any more: never equal to a row's key, so it is saved again.</summary>
     private const string StaleChoice = "\u0000stale";
@@ -646,12 +646,13 @@ public sealed partial class StepPickerViewModel(IModelCatalog catalog, IStepMode
             recommended.Select(r => r.Code).ToList());
         row.Options.Add(new StepOption(StepOptionKind.None, null, step.Optional ? text["step." + step.Code + ".off"] : text["models.none"]));
 
-        // What this card can run first, what it cannot run last (the developer, 18 Nov 2026); within each, the usual order.
+        // The usual order (local, the app's Ollama, the user's servers, then the online providers by name), then the one order of every model
+        // list (the developer, 18 Nov 2026 and 0.1.60): what runs here, online, what this card cannot run (red) always last.
         var options = catalog.With(step.Capability).Where(m => Usable(step, m))
             .OrderBy(m => m.Provider == ModelProviders.Local ? 0 : m.Provider == ModelProviders.AppOllama ? 1 : EndpointCodes.IsEndpoint(m.Provider) ? 2 : 3).ThenBy(m => m.Provider, StringComparer.Ordinal).ThenBy(m => m.Name, StringComparer.Ordinal)
             .Select(Option)
             .ToList();
-        foreach (var option in options.OrderBy(o => o.IsError ? 1 : 0))
+        foreach (var option in order.Order(options, o => order.GroupOf(o.Model!, o.IsError)))
         {
             row.Options.Add(option);
         }

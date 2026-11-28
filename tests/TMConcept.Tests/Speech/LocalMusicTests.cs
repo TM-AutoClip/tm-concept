@@ -90,7 +90,7 @@ public sealed class LocalMusicTests : IDisposable
         var card = LocalMusicSupport.Of(new GpuReport([new GpuAdapter(GpuVendor.Nvidia, "RTX 3060 Laptop", 6 * GiB)], true, true), linux: false);
         card.Tier.ShouldBe(VramTier.Gb6);
 
-        var fitting = Families.SelectMany(f => f.Variants).Where(v => !LocalMusicSupport.TooBig(catalog.Find(ModelProviders.Local, v.Id)!, card)).Select(v => v.Id);
+        var fitting = Families.SelectMany(f => f.Variants).Where(v => !card.TooBig(catalog.Find(ModelProviders.Local, v.Id)!)).Select(v => v.Id);
 
         fitting.ShouldBe(["musicgen-small", "musicgen-stereo-small", "magnet-small-10secs", "magnet-small-30secs", "audio-magnet-small", "audioldm2-music",
             "audioldm2", "audioldm2-large"], ignoreOrder: true);
@@ -109,13 +109,13 @@ public sealed class LocalMusicTests : IDisposable
         // The official floors: DiffRhythm base 8 GB (its README), AudioCraft's 16 GB for the medium MAGNeT models, and the 6 GB table of
         // YuE-exllamav2 that shows the original 16-bit stage 2 (which YuE 0.5B uses) out of memory.
         DiffRhythmModels.Current.Concat(DiffRhythmModels.Legacy).Append(MagnetModels.Medium10).Append(YueModels.Stage1Small)
-            .ShouldAllBe(v => LocalMusicSupport.TooBig(catalog.Find(ModelProviders.Local, v.Id)!, card));
+            .ShouldAllBe(v => card.TooBig(catalog.Find(ModelProviders.Local, v.Id)!));
         // The official floors: SongGeneration 10 to 22 GB (its low-memory mode already), YuE2 24 GB and 8 GB in its low-memory mode, YuE 7B 24 GB.
         SongGenerationModels.All.Concat(YueModels.Yue2Models).Append(YueModels.Stage1Large)
-            .ShouldAllBe(v => LocalMusicSupport.TooBig(catalog.Find(ModelProviders.Local, v.Id)!, card));
-        LocalMusicSupport.TooBig(catalog.Find(ModelProviders.Local, "musicgen-large")!, card with { Nvidia = false }).ShouldBeFalse("without NVIDIA the NVIDIA note says it");
-        LocalMusicSupport.TooBig(catalog.Find(ModelProviders.Local, "musicgen-large")!, card with { Tier = VramTier.None }).ShouldBeFalse("an unknown card is not held against it");
-        LocalMusicSupport.TooBig(catalog.Find(ModelProviders.Local, "musicgen-large")!, card with { Tier = VramTier.Gb12 }).ShouldBeFalse();
+            .ShouldAllBe(v => card.TooBig(catalog.Find(ModelProviders.Local, v.Id)!));
+        (card with { Nvidia = false }).TooBig(catalog.Find(ModelProviders.Local, "musicgen-large")!).ShouldBeFalse("without NVIDIA the NVIDIA note says it");
+        (card with { Tier = VramTier.None }).TooBig(catalog.Find(ModelProviders.Local, "musicgen-large")!).ShouldBeFalse("an unknown card is not held against it");
+        (card with { Tier = VramTier.Gb12 }).TooBig(catalog.Find(ModelProviders.Local, "musicgen-large")!).ShouldBeFalse();
     }
 
     [Fact]

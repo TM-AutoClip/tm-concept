@@ -404,6 +404,8 @@ public static class DesktopServices
         services.AddTransient<FirstRunViewModel>();
         services.AddTransient<UnlockViewModel>();
 
+        // The one order of every model list (0.1.60): what runs here, online, red last.
+        services.AddSingleton<IModelListOrder, ModelListOrder>();
         // One set of model pickers per page that uses models (Generate concepts, Concept → video, Profile).
         services.AddTransient<StepPickerViewModel>();
         services.AddTransient<VersionEditorViewModel>();

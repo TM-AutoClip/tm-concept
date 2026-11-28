@@ -326,7 +326,9 @@ durur, program açık kalır). Yerel müzik modeli ayrı bir süreçte çalış�
 başlamaz, pencere **Tekrar dene**'nin yanında **Yine de dene (çok yavaş olabilir)** de sunar (sürücü paylaşılan belleğe taşırdı). Her adım etkinlik panelinde bir satırdır. Gece modunda soru sorulmaz: o video hata sayılır. Boş bellek her seferinde ölçülür: Windows'ta Görev Yöneticisi'nin gösterdiğiyle Windows'un programa izin verdiğinden (ikincisi tek başına hiçbir görseli reddettirmez, yalnızca sd-cli'ye yükü ana belleğe aktarttırabilir) küçük
 olanı, Linux'ta AMD sürücüsünün dosyaları ya da `nvidia-smi`. Ekran belleği sınıfları 4, 6, 8, 12, 16, 24 ve 32 GB'tır: bir kart
 bildirdiği belleğe yüzde 8 payla en yakın sınıfta sayılır (15,8 GB bildiren "16 GB" kart 16 GB'lık, 11 GB'lık kart 8 GB'lık karttır), kendi sınıfını ve
-altındakileri kullanabilir; daha yüksek sınıftaki model kırmızı görünür. Bu bilgisayardaki Ollama ya da LM Studio'nun önceden (önceki bir
+altındakileri kullanabilir; daha yüksek sınıftaki model kırmızı görünür. Her model listesinin tek bir sırası var (0.1.60): önce bu bilgisayarda
+çalışanlar, sonra online modeller, kırmızılar (kartın üstünde bir sınıf ya da gereken NVIDIA kart yok) her zaman en sonda; müzik listesinde hiçbiri
+seçili değilse burada çalışan ilk model seçilir. Tam kartın sınıfını isteyen yerel müzik modeli sarıdır: "sıkışık — diğer programları kapat". Bu bilgisayardaki Ollama ya da LM Studio'nun önceden (önceki bir
 çalıştırmadan; LM Studio yüklenen modeli süresiz tutar) tuttuğu modeller bir çalıştırmanın ilk yerel modelinden önce boşaltılır; son yerel
 model de video kuyruğu bitince ve program kapanırken boşaltılır. Sunucusunun boşaltmadığı bir model bir sonraki değişimde yeniden istenir.
 

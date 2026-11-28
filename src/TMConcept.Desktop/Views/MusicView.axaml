@@ -20,7 +20,7 @@
             <ComboBox Name="MusicModel" ItemsSource="{Binding Models}" SelectedItem="{Binding Model}" MinWidth="320" IsEnabled="{Binding Idle}">
               <ComboBox.ItemTemplate>
                 <DataTemplate x:DataType="vm:MusicModelChoice">
-                  <TextBlock Text="{Binding Label}" Classes.error="{Binding IsError}" Classes.caution="{Binding IsCaution}" />
+                  <TextBlock Text="{Binding Label}" Classes.error="{Binding IsError}" Classes.caution="{Binding IsCaution}" Classes.warning="{Binding IsTight}" />
                 </DataTemplate>
               </ComboBox.ItemTemplate>
             </ComboBox>
